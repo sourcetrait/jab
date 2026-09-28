@@ -1,0 +1,10 @@
+# g1_empty: the G-1's hammer on an empty chamber, an eighth of a second:
+# one dry triangle click, a bright partial over a short lower body.
+{
+    seconds: 0.12,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [triangle, 0.0, 2400.0, 2200.0, 0.28, 0.0, 0.010, 0.0, 0.0],
+        [triangle, 0.0, 950.0, 900.0, 0.18, 0.0, 0.022, 0.0, 0.0],
+    ],
+}

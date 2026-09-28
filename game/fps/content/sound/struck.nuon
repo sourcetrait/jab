@@ -1,0 +1,15 @@
+# struck: a round hitting an android's shell, 0.3 seconds: a hollow
+# plastic knock, a triangle tok over a lower sine body both sagging in
+# pitch, a click of noise on impact, and a short metallic ring of two
+# high sines from the steel frame under the shell.
+{
+    seconds: 0.3,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [triangle, 0.0, 480.0, 430.0, 0.26, 0.001, 0.045, 0.0, 0.0],
+        [sine, 0.0, 290.0, 250.0, 0.24, 0.002, 0.08, 0.0, 0.0],
+        [noise, 0.0, 0.0, 0.0, 0.22, 0.0, 0.006, 0.0, 0.0],
+        [sine, 0.0, 2750.0, 2700.0, 0.09, 0.001, 0.14, 0.0, 0.0],
+        [sine, 0.0, 4180.0, 4120.0, 0.05, 0.001, 0.09, 0.0, 0.0],
+    ],
+}

@@ -1,0 +1,75 @@
+# garage: the parking garage's ventilation, sixteen seconds looping: a
+# hollow drone of a warm pad on a low F and its octave with a sweep pad
+# an octave over, a helicopter patch pitched two octaves down for a
+# fan's slow beating, three kalimba drips each with a faint echo, and
+# one distant rumble of a low seashore wash. The drones and the fan are
+# struck at 0 and 8 seconds on alternating channels, so the loop's seam
+# is the same join as the one inside the piece.
+{
+    gain: 1.8,
+    tracks: [
+        {
+            channel: 0, program: 89, volume: 84,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 29, 62, 8.0],
+                [0.0, 41, 44, 8.0],
+            ],
+        },
+        {
+            channel: 1, program: 89, volume: 84,
+            notes: [
+                [at, note, velocity, length];
+                [8.0, 29, 62, 8.0],
+                [8.0, 41, 44, 8.0],
+            ],
+        },
+        {
+            channel: 2, program: 95, volume: 56,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 53, 30, 8.0],
+            ],
+        },
+        {
+            channel: 3, program: 95, volume: 56,
+            notes: [
+                [at, note, velocity, length];
+                [8.0, 53, 30, 8.0],
+            ],
+        },
+        {
+            channel: 4, program: 125, volume: 50,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 36, 44, 8.0],
+            ],
+        },
+        {
+            channel: 5, program: 125, volume: 50,
+            notes: [
+                [at, note, velocity, length];
+                [8.0, 36, 44, 8.0],
+            ],
+        },
+        {
+            channel: 6, program: 108, volume: 60,
+            notes: [
+                [at, note, velocity, length];
+                [2.35, 91, 34, 0.3],
+                [2.62, 91, 13, 0.3],
+                [9.8, 89, 30, 0.3],
+                [10.07, 89, 12, 0.3],
+                [13.9, 91, 22, 0.3],
+                [14.17, 91, 9, 0.3],
+            ],
+        },
+        {
+            channel: 7, program: 122, volume: 60,
+            notes: [
+                [at, note, velocity, length];
+                [4.6, 34, 46, 4.4],
+            ],
+        },
+    ],
+}

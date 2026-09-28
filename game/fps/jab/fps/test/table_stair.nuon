@@ -1,0 +1,14 @@
+# fps's pad for the stair on the proof map: from the spawn facing
+# east, the left stick held forward from a second and a half, so the
+# body climbs the three steps onto the landing under the stairwell and
+# stops at its east wall; the right stick held left for half a second
+# from 3.7 s, a quarter turn to the north at pi radians a second; the
+# left stick released at 7.5 s, by when the body has climbed the ramp
+# into the upper hall and stopped at its north wall.
+[
+    [at, type, code, value];
+    [1500ms, 3, 1, 0],
+    [3700ms, 3, 2, 0],
+    [4200ms, 3, 2, 127],
+    [7500ms, 3, 1, 127],
+]

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <pattern id="wh" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#4d5a66"/>
+      <rect x="0" y="0" width="2" height="1" fill="#57646f"/>
+      <rect x="2" y="2" width="2" height="1" fill="#57646f"/>
+      <rect x="3" y="1" width="1" height="1" fill="#45515c"/>
+      <rect x="1" y="3" width="1" height="1" fill="#45515c"/>
+    </pattern>
+    <pattern id="wv" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#4d5a66"/>
+      <rect x="0" y="0" width="1" height="2" fill="#57646f"/>
+      <rect x="2" y="2" width="1" height="2" fill="#57646f"/>
+      <rect x="3" y="1" width="1" height="1" fill="#45515c"/>
+      <rect x="1" y="3" width="1" height="1" fill="#45515c"/>
+    </pattern>
+    <pattern id="lh" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#546170"/>
+      <rect x="0" y="0" width="2" height="1" fill="#5e6b79"/>
+      <rect x="2" y="2" width="2" height="1" fill="#5e6b79"/>
+      <rect x="3" y="1" width="1" height="1" fill="#4c5865"/>
+      <rect x="1" y="3" width="1" height="1" fill="#4c5865"/>
+    </pattern>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" fill="#3d4852"/>
+  <rect x="1" y="1" width="126" height="126" fill="url(#lh)"/>
+  <rect x="129" y="1" width="126" height="126" fill="url(#wv)"/>
+  <rect x="1" y="129" width="126" height="126" fill="url(#wv)"/>
+  <rect x="129" y="129" width="126" height="126" fill="url(#wh)"/>
+  <path d="M202.11 189.69Q201.04 191.37 200.31 193.09Q199.57 194.81 197.58 195.31Q195.6 195.82 193.8 196.59Q192 197.37 190.2 196.6Q188.39 195.83 186.5 195.25Q184.6 194.66 183.27 193.21Q181.93 191.75 182.56 189.88Q183.19 188 183.33 186.41Q183.46 184.82 184.46 183.46Q185.45 182.1 186.79 180.85Q188.13 179.6 190.07 179.43Q192 179.27 193.77 179.79Q195.54 180.3 197.39 180.9Q199.23 181.49 199.69 183.23Q200.15 184.96 201.66 186.48Q203.17 188 202.11 189.69Z" fill="#434e59" opacity="0.6"/>
+  <path d="M195.8 191.37Q195.71 192.75 194.37 193.56Q193.03 194.37 191.51 194.46Q190 194.54 188.46 194.5Q186.91 194.46 185.91 193.45Q184.91 192.45 184.38 191.22Q183.85 190 184.12 188.65Q184.38 187.3 185.59 186.34Q186.8 185.38 188.4 185.34Q190 185.29 191.62 185.3Q193.25 185.31 194.07 186.48Q194.89 187.65 195.39 188.82Q195.9 190 195.8 191.37Z" fill="#3e4954" opacity="0.45"/>
+</svg>

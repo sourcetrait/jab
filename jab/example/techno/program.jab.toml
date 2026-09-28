@@ -1,0 +1,5 @@
+name = 'techno'
+sdk = '../../sdk'
+includes = ['../../sdk']
+link = '../../sdk/program.ld'
+assets = 'assets'

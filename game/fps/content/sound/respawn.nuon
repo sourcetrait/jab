@@ -1,0 +1,16 @@
+# respawn: the player remoting into a fresh frame, one second: a sine
+# swelling as it climbs from 180 hertz toward 1500, a triangle an octave
+# under and a faint sine a fifth over rising with it, all gone by 0.75
+# seconds, while a soft power-on hum near 110 hertz swells in beneath,
+# overshoots, and settles toward 100 hertz before it fades.
+{
+    seconds: 1.0,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [sine, 0.0, 180.0, 1900.0, 0.26, 0.5, 0.25, 0.0, 0.0],
+        [triangle, 0.0, 90.0, 950.0, 0.16, 0.45, 0.3, 0.0, 0.0],
+        [sine, 0.0, 270.0, 2850.0, 0.07, 0.5, 0.25, 0.0, 0.0],
+        [sine, 0.0, 130.0, 100.0, 0.20, 0.62, 0.22, 0.55, 0.14],
+        [triangle, 0.0, 260.0, 200.0, 0.06, 0.62, 0.22, 0.55, 0.14],
+    ],
+}

@@ -1,0 +1,14 @@
+# alert: an android noticing the player, half a second: a two-note
+# square chirp rising a fifth, 880 hertz held to 0.11 seconds, then from
+# 0.14 seconds 1320 gliding up to 1400 and fading out. The first note is
+# two layers of one tone, one fading out as the other fades in, so their
+# sum holds level until the second drops away at 0.11 seconds.
+{
+    seconds: 0.5,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [square, 0.0, 880.0, 880.0, 0.24, 0.003, 0.107, 0.0, 0.0],
+        [square, 0.0, 880.0, 880.0, 0.24, 0.107, 0.003, 0.0, 0.0],
+        [square, 0.14, 1320.0, 1400.0, 0.30, 0.0, 0.03, 0.8, 0.2],
+    ],
+}

@@ -1,0 +1,31 @@
+# hum: the north room's ambient on the proof map, a machine-room drone.
+# A warm pad holds a low C and its fifth for eight seconds with a swell
+# over them, and a closed hat ticks under it now and then, softly; the
+# engine starts the piece again as it ends.
+{
+    gain: 1.8,
+    tracks: [
+        {
+            channel: 0, program: 89, volume: 100,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 36, 76, 8.0],
+                [0.0, 43, 60, 8.0],
+                [2.0, 48, 44, 3.5],
+                [5.5, 47, 40, 2.5],
+            ],
+        },
+        {
+            channel: 9, program: 0, volume: 60,
+            notes: [
+                [at, note, velocity, length];
+                [0.7, 42, 36, 0.1],
+                [1.9, 42, 28, 0.1],
+                [3.4, 42, 40, 0.1],
+                [4.1, 42, 26, 0.1],
+                [6.2, 42, 36, 0.1],
+                [7.3, 42, 30, 0.1],
+            ],
+        },
+    ],
+}

@@ -1,0 +1,33 @@
+version = '0.0.0-15'
+kernel = 'kernel'
+programs = [
+  'example/helloworld',
+  'example/bounce',
+  'example/wasd',
+  'example/pad',
+  'example/logo',
+  'example/walk',
+  'example/techno',
+  'example/piano',
+  'test/exitstatus',
+  'test/badstore',
+  'test/badstack',
+  'test/displayprint',
+  'test/framecap',
+  'test/keys',
+  'test/pad',
+  'test/random',
+  'test/sound',
+  'test/midi',
+  'test/smf',
+  'test/soundfont',
+  'test/blocklist',
+  'test/romfs',
+  'test/tar',
+  'test/gz',
+  'test/checksum',
+  'test/hash',
+  'test/png',
+  'test/sprite',
+  'test/purity'
+]

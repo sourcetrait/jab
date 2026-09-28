@@ -1,0 +1,15 @@
+# g1_bolt: the G-1's bolt released forward, 0.3 seconds: a short noise
+# rush as the carrier travels, then a metallic clack at 40 milliseconds
+# with a little ring of two high sines.
+{
+    seconds: 0.3,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [noise, 0.0, 0.0, 0.0, 0.10, 0.035, 0.006, 0.0, 0.0],
+        [square, 0.04, 470.0, 470.0, 0.22, 0.0, 0.03, 0.0, 0.0],
+        [noise, 0.04, 0.0, 0.0, 0.24, 0.0, 0.012, 0.0, 0.0],
+        [triangle, 0.04, 1250.0, 1250.0, 0.14, 0.0, 0.025, 0.0, 0.0],
+        [sine, 0.04, 2150.0, 2150.0, 0.10, 0.0, 0.24, 0.0, 0.0],
+        [sine, 0.04, 3470.0, 3470.0, 0.06, 0.0, 0.16, 0.0, 0.0],
+    ],
+}

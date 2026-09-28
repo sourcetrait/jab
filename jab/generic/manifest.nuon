@@ -1,0 +1,18 @@
+# The generic assets disk's fetched contents: each entry an archive by
+# URL and sha256, and the members taken from it with where each lands
+# on the disk, whose root this directory mirrors. Fetched into
+# .target/fetch on first use and verified against the digest on every
+# build, never committed. The FluidR3 soundfonts, GM and GS, are MIT,
+# Frank Wen's; their COPYING and README ride under /doc/license.
+[
+    {
+        url: "http://deb.debian.org/debian/pool/main/f/fluid-soundfont/fluid-soundfont_3.1.orig.tar.gz",
+        sha256: "2621acaa1c78e4abdb24bdd163230cc577e61276936d6aa6e3180582142f0343",
+        members: [
+            { from: "fluid-soundfont-3.1/FluidR3_GM.sf2", to: "mix/snd/font/FluidR3_GM.sf2" },
+            { from: "fluid-soundfont-3.1/FluidR3_GS.sf2", to: "mix/snd/font/FluidR3_GS.sf2" },
+            { from: "fluid-soundfont-3.1/COPYING", to: "doc/license/fluid-soundfont/COPYING" },
+            { from: "fluid-soundfont-3.1/README", to: "doc/license/fluid-soundfont/README" },
+        ],
+    },
+]

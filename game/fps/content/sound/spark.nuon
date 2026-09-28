@@ -1,0 +1,20 @@
+# spark: sparks where a round lands on steel, a quarter second: a crack
+# of noise with a short sizzle, a high metallic ping falling a little as
+# the round glances off, and six small noise crackles thinning out over
+# 0.17 seconds.
+{
+    seconds: 0.25,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [noise, 0.0, 0.0, 0.0, 0.32, 0.0, 0.005, 0.0, 0.0],
+        [noise, 0.0, 0.0, 0.0, 0.05, 0.0, 0.12, 0.0, 0.0],
+        [sine, 0.0, 4100.0, 3300.0, 0.20, 0.001, 0.20, 0.0, 0.0],
+        [sine, 0.0, 6350.0, 5200.0, 0.08, 0.001, 0.12, 0.0, 0.0],
+        [noise, 0.022, 0.0, 0.0, 0.20, 0.0, 0.004, 0.0, 0.0],
+        [noise, 0.041, 0.0, 0.0, 0.14, 0.0, 0.003, 0.0, 0.0],
+        [noise, 0.067, 0.0, 0.0, 0.17, 0.0, 0.004, 0.0, 0.0],
+        [noise, 0.098, 0.0, 0.0, 0.10, 0.0, 0.003, 0.0, 0.0],
+        [noise, 0.131, 0.0, 0.0, 0.08, 0.0, 0.003, 0.0, 0.0],
+        [noise, 0.172, 0.0, 0.0, 0.05, 0.0, 0.003, 0.0, 0.0],
+    ],
+}

@@ -1,0 +1,50 @@
+# office: the offices' air handling, twelve seconds looping: a quiet high
+# hiss of a seashore patch two octaves up, a fluorescent hum of a square
+# lead near 120 hertz with its octave, both struck at 0 and 6 seconds on
+# alternating channels so the loop's seam is the same join as the one
+# inside the piece, and three soft side-stick clicks, one lone and a
+# close pair like a relay.
+{
+    gain: 1.8,
+    tracks: [
+        {
+            channel: 0, program: 122, volume: 44,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 84, 34, 6.0],
+            ],
+        },
+        {
+            channel: 1, program: 122, volume: 44,
+            notes: [
+                [at, note, velocity, length];
+                [6.0, 84, 34, 6.0],
+            ],
+        },
+        {
+            channel: 2, program: 80, volume: 30,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 47, 30, 6.0],
+                [0.0, 59, 16, 6.0],
+            ],
+        },
+        {
+            channel: 3, program: 80, volume: 30,
+            notes: [
+                [at, note, velocity, length];
+                [6.0, 47, 30, 6.0],
+                [6.0, 59, 16, 6.0],
+            ],
+        },
+        {
+            channel: 9, program: 0, volume: 50,
+            notes: [
+                [at, note, velocity, length];
+                [4.2, 37, 18, 0.05],
+                [9.35, 37, 14, 0.05],
+                [9.47, 37, 10, 0.05],
+            ],
+        },
+    ],
+}

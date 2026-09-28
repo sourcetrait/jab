@@ -1,0 +1,6 @@
+name = 'fps'
+sdk = '../../../../jab/sdk'
+workspace = '../../../../jab'
+includes = ['../../../../jab/sdk']
+link = '../../../../jab/sdk/program.ld'
+assets = '../../.target/asset/factory'

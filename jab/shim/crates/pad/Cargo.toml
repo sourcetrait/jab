@@ -1,0 +1,17 @@
+[package]
+name = "jabshim_pad"
+description = "The pad bridge: reads the gamepad discovery named through gilrs and writes the jab.pad port's header and events into QEMU's pipe, for hosts where QEMU cannot pass a gamepad through."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "jabshim_pad"
+path = "src/main.rs"
+
+[dependencies]
+gilrs = { workspace = true }

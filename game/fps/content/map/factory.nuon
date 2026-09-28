@@ -1,0 +1,388 @@
+# factory: FPS Tech's factory, the game's map. Metres, z up, degrees;
+# x runs east and y north; the building's exterior is x 0 to 32 and y 0
+# to 24 with walls half a metre thick, drawn as the gaps between
+# sectors. Four storeys in the plan views:
+#
+# ground (z 0): the factory floor, `bay`, 21 by 23 metres and 6 high
+#   with two pillars, the spawn in its south-east corner facing the
+#   mezzanine; `west_low`, the bay under the mezzanine along the west
+#   wall, 2.7 high, open to the bay; the stairwell in the south-west
+#   corner, `stair_ground` a T-shaped hall 6 high with the up flight
+#   `up1` to `up6` (1.5 wide, half a metre a step) climbing north to
+#   the mezzanine and the down flight `down1` to `down6` (2 wide)
+#   descending north to the garage under a sloped ceiling, each an
+#   enclosed shaft entered from the hall at its foot, since the hall's
+#   one wall along a flight shares no edge with the steps and so makes
+#   no portal; `door_stair` (tag 1) from the hall east
+#   into the bay and `door_yard` (tag 2) from the bay east into the
+#   yard, each 2.1 high.
+# office (z 3): the mezzanine over `west_low`: `office_hall`, the
+#   corridor the up flight arrives in, with `sill`, a metre-high
+#   parapet along its east side whose window looks down onto the bay;
+#   `office_a` and `office_b` west of it behind `door_a` (tag 4) and
+#   `door_b` (tag 5); 2.8 high.
+# garage (z -3): `garage` under the bay and the mezzanine, 2.6 high
+#   with three pillars and parking stripes, reached by the down flight
+#   and by the driveway through `garage_door` (tag 3) in its east wall.
+# outside (z 0 and below): `yard`, fenced on the south, east, and
+#   north, along the building's east wall with the door and a sign;
+#   the driveway beside it behind `parapet`, a metre-high wall,
+#   `drive_low` at the garage door and `drive_ramp` rising north at one
+#   in four to the gate in the north fence; `beyond`, the street past
+#   the fences, sky-walled at the world's edge. The sky is the ceiling
+#   of every outside sector, 8 metres up.
+#
+# Five ambients, `floor`, `office`, `garage`, `yard`, and `stairwell`
+# for the stair hall and both flights, by area; every door sector
+# carries the ambient of the room it leads from.
+# Three patrols of waypoints, tags 1 to 3: the bay, the garage, and
+# the office corridor. Ten signs: the company's over the yard door and
+# in the bay, the parking arrow on the facade, exits in the stair
+# hall and by the yard door, the stairs beside their door, the bay's
+# name on its north wall, a hazard on a pillar, the office's in the
+# corridor, and the garage level by the down flight's foot.
+{
+    name: "factory",
+    sectors: [
+        {
+            name: "bay", storey: "ground", tag: 0, ambient: "floor",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [
+                [[10.5, 0.5], [31.5, 0.5], [31.5, 3.0], [31.5, 5.0], [31.5, 23.5], [10.0, 23.5], [10.0, 10.5], [10.5, 10.5], [10.5, 4.0], [10.5, 2.0]],
+                [[17.0, 11.5], [17.5, 11.5], [17.5, 12.0], [17.0, 12.0]],
+                [[24.0, 11.5], [24.5, 11.5], [24.5, 12.0], [24.0, 12.0]],
+            ],
+            walls: [],
+        },
+        {
+            name: "west_low", storey: "ground", tag: 0, ambient: "floor",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 2.7, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 10.5], [10.0, 10.5], [10.0, 23.5], [0.5, 23.5]]],
+            walls: [],
+        },
+        {
+            name: "stair_ground", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 0.5], [9.5, 0.5], [9.5, 2.0], [9.5, 4.0], [9.5, 4.5], [8.0, 4.5], [7.5, 4.5], [7.5, 10.0], [3.0, 10.0], [3.0, 4.5], [2.5, 4.5], [0.5, 4.5]]],
+            walls: [
+                { loop: 0, edge: 4, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 0.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "door_stair", storey: "ground", tag: 1, ambient: "floor",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 2.1, slope: [0.0, 0.0], material: "steel", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[9.5, 2.0], [10.5, 2.0], [10.5, 4.0], [9.5, 4.0]]],
+            walls: [],
+        },
+        {
+            name: "door_yard", storey: "ground", tag: 2, ambient: "floor",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 2.1, slope: [0.0, 0.0], material: "steel", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[31.5, 3.0], [32.0, 3.0], [32.0, 5.0], [31.5, 5.0]]],
+            walls: [],
+        },
+        {
+            name: "up1", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 0.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 4.5], [9.5, 4.5], [9.5, 5.5], [8.0, 5.5]]],
+            walls: [
+                { loop: 0, edge: 2, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "up2", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 1.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 5.5], [9.5, 5.5], [9.5, 6.5], [8.0, 6.5]]],
+            walls: [
+                { loop: 0, edge: 2, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 1.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "up3", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 1.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 6.5], [9.5, 6.5], [9.5, 7.5], [8.0, 7.5]]],
+            walls: [
+                { loop: 0, edge: 2, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 2.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "up4", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 2.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 7.5], [9.5, 7.5], [9.5, 8.5], [8.0, 8.5]]],
+            walls: [
+                { loop: 0, edge: 2, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 2.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "up5", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 2.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 8.5], [9.5, 8.5], [9.5, 9.5], [8.0, 9.5]]],
+            walls: [
+                { loop: 0, edge: 2, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 3.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "up6", storey: "ground", tag: 0, ambient: "stairwell",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 6.0, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 9.5], [9.5, 9.5], [9.5, 10.5], [8.0, 10.5]]],
+            walls: [
+            ],
+        },
+        {
+            name: "office_hall", storey: "office", tag: 0, ambient: "office",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "carpet", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.8, slope: [0.0, 0.0], material: "tile", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[8.0, 10.5], [9.5, 10.5], [9.5, 23.5], [8.0, 23.5], [8.0, 21.0], [8.0, 20.0], [8.0, 13.0], [8.0, 12.0]]],
+            walls: [],
+        },
+        {
+            name: "sill", storey: "office", tag: 0, ambient: "office",
+            floor: { height: 4.0, slope: [0.0, 0.0], material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.8, slope: [0.0, 0.0], material: "tile", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[9.5, 10.5], [10.0, 10.5], [10.0, 23.5], [9.5, 23.5]]],
+            walls: [],
+        },
+        {
+            name: "office_a", storey: "office", tag: 0, ambient: "office",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "carpet", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.8, slope: [0.0, 0.0], material: "tile", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 10.5], [7.5, 10.5], [7.5, 12.0], [7.5, 13.0], [7.5, 16.5], [0.5, 16.5]]],
+            walls: [],
+        },
+        {
+            name: "door_a", storey: "office", tag: 4, ambient: "office",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "carpet", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.1, slope: [0.0, 0.0], material: "steel", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[7.5, 12.0], [8.0, 12.0], [8.0, 13.0], [7.5, 13.0]]],
+            walls: [],
+        },
+        {
+            name: "office_b", storey: "office", tag: 0, ambient: "office",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "carpet", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.8, slope: [0.0, 0.0], material: "tile", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 17.0], [7.5, 17.0], [7.5, 20.0], [7.5, 21.0], [7.5, 23.5], [0.5, 23.5]]],
+            walls: [],
+        },
+        {
+            name: "door_b", storey: "office", tag: 5, ambient: "office",
+            floor: { height: 3.0, slope: [0.0, 0.0], material: "carpet", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 5.1, slope: [0.0, 0.0], material: "steel", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "plaster", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[7.5, 20.0], [8.0, 20.0], [8.0, 21.0], [7.5, 21.0]]],
+            walls: [],
+        },
+        {
+            name: "garage", storey: "garage", tag: 0, ambient: "garage",
+            floor: { height: -3.0, slope: [0.0, 0.0], material: "parking", scale: [0.4, 0.4], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: -0.4, slope: [0.0, 0.0], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [
+                [[0.5, 10.5], [2.5, 10.5], [31.5, 10.5], [31.5, 12.0], [31.5, 16.0], [31.5, 23.5], [0.5, 23.5]],
+                [[8.0, 16.5], [8.5, 16.5], [8.5, 17.0], [8.0, 17.0]],
+                [[16.0, 16.5], [16.5, 16.5], [16.5, 17.0], [16.0, 17.0]],
+                [[24.0, 16.5], [24.5, 16.5], [24.5, 17.0], [24.0, 17.0]],
+            ],
+            walls: [],
+        },
+        {
+            name: "garage_door", storey: "garage", tag: 3, ambient: "garage",
+            floor: { height: -3.0, slope: [0.0, 0.0], material: "asphalt", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: -0.4, slope: [0.0, 0.0], material: "steel", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[31.5, 12.0], [32.0, 12.0], [32.0, 16.0], [31.5, 16.0]]],
+            walls: [],
+        },
+        {
+            name: "down1", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -0.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 2.2, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 4.5], [2.5, 4.5], [2.5, 5.5], [0.5, 5.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: 0.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "down2", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -1.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 1.7, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 5.5], [2.5, 5.5], [2.5, 6.5], [0.5, 6.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: -0.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "down3", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -1.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 1.2, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 6.5], [2.5, 6.5], [2.5, 7.5], [0.5, 7.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: -1.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "down4", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -2.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 0.7, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 7.5], [2.5, 7.5], [2.5, 8.5], [0.5, 8.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: -1.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "down5", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -2.5, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: 0.2, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 8.5], [2.5, 8.5], [2.5, 9.5], [0.5, 9.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: -2.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "down6", storey: "garage", tag: 0, ambient: "stairwell",
+            floor: { height: -3.0, slope: [0.0, 0.0], material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.5], sky: false },
+            ceiling: { height: -0.3, slope: [0.0, -0.5], material: "deck", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[0.5, 9.5], [2.5, 9.5], [2.5, 10.5], [0.5, 10.5]]],
+            walls: [
+                { loop: 0, edge: 0, material: "tread", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: -2.5, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "yard", storey: "outside", tag: 0, ambient: "yard",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "asphalt", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 8.0, slope: [0.0, 0.0], material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: true },
+            wall: { material: "facade", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "bottom", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[32.0, 0.0], [44.0, 0.0], [44.0, 28.0], [36.5, 28.0], [36.5, 11.5], [32.0, 11.5], [32.0, 5.0], [32.0, 3.0]]],
+            walls: [
+                { loop: 0, edge: 0, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: "bottom", solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 1, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: "bottom", solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 2, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: "bottom", solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 3, material: "plinth", scale: [0.5, 1.0], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+                { loop: 0, edge: 4, material: "plinth", scale: [0.5, 1.0], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "parapet", storey: "outside", tag: 0, ambient: "yard",
+            floor: { height: 1.0, slope: [0.0, 0.0], material: "concrete", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 8.0, slope: [0.0, 0.0], material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: true },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[32.0, 11.5], [36.5, 11.5], [36.5, 28.0], [36.0, 28.0], [36.0, 16.0], [36.0, 12.0], [32.0, 12.0]]],
+            walls: [
+                { loop: 0, edge: 2, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 1.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 6, material: "facade", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 0.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "drive_low", storey: "outside", tag: 0, ambient: "yard",
+            floor: { height: -3.0, slope: [0.0, 0.0], material: "asphalt", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 8.0, slope: [0.0, 0.0], material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: true },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[32.0, 12.0], [36.0, 12.0], [36.0, 16.0], [32.0, 16.0]]],
+            walls: [
+                { loop: 0, edge: 3, material: "facade", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 0.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "drive_ramp", storey: "outside", tag: 0, ambient: "yard",
+            floor: { height: -3.0, slope: [0.0, 0.25], material: "asphalt", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 8.0, slope: [0.0, 0.0], material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: true },
+            wall: { material: "block", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 1.0, solid: false, masked: false, sky: false, tag: 0 },
+            loops: [[[32.0, 16.0], [36.0, 16.0], [36.0, 28.0], [32.0, 28.0]]],
+            walls: [
+                { loop: 0, edge: 2, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 3, material: "facade", scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: 0.0, solid: false, masked: false, sky: false, tag: 0 },
+            ],
+        },
+        {
+            name: "beyond", storey: "outside", tag: 0, ambient: "yard",
+            floor: { height: 0.0, slope: [0.0, 0.0], material: "asphalt", scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: 8.0, slope: [0.0, 0.0], material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], sky: true },
+            wall: { material: "sky", scale: [1.0, 1.0], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: true, tag: 0 },
+            loops: [[[32.0, -12.0], [64.0, -12.0], [64.0, 40.0], [32.0, 40.0], [32.0, 28.0], [36.0, 28.0], [36.5, 28.0], [44.0, 28.0], [44.0, 0.0], [32.0, 0.0]]],
+            walls: [
+                { loop: 0, edge: 4, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 5, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 6, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 7, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+                { loop: 0, edge: 8, material: "fence", scale: [0.5, 0.125], offset: [0.0, 0.0], anchor: 0.0, solid: true, masked: true, sky: false, tag: 0 },
+            ],
+        },
+    ],
+    entities: [
+        { name: "spawn", class: "spawn", at: [29.0, 2.5, 0.0], yaw: 150.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_light_sw", class: "light", at: [15.0, 6.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.85], radius: 16.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_light_se", class: "light", at: [26.0, 6.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.85], radius: 16.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_light_nw", class: "light", at: [15.0, 18.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.85], radius: 16.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_light_ne", class: "light", at: [26.0, 18.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.85], radius: 16.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "low_light_s", class: "light", at: [3.0, 14.0, 2.4], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.9, 0.75], radius: 8.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "low_light_n", class: "light", at: [7.0, 20.0, 2.4], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.9, 0.75], radius: 8.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "stair_light", class: "light", at: [5.0, 6.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.9, 0.95, 1.0], radius: 12.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "hall_light_s", class: "light", at: [8.75, 13.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.95, 0.97, 1.0], radius: 7.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "hall_light_n", class: "light", at: [8.75, 21.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.95, 0.97, 1.0], radius: 7.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "office_a_light", class: "light", at: [4.0, 13.5, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.95, 0.97, 1.0], radius: 8.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "office_b_light", class: "light", at: [4.0, 20.0, 5.5], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.95, 0.97, 1.0], radius: 8.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "garage_light_sw", class: "light", at: [8.0, 14.0, -0.6], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.85, 1.0, 0.85], radius: 10.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "garage_light_se", class: "light", at: [24.0, 14.0, -0.6], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.85, 1.0, 0.85], radius: 10.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "garage_light_nw", class: "light", at: [8.0, 21.0, -0.6], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.85, 1.0, 0.85], radius: 10.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "garage_light_ne", class: "light", at: [24.0, 21.0, -0.6], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.85, 1.0, 0.85], radius: 10.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "door_lamp", class: "light", at: [33.0, 14.0, 4.0], yaw: 180.0, pitch: -40.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.9, 0.7], radius: 12.0, spread: 45.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "yard_flood", class: "light", at: [33.0, 8.0, 6.5], yaw: 0.0, pitch: -35.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.8], radius: 22.0, spread: 50.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "door_light", class: "light", at: [32.8, 4.0, 4.2], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.95, 0.85], radius: 7.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "ramp_lamp", class: "light", at: [34.0, 27.0, 5.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.9, 0.7], radius: 10.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "street_lamp", class: "light", at: [50.0, 14.0, 6.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [1.0, 0.85, 0.6], radius: 20.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "facade_sign", class: "sprite", at: [32.05, 4.0, 2.8], yaw: 0.0, pitch: 0.0, size: [2.0, 1.0], material: "sign_fpstech", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "parking_sign", class: "sprite", at: [32.05, 10.0, 2.2], yaw: 0.0, pitch: 0.0, size: [2.0, 0.5], material: "sign_garage", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "hall_exit_sign", class: "sprite", at: [0.55, 2.5, 1.6], yaw: 0.0, pitch: 0.0, size: [1.0, 0.5], material: "sign_exit", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_exit_sign", class: "sprite", at: [31.45, 6.5, 2.4], yaw: 180.0, pitch: 0.0, size: [1.0, 0.5], material: "sign_exit", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "stairs_sign", class: "sprite", at: [10.55, 5.5, 1.9], yaw: 0.0, pitch: 0.0, size: [0.5, 0.5], material: "sign_stairs", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_company_sign", class: "sprite", at: [20.0, 0.55, 3.0], yaw: 90.0, pitch: 0.0, size: [1.0, 0.5], material: "sign_fpstech_small", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_name_sign", class: "sprite", at: [20.0, 23.45, 3.5], yaw: 270.0, pitch: 0.0, size: [2.0, 0.5], material: "sign_bay", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "hazard_sign", class: "sprite", at: [17.25, 11.45, 1.4], yaw: 270.0, pitch: 0.0, size: [0.5, 0.5], material: "sign_hazard", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "office_sign", class: "sprite", at: [8.05, 14.5, 4.6], yaw: 0.0, pitch: 0.0, size: [1.0, 0.5], material: "sign_office", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "p1_sign", class: "sprite", at: [4.0, 10.55, -1.65], yaw: 90.0, pitch: 0.0, size: [0.5, 0.5], material: "sign_p1", colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        { name: "bay_patrol_1", class: "waypoint", at: [14.0, 4.0, 0.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 1, target: "bay_patrol_2" },
+        { name: "bay_patrol_2", class: "waypoint", at: [28.0, 8.0, 0.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 1, target: "bay_patrol_3" },
+        { name: "bay_patrol_3", class: "waypoint", at: [28.0, 20.0, 0.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 1, target: "bay_patrol_4" },
+        { name: "bay_patrol_4", class: "waypoint", at: [14.0, 20.0, 0.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 1, target: "bay_patrol_1" },
+        { name: "garage_patrol_1", class: "waypoint", at: [5.0, 13.0, -3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 2, target: "garage_patrol_2" },
+        { name: "garage_patrol_2", class: "waypoint", at: [28.0, 13.0, -3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 2, target: "garage_patrol_3" },
+        { name: "garage_patrol_3", class: "waypoint", at: [28.0, 21.0, -3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 2, target: "garage_patrol_1" },
+        { name: "office_patrol_1", class: "waypoint", at: [8.75, 12.0, 3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 3, target: "office_patrol_2" },
+        { name: "office_patrol_2", class: "waypoint", at: [8.75, 22.0, 3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 3, target: "office_patrol_1" },
+        { name: "bay_android_1", class: "android", at: [28.0, 8.0, 0.0], yaw: 90.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "camera", two_sided: false, solid: true, tag: 1, target: "bay_patrol_3" },
+        { name: "bay_android_2", class: "android", at: [26.0, 20.0, 0.0], yaw: 180.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "camera", two_sided: false, solid: true, tag: 1, target: "bay_patrol_4" },
+        { name: "garage_android", class: "android", at: [5.0, 13.0, -3.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "camera", two_sided: false, solid: true, tag: 2, target: "garage_patrol_2" },
+        { name: "office_android", class: "android", at: [8.75, 12.0, 3.0], yaw: 90.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "camera", two_sided: false, solid: true, tag: 3, target: "office_patrol_2" },
+    ],
+}

@@ -1,0 +1,5 @@
+name = 'fillrate'
+sdk = '../../../../jab/sdk'
+workspace = '../../../../jab'
+includes = ['../../../../jab/sdk']
+link = '../../../../jab/sdk/program.ld'

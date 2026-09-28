@@ -1,0 +1,15 @@
+# g1_shot: the G-1's report, a third of a second: a hard burst of noise
+# decaying fast over a low thump sweeping down from 150 to 50 hertz, a
+# short bright crack of noise and saw at the front, a thin noise tail.
+{
+    seconds: 0.35,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [noise, 0.0, 0.0, 0.0, 0.28, 0.0, 0.004, 0.0, 0.0],
+        [saw, 0.0, 3200.0, 2400.0, 0.10, 0.0, 0.005, 0.0, 0.0],
+        [noise, 0.0, 0.0, 0.0, 0.30, 0.0, 0.06, 0.0, 0.0],
+        [noise, 0.0, 0.0, 0.0, 0.10, 0.0, 0.30, 0.0, 0.0],
+        [sine, 0.0, 150.0, 50.0, 0.34, 0.004, 0.10, 0.25, 0.22],
+        [sine, 0.0, 75.0, 35.0, 0.14, 0.006, 0.16, 0.0, 0.0],
+    ],
+}

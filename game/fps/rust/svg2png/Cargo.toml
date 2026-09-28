@@ -1,0 +1,13 @@
+[package]
+name = "svg2png"
+description = "An SVG rasterised to a PNG at a scale, for the game's content and plan views"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+resvg.workspace = true

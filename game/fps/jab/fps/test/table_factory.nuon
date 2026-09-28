@@ -1,0 +1,18 @@
+# fps's pad for the factory walks, three placed starts each followed by
+# the left stick held forward: from the foot of the up flight at 2 s for
+# three seconds, twelve metres up the six steps into the office
+# corridor; from the foot of the down flight at 6 s for three seconds,
+# down the six steps into the garage; from the garage door at 10 s for
+# 4.4 seconds, up the driveway's ramp to the gate, the fifteen metres
+# needing 3.7 of them at full throw and a slow frame's clamped step
+# losing a tenth. The console places the camera half a second before
+# each hold.
+[
+    [at, type, code, value];
+    [2000ms, 3, 1, 0],
+    [5000ms, 3, 1, 127],
+    [6000ms, 3, 1, 0],
+    [9000ms, 3, 1, 127],
+    [10000ms, 3, 1, 0],
+    [14400ms, 3, 1, 127],
+]

@@ -1,0 +1,105 @@
+# floor: the factory floor's machinery, sixteen seconds looping: a warm
+# pad drone on a low G and its fifth, struck again every four seconds on
+# alternating channels so it swells in a slow pulse, a soft bass drum
+# thump every two seconds, a side-stick conveyor tick every half second,
+# a low seashore rumble under it all, two short breath-noise pneumatic
+# hisses, and two distant bell-and-agogo clanks. Every drone and rumble
+# join, the loop's own included, is an end and a start on alternating
+# channels, so the seam sounds like the joins inside the piece.
+{
+    gain: 1.8,
+    tracks: [
+        {
+            channel: 0, program: 89, volume: 92,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 31, 70, 4.0],
+                [0.0, 38, 50, 4.0],
+                [8.0, 31, 70, 4.0],
+                [8.0, 38, 50, 4.0],
+            ],
+        },
+        {
+            channel: 1, program: 89, volume: 92,
+            notes: [
+                [at, note, velocity, length];
+                [4.0, 31, 70, 4.0],
+                [4.0, 38, 50, 4.0],
+                [12.0, 31, 70, 4.0],
+                [12.0, 38, 50, 4.0],
+            ],
+        },
+        {
+            channel: 3, program: 122, volume: 48,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 40, 40, 8.0],
+            ],
+        },
+        {
+            channel: 4, program: 122, volume: 48,
+            notes: [
+                [at, note, velocity, length];
+                [8.0, 40, 40, 8.0],
+            ],
+        },
+        {
+            channel: 2, program: 121, volume: 72,
+            notes: [
+                [at, note, velocity, length];
+                [3.1, 76, 62, 0.45],
+                [10.4, 74, 54, 0.6],
+            ],
+        },
+        {
+            channel: 9, program: 0, volume: 58,
+            notes: [
+                [at, note, velocity, length];
+                [0.0, 35, 34, 0.2],
+                [0.0, 37, 24, 0.05],
+                [0.5, 37, 18, 0.05],
+                [1.0, 37, 24, 0.05],
+                [1.5, 37, 18, 0.05],
+                [2.0, 35, 34, 0.2],
+                [2.0, 37, 24, 0.05],
+                [2.5, 37, 18, 0.05],
+                [3.0, 37, 24, 0.05],
+                [3.5, 37, 18, 0.05],
+                [4.0, 35, 34, 0.2],
+                [4.0, 37, 24, 0.05],
+                [4.5, 37, 18, 0.05],
+                [5.0, 37, 24, 0.05],
+                [5.3, 53, 30, 0.3],
+                [5.3, 68, 24, 0.3],
+                [5.5, 37, 18, 0.05],
+                [6.0, 35, 34, 0.2],
+                [6.0, 37, 24, 0.05],
+                [6.5, 37, 18, 0.05],
+                [7.0, 37, 24, 0.05],
+                [7.5, 37, 18, 0.05],
+                [8.0, 35, 34, 0.2],
+                [8.0, 37, 24, 0.05],
+                [8.5, 37, 18, 0.05],
+                [9.0, 37, 24, 0.05],
+                [9.5, 37, 18, 0.05],
+                [10.0, 35, 34, 0.2],
+                [10.0, 37, 24, 0.05],
+                [10.5, 37, 18, 0.05],
+                [11.0, 37, 24, 0.05],
+                [11.5, 37, 18, 0.05],
+                [12.0, 35, 34, 0.2],
+                [12.0, 37, 24, 0.05],
+                [12.5, 37, 18, 0.05],
+                [12.65, 53, 22, 0.3],
+                [12.65, 67, 18, 0.3],
+                [13.0, 37, 24, 0.05],
+                [13.5, 37, 18, 0.05],
+                [14.0, 35, 34, 0.2],
+                [14.0, 37, 24, 0.05],
+                [14.5, 37, 18, 0.05],
+                [15.0, 37, 24, 0.05],
+                [15.5, 37, 18, 0.05],
+            ],
+        },
+    ],
+}

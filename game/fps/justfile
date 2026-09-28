@@ -1,0 +1,35 @@
+# Jab FPS's own recipes: the content rendered and compiled, a run's
+# capture as a PNG to look at, and clean. The programs under jab/ each
+# build, test, and run through their own justfile against the jab
+# workspace; our maps under content/map compile into .target/asset,
+# beside the test trees the conversion tooling kept outside the
+# repository lays out from third-party sample content (README.md).
+
+set shell := ["nu", "-c"]
+set windows-shell := ["nu", "-c"]
+set quiet := true
+
+here := justfile_directory()
+
+default:
+    ^just --list
+
+# Every asset under content/ rendered to the file beside it the engine
+# reads: an SVG to a PNG at its own size through rust/svg2png, built
+# when it is not there; an ambient note list to a MIDI file through
+# nu/ambient.nu; a sound recipe to PCM through nu/sound.nu
+render:
+    let tool = "{{here}}/rust/target/release/svg2png"; if not ($tool | path exists) { ^cargo build --release --manifest-path "{{here}}/rust/Cargo.toml" }; for svg in (glob "{{here}}/content/**/*.svg") { ^$tool $svg ($svg | str replace --regex '\.svg$' '.png') }; for list in (glob "{{here}}/content/ambient/*.nuon") { ^nu "{{here}}/nu/ambient.nu" render $list ($list | str replace --regex '\.nuon$' '.mid') }; for recipe in (glob "{{here}}/content/sound/*.nuon") { ^nu "{{here}}/nu/sound.nu" render $recipe ($recipe | str replace --regex '\.nuon$' '.pcm') }
+
+# Every map source under content/map compiled into .target/asset/<name>
+# with its materials, ambients, counts, and plan views
+compile:
+    for src in (glob "{{here}}/content/map/*.nuon") { ^nu "{{here}}/nu/map.nu" compile $src "{{here}}/.target/asset" }
+
+# A run's screen capture as a PNG to look at, every Nth pixel:
+# `just shot jab/fps/.target/debug/fps/screen.ppm frame.png`
+shot ppm png step="4":
+    ^nu "{{here}}/nu/shot.nu" "{{ppm}}" "{{png}}" --step {{step}}
+
+clean:
+    rm -rf "{{here}}/.target"

@@ -1,0 +1,13 @@
+# pickup: a magazine picked up, 0.3 seconds: a bright two-tone sine blip
+# rising a fifth, each tone with its octave, C6 fading out by 72
+# milliseconds and G6 from 80 milliseconds fading out by 280.
+{
+    seconds: 0.3,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [sine, 0.0, 1046.5, 1046.5, 0.36, 0.002, 0.07, 0.0, 0.0],
+        [sine, 0.0, 2093.0, 2093.0, 0.10, 0.002, 0.05, 0.0, 0.0],
+        [sine, 0.08, 1568.0, 1568.0, 0.36, 0.0, 0.2, 0.0, 0.0],
+        [sine, 0.08, 3136.0, 3136.0, 0.10, 0.0, 0.13, 0.0, 0.0],
+    ],
+}

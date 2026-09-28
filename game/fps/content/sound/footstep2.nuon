@@ -1,0 +1,13 @@
+# footstep2: an android's other foot on concrete, 0.18 seconds: the
+# same soft low thud, contact, tap, and grit as footstep1, pitched about
+# two semitones higher and a touch shorter, so a walk alternates.
+{
+    seconds: 0.18,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [sine, 0.0, 118.0, 68.0, 0.28, 0.003, 0.065, 0.0, 0.0],
+        [triangle, 0.0, 212.0, 168.0, 0.10, 0.001, 0.022, 0.0, 0.0],
+        [square, 0.0, 460.0, 420.0, 0.035, 0.0, 0.009, 0.0, 0.0],
+        [noise, 0.0, 0.0, 0.0, 0.045, 0.002, 0.03, 0.0, 0.0],
+    ],
+}

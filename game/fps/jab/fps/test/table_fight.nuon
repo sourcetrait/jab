@@ -1,0 +1,12 @@
+# fps's pad for the fight: the right trigger's button pressed at 4.2 s
+# and released a tenth later, one round past the four the console
+# fired, then the left stick held forward from 5.5 s to 9 s, fourteen
+# metres south down the bay's east patrol leg over the fallen android
+# and its magazine.
+[
+    [at, type, code, value];
+    [4200ms, 1, 313, 1],
+    [4300ms, 1, 313, 0],
+    [5500ms, 3, 1, 0],
+    [9000ms, 3, 1, 127],
+]

@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="512" viewBox="0 0 1024 512">
+  <defs>
+    <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="0" y1="64" x2="0" y2="512">
+      <stop offset="0" stop-color="#3a6fb0"/>
+      <stop offset="0.4" stop-color="#6b9ad1"/>
+      <stop offset="0.78" stop-color="#b4cbe2"/>
+      <stop offset="1" stop-color="#dde7ee"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-60%" width="160%" height="220%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="softer" x="-30%" y="-60%" width="160%" height="220%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="haze" x="-10%" y="-40%" width="120%" height="180%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <g id="cumulus_large">
+      <g fill="#dbe4ec" opacity="0.9">
+        <ellipse cx="0" cy="8" rx="118" ry="14"/>
+      </g>
+      <g fill="#ffffff" opacity="0.95">
+        <ellipse cx="-62" cy="-4" rx="42" ry="26"/>
+        <ellipse cx="-14" cy="-22" rx="52" ry="36"/>
+        <ellipse cx="38" cy="-12" rx="48" ry="30"/>
+        <ellipse cx="80" cy="0" rx="34" ry="20"/>
+        <ellipse cx="0" cy="0" rx="110" ry="16"/>
+      </g>
+    </g>
+    <g id="cumulus_medium">
+      <g fill="#dbe4ec" opacity="0.9">
+        <ellipse cx="0" cy="6" rx="78" ry="10"/>
+      </g>
+      <g fill="#ffffff" opacity="0.95">
+        <ellipse cx="-40" cy="-2" rx="30" ry="18"/>
+        <ellipse cx="-6" cy="-16" rx="36" ry="26"/>
+        <ellipse cx="34" cy="-6" rx="30" ry="20"/>
+        <ellipse cx="0" cy="0" rx="72" ry="12"/>
+      </g>
+    </g>
+    <g id="cumulus_small">
+      <g fill="#dbe4ec" opacity="0.9">
+        <ellipse cx="0" cy="4" rx="46" ry="7"/>
+      </g>
+      <g fill="#ffffff" opacity="0.95">
+        <ellipse cx="-18" cy="-4" rx="20" ry="12"/>
+        <ellipse cx="12" cy="-8" rx="22" ry="14"/>
+        <ellipse cx="0" cy="0" rx="42" ry="8"/>
+      </g>
+    </g>
+    <g id="stratus">
+      <g fill="#ffffff" opacity="0.7">
+        <ellipse cx="0" cy="0" rx="90" ry="5"/>
+        <ellipse cx="-30" cy="-3" rx="50" ry="4"/>
+        <ellipse cx="40" cy="2" rx="46" ry="4"/>
+      </g>
+    </g>
+  </defs>
+  <rect x="0" y="0" width="1024" height="64" fill="#3a6fb0"/>
+  <rect x="0" y="64" width="1024" height="448" fill="url(#sky)"/>
+  <rect x="-40" y="350" width="1104" height="200" fill="#ffffff" opacity="0.22" filter="url(#haze)"/>
+  <g filter="url(#soft)">
+    <use xlink:href="#cumulus_large" x="200" y="190"/>
+    <use xlink:href="#cumulus_medium" x="540" y="150"/>
+    <use xlink:href="#cumulus_large" x="820" y="230"/>
+    <use xlink:href="#cumulus_small" x="420" y="262"/>
+    <use xlink:href="#cumulus_medium" x="1010" y="172"/>
+    <use xlink:href="#cumulus_medium" x="-14" y="172"/>
+    <use xlink:href="#cumulus_small" x="90" y="292"/>
+    <use xlink:href="#cumulus_small" x="1114" y="292"/>
+    <use xlink:href="#cumulus_small" x="700" y="300"/>
+  </g>
+  <g filter="url(#softer)">
+    <use xlink:href="#stratus" x="330" y="352"/>
+    <use xlink:href="#stratus" x="760" y="378"/>
+    <use xlink:href="#stratus" x="140" y="392"/>
+    <use xlink:href="#stratus" x="1164" y="392"/>
+    <use xlink:href="#stratus" x="960" y="410"/>
+    <use xlink:href="#stratus" x="-64" y="410"/>
+    <use xlink:href="#stratus" x="540" y="424"/>
+  </g>
+</svg>

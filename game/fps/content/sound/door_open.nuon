@@ -1,0 +1,17 @@
+# door_open: a steel door's motor opening it, 0.9 seconds: a low hum of
+# saw, sine, and a square sub sweeping slightly up as the door runs, a
+# faint roller rumble of noise, the hum fading over the last 0.16
+# seconds, and a click at 0.8 seconds as it reaches its stop.
+{
+    seconds: 0.9,
+    layers: [
+        [wave, start, frequency, sweep, gain, attack, decay, sustain, release];
+        [saw, 0.0, 92.0, 118.0, 0.20, 0.08, 0.0, 1.0, 0.16],
+        [sine, 0.0, 184.0, 236.0, 0.12, 0.08, 0.0, 1.0, 0.16],
+        [square, 0.0, 46.0, 59.0, 0.06, 0.10, 0.0, 1.0, 0.16],
+        [noise, 0.0, 0.0, 0.0, 0.035, 0.12, 0.0, 1.0, 0.18],
+        [square, 0.8, 1500.0, 1500.0, 0.16, 0.0, 0.012, 0.0, 0.0],
+        [triangle, 0.8, 640.0, 640.0, 0.14, 0.0, 0.02, 0.0, 0.0],
+        [noise, 0.8, 0.0, 0.0, 0.12, 0.0, 0.006, 0.0, 0.0],
+    ],
+}
