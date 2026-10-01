@@ -88,15 +88,19 @@
 # The surface's lumel map record; 0 for a polygon with no map, a sprite,
 # lit flat by POLY_FLAT_BRIGHT over its whole extent
 .set POLY_LUMAP, 184
-# The read's one word for a mapped polygon: the lumels' base in the low
-# LUMEL_BASE_BITS, a row's bytes from LUMEL_ROWBYTES_SHIFT, and k, the
-# lumel's texels as a power of two, from LUMEL_K_SHIFT
+# The read's one word for a mapped polygon: the lumels' offset into the
+# arena in the low LUMEL_OFFSET_BITS, a row's bytes from
+# LUMEL_ROWBYTES_SHIFT, the rows from LUMEL_ROWS_SHIFT, and k, the
+# lumel's texels as a power of two, from LUMEL_K_SHIFT; the columns and
+# rows bound the read, a texel coordinate past the map's last node or
+# before its first reading the node there
 .set POLY_LUMEL, 192
 # The brightness of a polygon with no map, packed as a brightness word
 .set POLY_FLAT_BRIGHT, 200
 .set POLY_SIZE, 208
-.set LUMEL_BASE_BITS, 40
-.set LUMEL_ROWBYTES_SHIFT, 40
+.set LUMEL_OFFSET_BITS, 24
+.set LUMEL_ROWBYTES_SHIFT, 24
+.set LUMEL_ROWS_SHIFT, 40
 .set LUMEL_K_SHIFT, 56
 .set LUMEL_K_MAX, 15
 # A brightness word packs three 16.16 channels CHANNEL_BITS apart, which

@@ -9,9 +9,17 @@ surface mathematics. The frame loop runs the game's phases before the
 drawing's and times each: the game's microseconds cover the pad, the console,
 the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 
-The first frame is reported on the UART, and one after each console placement,
-so a test reads the frame it posed; the DEBUG build adds the walk's order. The
-line's tail, the spans and the pixels they entered, the lit ones among them,
+The reports are the program's own debug lines, there for its test and
+nowhere else: under DEBUG the first frame is reported on the UART, and one
+after each console placement, so a test reads the frame it posed, with the
+walk's order after it; a release build carries neither the report routines
+nor their text and says nothing but an exit, jab's rule for a program, which
+the test holds by scanning a release image it builds for every `fps: `
+string. The load line, the bake's, the frames', the sounds', the soundfont's,
+and the ambient's lines are under the same conditional at their sites, with
+their text beside it, while a load that fails keeps its exit line in every
+build, as a fault line stays on the UART. The line's tail, the spans and the
+pixels they entered, the lit ones among them,
 the light's microseconds, the pixels rejected, and the lumel samples, is the
 light's instrument: pixels entered over the screen's 2,073,600 is the
 overdraw, the light's microseconds, the sprites' evaluations now that the

@@ -37,17 +37,17 @@ immediate offset needs its value at the load; the comment carries the sum.
 POLY_LUMAP is 0 for a polygon with no map, which the fill lights flat by
 POLY_FLAT_BRIGHT and the mode treats as lit whenever the map has lights;
 a mapped polygon whose record has no base, the bake having left it, draws
-unlit. POLY_LUMEL is the read's one word, the lumels' base in 40 bits, a
-row's bytes in 16, and k in the top byte, so a sample loads one word for
-the map where the record's fields cost nine loads before.
+unlit. POLY_LUMEL is the read's one word, the lumels' offset into the arena
+in 24 bits, a row's bytes in 16, the rows in 16, and k in the top byte, so
+a sample loads one word for the map where the record's fields cost nine
+loads before, and bounds itself from that word.
 
 The lumel map record is in texels: the first node's texel coordinate on
 each axis, a multiple of the texture's size below the surface's least
 texel, and k, the lumel's texels as a power of two. The read is then two
-shifts an axis with no clamp, since the fill's coordinate counted from the
-origin lies within the map by the frame's margins (light.S), and the
-texel-to-lumel scales and offsets the record carried before are gone with
-the clamps.
+shifts an axis after a clamp to the map, since a sample at a block's end
+can lie a pixel past the polygon's edge (raster.S); the texel-to-lumel
+scales and offsets the record carried before are gone.
 
 The interval constants size the cadence: a lit span samples at the ends of
 one, two, or four blocks, INTERVAL_SHIFT_MAX being four blocks' shift, by

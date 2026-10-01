@@ -1,0 +1,18 @@
+[package]
+name = "jabdisco"
+description = "Device discovery for Jab: the gamepad a run attaches and the audio output it plays through, as one NUON record."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "jabdisco"
+path = "src/main.rs"
+
+[dependencies]
+cpal.workspace = true
+gilrs.workspace = true

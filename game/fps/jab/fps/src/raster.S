@@ -556,10 +556,16 @@ lumap_bind:
     ld t5, POLY_VZC(t0)
     sub t5, t5, t4
     sd t5, POLY_VZC(t0)
-    # the read's word
+    # the read's word: the lumels' offset into the arena, a row's bytes,
+    # the rows, and k
     ld t3, LUMAP_BASE(t2)
+    la t4, lumel_arena
+    sub t3, t3, t4
     ld t4, LUMAP_W(t2)
     slli t4, t4, (3 + LUMEL_ROWBYTES_SHIFT)
+    or t3, t3, t4
+    ld t4, LUMAP_H(t2)
+    slli t4, t4, LUMEL_ROWS_SHIFT
     or t3, t3, t4
     ld t4, LUMAP_K(t2)
     slli t4, t4, LUMEL_K_SHIFT
@@ -711,53 +717,80 @@ poly_fill:
     ret
 
 # The brightness at a texel coordinate of the surface in hand from its
-# lumel map, the coordinate counted from the map's first node: the
-# lumel's 2^k texels shifted off for the column and the row, the fractions
-# in 256ths, the four lumels about it summed under weights adding to 256
+# lumel map, the coordinate counted from the map's first node and held
+# within the map: the lumel's 2^k texels shifted off for the column and
+# the row, the fractions in 256ths, the four lumels about it summed under
+# weights adding to 256
 # a5 int u, 16.16 texels from the map's origin
 # a6 int v, 16.16 texels from the map's origin
 # returns Clobbers a0, a6, a7, t3, t4
 #   a5 The brightness, the three channels in 16.16 packed CHANNEL_BITS apart
 .macro lumel_sample
     la t3, poly
-    ld t3, POLY_LUMEL(t3)           # the base, a row's bytes, k
-    srli a7, t3, LUMEL_K_SHIFT      # k
-    addi a0, a7, 16
-    srl t4, a5, a0                  # the column
-    srl a0, a6, a0                  # the row
-    addi a7, a7, 8
+    ld t3, POLY_LUMEL(t3)           # the arena offset, a row's bytes, the rows, k
+    srli a7, t3, LUMEL_K_SHIFT
+    addi a7, a7, 16                 # k + 16
+    # the coordinates held within the map: a pixel past a span's edge
+    # can lie before the first node or past the last, and a read past
+    # the map would fault
+    bgez a5, .Llumel_u0\@
+    li a5, 0
+.Llumel_u0\@:
+    bgez a6, .Llumel_v0\@
+    li a6, 0
+.Llumel_v0\@:
+    slli a0, t3, (64 - LUMEL_ROWBYTES_SHIFT - 16)
+    srli a0, a0, 48                 # a row's bytes
+    srli t4, a0, 3
+    addi t4, t4, -1
+    sll t4, t4, a7
+    addi t4, t4, -1                 # the greatest u, under the last column
+    ble a5, t4, .Llumel_u1\@
+    mv a5, t4
+.Llumel_u1\@:
+    slli t4, t3, (64 - LUMEL_ROWS_SHIFT - 16)
+    srli t4, t4, 48
+    addi t4, t4, -1
+    sll t4, t4, a7
+    addi t4, t4, -1                 # the greatest v
+    ble a6, t4, .Llumel_v1\@
+    mv a6, t4
+.Llumel_v1\@:
+    srl t4, a6, a7                  # the row
+    mul t4, t4, a0
+    slli t3, t3, (64 - LUMEL_OFFSET_BITS)
+    srli t3, t3, (64 - LUMEL_OFFSET_BITS)
+    add t4, t4, t3                  # the row's offset into the arena
+    la t3, lumel_arena
+    add t4, t4, t3                  # the row's address
+    srl t3, a5, a7                  # the column
+    slli t3, t3, 3
+    add t4, t4, t3                  # the lumel above left
+    add t3, t4, a0                  # the one below it
+    addi a7, a7, -8
     srl a5, a5, a7
     andi a5, a5, 0xff               # u's fraction in 256ths
     srl a6, a6, a7
     andi a6, a6, 0xff               # v's
-    slli a7, t3, (64 - LUMEL_ROWBYTES_SHIFT - 16)
-    srli a7, a7, 48                 # a row's bytes
-    mul a0, a0, a7
-    slli t3, t3, (64 - LUMEL_BASE_BITS)
-    srli t3, t3, (64 - LUMEL_BASE_BITS)     # the base
-    add a0, a0, t3
-    slli t4, t4, 3
-    add a0, a0, t4                  # the lumel above left
-    add t4, a0, a7                  # the one below it
     mul a7, a5, a6
     srli a7, a7, 8                  # the weight below right
     sub a5, a5, a7                  # above right
     sub a6, a6, a7                  # below left
+    ld a0, 8(t3)
+    mul a0, a0, a7
+    ld t3, 0(t3)
+    mul t3, t3, a6
+    add a0, a0, t3
     ld t3, 8(t4)
-    mul t3, t3, a7
-    ld t4, 0(t4)
-    mul t4, t4, a6
-    add t3, t3, t4
-    ld t4, 8(a0)
-    mul t4, t4, a5
-    add t3, t3, t4
+    mul t3, t3, a5
+    add a0, a0, t3
     neg a7, a7
     addi a7, a7, 256
     sub a7, a7, a5
     sub a7, a7, a6                  # above left, the four summing to 256
-    ld a0, 0(a0)
-    mul a0, a0, a7
-    add a5, t3, a0
+    ld t4, 0(t4)
+    mul t4, t4, a7
+    add a5, a0, t4
 .endm
 
 # The pixels a0 to a1 of row a2 filled with the surface in hand: textured,

@@ -116,11 +116,13 @@ _start:
     call clear_screen
     jab.sys.display.await
     jab.sys.display.flip
+.ifdef DEBUG
     rdtime t0
     sub t0, t0, s11
     li t1, MS_TICKS
     divu s5, t0, t1                 # the milliseconds
     call load_report
+.endif
     li s8, 0                        # the frames drawn
     rdtime s7                       # the frame before's time
 frame:
@@ -162,6 +164,7 @@ frame:
     call mixer_update
     jab.sys.display.flip
     call state_report
+.ifdef DEBUG
     # the first frame's report, and the first after a console placement
     la t0, report_pending
     lbu t1, 0(t0)
@@ -170,10 +173,9 @@ frame:
     beqz t1, 1f
 2:
     call frame_report
-.ifdef DEBUG
     call sectors_report
-.endif
 1:
+.endif
     addi s8, s8, 1
     jab.sys.await (JAB_AWAIT_DISPLAY | JAB_AWAIT_PAD)
     j frame
@@ -342,6 +344,9 @@ line_end:
     jab.sys.uart.print line
     ret
 
+# The reports are the program's own debug lines, for its test: a release
+# build carries neither them nor their text, and says nothing but an exit
+.ifdef DEBUG
 # The load line on the UART: the counts of what loaded
 # s5 int The milliseconds
 load_report:
@@ -539,7 +544,6 @@ frame_report:
     addi sp, sp, 16
     ret
 
-.ifdef DEBUG
 # The sectors line on the UART: the last frame's walk in order
 sectors_report:
     addi sp, sp, -32
@@ -853,42 +857,8 @@ msg_prefix:
     .asciz "fps: "
 msg_material:
     .asciz "fps: material "
-msg_ambient:
-    .asciz "fps: ambient "
-word_space:
-    .asciz " "
 word_colon:
     .asciz ": "
-word_loaded:
-    .asciz " loaded in "
-word_ms:
-    .asciz " ms: "
-word_sectors:
-    .asciz " sectors, "
-word_walls:
-    .asciz " walls, "
-word_vertices:
-    .asciz " vertices, "
-word_portals:
-    .asciz " portals, "
-word_entities:
-    .asciz " entities, "
-word_lights:
-    .asciz " lights, "
-word_lumel_maps:
-    .asciz " lumel maps, "
-word_sprites:
-    .asciz " sprites, "
-word_materials:
-    .asciz " materials, "
-word_textures:
-    .asciz " textures, "
-word_missing:
-    .asciz " missing"
-word_missing_file:
-    .asciz " missing"
-word_not_fit_arena:
-    .asciz " does not fit its arena"
 word_not_on_disk:
     .asciz " is not on the disk"
 word_not_map:
@@ -921,6 +891,42 @@ msg_no_disk:
     .asciz "fps: no disk of serial fps\n"
 msg_no_name:
     .asciz "fps: the disk has no /map/name\n"
+# The debug lines' text, in a debug build alone
+.ifdef DEBUG
+msg_ambient:
+    .asciz "fps: ambient "
+word_space:
+    .asciz " "
+word_loaded:
+    .asciz " loaded in "
+word_ms:
+    .asciz " ms: "
+word_sectors:
+    .asciz " sectors, "
+word_walls:
+    .asciz " walls, "
+word_vertices:
+    .asciz " vertices, "
+word_portals:
+    .asciz " portals, "
+word_entities:
+    .asciz " entities, "
+word_lights:
+    .asciz " lights, "
+word_lumel_maps:
+    .asciz " lumel maps, "
+word_sprites:
+    .asciz " sprites, "
+word_materials:
+    .asciz " materials, "
+word_textures:
+    .asciz " textures, "
+word_missing:
+    .asciz " missing"
+word_missing_file:
+    .asciz " missing"
+word_not_fit_arena:
+    .asciz " does not fit its arena"
 msg_frame:
     .asciz "fps: frame in "
 msg_sectors:
@@ -951,6 +957,7 @@ word_rejected:
     .asciz ", rejected "
 word_lumel_samples:
     .asciz ", samples "
+.endif
 
 .balign 4
 k_seconds_a_tick:

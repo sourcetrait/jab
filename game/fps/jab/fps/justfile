@@ -45,7 +45,21 @@ run *args: assets
 # NUON list of {name, x, y, z, yaw, pitch}, as PNGs under out:
 # `just pose cage2 poses.nuon out`
 pose map poses out: assets
-    ^just build --set debug; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel "{{game}}/../../jab/.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab"
+    ^just build --set debug; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel "{{game}}/../../.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab"
+
+# Build with DEBUG set, then play the factory on the pad from seeded
+# random tables for that many seconds a seed, a fault resolved to its
+# routine: `just smoke "[1 2 3]" 60`
+smoke seeds='[1]' seconds='60': assets
+    ^just build --set debug; ^nu "{{here}}/test/smoke.nu" --kernel "{{game}}/../../.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --out "{{here}}/.target/debug/fps/smoke" --seeds "{{seeds}}" --seconds {{seconds}}
+
+# Build with DEBUG set, then hand the factory to robojab for an agent or
+# a script to play: `just play` prints the MCP server line and config
+# record for a subagent; `just play /tmp/fps.sock` serves commands on
+# that socket in the foreground; `just play mcp cage2 300` another map
+# and bound
+play target='mcp' map='factory' seconds='600': assets
+    ^just build --set debug; ^nu "{{here}}/test/play.nu" --kernel "{{game}}/../../.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --out "{{here}}/.target/debug/fps/play" --map "{{map}}" --seconds {{seconds}} --target "{{target}}"
 
 clean:
     let sdk = (open program.jab.toml | get sdk); ^nu ($sdk | path join "nu" "jab.nu") clean "{{here}}"

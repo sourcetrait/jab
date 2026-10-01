@@ -29,7 +29,7 @@ const plan_margin = 1.0
 const here = (path self | path dirname)
 # The plan view's labels are drawn in the kernel's console font, the
 # glyph table the kernel assembles, so the renderer needs no font
-const font_path = ($here | path join ".." ".." ".." "jab" "kernel" "src" "font.S")
+const font_path = ($here | path join ".." ".." ".." "kernel" "src" "font.S")
 const glyph_width = 12
 const glyph_height = 24
 

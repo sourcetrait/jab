@@ -1,5 +1,5 @@
 name = 'fillrate'
-sdk = '../../../../jab/sdk'
-workspace = '../../../../jab'
-includes = ['../../../../jab/sdk']
-link = '../../../../jab/sdk/program.ld'
+sdk = '../../../../sdk'
+workspace = '../../../..'
+includes = ['../../../../sdk']
+link = '../../../../sdk/program.ld'

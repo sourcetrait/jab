@@ -61,30 +61,37 @@ A lit polygon with a map has the map's texel origin folded into its u/z and
 v/z coefficients once a polygon: u/z less U0/z on A, B, and C, which is U0
 times the 6.26 1/z coefficient shifted down ten for the 48.16 u/z, and v the
 same. The span's texel coordinates then count from the map's first node, so
-the read is a shift and the coordinate is never negative; the origin is a
-multiple of the texture's size, so the wrap by the mask is unchanged and the
-texel loop needs no change. U0 times 1/z stays under 2^46 across the
-factory. The read's one word packs the lumels' base in 40 bits, a row's
-bytes in 16 from bit 40, and k from bit 56; a program window sits under 2^40
-on this machine, which the packing assumes.
+the read is a shift; the origin is a multiple of the texture's size, so the
+wrap by the mask is unchanged and the texel loop needs no change. U0 times
+1/z stays under 2^46 across the factory. The read's one word packs the
+lumels' offset into the arena in 24 bits, a row's bytes in 16 from bit 24,
+the rows in 16 from bit 40, and k from bit 56, so the read can bound itself
+from the word alone; the offset rather than the address because a window
+on an 8 GB machine can sit past 2^32 and the rows need the bits.
 
 ## lumel_sample
 
-The read, about 41 integer ops and five loads a sample, one of them the
-packed word: the column and the row are the texel coordinate shifted by k
-plus 16, the fractions the next eight bits down, the address the base plus
-the row times the row's bytes plus the column times eight, the lumel below
-one row's bytes on; the four lumels about the coordinate are summed under
-weights from the fractions in 256ths, the below-right one the product
-shifted, the other three by subtraction so the four sum to 256 exactly,
-since four truncated products summed to as little as 253 and darkened a
-fully lit lumel by a visible percent; the products are summed on the packed
-lanes whole, 256 times 256 being 17 bits and a lane 21. No clamp: a span's
-texel coordinate lies within the surface by construction, the map's frame
-holds a node past each end, and the origin sits a texel or more below the
-surface's least, which covers a block end's rounding. Bilinear, since a
-lumel close up is hundreds of pixels wide and nearest sampling would show
-every one as a step.
+The read, about 60 integer ops and five loads a sample, one of them the
+packed word: the coordinates are held within the map first, a negative one
+to 0 and one past the last column or row to the greatest coordinate under
+it, both from the word's columns and rows; then the column and the row are
+the texel coordinate shifted by k plus 16, the fractions the next eight
+bits down, the address the arena plus the offset plus the row times the
+row's bytes plus the column times eight, the lumel below one row's bytes
+on; the four lumels about the coordinate are summed under weights from the
+fractions in 256ths, the below-right one the product shifted, the other
+three by subtraction so the four sum to 256 exactly, since four truncated
+products summed to as little as 253 and darkened a fully lit lumel by a
+visible percent; the products are summed on the packed lanes whole, 256
+times 256 being 17 bits and a lane 21. The clamp is load-bearing: a
+sample is taken at a block's or an interval's end, the pixel past its last,
+which at a span's last block lies beyond the polygon's edge by up to one
+pixel's texel step, several texels on a wall seen nearly edge-on; a first
+form read with no clamp on the claim that a span's coordinate lies within
+the surface by construction, and a coordinate before the map's first node
+shifted logically became a huge column and a load outside the program.
+Bilinear, since a lumel close up is hundreds of pixels wide and nearest
+sampling would show every one as a step.
 
 The read it replaced did 13 loads and eight multiplies a sample, nine of
 the loads the map's record and its fields reloaded every block, and

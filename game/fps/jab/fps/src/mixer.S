@@ -70,15 +70,18 @@ word_sound_dir:
     .asciz "/sound/"
 word_pcm_ext:
     .asciz ".pcm"
+.ifdef DEBUG
 msg_sound:
     .asciz "fps: sound "
 msg_sounds:
     .asciz "fps: sounds "
+.endif
 
 .section .text
 
 # Every sound of the engine's stems read off the disk into the sound arena;
-# one not there or not fitting is named on the UART and left as none.
+# one not there or not fitting is named on the UART of a debug build and
+# left as none.
 sounds_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -136,11 +139,12 @@ sounds_load:
     addi s4, s4, 1
     j 8f
 4:
-    la a1, word_missing_file
+    li a1, 0                        # missing
     j 6f
 5:
-    la a1, word_not_fit_arena
+    li a1, 1                        # not fitting the arena
 6:
+.ifdef DEBUG
     mv s3, a1
     la a0, line
     la a1, msg_sound
@@ -151,14 +155,19 @@ sounds_load:
     call append_str
     la a1, tile_path
     call append_str
-    mv a1, s3
+    la a1, word_missing_file
+    beqz s3, 7f
+    la a1, word_not_fit_arena
+7:
     call append_str
     call line_end
+.endif
     addi s5, s5, 1
 8:
     addi s2, s2, 1
     j 1b
 9:
+.ifdef DEBUG
     la a0, line
     la a1, msg_sounds
     call append_str
@@ -171,6 +180,7 @@ sounds_load:
     la a1, word_missing
     call append_str
     call line_end
+.endif
     ld ra, 40(sp)
     ld s2, 32(sp)
     ld s3, 24(sp)

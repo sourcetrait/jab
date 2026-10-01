@@ -666,6 +666,7 @@ material_read:
     la a3, tile_path
     call read_file
     bnez a0, 30f
+.ifdef DEBUG
     # missing: named on the UART
     la a0, line
     mv a1, s5
@@ -679,6 +680,7 @@ material_read:
     la a1, word_missing_file
     call append_str
     call line_end
+.endif
     li a0, 0
     j 90f
 30:
@@ -792,7 +794,9 @@ frames_load:
     lwu s3, 0(t0)
     add s3, s3, s2                  # the material index
     mv a0, s2
+.ifdef DEBUG
     la a1, msg_frame_missing
+.endif
     call material_read
     la t0, material_record
     slli t1, s3, 3
@@ -807,6 +811,7 @@ frames_load:
     addi s2, s2, 1
     j 1b
 9:
+.ifdef DEBUG
     la a0, line
     la a1, msg_frames
     call append_str
@@ -819,6 +824,7 @@ frames_load:
     la a1, word_missing
     call append_str
     call line_end
+.endif
     ld ra, 40(sp)
     ld s2, 32(sp)
     ld s3, 24(sp)
@@ -828,7 +834,8 @@ frames_load:
     ret
 
 # Every ambient piece read off the disk at /<name>.mid into its arena; one
-# not there, too long a name, or not fitting is named on the UART.
+# not there, too long a name, or not fitting is named on the UART of a
+# debug build and left as none.
 ambients_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -857,8 +864,7 @@ ambients_load:
     addi t0, a1, 6
     li t1, PATH_BYTES
     bleu t0, t1, 2f
-    la a1, word_name_too_long
-    li a2, 0
+    li a2, 0                        # the name too long, no path
     j 7f
 2:
     la a0, tile_path
@@ -880,13 +886,11 @@ ambients_load:
     la a3, tile_path
     call read_file
     bnez a0, 3f
-    la a1, word_missing_file
-    li a2, 1
+    li a2, 1                        # missing
     j 7f
 3:
     bltu a0, s5, 4f
-    la a1, word_not_fit_arena
-    li a2, 1
+    li a2, 2                        # not fitting the arena
     j 7f
 4:
     # kept, the cursor moved on to a word boundary
@@ -905,24 +909,29 @@ ambients_load:
     sd t1, 0(t0)
     j 9f
 7:
+.ifdef DEBUG
     # named on the UART: `fps: ambient N <path> missing`, or with no
-    # path when a2 is 0
-    mv s5, a1
+    # path when the name is too long
     mv s4, a2
     la a0, line
     la a1, msg_ambient
     call append_str
     mv a1, s3
     call append_dec
+    la a1, word_name_too_long
     beqz s4, 8f
     la a1, word_space
     call append_str
     la a1, tile_path
     call append_str
+    la a1, word_missing_file
+    li t0, 1
+    beq s4, t0, 8f
+    la a1, word_not_fit_arena
 8:
-    mv a1, s5
     call append_str
     call line_end
+.endif
 9:
     addi s3, s3, 1
     j 1b
@@ -936,7 +945,7 @@ ambients_load:
     ret
 
 # The generic disk's soundfont put into the synthesizer, its counts on the
-# UART; without the disk or the file the chip voices play.
+# UART of a debug build; without the disk or the file the chip voices play.
 soundfont_load:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -952,6 +961,7 @@ soundfont_load:
     mv t1, a0
     jab.sys.midi.soundfont t0, t1
     bnez a0, 7f
+.ifdef DEBUG
     sd a1, 0(sp)
     sd a2, 8(sp)
     sd a3, 16(sp)
@@ -971,8 +981,10 @@ soundfont_load:
     la a1, word_samples
     call append_str
     call line_end
+.endif
     j 9f
 7:
+.ifdef DEBUG
     sd a0, 0(sp)
     la a0, line
     la a1, msg_soundfont_refused
@@ -980,9 +992,12 @@ soundfont_load:
     ld a1, 0(sp)
     call append_dec
     call line_end
+.endif
     j 9f
 8:
+.ifdef DEBUG
     jab.sys.uart.print msg_no_soundfont
+.endif
 9:
     ld ra, 24(sp)
     addi sp, sp, 32
@@ -1016,6 +1031,7 @@ ambient_follow:
     ld a1, 0(t3)
     sd t2, 0(sp)
     jab.sys.midi.play a0, a1
+.ifdef DEBUG
     sd a0, 8(sp)
     la a0, line
     la a1, msg_ambient
@@ -1034,6 +1050,7 @@ ambient_follow:
     call append_str
 21:
     call line_end
+.endif
     j 9f
 3:
     jab.sys.midi.stop
@@ -1167,6 +1184,12 @@ serial_mix:
     .asciz "mix"
 path_font:
     .asciz "/mix/snd/font/FluidR3_GM.sf2"
+word_sprite_dir:
+    .asciz "/sprite/"
+word_android_dir:
+    .asciz "android/"
+# The debug lines' text, in a debug build alone
+.ifdef DEBUG
 msg_soundfont:
     .asciz "fps: soundfont "
 word_presets:
@@ -1183,13 +1206,10 @@ word_playing:
     .asciz " playing"
 word_refused:
     .asciz " refused "
-word_sprite_dir:
-    .asciz "/sprite/"
-word_android_dir:
-    .asciz "android/"
 msg_frames:
     .asciz "fps: frames "
 msg_frame_missing:
     .asciz "fps: frame "
 word_loaded_comma:
     .asciz " loaded, "
+.endif

@@ -19,6 +19,7 @@ k_light_minus_one:
     .float -1.0
 k_depth_scale:
     .float 67108864.0
+.ifdef DEBUG
 msg_lumels:
     .asciz "fps: lumel maps "
 word_baked_in:
@@ -27,6 +28,7 @@ word_lumels:
     .asciz " lumels, "
 word_unmapped:
     .asciz " unmapped"
+.endif
 
 .section .text
 
@@ -521,8 +523,8 @@ lumel_pack:
 
 # Every textured surface's lumel map baked in the surface's own texels, the
 # sector planes then the walls, each over the sector's lights culled to the
-# surface; a line on the UART. A map with no lights bakes none and draws
-# unlit.
+# surface; a line on the UART of a debug build. A map with no lights bakes
+# none and draws unlit.
 lumaps_bake:
     addi sp, sp, -208
     sd ra, 200(sp)
@@ -926,6 +928,7 @@ lumaps_bake:
     addi s3, s3, 1
     j 31b
 50:
+.ifdef DEBUG
     # the line: the maps baked, the time, the lumels, and the textured
     # surfaces left without a map
     rdtime t0
@@ -955,6 +958,7 @@ lumaps_bake:
     la a1, word_unmapped
     call append_str
     call line_end
+.endif
 90:
     ld ra, 200(sp)
     ld s2, 192(sp)

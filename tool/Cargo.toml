@@ -1,0 +1,32 @@
+# The tools: what runs on the host beside a Jab machine and is never
+# shipped on one, one crate each under crates/: jabdisco, the device
+# discovery every launcher asks for the gamepad and the audio output,
+# and robojab, the harness that runs a prepared machine and lets an
+# agent play it a move at a time. A crate declares only its name and
+# description; everything else is the workspace's.
+[workspace]
+resolver = "3"
+members = [
+    "crates/disco",
+    "crates/robojab",
+]
+
+[workspace.package]
+version = "0.0.0-1"
+edition = "2024"
+authors = ["SourceTrait <development@sourcetrait.com>"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/sourcetrait/lowkick"
+homepage = "https://sourcetrait.com"
+publish = false
+
+[workspace.dependencies]
+base64 = "0.23"
+cpal = { version = "0.18", features = ["pulseaudio"] }
+gilrs = "0.11"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+rmcp = { version = "3.5", features = ["server", "transport-io", "schemars", "macros"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread"] }

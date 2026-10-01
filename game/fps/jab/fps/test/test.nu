@@ -22,7 +22,7 @@
 # factory and a lightless one, the light alone the same from both; a
 # map whose magic is wrong, which exits 6, and one cut short, which
 # exits 7, each saying so on the UART.
-use ../../../../../jab/sdk/nu/jab.nu
+use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
 use ./pose.nu
@@ -121,6 +121,31 @@ const CROSSHAIR = [960, 540]
 # mixer's two calls a frame are
 const HOT_FUNCTIONS = [span_fill poly_shows span_light mixer_update]
 const HOT_ECALLS = { span_fill: 0, poly_shows: 0, span_light: 0, mixer_update: 2 }
+# The program's lines: what only a debug build says, its reports, and
+# what every build says, the exits and a load that fails, so a release
+# build carries no debug text and prints nothing but an exit
+const DEBUG_TEXT = [
+    "fps: frame in "
+    "fps: sectors "
+    "fps: ambient "
+    "fps: frames "
+    "fps: frame "
+    "fps: soundfont "
+    "fps: soundfont refused "
+    "fps: soundfont none, the chip voices play"
+    "fps: lumel maps "
+    "fps: sound "
+    "fps: sounds "
+]
+const EXIT_TEXT = [
+    "fps: "
+    "fps: material "
+    "fps: a load failed on material "
+    "fps: no display\n"
+    "fps: no sound\n"
+    "fps: no disk of serial fps\n"
+    "fps: the disk has no /map/name\n"
+]
 # The engine's own images and sounds, every one in a tree of ours
 const FRAMES_LINE = "fps: frames 69 loaded, 0 missing"
 const SOUNDS_LINE = "fps: sounds 16 loaded, 0 missing"
@@ -153,6 +178,7 @@ const VIEW_SLACK = 4
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
     assert (($assets | path exists)) "the sdk built the assets image"
     hot-functions $image
+    release-strings $image
     let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let trees = ($game | path join ".target" "asset")
     mut runs = []
@@ -661,6 +687,32 @@ def hot-functions [image: path]: nothing -> nothing {
         assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
         assert equal $h.ecalls ($HOT_ECALLS | get $h.name) $"($h.name) traps inside its page"
     }
+}
+
+# A release build carries none of the program's debug text, every
+# `fps: ` string in it an exit's, and the debug build carries all of it,
+# so the scan is proved where it must find things before it is trusted
+# where it must find nothing; the release image is built here through
+# the tool, since the test's build is a debug one.
+def release-strings [image: path]: nothing -> nothing {
+    let here = ($env.FILE_PWD | path join ".." | path expand)
+    let tool = ($here | path join ".." ".." ".." ".." "sdk" "nu" "jab.nu" | path expand)
+    let built = (^nu $tool build $here | complete)
+    assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
+    let release = ($here | path join ".target" "release" "fps" "fps.jab")
+    assert ($release | path exists) $"the release image at ($release)"
+    let debug_found = (jab strings $image "fps: ")
+    for text in $DEBUG_TEXT {
+        assert ($debug_found | any {|s| $s | str starts-with $text }) $"the debug build carries '($text)'"
+    }
+    for text in $EXIT_TEXT {
+        assert ($text in $debug_found) $"the debug build carries the exit text '($text)'"
+    }
+    let release_found = (jab strings $release "fps: ")
+    for text in $DEBUG_TEXT {
+        assert (not ($release_found | any {|s| $s | str starts-with $text })) $"the release build carries no '($text)'"
+    }
+    assert equal ($release_found | sort) ($EXIT_TEXT | sort) $"every fps: string in the release build is an exit's: ($release_found)"
 }
 
 # The records of an API capture: the kind, the sector, the eye, the
