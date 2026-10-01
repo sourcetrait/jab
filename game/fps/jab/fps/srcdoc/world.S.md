@@ -40,11 +40,17 @@ author's anchor height, the same for every piece of the wall and over its
 openings. The wall's unit direction is a vec2 norm by hand over
 jab.f64.vec2.reg.len, the library carrying no vec2 norm.
 
-A plane's and a wall's surface name their lumel map in the polygon before
-the mode is chosen: poly_mode adds the lit flag only when the map has lights
-and the surface a baked map, so a surface the bake left unmapped draws
-unlit rather than reading a map of nothing. A plane's world box for the
-light cull is plane_box, shared with the bake.
+A plane's and a wall's surface name their lumel map in the polygon, then
+run surface_setup, the mode, and lumap_bind in that order: the setup clears
+the flat flag the mode reads, so the mode comes after it; poly_mode adds the
+lit flag when the map has lights and the polygon either has no map, a sprite
+lit flat, or a baked one, so a surface the bake left unmapped draws unlit
+rather than reading a map of nothing; and the bind folds the map's origin
+into the coefficients the setup wrote, once a polygon, a wall's for each
+piece and opening since each is its own setup. No plane or wall piece culls
+lights per frame any more: the per-polygon list had no reader on the baked
+path, and the box and the cull ran for nothing; a sprite still culls for its
+one evaluation (sprite.S), and the bake culls once a map (light.S).
 
 The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the

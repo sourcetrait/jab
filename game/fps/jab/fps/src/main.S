@@ -413,8 +413,8 @@ load_report:
     ret
 
 # The frame line on the UART: the counts, the ticks by phase, the spans and
-# the pixels they entered, the lit ones among them, the light's ticks, and
-# the pixels the depth test rejected
+# the pixels they entered, the lit ones among them, the light's ticks, the
+# pixels the depth test rejected, and the lumel samples read
 # s10 int The frame's ticks
 frame_report:
     addi sp, sp, -16
@@ -528,6 +528,11 @@ frame_report:
     call append_str
     la t0, stats
     ld a1, STAT_REJECTED(t0)
+    call append_dec
+    la a1, word_lumel_samples
+    call append_str
+    la t0, stats
+    ld a1, STAT_SAMPLES(t0)
     call append_dec
     call line_end
     ld ra, 8(sp)
@@ -944,6 +949,8 @@ word_light_us:
     .asciz ", light us "
 word_rejected:
     .asciz ", rejected "
+word_lumel_samples:
+    .asciz ", samples "
 
 .balign 4
 k_seconds_a_tick:

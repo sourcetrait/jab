@@ -70,6 +70,7 @@ world_draw:
     sd zero, STAT_LIT_PIXELS(t1)
     sd zero, STAT_LIGHT_TICKS(t1)
     sd zero, STAT_REJECTED(t1)
+    sd zero, STAT_SAMPLES(t1)
     call sky_setup
     # the walk's start
     section_count KIND_SECTORS, s2
@@ -402,8 +403,8 @@ surface_mode:
     sd a0, POLY_MODE(t0)
     ret
 
-# POLY_MODE set, the lit flag added when the map has lights and the surface
-# a lumel map
+# POLY_MODE set, the lit flag added when the map has lights and the polygon
+# has no map, a sprite lit flat, or a baked one
 # a0 int The mode
 # returns Clobbers t0, t1
 poly_mode:
@@ -412,9 +413,10 @@ poly_mode:
     beqz t0, 1f
     la t0, poly
     ld t1, POLY_LUMAP(t0)
-    beqz t1, 1f
+    beqz t1, 2f
     ld t1, LUMAP_BASE(t1)
     beqz t1, 1f
+2:
     ori a0, a0, POLY_LIT
 1:
     la t0, poly
@@ -454,10 +456,6 @@ plane_draw:
     lw a0, SURFACE_MATERIAL(s5)
     call material_bind
     beqz a0, 90f
-    lwu a0, SURFACE_FLAGS(s5)
-    call surface_mode
-    la t0, poly
-    sw s2, POLY_SECTOR(t0)
     # the plane: the normal (-a, -b, 1) and the point (0, 0, c)
     la t0, plane
     li t1, SECTOR_CEILING
@@ -490,13 +488,13 @@ plane_draw:
     flw ft0, SURFACE_V_OFFSET(s5)
     fsw ft0, PLANE_V0(t0)
     call surface_setup
-    # the sector's lights within the plane's box
-    mv a0, s4
-    li t1, SECTOR_CEILING
-    mul t1, s3, t1
-    add a1, s4, t1
-    call plane_box
-    call lights_cull
+    # the mode after the setup, which clears the flat flag the mode
+    # reads, then the lumel map bound
+    lwu a0, SURFACE_FLAGS(s5)
+    call surface_mode
+    la t0, poly
+    sw s2, POLY_SECTOR(t0)
+    call lumap_bind
     # the loops' edges, each loop a polygon of its walls' first
     # vertices at the plane's height
     call edges_reset
@@ -757,11 +755,14 @@ wall_surface:
     lw a0, (WALL_SURFACE + SURFACE_MATERIAL)(s6)
     call material_bind
     mv s5, a0
+    call surface_setup
+    # the mode after the setup, which clears the flat flag the mode
+    # reads, then the lumel map bound
     lwu a0, (WALL_SURFACE + SURFACE_FLAGS)(s6)
     call surface_mode
     la t0, poly
     sw s4, POLY_SECTOR(t0)
-    call surface_setup
+    call lumap_bind
     mv a0, s5
     ld ra, 40(sp)
     ld s4, 32(sp)
@@ -986,8 +987,6 @@ wall_draw:
     beqz t0, 20f
     li a0, POLY_MASKED
     call poly_mode
-    call verts_bounds
-    call lights_cull
     call poly_fill
 20:
     # the piece's bottom: the next neighbour's ceiling, or the floor
@@ -1027,8 +1026,6 @@ wall_draw:
     ld t1, STAT_PIECES(t0)
     addi t1, t1, 1
     sd t1, STAT_PIECES(t0)
-    call verts_bounds
-    call lights_cull
     call poly_fill
 30:
     addi s6, s6, 1

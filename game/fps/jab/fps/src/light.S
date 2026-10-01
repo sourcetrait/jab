@@ -1,14 +1,15 @@
 # The map's lights, without shadows: the brightness at a world point of a
 # surface, the ambient plus each light of a list by cosine and falloff; a
-# lumel map baked over every textured surface at load, which the lit spans
-# read, and a sprite's one lumel taken at its centre a frame.
+# lumel map baked over every textured surface at load in the surface's own
+# texels, which the lit spans read, and a sprite's one brightness taken at
+# its centre a frame.
 
 .section .rodata
 .balign 8
 k_lumel_d:
     .double 0.5
-k_two32_d:
-    .double 4294967296.0
+k_sqrt2_mantissa:
+    .dword 0x6a09e667f3bcd
 .balign 4
 k_light_ambient:
     .float 0.15
@@ -518,31 +519,33 @@ lumel_pack:
     or a0, t0, t1
     ret
 
-# Every textured surface's lumel map baked, the sector planes then the
-# walls, each over the sector's lights culled to the surface; the sprite's
-# own map of four lumels alike set up; a line on the UART. A map with no
-# lights bakes none and draws unlit.
+# Every textured surface's lumel map baked in the surface's own texels, the
+# sector planes then the walls, each over the sector's lights culled to the
+# surface; a line on the UART. A map with no lights bakes none and draws
+# unlit.
 lumaps_bake:
-    addi sp, sp, -192
-    sd ra, 184(sp)
-    sd s2, 176(sp)
-    sd s3, 168(sp)
-    sd s4, 160(sp)
-    sd s5, 152(sp)
-    sd s6, 144(sp)
-    sd s7, 136(sp)
-    sd s8, 128(sp)
-    sd s9, 120(sp)
-    fsd fs0, 112(sp)
-    fsd fs1, 104(sp)
-    fsd fs2, 96(sp)
-    fsd fs3, 88(sp)
-    fsd fs4, 80(sp)
-    fsd fs5, 72(sp)
-    fsd fs6, 64(sp)
-    fsd fs7, 56(sp)
-    fsd fs8, 48(sp)
-    fsd fs9, 40(sp)
+    addi sp, sp, -208
+    sd ra, 200(sp)
+    sd s2, 192(sp)
+    sd s3, 184(sp)
+    sd s4, 176(sp)
+    sd s5, 168(sp)
+    sd s6, 160(sp)
+    sd s7, 152(sp)
+    sd s8, 144(sp)
+    sd s9, 136(sp)
+    fsd fs0, 128(sp)
+    fsd fs1, 120(sp)
+    fsd fs2, 112(sp)
+    fsd fs3, 104(sp)
+    fsd fs4, 96(sp)
+    fsd fs5, 88(sp)
+    fsd fs6, 80(sp)
+    fsd fs7, 72(sp)
+    fsd fs8, 64(sp)
+    fsd fs9, 56(sp)
+    fsd fs10, 48(sp)
+    fsd fs11, 40(sp)
     rdtime s9
     la t0, lumel_cursor
     la t1, lumel_arena
@@ -561,20 +564,6 @@ lumaps_bake:
     sd zero, 0(t0)
     addi t0, t0, 8
     bltu t0, t1, 1b
-    # the sprite's map: two lumels a side, every sample the first
-    la t0, sprite_lumap
-    la t1, sprite_cells
-    sd t1, LUMAP_BASE(t0)
-    li t1, 2
-    sd t1, LUMAP_W(t0)
-    sd t1, LUMAP_H(t0)
-    sd zero, LUMAP_RU(t0)
-    sd zero, LUMAP_OU(t0)
-    sd zero, LUMAP_RV(t0)
-    sd zero, LUMAP_OV(t0)
-    li t1, 0xffff
-    sd t1, LUMAP_UMAX(t0)
-    sd t1, LUMAP_VMAX(t0)
     la t0, light_count
     lwu t0, 0(t0)
     beqz t0, 90f
@@ -609,39 +598,37 @@ lumaps_bake:
     li t0, SECTOR_CEILING
     mul t0, s4, t0
     add s8, s5, t0                  # the plane's a, b, c
-    # the grid: from the bounds' corner at the plane's height there, a
-    # lumel along x with the plane's rise, the same along y
-    flw ft0, SECTOR_MIN_X(s5)
+    # the mapping as doubles, a scale of none leaving the surface
+    # unmapped: fs0 u_scale, fs1 v_scale, fs2 u_offset, fs3 v_offset,
+    # fs4 the texture's width, fs5 its height, fs6 a, fs7 b, fs8 c
+    flw ft0, SURFACE_U_SCALE(s6)
     fcvt.d.s fs0, ft0
-    flw ft0, SECTOR_MIN_Y(s5)
+    flw ft0, SURFACE_V_SCALE(s6)
     fcvt.d.s fs1, ft0
-    flw ft0, PLANE_A(s8)
+    fcvt.d.w ft0, zero
+    feq.d t0, fs0, ft0
+    bnez t0, 17f
+    feq.d t0, fs1, ft0
+    bnez t0, 17f
+    flw ft0, SURFACE_U_OFFSET(s6)
     fcvt.d.s fs2, ft0
-    flw ft0, PLANE_B(s8)
+    flw ft0, SURFACE_V_OFFSET(s6)
     fcvt.d.s fs3, ft0
-    flw ft0, PLANE_C(s8)
+    la t0, poly
+    flw ft0, POLY_TEXW(t0)
     fcvt.d.s fs4, ft0
-    la t0, k_lumel_d
-    fld fs5, 0(t0)
-    la t1, bake_grid
-    fsd fs0, (GRID_O + 0)(t1)
-    fsd fs1, (GRID_O + 8)(t1)
-    fmul.d ft0, fs2, fs0
-    fmadd.d ft0, fs3, fs1, ft0
-    fadd.d ft0, ft0, fs4
-    fsd ft0, (GRID_O + 16)(t1)
-    fsd fs5, (GRID_U + 0)(t1)
-    sd zero, (GRID_U + 8)(t1)
-    fmul.d ft0, fs2, fs5
-    fsd ft0, (GRID_U + 16)(t1)
-    sd zero, (GRID_V + 0)(t1)
-    fsd fs5, (GRID_V + 8)(t1)
-    fmul.d ft0, fs3, fs5
-    fsd ft0, (GRID_V + 16)(t1)
+    flw ft0, POLY_TEXH(t0)
+    fcvt.d.s fs5, ft0
+    flw ft0, PLANE_A(s8)
+    fcvt.d.s fs6, ft0
+    flw ft0, PLANE_B(s8)
+    fcvt.d.s fs7, ft0
+    flw ft0, PLANE_C(s8)
+    fcvt.d.s fs8, ft0
     # the unit normal into the room: (-a, -b, 1) for the floor, its
     # negative for the ceiling
-    fneg.d ft6, fs2
-    fneg.d ft7, fs3
+    fneg.d ft6, fs6
+    fneg.d ft7, fs7
     la t0, k_one_d
     fld ft8, 0(t0)
     beqz s4, 12f
@@ -657,30 +644,18 @@ lumaps_bake:
     fsw ft7, (GRID_N + 4)(t1)
     fcvt.s.d ft8, ft8
     fsw ft8, (GRID_N + 8)(t1)
-    # the columns and rows: the bounds in lumels
-    flw ft0, SECTOR_MAX_X(s5)
-    fcvt.d.s ft0, ft0
-    fsub.d ft0, ft0, fs0
-    flw ft1, SECTOR_MAX_Y(s5)
-    fcvt.d.s ft1, ft1
-    fsub.d ft1, ft1, fs1
-    mv a0, s7
-    call map_extent
-    # the texel coordinates to lumel coordinates, from the bounds' corner
-    mv a0, s6
-    mv a1, s7
-    fmv.d fa0, fs0
-    fmv.d fa1, fs1
-    call map_params
-    beqz a0, 17f
-    # the lights culled to the plane: its point and normal, its box
+    # the lights culled to the plane: its box, a point on it at the
+    # bounds' corner, and the normal
     la t0, plane
-    fcvt.s.d ft0, fs0
+    flw ft0, SECTOR_MIN_X(s5)
     fsw ft0, (PLANE_Q + 0)(t0)
-    fcvt.s.d ft0, fs1
-    fsw ft0, (PLANE_Q + 4)(t0)
-    la t1, bake_grid
-    fld ft0, (GRID_O + 16)(t1)
+    fcvt.d.s ft0, ft0
+    flw ft1, SECTOR_MIN_Y(s5)
+    fsw ft1, (PLANE_Q + 4)(t0)
+    fcvt.d.s ft1, ft1
+    fmul.d ft0, fs6, ft0
+    fmadd.d ft0, fs7, ft1, ft0
+    fadd.d ft0, ft0, fs8
     fcvt.s.d ft0, ft0
     fsw ft0, (PLANE_Q + 8)(t0)
     la t0, poly
@@ -696,6 +671,60 @@ lumaps_bake:
     mv a1, s8
     call plane_box
     call lights_cull
+    # the frame in texels: the world point where u and v are 0, and the
+    # world step a texel along each, u along x with the plane's rise a
+    # and v along y with b
+    la t1, bake_grid
+    fdiv.d ft1, fs2, fs0
+    fneg.d ft1, ft1                 # x at u 0: -u_offset / u_scale
+    fsd ft1, (GRID_O + 0)(t1)
+    fdiv.d ft2, fs3, fs1
+    fneg.d ft2, ft2                 # y at v 0
+    fsd ft2, (GRID_O + 8)(t1)
+    fmul.d ft0, fs6, ft1
+    fmadd.d ft0, fs7, ft2, ft0
+    fadd.d ft0, ft0, fs8
+    fsd ft0, (GRID_O + 16)(t1)      # the height there
+    la t0, k_one_d
+    fld ft3, 0(t0)
+    fmul.d ft4, fs4, fs0            # texels a metre along u, signed
+    fdiv.d ft4, ft3, ft4            # metres a texel
+    fsd ft4, (GRID_U + 0)(t1)
+    sd zero, (GRID_U + 8)(t1)
+    fmul.d ft0, fs6, ft4
+    fsd ft0, (GRID_U + 16)(t1)
+    fmul.d ft5, fs5, fs1            # texels a metre along v
+    fdiv.d ft5, ft3, ft5
+    sd zero, (GRID_V + 0)(t1)
+    fsd ft5, (GRID_V + 8)(t1)
+    fmul.d ft0, fs7, ft5
+    fsd ft0, (GRID_V + 16)(t1)
+    # the surface's texels: u at the bounds' x ends, v at the y ends,
+    # the lesser and the greater of each
+    flw ft0, SECTOR_MIN_X(s5)
+    fcvt.d.s ft0, ft0
+    fmadd.d ft0, fs0, ft0, fs2
+    fmul.d ft0, ft0, fs4
+    flw ft1, SECTOR_MAX_X(s5)
+    fcvt.d.s ft1, ft1
+    fmadd.d ft1, fs0, ft1, fs2
+    fmul.d ft1, ft1, fs4
+    fmin.d fa0, ft0, ft1
+    fmax.d fa1, ft0, ft1
+    flw ft0, SECTOR_MIN_Y(s5)
+    fcvt.d.s ft0, ft0
+    fmadd.d ft0, fs1, ft0, fs3
+    fmul.d ft0, ft0, fs5
+    flw ft1, SECTOR_MAX_Y(s5)
+    fcvt.d.s ft1, ft1
+    fmadd.d ft1, fs1, ft1, fs3
+    fmul.d ft1, ft1, fs5
+    fmin.d fa2, ft0, ft1
+    fmax.d fa3, ft0, ft1
+    fmul.d fa4, fs4, fs0
+    fabs.d fa4, fa4                 # texels a metre along u
+    mv a0, s7
+    call lumap_frame
     mv a0, s7
     call lumap_fill
     j 18f
@@ -779,45 +808,16 @@ lumaps_bake:
     bnez t0, 47f
     fdiv.d fs6, fs6, fs8
     fdiv.d fs7, fs7, fs8
-    la t0, k_lumel_d
-    fld fs9, 0(t0)
-    # the grid: from a at the top, a lumel along the wall, a lumel down
-    la t1, bake_grid
-    fsd fs0, (GRID_O + 0)(t1)
-    fsd fs1, (GRID_O + 8)(t1)
-    fsd fs4, (GRID_O + 16)(t1)
-    fmul.d ft0, fs6, fs9
-    fsd ft0, (GRID_U + 0)(t1)
-    fmul.d ft0, fs7, fs9
-    fsd ft0, (GRID_U + 8)(t1)
-    sd zero, (GRID_U + 16)(t1)
-    sd zero, (GRID_V + 0)(t1)
-    sd zero, (GRID_V + 8)(t1)
-    fneg.d ft0, fs9
-    fsd ft0, (GRID_V + 16)(t1)
     # the unit normal into the sector, the run turned a quarter left
+    la t1, bake_grid
     fneg.d ft0, fs7
     fcvt.s.d ft0, ft0
     fsw ft0, (GRID_N + 0)(t1)
     fcvt.s.d ft0, fs6
     fsw ft0, (GRID_N + 4)(t1)
     sw zero, (GRID_N + 8)(t1)
-    # the columns and rows: the length and the height in lumels
-    fmv.d ft0, fs8
-    fsub.d ft1, fs4, fs5
-    mv a0, s7
-    call map_extent
-    # the texel coordinates to lumel coordinates: u from a, v from the
-    # anchor against the top
-    flw ft0, WALL_ANCHOR(s5)
-    fcvt.d.s fa1, ft0
-    fsub.d fa1, fa1, fs4
-    fcvt.d.w fa0, zero
-    addi a0, s5, WALL_SURFACE
-    mv a1, s7
-    call map_params
-    beqz a0, 47f
-    # the lights culled to the wall: its point and normal, its box
+    # the lights culled to the wall: its box, its first vertex at the
+    # top, and the normal
     la t0, plane
     fcvt.s.d ft0, fs0
     fsw ft0, (PLANE_Q + 0)(t0)
@@ -825,7 +825,6 @@ lumaps_bake:
     fsw ft0, (PLANE_Q + 4)(t0)
     fcvt.s.d ft0, fs4
     fsw ft0, (PLANE_Q + 8)(t0)
-    la t1, bake_grid
     la t0, poly
     flw ft0, (GRID_N + 0)(t1)
     fsw ft0, POLY_LNX(t0)
@@ -845,6 +844,76 @@ lumaps_bake:
     fcvt.s.d fa4, fs5
     fcvt.s.d fa5, fs4
     call lights_cull
+    # the mapping as doubles, a scale of none leaving the wall unmapped:
+    # fs9 u_scale, fs10 v_scale, fs11 u_offset, fs2 v_offset, fs3 the
+    # anchor height
+    flw ft0, (WALL_SURFACE + SURFACE_U_SCALE)(s5)
+    fcvt.d.s fs9, ft0
+    flw ft0, (WALL_SURFACE + SURFACE_V_SCALE)(s5)
+    fcvt.d.s fs10, ft0
+    fcvt.d.w ft0, zero
+    feq.d t0, fs9, ft0
+    bnez t0, 47f
+    feq.d t0, fs10, ft0
+    bnez t0, 47f
+    flw ft0, (WALL_SURFACE + SURFACE_U_OFFSET)(s5)
+    fcvt.d.s fs11, ft0
+    flw ft0, (WALL_SURFACE + SURFACE_V_OFFSET)(s5)
+    fcvt.d.s fs2, ft0
+    flw ft0, WALL_ANCHOR(s5)
+    fcvt.d.s fs3, ft0
+    # the frame in texels: the world point where u and v are 0, along
+    # the wall from its first vertex and at the height v reaches 0; the
+    # step a texel along the wall, and down it
+    la t1, bake_grid
+    fdiv.d ft1, fs11, fs9
+    fneg.d ft1, ft1                 # the distance along e at u 0
+    fmadd.d ft0, fs6, ft1, fs0
+    fsd ft0, (GRID_O + 0)(t1)
+    fmadd.d ft0, fs7, ft1, fs1
+    fsd ft0, (GRID_O + 8)(t1)
+    fdiv.d ft0, fs2, fs10
+    fadd.d ft0, ft0, fs3            # z at v 0: the anchor plus v_offset / v_scale
+    fsd ft0, (GRID_O + 16)(t1)
+    la t0, poly
+    flw ft2, POLY_TEXW(t0)
+    fcvt.d.s ft2, ft2               # the texture's width
+    flw ft3, POLY_TEXH(t0)
+    fcvt.d.s ft3, ft3               # and height
+    la t0, k_one_d
+    fld ft4, 0(t0)
+    fmul.d ft5, ft2, fs9            # texels a metre along u, signed
+    fdiv.d ft5, ft4, ft5            # metres a texel
+    fmul.d ft0, fs6, ft5
+    fsd ft0, (GRID_U + 0)(t1)
+    fmul.d ft0, fs7, ft5
+    fsd ft0, (GRID_U + 8)(t1)
+    sd zero, (GRID_U + 16)(t1)
+    fmul.d ft6, ft3, fs10           # texels a metre down v
+    fdiv.d ft6, ft4, ft6
+    fneg.d ft6, ft6                 # z falls as v grows
+    sd zero, (GRID_V + 0)(t1)
+    sd zero, (GRID_V + 8)(t1)
+    fsd ft6, (GRID_V + 16)(t1)
+    # the wall's texels: u from its first vertex to its length, v from
+    # the top to the bottom against the anchor
+    fmul.d ft0, fs11, ft2           # u at the start
+    fmadd.d ft1, fs9, fs8, fs11
+    fmul.d ft1, ft1, ft2            # u at the end
+    fmin.d fa0, ft0, ft1
+    fmax.d fa1, ft0, ft1
+    fsub.d ft0, fs3, fs4            # the anchor less the top
+    fmadd.d ft0, fs10, ft0, fs2
+    fmul.d ft0, ft0, ft3            # v at the top
+    fsub.d ft1, fs3, fs5
+    fmadd.d ft1, fs10, ft1, fs2
+    fmul.d ft1, ft1, ft3            # v at the bottom
+    fmin.d fa2, ft0, ft1
+    fmax.d fa3, ft0, ft1
+    fmul.d fa4, ft2, fs9
+    fabs.d fa4, fa4                 # texels a metre along u
+    mv a0, s7
+    call lumap_frame
     mv a0, s7
     call lumap_fill
     j 48f
@@ -887,142 +956,115 @@ lumaps_bake:
     call append_str
     call line_end
 90:
-    ld ra, 184(sp)
-    ld s2, 176(sp)
-    ld s3, 168(sp)
-    ld s4, 160(sp)
-    ld s5, 152(sp)
-    ld s6, 144(sp)
-    ld s7, 136(sp)
-    ld s8, 128(sp)
-    ld s9, 120(sp)
-    fld fs0, 112(sp)
-    fld fs1, 104(sp)
-    fld fs2, 96(sp)
-    fld fs3, 88(sp)
-    fld fs4, 80(sp)
-    fld fs5, 72(sp)
-    fld fs6, 64(sp)
-    fld fs7, 56(sp)
-    fld fs8, 48(sp)
-    fld fs9, 40(sp)
-    addi sp, sp, 192
+    ld ra, 200(sp)
+    ld s2, 192(sp)
+    ld s3, 184(sp)
+    ld s4, 176(sp)
+    ld s5, 168(sp)
+    ld s6, 160(sp)
+    ld s7, 152(sp)
+    ld s8, 144(sp)
+    ld s9, 136(sp)
+    fld fs0, 128(sp)
+    fld fs1, 120(sp)
+    fld fs2, 112(sp)
+    fld fs3, 104(sp)
+    fld fs4, 96(sp)
+    fld fs5, 88(sp)
+    fld fs6, 80(sp)
+    fld fs7, 72(sp)
+    fld fs8, 64(sp)
+    fld fs9, 56(sp)
+    fld fs10, 48(sp)
+    fld fs11, 40(sp)
+    addi sp, sp, 208
     ret
 
-# A map's columns and rows from its extents, a node past each end and two
-# at the least, and the clamps a sample stays within.
+# A map's frame from the surface's texel range: k, the lumel's texels as
+# the power of two nearest half a metre along u; the origin, a multiple of
+# the texture's size at or below the least texel less one on each axis; the
+# columns and rows reaching a node past the greatest texel, two at the
+# least.
 # a0 address The record.
-# ft0 f64 The extent along u, metres.
-# ft1 f64 The extent along v.
-# returns Clobbers t0 to t2, ft0 to ft2.
-map_extent:
+# fa0 f64 The least texel u of the surface; fa1 the greatest.
+# fa2 f64 The least texel v; fa3 the greatest.
+# fa4 f64 Texels a metre along u.
+# returns Clobbers t0 to t6, ft0.
+lumap_frame:
+    # k from the double's exponent, rounded up where the mantissa is at
+    # or past root two's
     la t0, k_lumel_d
-    fld ft2, 0(t0)
-    fdiv.d ft0, ft0, ft2
-    fcvt.l.d t0, ft0, rup
-    addi t0, t0, 2
-    li t2, 2
-    bge t0, t2, 1f
-    mv t0, t2
+    fld ft0, 0(t0)
+    fmul.d ft0, fa4, ft0            # texels in half a metre
+    fmv.x.d t1, ft0
+    srli t2, t1, 52
+    andi t2, t2, 0x7ff
+    addi t2, t2, -1023              # the exponent
+    slli t1, t1, 12
+    srli t1, t1, 12                 # the mantissa
+    la t0, k_sqrt2_mantissa
+    ld t3, 0(t0)
+    bltu t1, t3, 1f
+    addi t2, t2, 1
 1:
-    sd t0, LUMAP_W(a0)
-    addi t0, t0, -1
-    slli t0, t0, 16
-    addi t0, t0, -1
-    sd t0, LUMAP_UMAX(a0)
-    fdiv.d ft1, ft1, ft2
-    fcvt.l.d t1, ft1, rup
-    addi t1, t1, 2
-    bge t1, t2, 2f
-    mv t1, t2
+    bgez t2, 2f
+    li t2, 0
 2:
-    sd t1, LUMAP_H(a0)
-    addi t1, t1, -1
-    slli t1, t1, 16
-    addi t1, t1, -1
-    sd t1, LUMAP_VMAX(a0)
+    li t3, LUMEL_K_MAX
+    ble t2, t3, 3f
+    mv t2, t3
+3:
+    sd t2, LUMAP_K(a0)
+    la t4, poly
+    # the origin: the least texel less one, floored to the texture's size
+    fcvt.l.d t3, fa0, rdn
+    addi t3, t3, -1
+    ld t5, POLY_UMASK(t4)
+    not t5, t5
+    and t3, t3, t5                  # U0
+    sd t3, LUMAP_U0(a0)
+    fcvt.l.d t6, fa1, rup
+    sub t6, t6, t3
+    sra t6, t6, t2
+    addi t6, t6, 2                  # the columns
+    sd t6, LUMAP_W(a0)
+    fcvt.l.d t3, fa2, rdn
+    addi t3, t3, -1
+    ld t5, POLY_VMASK(t4)
+    not t5, t5
+    and t3, t3, t5                  # V0
+    sd t3, LUMAP_V0(a0)
+    fcvt.l.d t6, fa3, rup
+    sub t6, t6, t3
+    sra t6, t6, t2
+    addi t6, t6, 2                  # the rows
+    sd t6, LUMAP_H(a0)
     ret
 
-# A map's texel coordinates to lumel coordinates from a surface's mapping:
-# lu = u RU >> 32 - OU, RU being 2^32 over texw u_scale L and OU (u_offset /
-# u_scale + du) / L in 16.16, and v the same over texh.
-# a0 address The surface.
-# a1 address The record.
-# fa0 f64 du, the u term beyond the mapping: a plane's origin, nothing for a wall.
-# fa1 f64 dv: a plane's origin, a wall's anchor less its top.
-# returns Clobbers t0, ft0 to ft5.
-#   a0 1, or 0 for a mapping of no scale, which has no map.
-map_params:
-    la t0, k_lumel_d
-    fld ft5, 0(t0)
-    la t0, k_two32_d
-    fld ft4, 0(t0)
-    la t0, poly
-    flw ft0, POLY_TEXW(t0)
-    fcvt.d.s ft0, ft0
-    flw ft1, SURFACE_U_SCALE(a0)
-    fcvt.d.s ft1, ft1
-    fcvt.d.w ft2, zero
-    feq.d t0, ft1, ft2
-    bnez t0, 8f
-    fmul.d ft0, ft0, ft1
-    fmul.d ft0, ft0, ft5
-    fdiv.d ft0, ft4, ft0
-    fcvt.l.d t0, ft0, rne
-    sd t0, LUMAP_RU(a1)
-    flw ft0, SURFACE_U_OFFSET(a0)
-    fcvt.d.s ft0, ft0
-    fdiv.d ft0, ft0, ft1
-    fadd.d ft0, ft0, fa0
-    fdiv.d ft0, ft0, ft5
-    la t0, k_uv_scale_d
-    fld ft3, 0(t0)
-    fmul.d ft0, ft0, ft3
-    fcvt.l.d t0, ft0, rne
-    sd t0, LUMAP_OU(a1)
-    la t0, poly
-    flw ft0, POLY_TEXH(t0)
-    fcvt.d.s ft0, ft0
-    flw ft1, SURFACE_V_SCALE(a0)
-    fcvt.d.s ft1, ft1
-    feq.d t0, ft1, ft2
-    bnez t0, 8f
-    fmul.d ft0, ft0, ft1
-    fmul.d ft0, ft0, ft5
-    fdiv.d ft0, ft4, ft0
-    fcvt.l.d t0, ft0, rne
-    sd t0, LUMAP_RV(a1)
-    flw ft0, SURFACE_V_OFFSET(a0)
-    fcvt.d.s ft0, ft0
-    fdiv.d ft0, ft0, ft1
-    fadd.d ft0, ft0, fa1
-    fdiv.d ft0, ft0, ft5
-    fmul.d ft0, ft0, ft3
-    fcvt.l.d t0, ft0, rne
-    sd t0, LUMAP_OV(a1)
-    li a0, 1
-    ret
-8:
-    li a0, 0
-    ret
-
-# A map's lumels baked over bake_grid: each node's point under the normal
-# over the polygon's list through point_light, its channels to 256ths, into
-# the arena from the cursor; the record's base, or none when the arena is
-# full, which counts the map unmapped.
-# a0 address The record, its columns and rows set.
+# A map's lumels baked over bake_grid: each node's point, the frame's
+# origin along the texel axes by the node's texel coordinate, under the
+# normal over the polygon's list through point_light, its channels to
+# 256ths, into the arena from the cursor; the record's base, or none when
+# the arena is full, which counts the map unmapped.
+# a0 address The record, its frame set.
 lumap_fill:
-    addi sp, sp, -64
-    sd ra, 56(sp)
-    sd s2, 48(sp)
-    sd s3, 40(sp)
-    sd s4, 32(sp)
-    sd s5, 24(sp)
-    sd s6, 16(sp)
-    sd s7, 8(sp)
+    addi sp, sp, -96
+    sd ra, 88(sp)
+    sd s2, 80(sp)
+    sd s3, 72(sp)
+    sd s4, 64(sp)
+    sd s5, 56(sp)
+    sd s6, 48(sp)
+    sd s7, 40(sp)
+    sd s8, 32(sp)
+    sd s9, 24(sp)
+    sd s10, 16(sp)
     mv s2, a0
     ld s6, LUMAP_W(s2)
     ld s7, LUMAP_H(s2)
+    ld s8, LUMAP_U0(s2)
+    ld s9, LUMAP_V0(s2)
+    ld s10, LUMAP_K(s2)
     mul t2, s6, s7                  # the lumels
     la t0, lumel_cursor
     ld s3, 0(t0)                    # the first
@@ -1048,10 +1090,15 @@ lumap_fill:
     li s4, 0                        # the column
 2:
     bgeu s4, s6, 7f
-    # the node: the origin along u by the column and along v by the row
+    # the node's texel coordinate, the origin plus the column and the
+    # row of lumels, then its point along the frame's axes
+    sll t0, s4, s10
+    add t0, t0, s8
+    fcvt.d.l ft8, t0                # u
+    sll t0, s5, s10
+    add t0, t0, s9
+    fcvt.d.l ft9, t0                # v
     la t0, bake_grid
-    fcvt.d.l ft8, s4
-    fcvt.d.l ft9, s5
     fld ft0, (GRID_O + 0)(t0)
     fld ft1, (GRID_U + 0)(t0)
     fmadd.d ft0, ft1, ft8, ft0
@@ -1092,14 +1139,17 @@ lumap_fill:
     addi t1, t1, 1
     sd t1, 0(t0)
 9:
-    ld ra, 56(sp)
-    ld s2, 48(sp)
-    ld s3, 40(sp)
-    ld s4, 32(sp)
-    ld s5, 24(sp)
-    ld s6, 16(sp)
-    ld s7, 8(sp)
-    addi sp, sp, 64
+    ld ra, 88(sp)
+    ld s2, 80(sp)
+    ld s3, 72(sp)
+    ld s4, 64(sp)
+    ld s5, 56(sp)
+    ld s6, 48(sp)
+    ld s7, 40(sp)
+    ld s8, 32(sp)
+    ld s9, 24(sp)
+    ld s10, 16(sp)
+    addi sp, sp, 96
     ret
 
 .section .bss
@@ -1125,15 +1175,10 @@ lumel_count:
     .skip 8
 lumap_missing:
     .skip 8
-# The grid the map in hand is baked over
+# The frame the map in hand is baked over
 bake_grid:
     .skip GRID_SIZE
 .balign 8
-# A sprite's map: four lumels alike, written a frame at its centre
-sprite_lumap:
-    .skip LUMAP_SIZE
-sprite_cells:
-    .skip (4 * LUMEL_BYTES)
 # Every surface's map
 lumaps:
     .skip (LUMAP_COUNT * LUMAP_SIZE)

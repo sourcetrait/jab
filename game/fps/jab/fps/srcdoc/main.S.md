@@ -12,11 +12,13 @@ the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The first frame is reported on the UART, and one after each console placement,
 so a test reads the frame it posed; the DEBUG build adds the walk's order. The
 line's tail, the spans and the pixels they entered, the lit ones among them,
-and the light's microseconds, is the light's instrument: pixels entered over
-the screen's 2,073,600 is the overdraw, and the light's microseconds, the
-sprites' evaluations now that the surfaces read baked maps, say what the
-frame still evaluates. The load line carries the maps baked, and the bake's
-own line their lumels and time.
+the light's microseconds, the pixels rejected, and the lumel samples, is the
+light's instrument: pixels entered over the screen's 2,073,600 is the
+overdraw, the light's microseconds, the sprites' evaluations now that the
+surfaces read baked maps, say what the frame still evaluates, and the
+samples against the pixels' blocks of sixteen say how often the lit spans
+read their maps. The load line carries the maps baked, and the bake's own
+line their lumels and time.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,

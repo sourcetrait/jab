@@ -17,8 +17,11 @@
 # walked from placed starts with the ambient following, the fight: an
 # android roused and firing, struck down by four rounds from the
 # console and one from the trigger, fallen, its magazine taken on a
-# walk, the shots heard; a map whose magic is wrong, which exits 6,
-# and one cut short, which exits 7, each saying so on the UART.
+# walk, the shots heard; the light's view independence, floor points
+# of the bay read from the spawn at two yaws on a still copy of the
+# factory and a lightless one, the light alone the same from both; a
+# map whose magic is wrong, which exits 6, and one cut short, which
+# exits 7, each saying so on the UART.
 use ../../../../../jab/sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
@@ -26,7 +29,7 @@ use ./pose.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}"
 const PIXELS = (1920 * 1080)
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
@@ -139,6 +142,13 @@ const MAGAZINE_ROUNDS = 30
 # The traces from the factory's window and yard poses: the window's
 # ray reaches the bay's floor, the yard's the street's far wall
 const TRACE_SLACK = 50
+# The light's view independence: six floor points of the bay under and
+# between its lights, read from the spawn's eye at two yaws, and the
+# levels of 256 the light alone may differ by across the yaws
+const VIEW_POINTS = [[26.0, 6.0], [15.0, 6.0], [18.0, 4.0], [22.0, 8.0], [20.0, 12.0], [24.0, 16.0]]
+const VIEW_EYE = { x: 29.0, y: 2.5, z: 1.6 }
+const VIEW_YAWS = [170, 130]
+const VIEW_SLACK = 4
 
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
     assert (($assets | path exists)) "the sdk built the assets image"
@@ -523,6 +533,51 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let shots = (sound-level $fight_run.sound $FIGHT_SHOTS.from $FIGHT_SHOTS.to)
     assert ($shots.peak >= $FIGHT_SHOTS.over) $"the shots are heard: ($shots)"
 
+    # the light's view independence: six floor points of the bay read
+    # from the spawn's eye at two yaws on a copy of the factory with its
+    # androids dropped, so no sprite crosses a point, and on a copy with
+    # its lights dropped too, both compiled here; the lit reading over
+    # the unlit at a point, the light alone, holds within a few levels
+    # across the yaws at every point in view at both
+    let view_still = (variant-tree $factory_source "factory_still" [android] ($out | path join "still") $game)
+    let view_dark = (variant-tree $factory_source "factory_dark" [android light] ($out | path join "dark") $game)
+    mut view_readings = []
+    for yaw in $VIEW_YAWS {
+        let view_pose = { name: $"view($yaw)", x: $VIEW_EYE.x, y: $VIEW_EYE.y, z: $VIEW_EYE.z, yaw: $yaw, pitch: 0 }
+        let view_sends = [{ at: 1500ms, bytes: (pose pose-frame $view_pose) }]
+        mut captures = {}
+        for v in [{ name: "still", tree: $view_still }, { name: "dark", tree: $view_dark }] {
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $v.tree ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the ($v.name) view at yaw ($yaw)"
+            let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+            assert equal ($frames | length) 2 $"the first frame and the pose's reported on the ($v.name) view at yaw ($yaw): ($run.serial)"
+            let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+            assert ($frame.uncovered < $CRACKS) $"the ($v.name) view at yaw ($yaw) has no pixel uncovered: ($frame)"
+            assert ($run.screen != "") $"a screen was taken on the ($v.name) view at yaw ($yaw)"
+            $captures = ($captures | insert $v.name { bytes: (open --raw $run.screen | into binary), frame: $frame })
+        }
+        assert equal $captures.dark.frame.lit_pixels 0 $"the dark copy draws unlit: ($captures.dark.frame)"
+        assert ($captures.still.frame.samples > 0) $"the lit copy reads its maps: ($captures.still.frame)"
+        for p in $VIEW_POINTS {
+            let at = (project $VIEW_EYE $yaw [$p.0, $p.1, 0.0])
+            if $at == null { continue }
+            let lit = (block-sum $captures.still.bytes $at)
+            let dark = (block-sum $captures.dark.bytes $at)
+            assert ($dark > 0) $"the floor at ($p) reads on the dark copy at ($at)"
+            $view_readings = ($view_readings | append { yaw: $yaw, point: ($p | str join ","), at: $at, lit: $lit, dark: $dark, light: (256 * $lit / $dark) })
+        }
+    }
+    let view_seen = ($view_readings | group-by point)
+    mut view_spread = []
+    for key in ($view_seen | columns) {
+        let rs = ($view_seen | get $key)
+        if ($rs | length) < 2 { continue }
+        let spread = (($rs | get light | math max) - ($rs | get light | math min))
+        assert ($spread <= $VIEW_SLACK) $"the light at ($key) reads the same from every yaw within ($VIEW_SLACK) of 256: ($rs)"
+        $view_spread = ($view_spread | append { point: $key, spread: $spread, light: ($rs | get light) })
+    }
+    assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
+
     # a map whose magic is wrong
     let bad = (broken ($out | path join "bad_tree") "bad" ([("XXXX" | into binary), (0..<60 | each {|i| 0x[00] } | bytes collect)] | bytes collect))
     let bad_run = (jab launch --kernel $kernel --image $image --out ($out | path join "bad") --set $set --sound --disk (romfs $bad ($out | path join "bad.romfs")) --serial "fps" --seconds 8)
@@ -548,8 +603,51 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         print $"fps: the ($w.name) walk from ($w.first.x), ($w.first.y), ($w.first.z) in ($w.first.sector) to ($w.last.x), ($w.last.y), ($w.last.z) in ($w.last.sector) through ($w.crossed) over ($w.frames) frames"
     }
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
+    print $"fps: the light from the spawn at yaws ($VIEW_YAWS): ($view_spread | each {|s| $'($s.point) ($s.light | each {|l| $l | math round --precision 1 } | str join ' and ') of 256, ($s.spread | math round --precision 1) apart' } | str join '; ')"
     print $"fps: the wrong magic out with ($bad_run.status), the short file with ($short_run.status)"
     print "fps: ok"
+}
+
+# A copy of a map source with the entities of the given classes dropped,
+# compiled under out with the game's content; the tree's path.
+def variant-tree [source: record, name: string, dropped: list<string>, out: path, game: path]: nothing -> string {
+    if ($out | path exists) { rm -r $out }
+    mkdir $out
+    let copy = ($source | update name $name | update entities ($source.entities | where {|e| $e.class not-in $dropped }))
+    let src = ($out | path join $"($name).nuon")
+    $copy | to nuon | save --raw -f $src
+    let compiled = (^nu ($game | path join "nu" "map.nu") compile $src $out --content ($game | path join "content") | complete)
+    if $compiled.exit_code != 0 { error make { msg: $"compiling ($name): ($compiled.stderr)" } }
+    $out | path join $name
+}
+
+# A world point's pixel from an eye at a yaw with no pitch or roll: the
+# point's right and up over its depth times the focal length from the
+# screen's centre; null behind the near plane or off the screen by a
+# block's margin.
+def project [eye: record, yaw: int, point: list<float>]: nothing -> oneof<list<int>, nothing> {
+    let rad = ($yaw * 3.141592653589793 / 180)
+    let fx = ($rad | math cos)
+    let fy = ($rad | math sin)
+    let v = [($point.0 - $eye.x), ($point.1 - $eye.y), ($point.2 - $eye.z)]
+    let depth = ($v.0 * $fx + $v.1 * $fy)
+    if $depth <= 0.0625 { return null }
+    let right = ($v.0 * $fy - $v.1 * $fx)
+    let x = ((960 + $right / $depth * 960) | math round | into int)
+    let y = ((540 - $v.2 / $depth * 960) | math round | into int)
+    if $x < 1 or $x >= 1919 or $y < 1 or $y >= 1079 { return null }
+    [$x, $y]
+}
+
+# The sum of every channel over the 3 by 3 block of pixels about a point
+# of a capture, the capture's bytes whole.
+def block-sum [bytes: binary, at: list<int>]: nothing -> int {
+    let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
+    let head_len = ($newlines.2 + 1)
+    [-1, 0, 1] | each {|dy|
+        let o = ($head_len + (($at.1 + $dy) * 1920 + $at.0 - 1) * 3)
+        $bytes | bytes at $o..<($o + 9) | encode hex | split chars | chunks 2 | each {|h| $h | str join "" | into int --radix 16 } | math sum
+    } | math sum
 }
 
 # Each hot function within one page of code and trapping no more than

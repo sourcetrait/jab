@@ -17,14 +17,17 @@ k_hy_d:
     .double 540.0
 k_hz_d:
     .double 960.0
-# A lane's bias and the mask that steps a brightness word's three lanes
-# at once by a sixteenth each: the end less the start, each lane biased
-# past zero, its low four bits cleared so none spill into the lane
-# below, the word shifted, and the bias's sixteenth taken back
+# A lane's bias and the masks that step a brightness word's three lanes
+# at once by 16, 32, or 64 pixels: the end less the start, each lane
+# biased past zero, its low 4, 5, or 6 bits cleared by the shift's mask
+# so none spill into the lane below, the word shifted, and the bias's
+# share taken back
 k_lane_bias:
     .dword ((1 << 20) | (1 << 41) | (1 << 62))
-k_lane_mask:
+k_lane_masks:
     .dword ~(0xf | (0xf << 21) | (0xf << 42))
+    .dword ~(0x1f | (0x1f << 21) | (0x1f << 42))
+    .dword ~(0x3f | (0x3f << 21) | (0x3f << 42))
 .balign 4
 k_near:
     .float 0.0625
@@ -500,6 +503,71 @@ surface_axis:
     sd t3, 16(t2)
     ret
 
+# The lit, mapped polygon in hand bound to its lumel map: the map's texel
+# origin folded into the u/z and v/z coefficients, so the span's texel
+# coordinates count from the map's first node and the wrap by the mask is
+# unchanged, the origin being a multiple of the texture's size; and the
+# read's one word set, the lumels' base, a row's bytes, and k. A polygon
+# unlit or without a map is left alone
+# returns Clobbers t0 to t5
+lumap_bind:
+    la t0, poly
+    ld t1, POLY_MODE(t0)
+    andi t1, t1, POLY_LIT
+    beqz t1, 9f
+    ld t2, POLY_LUMAP(t0)
+    beqz t2, 9f
+    # u/z less U0/z, 1/z being 6.26 and u/z 48.16
+    ld t3, LUMAP_U0(t2)
+    ld t4, POLY_IZA(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_UZA(t0)
+    sub t5, t5, t4
+    sd t5, POLY_UZA(t0)
+    ld t4, POLY_IZB(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_UZB(t0)
+    sub t5, t5, t4
+    sd t5, POLY_UZB(t0)
+    ld t4, POLY_IZC(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_UZC(t0)
+    sub t5, t5, t4
+    sd t5, POLY_UZC(t0)
+    ld t3, LUMAP_V0(t2)
+    ld t4, POLY_IZA(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_VZA(t0)
+    sub t5, t5, t4
+    sd t5, POLY_VZA(t0)
+    ld t4, POLY_IZB(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_VZB(t0)
+    sub t5, t5, t4
+    sd t5, POLY_VZB(t0)
+    ld t4, POLY_IZC(t0)
+    mul t4, t4, t3
+    srai t4, t4, (DEPTH_BITS - 16)
+    ld t5, POLY_VZC(t0)
+    sub t5, t5, t4
+    sd t5, POLY_VZC(t0)
+    # the read's word
+    ld t3, LUMAP_BASE(t2)
+    ld t4, LUMAP_W(t2)
+    slli t4, t4, (3 + LUMEL_ROWBYTES_SHIFT)
+    or t3, t3, t4
+    ld t4, LUMAP_K(t2)
+    slli t4, t4, LUMEL_K_SHIFT
+    or t3, t3, t4
+    sd t3, POLY_LUMEL(t0)
+9:
+    ret
+
 # The edges the row centre crosses, their x in crossings sorted ascending
 # fa0 f32 The row's centre
 # returns Clobbers t0 to t5, ft0 to ft6
@@ -642,53 +710,35 @@ poly_fill:
     addi sp, sp, 48
     ret
 
-# The brightness at a texel coordinate of the surface in hand from its lumel
-# map: the four lumels about it summed under weights of its fractions
-# a5 int u, 16.16 texels
-# a6 int v, 16.16 texels
+# The brightness at a texel coordinate of the surface in hand from its
+# lumel map, the coordinate counted from the map's first node: the
+# lumel's 2^k texels shifted off for the column and the row, the fractions
+# in 256ths, the four lumels about it summed under weights adding to 256
+# a5 int u, 16.16 texels from the map's origin
+# a6 int v, 16.16 texels from the map's origin
 # returns Clobbers a0, a6, a7, t3, t4
-#   a5 The brightness, the three channels in 8.8 packed CHANNEL_BITS apart
+#   a5 The brightness, the three channels in 16.16 packed CHANNEL_BITS apart
 .macro lumel_sample
     la t3, poly
-    ld t3, POLY_LUMAP(t3)
-    ld a7, LUMAP_RU(t3)
-    mul a5, a5, a7
-    srai a5, a5, 32
-    ld a7, LUMAP_OU(t3)
-    sub a5, a5, a7                  # lu, 16.16
-    ld a7, LUMAP_RV(t3)
-    mul a6, a6, a7
-    srai a6, a6, 32
-    ld a7, LUMAP_OV(t3)
-    sub a6, a6, a7                  # lv
-    bgez a5, .Llumel_u0\@
-    li a5, 0
-.Llumel_u0\@:
-    ld a7, LUMAP_UMAX(t3)
-    ble a5, a7, .Llumel_u1\@
-    mv a5, a7
-.Llumel_u1\@:
-    bgez a6, .Llumel_v0\@
-    li a6, 0
-.Llumel_v0\@:
-    ld a7, LUMAP_VMAX(t3)
-    ble a6, a7, .Llumel_v1\@
-    mv a6, a7
-.Llumel_v1\@:
-    srli a7, a5, 16                 # the column
-    srli a0, a6, 16                 # the row
-    ld t4, LUMAP_W(t3)
-    mul a0, a0, t4
-    add a0, a0, a7
-    slli a0, a0, 3
-    ld a7, LUMAP_BASE(t3)
-    add a0, a0, a7                  # the lumel above left
-    slli t4, t4, 3
-    add t4, t4, a0                  # the one below it
-    srli a5, a5, 8
+    ld t3, POLY_LUMEL(t3)           # the base, a row's bytes, k
+    srli a7, t3, LUMEL_K_SHIFT      # k
+    addi a0, a7, 16
+    srl t4, a5, a0                  # the column
+    srl a0, a6, a0                  # the row
+    addi a7, a7, 8
+    srl a5, a5, a7
     andi a5, a5, 0xff               # u's fraction in 256ths
-    srli a6, a6, 8
+    srl a6, a6, a7
     andi a6, a6, 0xff               # v's
+    slli a7, t3, (64 - LUMEL_ROWBYTES_SHIFT - 16)
+    srli a7, a7, 48                 # a row's bytes
+    mul a0, a0, a7
+    slli t3, t3, (64 - LUMEL_BASE_BITS)
+    srli t3, t3, (64 - LUMEL_BASE_BITS)     # the base
+    add a0, a0, t3
+    slli t4, t4, 3
+    add a0, a0, t4                  # the lumel above left
+    add t4, a0, a7                  # the one below it
     mul a7, a5, a6
     srli a7, a7, 8                  # the weight below right
     sub a5, a5, a7                  # above right
@@ -711,13 +761,14 @@ poly_fill:
 .endm
 
 # The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
-# masked, sky, or lit from its lumel map, no float in the loop
+# masked, sky, or lit, from its lumel map at the lumel's own cadence or flat
+# by one brightness; no float in the loop
 # a0 int The first pixel
 # a1 int The pixel past the last
 # a2 int The row
 .balign CODE_PAGE
 span_fill:
-    addi sp, sp, -160
+    addi sp, sp, -192
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -732,6 +783,7 @@ span_fill:
     sd s0, 48(sp)
     sd a2, 24(sp)                   # the row
     sd zero, 144(sp)                # the pixels the depth test rejected, as entered less passed
+    sd zero, 176(sp)                # the lumel samples
     la t0, poly
     ld s3, POLY_IZA(t0)
     ld t1, POLY_IZB(t0)
@@ -808,14 +860,29 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
-    # lit: the brightness at the span's start from the lumel map
+    # lit: a polygon with no map takes its one brightness over the whole
+    # span, no step and no sample; a mapped one samples its map at the
+    # span's start, an interval starting at the first block
     ld t3, 16(sp)
     andi t3, t3, POLY_LIT
     beqz t3, 30f
+    la t3, poly
+    ld t4, POLY_LUMAP(t3)
+    bnez t4, 20f
+    ld t4, POLY_FLAT_BRIGHT(t3)
+    sd t4, 160(sp)                  # the brightness entering the next block
+    li s0, 0                        # the step a pixel
+    li t4, -1
+    sd t4, 152(sp)                  # an interval that never ends
+    j 30f
+20:
     mv a5, s8
     mv a6, s9
     lumel_sample
-    sd a5, 32(sp)
+    sd a5, 160(sp)
+    sd zero, 152(sp)                # the interval's pixels left: none, so one starts
+    li t3, 1
+    sd t3, 176(sp)
 30:
     # the block: its length, its end's u and v, the steps
     li s11, BLOCK
@@ -857,27 +924,130 @@ span_fill:
     beq t3, a5, 50f
     j 40f
 44:
-    # lit: the brightness at the block's end from the lumel map, the
-    # step a pixel a sixteenth of its lanes' change from the start's,
-    # and the end kept as the next block's start
-    andi a5, t3, POLY_MASKED
-    sd a5, 40(sp)
+    # lit: the brightness entering the block; at an interval's start the
+    # interval's length from the lumel's size on screen, the sample at
+    # its end, and the step a pixel over it
+    ld t3, 160(sp)
+    ld a5, 152(sp)
+    bnez a5, 49f
+    # the texel step a pixel, the larger of |du| and |dv|, against the
+    # lumel's 2^k texels: four blocks when they stay within half a
+    # lumel over 64 pixels, two when within it over 32, else one, so a
+    # lumel spans at least two samples wherever one block allows it
+    srai a5, t5, 63
+    xor a0, t5, a5
+    sub a0, a0, a5                  # |du|
+    srai a5, t6, 63
+    xor a6, t6, a5
+    sub a6, a6, a5                  # |dv|
+    bge a0, a6, 441f
+    mv a0, a6
+441:
+    la a5, poly
+    ld a5, POLY_LUMEL(a5)
+    srli a5, a5, LUMEL_K_SHIFT      # k
+    addi a7, a5, (15 - INTERVAL_SHIFT_MAX)
+    srl a0, a0, a7                  # the step in half lumels over four blocks
+    li t2, (BLOCK << 2)             # the interval's pixels: four blocks
+    beqz a0, 442f
+    li t2, (BLOCK << 1)             # two
+    li a6, 1
+    beq a0, a6, 442f
+    li t2, BLOCK                    # one
+442:
+    ble t2, s10, 443f
+    mv t2, s10                      # cut short by the span's end
+443:
+    # the end's u and v: the block's own when the interval is one block,
+    # else from one divide at the interval's pixels on
+    beq t2, s11, 445f
+    mul t3, t2, s3
+    add t3, t3, s2                  # 1/z at the interval's end
+    li t4, IZ_MIN
+    bge t3, t4, 444f
+    mv t3, t4
+444:
+    li t4, 1
+    slli t4, t4, Z_SHIFT
+    div t4, t4, t3                  # z there
+    mul a5, t2, s6
+    add a5, a5, s4
+    mul a5, a5, t4
+    srai a5, a5, 16                 # u
+    mul a6, t2, s7
+    add a6, a6, s5
+    mul a6, a6, t4
+    srai a6, a6, 16                 # v
+    j 446f
+445:
     ld a5, 0(sp)
     ld a6, 8(sp)
+446:
     lumel_sample
-    ld t3, 32(sp)                   # the brightness at the start, packed
-    sd a5, 32(sp)
+    ld t3, 160(sp)                  # the brightness at the interval's start
+    sd a5, 160(sp)                  # its end sample, the next interval's start
+    ld a0, 176(sp)
+    addi a0, a0, 1
+    sd a0, 176(sp)
+    # a whole interval of one, two, or four blocks steps the lanes at
+    # once by its shift: the end less the start, each lane biased past
+    # zero and its low bits cleared under the shift's mask so nothing
+    # spills into the lane below, shifted, the bias's share taken back;
+    # any other length, the span cutting the interval short, divides
+    # each lane's change by it and packs the quotients again
+    li a7, (INTERVAL_SHIFT_MAX - 2)
+    li t4, BLOCK
+    beq t2, t4, 447f
+    li a7, (INTERVAL_SHIFT_MAX - 1)
+    li t4, (BLOCK << 1)
+    beq t2, t4, 447f
+    li a7, INTERVAL_SHIFT_MAX
+    li t4, (BLOCK << 2)
+    bne t2, t4, 448f
+447:
     sub a5, a5, t3
-    la a7, k_lane_bias
-    ld a6, 0(a7)
+    la a0, k_lane_bias
+    ld a6, 0(a0)
     add a5, a5, a6
-    ld a7, 8(a7)                    # k_lane_mask, beside it
-    and a5, a5, a7
-    srli a5, a5, 4
-    srli a6, a6, 4
+    la a0, k_lane_masks
+    addi t4, a7, -(INTERVAL_SHIFT_MAX - 2)
+    slli t4, t4, 3
+    add a0, a0, t4
+    ld a0, 0(a0)
+    and a5, a5, a0
+    srl a5, a5, a7
+    srl a6, a6, a7
     sub s0, a5, a6                  # the step a pixel
+    j 449f
+448:
+    li a0, ((1 << CHANNEL_BITS) - 1)
+    and a6, a5, a0
+    and t4, t3, a0
+    sub a6, a6, t4
+    div s0, a6, t2
+    srli a6, a5, CHANNEL_BITS
+    and a6, a6, a0
+    srli t4, t3, CHANNEL_BITS
+    and t4, t4, a0
+    sub a6, a6, t4
+    div a6, a6, t2
+    slli a6, a6, CHANNEL_BITS
+    add s0, s0, a6
+    srli a6, a5, (2 * CHANNEL_BITS)
+    srli t4, t3, (2 * CHANNEL_BITS)
+    sub a6, a6, t4
+    div a6, a6, t2
+    slli a6, a6, (2 * CHANNEL_BITS)
+    add s0, s0, a6
+449:
+    mv a5, t2                       # the interval's pixels
+    mv t2, s11                      # the block's, for the loop
+49:
+    sub a5, a5, s11
+    sd a5, 152(sp)                  # the interval's pixels left after this block
     li t4, 0
-    ld a5, 40(sp)
+    ld a5, 16(sp)
+    andi a5, a5, POLY_MASKED
     bnez a5, 55f
 45:
     # textured, lit: the depth first, then the texel, each channel
@@ -930,7 +1100,7 @@ span_fill:
     addi t1, t1, 4
     addi t2, t2, -1
     bnez t2, 45b
-    j 60f
+    j 61f
 55:
     # masked, lit: the depth, the texel, its alpha
     lwu a7, 0(t1)
@@ -982,6 +1152,12 @@ span_fill:
     addi t1, t1, 4
     addi t2, t2, -1
     bnez t2, 55b
+61:
+    # a lit block's brightness carried into the next block of its
+    # interval; where the interval ended, the exact end sample is there
+    ld t5, 152(sp)
+    beqz t5, 60f
+    sd t3, 160(sp)
     j 60f
 40:
     # textured: the depth test, then the texel and the stores
@@ -1108,6 +1284,10 @@ span_fill:
     ld t5, 144(sp)
     add t4, t4, t5
     sd t4, STAT_REJECTED(t3)
+    ld t4, STAT_SAMPLES(t3)
+    ld t5, 176(sp)
+    add t4, t4, t5
+    sd t4, STAT_SAMPLES(t3)
     ld ra, 136(sp)
     ld s2, 128(sp)
     ld s3, 120(sp)
@@ -1120,7 +1300,7 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 160
+    addi sp, sp, 192
     ret
 
 # Whether any of the polygon in hand shows against what is drawn, sampled

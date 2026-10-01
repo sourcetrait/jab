@@ -15,9 +15,10 @@ basis, the plane's once a polygon in surface_setup, each at twice the float
 record's offsets.
 
 The stats record grew its span, pixel, and light-tick fields for the light's
-instrument, then the rejected-pixel count; a field is added by extending the
-record, zeroed in world_draw, and printed by frame_report, with the test's
-frame template extended to match, since the template names every field.
+instrument, then the rejected-pixel count, then the lumel samples; a field
+is added by extending the record, zeroed in world_draw, and printed by
+frame_report, with the test's frame template extended to match, since the
+template names every field.
 
 The brightness word packs three 16.16 channels CHANNEL_BITS apart, which
 integer addition steps exactly while every channel stays in range; the lit
@@ -26,16 +27,28 @@ channels in 256ths, so a lane holds the channel times the weight that sums
 over four lumels to 256: 256 times 256 is 17 bits, a lane 21, and the four
 products add back to a 16.16 lane with no unpacking. A packed word halved by
 an arithmetic shift does not step, since each channel's odd bit lands in the
-lane below; the block step clears each lane's low four bits under a bias
-before shifting (raster.S).
+lane below; the interval step clears each lane's low bits under a bias
+before shifting, the mask built from a one in each lane for the shift in
+hand (raster.S).
 
-POLY_LUMAP and POLY_SIZE are written as literals because the light list's
-size is defined below them and an immediate offset needs its value at the
-load; the comment carries the sum.
+POLY_LUMAP, POLY_LUMEL, POLY_FLAT_BRIGHT, and POLY_SIZE are written as
+literals because the light list's size is defined below them and an
+immediate offset needs its value at the load; the comment carries the sum.
+POLY_LUMAP is 0 for a polygon with no map, which the fill lights flat by
+POLY_FLAT_BRIGHT and the mode treats as lit whenever the map has lights;
+a mapped polygon whose record has no base, the bake having left it, draws
+unlit. POLY_LUMEL is the read's one word, the lumels' base in 40 bits, a
+row's bytes in 16, and k in the top byte, so a sample loads one word for
+the map where the record's fields cost nine loads before.
 
-The lumel map record keeps the texel-to-lumel map as a multiply and a shift
-rather than a divide: RU is 2^32 over the texels in a lumel, so u RU >> 32 is
-u over that, and OU the texel origin's lumel coordinate, both signed so a
-mirrored mapping holds. The clamps are ((W - 1) << 16) - 1, one short of the
-last node, so a clamped sample's fraction stays under one and the lumel past
-it is the last.
+The lumel map record is in texels: the first node's texel coordinate on
+each axis, a multiple of the texture's size below the surface's least
+texel, and k, the lumel's texels as a power of two. The read is then two
+shifts an axis with no clamp, since the fill's coordinate counted from the
+origin lies within the map by the frame's margins (light.S), and the
+texel-to-lumel scales and offsets the record carried before are gone with
+the clamps.
+
+The interval constants size the cadence: a lit span samples at the ends of
+one, two, or four blocks, INTERVAL_SHIFT_MAX being four blocks' shift, by
+the texel step a pixel against the lumel's 2^k texels.

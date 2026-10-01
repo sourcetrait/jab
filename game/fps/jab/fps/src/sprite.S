@@ -42,7 +42,7 @@ sprites_draw:
     ret
 
 # A sprite entity drawn when it has a texture and faces the camera or is
-# two-sided.
+# two-sided; lit flat by one brightness at its centre.
 # a0 address The entity.
 sprite_draw:
     addi sp, sp, -128
@@ -245,24 +245,24 @@ sprite_draw:
     fnmsub.d ft6, ft4, fs2, ft6
     fcvt.s.d ft0, ft6
     fsw ft0, PLANE_V0(t0)
-    # the sprite's own lumel map, written below once the lights are culled
+    # no lumel map: a sprite moves, so it is lit flat by one brightness
+    # taken below once the lights are culled
     la t0, poly
-    la t1, sprite_lumap
-    sd t1, POLY_LUMAP(t0)
-    li a0, POLY_MASKED
-    call poly_mode
-    la t0, poly
+    sd zero, POLY_LUMAP(t0)
     lw t1, ENTITY_SECTOR(s2)
     sw t1, POLY_SECTOR(t0)
     call surface_setup
     # facing the camera, its face is the eye's, so it is lit at no
-    # angle, else a light behind it would leave it black
+    # angle, else a light behind it would leave it black; the mode
+    # after the setup, which clears the flag
     andi t0, s3, ENTITY_CAMERA
     beqz t0, 45f
     la t0, poly
     li t1, 1
     sd t1, POLY_FLAT_LIT(t0)
 45:
+    li a0, POLY_MASKED
+    call poly_mode
     # the quad, from the corner at u 0, v 0 around
     call edges_reset
     call poly_reset
@@ -312,9 +312,9 @@ sprite_draw:
     call verts_bounds
     call lights_cull
     # lit: the brightness at the quad's centre over the polygon's list,
-    # at no angle for a face the eye's, as the sprite's one lumel, its
-    # four alike, so the fill reads it over the whole quad; its ticks
-    # are the frame's light
+    # at no angle for a face the eye's, as the polygon's one brightness,
+    # which the fill takes over the whole quad; its ticks are the
+    # frame's light
     la t0, poly
     ld t1, POLY_MODE(t0)
     andi t1, t1, POLY_LIT
@@ -330,12 +330,8 @@ sprite_draw:
     ld t6, POLY_FLAT_LIT(t0)
     addi t2, t0, POLY_LIGHTS
     call point_light
-    call lumel_pack
-    la t1, sprite_cells
-    sd a0, 0(t1)
-    sd a0, 8(t1)
-    sd a0, 16(t1)
-    sd a0, 24(t1)
+    la t1, poly
+    sd a0, POLY_FLAT_BRIGHT(t1)
     rdtime t0
     ld t1, 0(sp)
     sub t0, t0, t1

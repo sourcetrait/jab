@@ -85,42 +85,62 @@
 # byte, then that many light indices, as a sector's list is shaped,
 # SECTOR_LIGHTS_SIZE bytes
 .set POLY_LIGHTS, 152
-# The surface's lumel map record, 0 for none
+# The surface's lumel map record; 0 for a polygon with no map, a sprite,
+# lit flat by POLY_FLAT_BRIGHT over its whole extent
 .set POLY_LUMAP, 184
-.set POLY_SIZE, 192
+# The read's one word for a mapped polygon: the lumels' base in the low
+# LUMEL_BASE_BITS, a row's bytes from LUMEL_ROWBYTES_SHIFT, and k, the
+# lumel's texels as a power of two, from LUMEL_K_SHIFT
+.set POLY_LUMEL, 192
+# The brightness of a polygon with no map, packed as a brightness word
+.set POLY_FLAT_BRIGHT, 200
+.set POLY_SIZE, 208
+.set LUMEL_BASE_BITS, 40
+.set LUMEL_ROWBYTES_SHIFT, 40
+.set LUMEL_K_SHIFT, 56
+.set LUMEL_K_MAX, 15
 # A brightness word packs three 16.16 channels CHANNEL_BITS apart, which
 # integer addition steps exactly while every lane stays in range; a
 # lumel packs the same three channels in 256ths, 0 to 256, so four
 # lumels summed under weights adding to 256 are a brightness word
 .set CHANNEL_BITS, 21
 # A surface's lumel map: its lumels in the arena, 0 for none; its columns
-# and rows; a texel coordinate to a lumel coordinate, lu = (u * RU >> 32)
-# - OU in 16.16 and lv the same; the clamps ((W - 1) << 16) - 1 and the
-# same of H, so a sample and the lumel past it both lie in the map
+# and rows; the texel coordinate of its first node, U0 and V0, each a
+# multiple of the texture's size at or below the surface's least texel
+# less one, so a texel coordinate counted from it is never negative and
+# wraps by the mask unchanged; k, a lumel being 2^k texels along both
+# axes, the power of two nearest half a metre along u. A node sits at
+# every (U0 + i 2^k, V0 + j 2^k), one past each end of the surface, so a
+# sample within the surface and the lumel past it both lie in the map
 .set LUMAP_BASE, 0
 .set LUMAP_W, 8
 .set LUMAP_H, 16
-.set LUMAP_RU, 24
-.set LUMAP_OU, 32
-.set LUMAP_RV, 40
-.set LUMAP_OV, 48
-.set LUMAP_UMAX, 56
-.set LUMAP_VMAX, 64
-.set LUMAP_SIZE, 72
+.set LUMAP_U0, 24
+.set LUMAP_V0, 32
+.set LUMAP_K, 40
+.set LUMAP_SIZE, 48
 # The maps by surface: a sector's floor at twice its index and its
 # ceiling after, then the walls; a lumel is one word, the grid's spacing
-# in metres is k_lumel_d, and the arena holds every map
+# in metres is near k_lumel_d, and the arena holds every map
 .set LUMAP_PLANES, (MAX_SECTORS * 2)
 .set LUMAP_COUNT, (LUMAP_PLANES + MAX_WALLS)
 .set LUMEL_BYTES, 8
 .set LUMEL_ARENA_BYTES, (8 * 1024 * 1024)
-# The grid a map is baked over: the origin, the u axis's step a lumel,
-# and the v axis's step, doubles; the unit normal into the room, singles
+# The frame a map is baked over, in texels: the world point at texel
+# (0, 0) of the surface's mapping, the world step a texel along u, and
+# the step a texel along v, doubles; the unit normal into the room,
+# singles. A node's point is the origin plus its texel coordinate along
+# each step
 .set GRID_O, 0
 .set GRID_U, 24
 .set GRID_V, 48
 .set GRID_N, 72
 .set GRID_SIZE, 84
+# A lit span samples its map at the ends of intervals of 1, 2, or 4
+# blocks, the shift of the interval's pixels 4 to INTERVAL_SHIFT_MAX,
+# chosen so a lumel spans at least two samples: the longest whose pixels
+# times the texel step a pixel stay within half a lumel
+.set INTERVAL_SHIFT_MAX, 6
 .set POLY_TEXTURED, 0
 .set POLY_MASKED, 1
 .set POLY_SKY, 2
@@ -187,15 +207,16 @@
 .set STAT_SPRITES, 72
 .set STAT_SPRITE_TICKS, 80
 # The spans filled and the pixels they entered, the lit ones among them,
-# the ticks the light's evaluation took, and the pixels the depth test
-# rejected
+# the ticks the light's evaluation took, the pixels the depth test
+# rejected, and the lumel samples the lit spans read
 .set STAT_SPANS, 88
 .set STAT_PIXELS, 96
 .set STAT_LIT_SPANS, 104
 .set STAT_LIT_PIXELS, 112
 .set STAT_LIGHT_TICKS, 120
 .set STAT_REJECTED, 128
-.set STAT_SIZE, 136
+.set STAT_SAMPLES, 136
+.set STAT_SIZE, 144
 # The records over the API, 64 bytes each: the state a frame, kind
 # REPORT_STATE, the camera's sector, the eye, the yaw, pitch, and roll
 # in degrees, the drawing's and the game's microseconds, zero to the

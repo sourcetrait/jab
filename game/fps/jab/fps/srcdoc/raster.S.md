@@ -55,44 +55,99 @@ meet without a crack. Walking by rows matters under TCG: a column walk
 touches a new cache line of each 8 MB buffer per pixel and measured 180 ms
 for a million pixels against 16 by rows.
 
-A lit span reads the surface's lumel map (light.S): the brightness at the
-span's start from its texel u and v, then at each 16-pixel block's end from
-the block's end u and v, which the block already computes exactly for the
-texel steps, and the pixel loop steps between the two as before, the end
-sample becoming the next block's start. lumel_sample is bilinear: the texel
-coordinate to a lumel coordinate by the record's multiply, shift, and offset,
-clamped to the map; the four lumels about it loaded; the weights from the
-fractions in 256ths, the below-right one the product shifted, the other
-three by subtraction so the four sum to 256 exactly, since four truncated
-products summed to as little as 253 and darkened a fully lit lumel by a
-visible percent; the four products summed on the packed lanes whole. About
-fifty integer ops and nine loads a block, under four ops a pixel, which the
-per-span setup and the evaluation it replaces more than paid; nearest
-sampling would show every half-metre lumel as a step on a wall close up,
-where a lumel is hundreds of pixels wide.
+## lumap_bind
 
-The block step is the end less the start over sixteen, each lane at once:
-the difference biased by 2^20 a lane so no lane is negative, each lane's low
-four bits cleared so a shift carries nothing into the lane below, the word
-shifted four, and the bias's sixteenth taken back, five ops over two
-constants, where a lane at a time was near thirty. A short last block steps
-by a sixteenth too, so its ramp covers its share of the change and stops;
-the span's end sample is where the next span's start is read afresh. The
-sample at the first pixel of a span lands in the same stack slot the held
-evaluation once did.
+A lit polygon with a map has the map's texel origin folded into its u/z and
+v/z coefficients once a polygon: u/z less U0/z on A, B, and C, which is U0
+times the 6.26 1/z coefficient shifted down ten for the 48.16 u/z, and v the
+same. The span's texel coordinates then count from the map's first node, so
+the read is a shift and the coordinate is never negative; the origin is a
+multiple of the texture's size, so the wrap by the mask is unchanged and the
+texel loop needs no change. U0 times 1/z stays under 2^46 across the
+factory. The read's one word packs the lumels' base in 40 bits, a row's
+bytes in 16 from bit 40, and k from bit 56; a program window sits under 2^40
+on this machine, which the packing assumes.
 
-The scheme this replaced evaluated span_light at a span's two ends and
-stepped between, holding four evaluations per polygon keyed by the row and
-the span's ends across an eight-row stride. Its fault was in the sampling:
-a pool between a span's ends was never seen, so a row's light depended on
-where its ends fell, which the camera's turn moved, up to 44 levels at one
-floor point across three yaws; the keyed hold had only fixed a band of
-strips where a pillar's hole cut a row in two. Both went with the bake.
+## lumel_sample
 
-span_fill counts every span it fills and the pixels it enters, the lit ones
-beside, into the frame's stats for the frame line, which reads the overdraw
-as pixels entered against the screen's; the light's microseconds on that
-line are now the sprites' evaluations alone.
+The read, about 41 integer ops and five loads a sample, one of them the
+packed word: the column and the row are the texel coordinate shifted by k
+plus 16, the fractions the next eight bits down, the address the base plus
+the row times the row's bytes plus the column times eight, the lumel below
+one row's bytes on; the four lumels about the coordinate are summed under
+weights from the fractions in 256ths, the below-right one the product
+shifted, the other three by subtraction so the four sum to 256 exactly,
+since four truncated products summed to as little as 253 and darkened a
+fully lit lumel by a visible percent; the products are summed on the packed
+lanes whole, 256 times 256 being 17 bits and a lane 21. No clamp: a span's
+texel coordinate lies within the surface by construction, the map's frame
+holds a node past each end, and the origin sits a texel or more below the
+surface's least, which covers a block end's rounding. Bilinear, since a
+lumel close up is hundreds of pixels wide and nearest sampling would show
+every one as a step.
+
+The read it replaced did 13 loads and eight multiplies a sample, nine of
+the loads the map's record and its fields reloaded every block, and
+converted the texel coordinate by a multiply, a shift, an offset, and a
+clamp on each axis; this mirror had counted nine loads and claimed the read
+more than paid for the evaluation it replaced, both written before the
+gauge came back, and the gauge showed the read costing about what the
+evaluation had on the views that enter the most pixels.
+
+## The cadence
+
+A lit span samples at its start, then at the ends of intervals of one,
+two, or four blocks, the interval chosen at its start from the block just
+computed: with step the larger of |du| and |dv| in 16.16 texels a pixel and
+a lumel 2^k texels, four blocks when 64 pixels times the step stay within
+half a lumel, two when 32 do, else one, so a lumel spans at least two
+samples wherever the floor of one block allows it. The criterion is the
+world's, not the screen's: a fixed pixel interval between samples bounds
+nothing in the world, which the scheme before the bake showed. Far surfaces
+sample every block, the floor; near surfaces, where the pixels are, every
+two or four. The interval's end coordinates come from one divide at its
+pixels on, or from the block's own end when the interval is one block, and
+its pixels are capped at the span's remaining. The sample's brightness is
+stepped across the interval's blocks and the exact end sample becomes the
+next interval's start so nothing drifts. The decision is a shift and two
+compares: the step shifted down by k plus 9 reads 0 for four blocks, 1 for
+two, more for one.
+
+The step over a whole interval of 16, 32, or 64 pixels is the lane trick
+shifted by 4, 5, or 6: the end less the start, each lane biased past zero
+by 2^20, each lane's low bits cleared under the shift's mask, one of three
+constants, so the shift spills nothing into the lane below, the word
+shifted, and the bias's share taken back; a lane at a time was near thirty
+ops. An interval the span cuts short divides each lane's change by its
+pixels, the three quotients packed again, which also fixes the short last
+block: the read before stepped every block by a sixteenth whatever its
+length, so an eight-pixel block got half its gradient.
+
+The span's state across the pixel loops lives in two stack slots, the
+interval's pixels left and the brightness, and the interval's length rides
+the loop's count register until the loop needs it, since every register is
+taken in the pixel loops: a first form kept the interval's length and shift
+and a masked flag in slots too, and the no-read probe priced the read at
+1.8 to 2.9 ms a view, nearly all of it that traffic rather than the
+samples, since a build sampling every block cost the same as the cadence
+within the gauge's noise. A lit block ends by carrying its brightness into
+the slot only while its interval continues; where the interval ended the
+slot already holds the exact end sample.
+
+## The flat path
+
+A polygon with no lumel map, a sprite, is lit flat: its one brightness
+word, point_light at the quad's centre into POLY_FLAT_BRIGHT, is the span's
+brightness with a zero step and no sample, the interval the whole span. The
+read before put the sprite's one brightness into a map of four lumels alike
+and read it per block through the general path, converting and weighting a
+constant.
+
+span_fill counts every span it fills, the pixels it enters, the lit ones
+beside, and the lumel samples it reads, into the frame's stats for the frame
+line, which reads the overdraw as pixels entered against the screen's and
+the cadence as samples against blocks; the light's microseconds on that
+line are the sprites' evaluations alone.
 
 span_fill and poly_shows are page-aligned and kept under a page: QEMU's
 translator ends a block at a page boundary and chains blocks within a page
