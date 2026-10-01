@@ -245,6 +245,10 @@ sprite_draw:
     fnmsub.d ft6, ft4, fs2, ft6
     fcvt.s.d ft0, ft6
     fsw ft0, PLANE_V0(t0)
+    # the sprite's own lumel map, written below once the lights are culled
+    la t0, poly
+    la t1, sprite_lumap
+    sd t1, POLY_LUMAP(t0)
     li a0, POLY_MASKED
     call poly_mode
     la t0, poly
@@ -307,6 +311,39 @@ sprite_draw:
     bltu a0, t0, 90f
     call verts_bounds
     call lights_cull
+    # lit: the brightness at the quad's centre over the polygon's list,
+    # at no angle for a face the eye's, as the sprite's one lumel, its
+    # four alike, so the fill reads it over the whole quad; its ticks
+    # are the frame's light
+    la t0, poly
+    ld t1, POLY_MODE(t0)
+    andi t1, t1, POLY_LIT
+    beqz t1, 46f
+    rdtime t1
+    sd t1, 0(sp)
+    fcvt.s.d fa0, fs0
+    fcvt.s.d fa1, fs1
+    fcvt.s.d fa2, fs2
+    flw fa3, POLY_LNX(t0)
+    flw fa4, POLY_LNY(t0)
+    flw fa5, POLY_LNZ(t0)
+    ld t6, POLY_FLAT_LIT(t0)
+    addi t2, t0, POLY_LIGHTS
+    call point_light
+    call lumel_pack
+    la t1, sprite_cells
+    sd a0, 0(t1)
+    sd a0, 8(t1)
+    sd a0, 16(t1)
+    sd a0, 24(t1)
+    rdtime t0
+    ld t1, 0(sp)
+    sub t0, t0, t1
+    la t1, stats
+    ld t2, STAT_LIGHT_TICKS(t1)
+    add t2, t2, t0
+    sd t2, STAT_LIGHT_TICKS(t1)
+46:
     call poly_fill
     la t0, stats
     ld t1, STAT_SPRITES(t0)

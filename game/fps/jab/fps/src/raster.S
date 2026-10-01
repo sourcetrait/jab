@@ -17,6 +17,14 @@ k_hy_d:
     .double 540.0
 k_hz_d:
     .double 960.0
+# A lane's bias and the mask that steps a brightness word's three lanes
+# at once by a sixteenth each: the end less the start, each lane biased
+# past zero, its low four bits cleared so none spill into the lane
+# below, the word shifted, and the bias's sixteenth taken back
+k_lane_bias:
+    .dword ((1 << 20) | (1 << 41) | (1 << 62))
+k_lane_mask:
+    .dword ~(0xf | (0xf << 21) | (0xf << 42))
 .balign 4
 k_near:
     .float 0.0625
@@ -345,12 +353,6 @@ surface_setup:
     bnez t0, 80f
     # the unit normal facing the camera, for the light
     la t1, poly
-    li t0, -1
-    sd t0, (POLY_LIT_TABLE + LIT_ROW)(t1)                 # nothing held yet
-    sd t0, (POLY_LIT_TABLE + LIT_ENTRY + LIT_ROW)(t1)
-    sd t0, (POLY_LIT_TABLE + 2 * LIT_ENTRY + LIT_ROW)(t1)
-    sd t0, (POLY_LIT_TABLE + 3 * LIT_ENTRY + LIT_ROW)(t1)
-    sd zero, POLY_LIT_NEXT(t1)
     sd zero, POLY_FLAT_LIT(t1)      # lit at its angle unless the caller says
     fld ft8, 0(t3)
     fld ft9, 8(t3)
@@ -640,8 +642,76 @@ poly_fill:
     addi sp, sp, 48
     ret
 
+# The brightness at a texel coordinate of the surface in hand from its lumel
+# map: the four lumels about it summed under weights of its fractions
+# a5 int u, 16.16 texels
+# a6 int v, 16.16 texels
+# returns Clobbers a0, a6, a7, t3, t4
+#   a5 The brightness, the three channels in 8.8 packed CHANNEL_BITS apart
+.macro lumel_sample
+    la t3, poly
+    ld t3, POLY_LUMAP(t3)
+    ld a7, LUMAP_RU(t3)
+    mul a5, a5, a7
+    srai a5, a5, 32
+    ld a7, LUMAP_OU(t3)
+    sub a5, a5, a7                  # lu, 16.16
+    ld a7, LUMAP_RV(t3)
+    mul a6, a6, a7
+    srai a6, a6, 32
+    ld a7, LUMAP_OV(t3)
+    sub a6, a6, a7                  # lv
+    bgez a5, .Llumel_u0\@
+    li a5, 0
+.Llumel_u0\@:
+    ld a7, LUMAP_UMAX(t3)
+    ble a5, a7, .Llumel_u1\@
+    mv a5, a7
+.Llumel_u1\@:
+    bgez a6, .Llumel_v0\@
+    li a6, 0
+.Llumel_v0\@:
+    ld a7, LUMAP_VMAX(t3)
+    ble a6, a7, .Llumel_v1\@
+    mv a6, a7
+.Llumel_v1\@:
+    srli a7, a5, 16                 # the column
+    srli a0, a6, 16                 # the row
+    ld t4, LUMAP_W(t3)
+    mul a0, a0, t4
+    add a0, a0, a7
+    slli a0, a0, 3
+    ld a7, LUMAP_BASE(t3)
+    add a0, a0, a7                  # the lumel above left
+    slli t4, t4, 3
+    add t4, t4, a0                  # the one below it
+    srli a5, a5, 8
+    andi a5, a5, 0xff               # u's fraction in 256ths
+    srli a6, a6, 8
+    andi a6, a6, 0xff               # v's
+    mul a7, a5, a6
+    srli a7, a7, 8                  # the weight below right
+    sub a5, a5, a7                  # above right
+    sub a6, a6, a7                  # below left
+    ld t3, 8(t4)
+    mul t3, t3, a7
+    ld t4, 0(t4)
+    mul t4, t4, a6
+    add t3, t3, t4
+    ld t4, 8(a0)
+    mul t4, t4, a5
+    add t3, t3, t4
+    neg a7, a7
+    addi a7, a7, 256
+    sub a7, a7, a5
+    sub a7, a7, a6                  # above left, the four summing to 256
+    ld a0, 0(a0)
+    mul a0, a0, a7
+    add a5, t3, a0
+.endm
+
 # The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
-# masked, sky, or lit, no float in the loop
+# masked, sky, or lit from its lumel map, no float in the loop
 # a0 int The first pixel
 # a1 int The pixel past the last
 # a2 int The row
@@ -692,15 +762,11 @@ span_fill:
     ld t4, STAT_PIXELS(t3)
     add t4, t4, s10
     sd t4, STAT_PIXELS(t3)
-    # lit: the brightness at the span's start and its step a pixel into
-    # s0, from the evaluation the polygon holds for this span within the
-    # stride, else evaluated afresh at both ends
+    # lit: counted
     la t3, poly
     ld t4, POLY_MODE(t3)
     andi t4, t4, POLY_LIT
     beqz t4, 5f
-    sd a0, 0(sp)
-    sd a1, 8(sp)
     la t6, stats
     ld t5, STAT_LIT_SPANS(t6)
     addi t5, t5, 1
@@ -708,111 +774,6 @@ span_fill:
     ld t5, STAT_LIT_PIXELS(t6)
     add t5, t5, s10
     sd t5, STAT_LIT_PIXELS(t6)
-    # the held evaluations searched for one within LIGHT_ROWS rows whose
-    # span ends lie within LIGHT_SLACK pixels of this span's
-    addi t5, t3, POLY_LIT_TABLE
-    li t6, LIT_HELD
-43:
-    ld a3, LIT_ROW(t5)
-    bltz a3, 48f                    # nothing held here
-    sub a3, a2, a3
-    li a4, LIGHT_ROWS
-    bgeu a3, a4, 48f                # past the stride
-    ld a3, LIT_A0(t5)
-    sub a3, a0, a3
-    srai a4, a3, 63
-    xor a3, a3, a4
-    sub a3, a3, a4                  # the start's drift
-    li a4, LIGHT_SLACK
-    bgtu a3, a4, 48f
-    ld a3, LIT_A1(t5)
-    sub a3, a1, a3
-    srai a4, a3, 63
-    xor a3, a3, a4
-    sub a3, a3, a4                  # the end's drift
-    li a4, LIGHT_SLACK
-    bgtu a3, a4, 48f
-    j 49f
-48:
-    addi t5, t5, LIT_ENTRY
-    addi t6, t6, -1
-    bnez t6, 43b
-    # none held: evaluated at both ends into the entry replaced next
-    ld t5, POLY_LIT_NEXT(t3)
-    addi t6, t5, 1
-    andi t6, t6, (LIT_HELD - 1)
-    sd t6, POLY_LIT_NEXT(t3)
-    li t6, LIT_ENTRY
-    mul t5, t5, t6
-    add t5, t5, t3
-    addi t5, t5, POLY_LIT_TABLE     # the entry
-    sd t5, 152(sp)
-    sd a2, LIT_ROW(t5)
-    sd a0, LIT_A0(t5)
-    sd a1, LIT_A1(t5)
-    rdtime t5
-    sd t5, 40(sp)                   # the evaluation's start
-    mv a1, a2
-    mv a2, s2
-    call span_light
-    ld t5, 152(sp)
-    sd a0, LIT_B0(t5)               # the brightness at the start
-    ld a0, 0(sp)
-    ld a1, 8(sp)
-    sub t0, a1, a0
-    mul t0, t0, s3
-    add a2, s2, t0                  # 1/z past the end
-    mv a0, a1
-    ld a1, 24(sp)
-    call span_light
-    mv t1, a0                       # the brightness past the end
-    rdtime t0
-    ld t5, 40(sp)
-    sub t0, t0, t5
-    la t6, stats
-    ld t5, STAT_LIGHT_TICKS(t6)
-    add t5, t5, t0
-    sd t5, STAT_LIGHT_TICKS(t6)
-    ld t5, 152(sp)
-    ld t0, LIT_B0(t5)
-    sd t0, 32(sp)
-    # the step a pixel, a channel at a time, packed again, into the entry
-    li t6, ((1 << CHANNEL_BITS) - 1)
-    and t2, t1, t6
-    and t4, t0, t6
-    sub t2, t2, t4
-    div t2, t2, s10
-    srli t4, t1, CHANNEL_BITS
-    and t4, t4, t6
-    srli t5, t0, CHANNEL_BITS
-    and t5, t5, t6
-    sub t4, t4, t5
-    div t4, t4, s10
-    slli t4, t4, CHANNEL_BITS
-    add s0, t2, t4
-    srli t4, t1, (2 * CHANNEL_BITS)
-    srli t5, t0, (2 * CHANNEL_BITS)
-    sub t4, t4, t5
-    div t4, t4, s10
-    slli t4, t4, (2 * CHANNEL_BITS)
-    add s0, s0, t4
-    ld t5, 152(sp)
-    sd s0, LIT_STEP(t5)
-    j 42f
-49:
-    # the entry taken: its step, and its start moved along it by the
-    # drift of this span's start
-    ld s0, LIT_STEP(t5)
-    ld t0, LIT_B0(t5)
-    ld a3, LIT_A0(t5)
-    sub a3, a0, a3
-    mul a3, a3, s0
-    add t0, t0, a3
-    sd t0, 32(sp)
-42:
-    ld a0, 0(sp)
-    ld a1, 8(sp)
-    ld a2, 24(sp)                   # the row again
 5:
     li t1, SCREEN_PITCH
     mul t1, a2, t1
@@ -847,6 +808,14 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
+    # lit: the brightness at the span's start from the lumel map
+    ld t3, 16(sp)
+    andi t3, t3, POLY_LIT
+    beqz t3, 30f
+    mv a5, s8
+    mv a6, s9
+    lumel_sample
+    sd a5, 32(sp)
 30:
     # the block: its length, its end's u and v, the steps
     li s11, BLOCK
@@ -888,8 +857,27 @@ span_fill:
     beq t3, a5, 50f
     j 40f
 44:
+    # lit: the brightness at the block's end from the lumel map, the
+    # step a pixel a sixteenth of its lanes' change from the start's,
+    # and the end kept as the next block's start
     andi a5, t3, POLY_MASKED
-    ld t3, 32(sp)                   # the brightness, packed
+    sd a5, 40(sp)
+    ld a5, 0(sp)
+    ld a6, 8(sp)
+    lumel_sample
+    ld t3, 32(sp)                   # the brightness at the start, packed
+    sd a5, 32(sp)
+    sub a5, a5, t3
+    la a7, k_lane_bias
+    ld a6, 0(a7)
+    add a5, a5, a6
+    ld a7, 8(a7)                    # k_lane_mask, beside it
+    and a5, a5, a7
+    srli a5, a5, 4
+    srli a6, a6, 4
+    sub s0, a5, a6                  # the step a pixel
+    li t4, 0
+    ld a5, 40(sp)
     bnez a5, 55f
 45:
     # textured, lit: the depth first, then the texel, each channel
@@ -942,7 +930,6 @@ span_fill:
     addi t1, t1, 4
     addi t2, t2, -1
     bnez t2, 45b
-    sd t3, 32(sp)
     j 60f
 55:
     # masked, lit: the depth, the texel, its alpha
@@ -995,7 +982,6 @@ span_fill:
     addi t1, t1, 4
     addi t2, t2, -1
     bnez t2, 55b
-    sd t3, 32(sp)
     j 60f
 40:
     # textured: the depth test, then the texel and the stores

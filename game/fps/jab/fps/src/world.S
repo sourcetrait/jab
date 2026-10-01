@@ -402,13 +402,19 @@ surface_mode:
     sd a0, POLY_MODE(t0)
     ret
 
-# POLY_MODE set, the lit flag added when the map has lights
+# POLY_MODE set, the lit flag added when the map has lights and the surface
+# a lumel map
 # a0 int The mode
 # returns Clobbers t0, t1
 poly_mode:
     la t0, light_count
     lwu t0, 0(t0)
     beqz t0, 1f
+    la t0, poly
+    ld t1, POLY_LUMAP(t0)
+    beqz t1, 1f
+    ld t1, LUMAP_BASE(t1)
+    beqz t1, 1f
     ori a0, a0, POLY_LIT
 1:
     la t0, poly
@@ -430,6 +436,15 @@ plane_draw:
     sd s7, 8(sp)
     mv s2, a0
     mv s3, a1
+    # the plane's lumel map
+    slli t0, s2, 1
+    add t0, t0, s3
+    li t1, LUMAP_SIZE
+    mul t0, t0, t1
+    la t1, lumaps
+    add t0, t0, t1
+    la t1, poly
+    sd t0, POLY_LUMAP(t1)
     call sector_at
     mv s4, a0                       # the sector
     li t0, SURFACE_SIZE
@@ -475,36 +490,12 @@ plane_draw:
     flw ft0, SURFACE_V_OFFSET(s5)
     fsw ft0, PLANE_V0(t0)
     call surface_setup
-    # the sector's lights within the plane's box: its bounds in the plan
-    # and the plane's height at their corners
-    flw fa0, SECTOR_MIN_X(s4)
-    flw fa1, SECTOR_MAX_X(s4)
-    flw fa2, SECTOR_MIN_Y(s4)
-    flw fa3, SECTOR_MAX_Y(s4)
+    # the sector's lights within the plane's box
+    mv a0, s4
     li t1, SECTOR_CEILING
     mul t1, s3, t1
-    add t1, t1, s4
-    flw ft0, PLANE_A(t1)
-    flw ft1, PLANE_B(t1)
-    flw ft2, PLANE_C(t1)
-    fmul.s ft3, ft0, fa0
-    fmadd.s ft3, ft1, fa2, ft3
-    fadd.s ft3, ft3, ft2
-    fmul.s ft4, ft0, fa1
-    fmadd.s ft4, ft1, fa2, ft4
-    fadd.s ft4, ft4, ft2
-    fmul.s ft5, ft0, fa0
-    fmadd.s ft5, ft1, fa3, ft5
-    fadd.s ft5, ft5, ft2
-    fmul.s ft6, ft0, fa1
-    fmadd.s ft6, ft1, fa3, ft6
-    fadd.s ft6, ft6, ft2
-    fmin.s fa4, ft3, ft4
-    fmin.s fa4, fa4, ft5
-    fmin.s fa4, fa4, ft6
-    fmax.s fa5, ft3, ft4
-    fmax.s fa5, fa5, ft5
-    fmax.s fa5, fa5, ft6
+    add a1, s4, t1
+    call plane_box
     call lights_cull
     # the loops' edges, each loop a polygon of its walls' first
     # vertices at the plane's height
@@ -695,6 +686,15 @@ wall_surface:
     sd s6, 16(sp)
     mv s4, a0
     mv s5, a1
+    # the wall's lumel map
+    li t0, LUMAP_PLANES
+    add t0, t0, s5
+    li t1, LUMAP_SIZE
+    mul t0, t0, t1
+    la t1, lumaps
+    add t0, t0, t1
+    la t1, poly
+    sd t0, POLY_LUMAP(t1)
     mv a0, s5
     call wall_at
     mv s6, a0                       # the wall

@@ -77,35 +77,50 @@
 .set POLY_LNY, 132
 .set POLY_LNZ, 136
 .set POLY_SECTOR, 140
-# The light evaluations the polygon holds, LIT_HELD entries replaced
-# round robin from POLY_LIT_NEXT: the row, -1 while empty, the span's
-# first pixel and the pixel past its last, the brightness at its first
-# pixel, the three channels in 16.16 packed CHANNEL_BITS apart in one
-# word, and its step a pixel packed the same. A span within LIGHT_ROWS
-# rows of an entry whose ends lie within LIGHT_SLACK pixels of its own
-# takes the entry, its start moved along the step by the drift; any
-# other span is evaluated afresh, so the spans a hole cuts a row into
-# are each lit by their own ends
-.set POLY_LIT_NEXT, 144
-.set POLY_LIT_TABLE, 152
-.set LIT_HELD, 4
-.set LIT_ROW, 0
-.set LIT_A0, 8
-.set LIT_A1, 16
-.set LIT_B0, 24
-.set LIT_STEP, 32
-.set LIT_ENTRY, 40
 # Set for a surface lit at no angle, a sprite facing the camera: every
 # light within reach lights it by its falloff alone
-.set POLY_FLAT_LIT, (POLY_LIT_TABLE + LIT_HELD * LIT_ENTRY)
+.set POLY_FLAT_LIT, 144
 # The polygon's own light list, the sector's culled to the lights whose
 # sphere meets its world box and which lie ahead of its plane: a count
-# byte, then that many light indices, as a sector's list is shaped
-.set POLY_LIGHTS, (POLY_FLAT_LIT + 8)
-.set POLY_SIZE, (POLY_LIGHTS + SECTOR_LIGHTS_SIZE)
-.set LIGHT_ROWS, 8
-.set LIGHT_SLACK, 32
+# byte, then that many light indices, as a sector's list is shaped,
+# SECTOR_LIGHTS_SIZE bytes
+.set POLY_LIGHTS, 152
+# The surface's lumel map record, 0 for none
+.set POLY_LUMAP, 184
+.set POLY_SIZE, 192
+# A brightness word packs three 16.16 channels CHANNEL_BITS apart, which
+# integer addition steps exactly while every lane stays in range; a
+# lumel packs the same three channels in 256ths, 0 to 256, so four
+# lumels summed under weights adding to 256 are a brightness word
 .set CHANNEL_BITS, 21
+# A surface's lumel map: its lumels in the arena, 0 for none; its columns
+# and rows; a texel coordinate to a lumel coordinate, lu = (u * RU >> 32)
+# - OU in 16.16 and lv the same; the clamps ((W - 1) << 16) - 1 and the
+# same of H, so a sample and the lumel past it both lie in the map
+.set LUMAP_BASE, 0
+.set LUMAP_W, 8
+.set LUMAP_H, 16
+.set LUMAP_RU, 24
+.set LUMAP_OU, 32
+.set LUMAP_RV, 40
+.set LUMAP_OV, 48
+.set LUMAP_UMAX, 56
+.set LUMAP_VMAX, 64
+.set LUMAP_SIZE, 72
+# The maps by surface: a sector's floor at twice its index and its
+# ceiling after, then the walls; a lumel is one word, the grid's spacing
+# in metres is k_lumel_d, and the arena holds every map
+.set LUMAP_PLANES, (MAX_SECTORS * 2)
+.set LUMAP_COUNT, (LUMAP_PLANES + MAX_WALLS)
+.set LUMEL_BYTES, 8
+.set LUMEL_ARENA_BYTES, (8 * 1024 * 1024)
+# The grid a map is baked over: the origin, the u axis's step a lumel,
+# and the v axis's step, doubles; the unit normal into the room, singles
+.set GRID_O, 0
+.set GRID_U, 24
+.set GRID_V, 48
+.set GRID_N, 72
+.set GRID_SIZE, 84
 .set POLY_TEXTURED, 0
 .set POLY_MASKED, 1
 .set POLY_SKY, 2

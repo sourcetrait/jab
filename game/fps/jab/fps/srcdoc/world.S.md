@@ -40,6 +40,12 @@ author's anchor height, the same for every piece of the wall and over its
 openings. The wall's unit direction is a vec2 norm by hand over
 jab.f64.vec2.reg.len, the library carrying no vec2 norm.
 
+A plane's and a wall's surface name their lumel map in the polygon before
+the mode is chosen: poly_mode adds the lit flag only when the map has lights
+and the surface a baked map, so a surface the bake left unmapped draws
+unlit rather than reading a map of nothing. A plane's world box for the
+light cull is plane_box, shared with the bake.
+
 The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached.

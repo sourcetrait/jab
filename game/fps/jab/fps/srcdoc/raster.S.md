@@ -55,31 +55,44 @@ meet without a crack. Walking by rows matters under TCG: a column walk
 touches a new cache line of each 8 MB buffer per pixel and measured 180 ms
 for a million pixels against 16 by rows.
 
-A lit span's brightness at its start and its step a pixel come from the
-evaluations the polygon holds, LIT_HELD four of them keyed by the row and the
-span's two ends: a span within LIGHT_ROWS rows of an entry whose ends lie
-within LIGHT_SLACK 32 pixels of its own takes that entry's step and its
-start moved along the step by the drift of the span's start, and any other
-span evaluates span_light at both its ends into the entry replaced next,
-round robin. The key is the fix for light that showed as strips: the hold
-was keyed by the row alone, so every span within eight rows of the last
-evaluation took that span's two end values whatever its own extent. A
-pillar is a hole in the bay's planes, so from its top down each row of the
-ceiling is two spans, and the right span was lit from the far-left pixel to
-the pillar's edge as if those were its ends, a band about forty pixels tall
-from the pillar's top, dark or bright with the camera's turn, with its twin
-on the floor at the pillar's base; a span whose edge slopes drifted from the
-point its brightness was taken at the same way, both resetting every eighth
-row. Four entries let a row a pillar splits keep both spans across the
-stride, where one entry would have each span evict the other and evaluate
-every row. The eight-row hold in y stays, a staircase of its own near a
-steep gradient, which interpolating between stride rows would remove.
+A lit span reads the surface's lumel map (light.S): the brightness at the
+span's start from its texel u and v, then at each 16-pixel block's end from
+the block's end u and v, which the block already computes exactly for the
+texel steps, and the pixel loop steps between the two as before, the end
+sample becoming the next block's start. lumel_sample is bilinear: the texel
+coordinate to a lumel coordinate by the record's multiply, shift, and offset,
+clamped to the map; the four lumels about it loaded; the weights from the
+fractions in 256ths, the below-right one the product shifted, the other
+three by subtraction so the four sum to 256 exactly, since four truncated
+products summed to as little as 253 and darkened a fully lit lumel by a
+visible percent; the four products summed on the packed lanes whole. About
+fifty integer ops and nine loads a block, under four ops a pixel, which the
+per-span setup and the evaluation it replaces more than paid; nearest
+sampling would show every half-metre lumel as a step on a wall close up,
+where a lumel is hundreds of pixels wide.
+
+The block step is the end less the start over sixteen, each lane at once:
+the difference biased by 2^20 a lane so no lane is negative, each lane's low
+four bits cleared so a shift carries nothing into the lane below, the word
+shifted four, and the bias's sixteenth taken back, five ops over two
+constants, where a lane at a time was near thirty. A short last block steps
+by a sixteenth too, so its ramp covers its share of the change and stops;
+the span's end sample is where the next span's start is read afresh. The
+sample at the first pixel of a span lands in the same stack slot the held
+evaluation once did.
+
+The scheme this replaced evaluated span_light at a span's two ends and
+stepped between, holding four evaluations per polygon keyed by the row and
+the span's ends across an eight-row stride. Its fault was in the sampling:
+a pool between a span's ends was never seen, so a row's light depended on
+where its ends fell, which the camera's turn moved, up to 44 levels at one
+floor point across three yaws; the keyed hold had only fixed a band of
+strips where a pillar's hole cut a row in two. Both went with the bake.
 
 span_fill counts every span it fills and the pixels it enters, the lit ones
-beside, and times the two span_light evaluations of a lit stride row with
-rdtime, into the frame's stats for the frame line: the instrument that
-splits the light's cost between the evaluation and the lit pixel loop, and
-that reads the overdraw as pixels entered against the screen's.
+beside, into the frame's stats for the frame line, which reads the overdraw
+as pixels entered against the screen's; the light's microseconds on that
+line are now the sprites' evaluations alone.
 
 span_fill and poly_shows are page-aligned and kept under a page: QEMU's
 translator ends a block at a page boundary and chains blocks within a page

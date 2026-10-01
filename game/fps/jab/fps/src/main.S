@@ -107,6 +107,7 @@ _start:
     call sounds_load
     call soundfont_load
     call lights_gather
+    call lumaps_bake
     call actors_place
     call player_reset
     call camera_spawn
@@ -381,6 +382,11 @@ load_report:
     lwu a1, 0(t0)
     call append_dec
     la a1, word_lights
+    call append_str
+    la t0, lumap_count
+    ld a1, 0(t0)
+    call append_dec
+    la a1, word_lumel_maps
     call append_str
     la t0, sprite_count
     lwu a1, 0(t0)
@@ -864,6 +870,8 @@ word_entities:
     .asciz " entities, "
 word_lights:
     .asciz " lights, "
+word_lumel_maps:
+    .asciz " lumel maps, "
 word_sprites:
     .asciz " sprites, "
 word_materials:
