@@ -14,8 +14,9 @@ rule. A light reaches a sector by the compiler's list, bounds and radius in
 the plan without z.
 
 The brightness is taken at both ends of a span, on the first row of a polygon
-and every LIGHT_ROWS 8 rows after, held in the polygon between, and stepped a
-pixel in 16.16 with the three channels packed 21 bits apart in one word.
+and every LIGHT_ROWS 8 rows after, held in the polygon between for that span
+alone, keyed by its ends (raster.S), and stepped a pixel in 16.16 with the
+three channels packed 21 bits apart in one word.
 Per-vertex interpolation would lose a bulb's pool on a room's floor, whose
 vertices are all far from it; per row the cost was a microsecond a row of
 every polygon, which the stride cuts: two evaluations a row over 57 pieces of

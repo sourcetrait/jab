@@ -346,7 +346,11 @@ surface_setup:
     # the unit normal facing the camera, for the light
     la t1, poly
     li t0, -1
-    sw t0, POLY_LIT_ROW(t1)         # no brightness taken yet
+    sd t0, (POLY_LIT_TABLE + LIT_ROW)(t1)                 # nothing held yet
+    sd t0, (POLY_LIT_TABLE + LIT_ENTRY + LIT_ROW)(t1)
+    sd t0, (POLY_LIT_TABLE + 2 * LIT_ENTRY + LIT_ROW)(t1)
+    sd t0, (POLY_LIT_TABLE + 3 * LIT_ENTRY + LIT_ROW)(t1)
+    sd zero, POLY_LIT_NEXT(t1)
     sd zero, POLY_FLAT_LIT(t1)      # lit at its angle unless the caller says
     fld ft8, 0(t3)
     fld ft9, 8(t3)
@@ -688,8 +692,9 @@ span_fill:
     ld t4, STAT_PIXELS(t3)
     add t4, t4, s10
     sd t4, STAT_PIXELS(t3)
-    # lit: the brightness at both ends, taken afresh every LIGHT_ROWS
-    # rows of a polygon and held between, its step a pixel into s0
+    # lit: the brightness at the span's start and its step a pixel into
+    # s0, from the evaluation the polygon holds for this span within the
+    # stride, else evaluated afresh at both ends
     la t3, poly
     ld t4, POLY_MODE(t3)
     andi t4, t4, POLY_LIT
@@ -703,20 +708,55 @@ span_fill:
     ld t5, STAT_LIT_PIXELS(t6)
     add t5, t5, s10
     sd t5, STAT_LIT_PIXELS(t6)
-    lw t5, POLY_LIT_ROW(t3)
-    bltz t5, 41f
-    sub t5, a2, t5
-    li t6, LIGHT_ROWS
-    bltu t5, t6, 42f                # within the stride: the last taken
-41:
-    sw a2, POLY_LIT_ROW(t3)
+    # the held evaluations searched for one within LIGHT_ROWS rows whose
+    # span ends lie within LIGHT_SLACK pixels of this span's
+    addi t5, t3, POLY_LIT_TABLE
+    li t6, LIT_HELD
+43:
+    ld a3, LIT_ROW(t5)
+    bltz a3, 48f                    # nothing held here
+    sub a3, a2, a3
+    li a4, LIGHT_ROWS
+    bgeu a3, a4, 48f                # past the stride
+    ld a3, LIT_A0(t5)
+    sub a3, a0, a3
+    srai a4, a3, 63
+    xor a3, a3, a4
+    sub a3, a3, a4                  # the start's drift
+    li a4, LIGHT_SLACK
+    bgtu a3, a4, 48f
+    ld a3, LIT_A1(t5)
+    sub a3, a1, a3
+    srai a4, a3, 63
+    xor a3, a3, a4
+    sub a3, a3, a4                  # the end's drift
+    li a4, LIGHT_SLACK
+    bgtu a3, a4, 48f
+    j 49f
+48:
+    addi t5, t5, LIT_ENTRY
+    addi t6, t6, -1
+    bnez t6, 43b
+    # none held: evaluated at both ends into the entry replaced next
+    ld t5, POLY_LIT_NEXT(t3)
+    addi t6, t5, 1
+    andi t6, t6, (LIT_HELD - 1)
+    sd t6, POLY_LIT_NEXT(t3)
+    li t6, LIT_ENTRY
+    mul t5, t5, t6
+    add t5, t5, t3
+    addi t5, t5, POLY_LIT_TABLE     # the entry
+    sd t5, 152(sp)
+    sd a2, LIT_ROW(t5)
+    sd a0, LIT_A0(t5)
+    sd a1, LIT_A1(t5)
     rdtime t5
     sd t5, 40(sp)                   # the evaluation's start
     mv a1, a2
     mv a2, s2
     call span_light
-    la t3, poly
-    sd a0, POLY_B0(t3)              # the brightness at the start
+    ld t5, 152(sp)
+    sd a0, LIT_B0(t5)               # the brightness at the start
     ld a0, 0(sp)
     ld a1, 8(sp)
     sub t0, a1, a0
@@ -725,8 +765,7 @@ span_fill:
     mv a0, a1
     ld a1, 24(sp)
     call span_light
-    la t3, poly
-    sd a0, POLY_B1(t3)
+    mv t1, a0                       # the brightness past the end
     rdtime t0
     ld t5, 40(sp)
     sub t0, t0, t5
@@ -734,11 +773,10 @@ span_fill:
     ld t5, STAT_LIGHT_TICKS(t6)
     add t5, t5, t0
     sd t5, STAT_LIGHT_TICKS(t6)
-42:
-    ld t0, POLY_B0(t3)
-    ld t1, POLY_B1(t3)
+    ld t5, 152(sp)
+    ld t0, LIT_B0(t5)
     sd t0, 32(sp)
-    # the step a pixel, a channel at a time, packed again
+    # the step a pixel, a channel at a time, packed again, into the entry
     li t6, ((1 << CHANNEL_BITS) - 1)
     and t2, t1, t6
     and t4, t0, t6
@@ -758,6 +796,20 @@ span_fill:
     div t4, t4, s10
     slli t4, t4, (2 * CHANNEL_BITS)
     add s0, s0, t4
+    ld t5, 152(sp)
+    sd s0, LIT_STEP(t5)
+    j 42f
+49:
+    # the entry taken: its step, and its start moved along it by the
+    # drift of this span's start
+    ld s0, LIT_STEP(t5)
+    ld t0, LIT_B0(t5)
+    ld a3, LIT_A0(t5)
+    sub a3, a0, a3
+    mul a3, a3, s0
+    add t0, t0, a3
+    sd t0, 32(sp)
+42:
     ld a0, 0(sp)
     ld a1, 8(sp)
     ld a2, 24(sp)                   # the row again

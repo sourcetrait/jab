@@ -55,6 +55,26 @@ meet without a crack. Walking by rows matters under TCG: a column walk
 touches a new cache line of each 8 MB buffer per pixel and measured 180 ms
 for a million pixels against 16 by rows.
 
+A lit span's brightness at its start and its step a pixel come from the
+evaluations the polygon holds, LIT_HELD four of them keyed by the row and the
+span's two ends: a span within LIGHT_ROWS rows of an entry whose ends lie
+within LIGHT_SLACK 32 pixels of its own takes that entry's step and its
+start moved along the step by the drift of the span's start, and any other
+span evaluates span_light at both its ends into the entry replaced next,
+round robin. The key is the fix for light that showed as strips: the hold
+was keyed by the row alone, so every span within eight rows of the last
+evaluation took that span's two end values whatever its own extent. A
+pillar is a hole in the bay's planes, so from its top down each row of the
+ceiling is two spans, and the right span was lit from the far-left pixel to
+the pillar's edge as if those were its ends, a band about forty pixels tall
+from the pillar's top, dark or bright with the camera's turn, with its twin
+on the floor at the pillar's base; a span whose edge slopes drifted from the
+point its brightness was taken at the same way, both resetting every eighth
+row. Four entries let a row a pillar splits keep both spans across the
+stride, where one entry would have each span evict the other and evaluate
+every row. The eight-row hold in y stays, a staircase of its own near a
+steep gradient, which interpolating between stride rows would remove.
+
 span_fill counts every span it fills and the pixels it enters, the lit ones
 beside, and times the two span_light evaluations of a lit stride row with
 rdtime, into the frame's stats for the frame line: the instrument that

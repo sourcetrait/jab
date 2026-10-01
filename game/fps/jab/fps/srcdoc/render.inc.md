@@ -21,4 +21,12 @@ frame template extended to match, since the template names every field.
 
 The brightness word packs three 16.16 channels CHANNEL_BITS apart, which
 integer addition steps exactly while every channel stays in range; the lit
-pixel loops unpack each channel to 8.8 by two shifts.
+pixel loops unpack each channel to 8.8 by two shifts. The packed step
+multiplied by an integer stays exact the same way, which is how a held span's
+start moves along it; a packed word halved by an arithmetic shift does not,
+since each channel's odd bit lands in the lane below.
+
+The polygon's held light evaluations are a small table rather than one row
+and two brightnesses because a row that a hole cuts in two is two spans with
+their own ends, and one slot would have each span evict the other every row
+(raster.S).

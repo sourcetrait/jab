@@ -77,18 +77,30 @@
 .set POLY_LNY, 132
 .set POLY_LNZ, 136
 .set POLY_SECTOR, 140
-# The row the brightness was last taken on, -1 before any, and the
-# brightness at that row's span ends, the three channels in 16.16
-# packed 21 bits apart in one word; taken afresh every LIGHT_ROWS rows
-# of a polygon
-.set POLY_LIT_ROW, 144
-.set POLY_B0, 152
-.set POLY_B1, 160
+# The light evaluations the polygon holds, LIT_HELD entries replaced
+# round robin from POLY_LIT_NEXT: the row, -1 while empty, the span's
+# first pixel and the pixel past its last, the brightness at its first
+# pixel, the three channels in 16.16 packed CHANNEL_BITS apart in one
+# word, and its step a pixel packed the same. A span within LIGHT_ROWS
+# rows of an entry whose ends lie within LIGHT_SLACK pixels of its own
+# takes the entry, its start moved along the step by the drift; any
+# other span is evaluated afresh, so the spans a hole cuts a row into
+# are each lit by their own ends
+.set POLY_LIT_NEXT, 144
+.set POLY_LIT_TABLE, 152
+.set LIT_HELD, 4
+.set LIT_ROW, 0
+.set LIT_A0, 8
+.set LIT_A1, 16
+.set LIT_B0, 24
+.set LIT_STEP, 32
+.set LIT_ENTRY, 40
 # Set for a surface lit at no angle, a sprite facing the camera: every
 # light within reach lights it by its falloff alone
-.set POLY_FLAT_LIT, 168
-.set POLY_SIZE, 176
+.set POLY_FLAT_LIT, (POLY_LIT_TABLE + LIT_HELD * LIT_ENTRY)
+.set POLY_SIZE, (POLY_FLAT_LIT + 8)
 .set LIGHT_ROWS, 8
+.set LIGHT_SLACK, 32
 .set CHANNEL_BITS, 21
 .set POLY_TEXTURED, 0
 .set POLY_MASKED, 1
