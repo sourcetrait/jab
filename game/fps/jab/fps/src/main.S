@@ -746,9 +746,6 @@ pixel_cursor:
     .skip 8
 ambient_cursor:
     .skip 8
-# Three doubles a library macro reads a register vector through
-vec3_scratch:
-    .skip 24
 # The sections as the loader placed them, an entry a kind
 sections:
     .skip (KIND_COUNT * SECTION_ENTRY)

@@ -28,6 +28,7 @@ yaw it read as garbage from most.
 The generator is the SDK's xorshift over the state word rng in player.S,
 seeded at player_reset; every draw names its address. The lengths and the
 normalisation go through the vec3 macros: actor_to_eye writes the raw line
-into aim, takes its length into AIM_DIST, and norms it in place, so a zero
-line stays zero where the former eps clamp made it huge; action_fire strays
-the direction in registers, stores it to vec3_scratch, and norms it there.
+into aim, takes its length into AIM_DIST, and norms it in place through the
+memory forms, so a zero line stays zero where the former eps clamp made it
+huge; action_fire strays the direction in registers and norms it there
+through `reg.norm`; actor_walk's distance is the vec2 register length.

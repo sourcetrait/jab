@@ -13,9 +13,10 @@ so a test reads the frame it posed; the DEBUG build adds the walk's order.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,
-length, or generator of its own. vec3_scratch is the one scratch vector a site
-stores a register vector into before a length or norm macro reads it; the
-sites never nest, so one suffices.
+length, or generator of its own. A vector that lives in a record goes through
+the memory forms; one computed in registers goes through the `reg` forms,
+which touch only their destination, so no site stores a vector to be read
+back.
 
 A step the load cannot take exits with its own code and a line naming it, the
 codes and lines being the loader's contract with the test.

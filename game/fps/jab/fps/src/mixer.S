@@ -217,11 +217,9 @@ sound_start:
     flw ft2, CAM_Z(t3)
     fcvt.d.s ft2, ft2
     fsub.d ft2, fa2, ft2
-    la t3, vec3_scratch
-    fsd ft0, 0(t3)
-    fsd ft1, 8(t3)
-    fsd ft2, 16(t3)
-    jab.f64.vec3.len ft8, t3        # the distance
+    jab.f64.vec3.reg.len ft8, ft0, ft1, ft2 # the distance
+    fmv.d ft10, ft0                 # dx and dy, held past the macros
+    fmv.d ft11, ft1
     la t0, k_mix_near_d
     fld ft4, 0(t0)
     fle.d t1, ft8, ft4
@@ -240,7 +238,7 @@ sound_start:
 2:
     # the pan: the point's share to the right, along the level right
     # (sin yaw, -cos yaw), over the level distance
-    jab.f64.vec2.len ft9, t3
+    jab.f64.vec2.reg.len ft9, ft10, ft11
     la t0, k_mix_level_eps_d
     fld ft5, 0(t0)
     flt.d t1, ft9, ft5
@@ -251,10 +249,8 @@ sound_start:
     fcvt.d.s fs2, fa4               # sin yaw
     jab.f32.cos fa4, fa3
     fcvt.d.s fs3, fa4               # cos yaw
-    fld ft0, 0(t3)
-    fld ft1, 8(t3)
-    fmul.d ft5, ft0, fs2
-    fnmsub.d ft5, ft1, fs3, ft5     # dx sin - dy cos
+    fmul.d ft5, ft10, fs2
+    fnmsub.d ft5, ft11, fs3, ft5    # dx sin - dy cos
     fdiv.d ft5, ft5, ft9
     la t0, k_mix_pan_d
     fld ft6, 0(t0)

@@ -17,6 +17,13 @@ pair's combined rounding.
 `rngsys` seeds from the 8 bytes jab.sys.random gives; on a machine with no rng
 device the line is `rngsys none` and the test accepts it.
 
+The register forms are exercised over the same tables as the memory forms,
+each vector loaded into argument registers first, so a line's inputs are
+still the table's and the host decodes the same values; a vector is
+reloaded before every macro, since a `uart.print` between two macros could
+not be trusted to leave the argument registers alone. The f32 table gained
+the zero vector for the register norm's zero case.
+
 ## expand_all
 ## trapped
 

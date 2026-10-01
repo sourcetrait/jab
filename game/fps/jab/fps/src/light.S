@@ -2,13 +2,15 @@
 # the ambient plus each light of the sector's list by cosine and falloff.
 
 .section .rodata
-.balign 8
-k_light_ambient_d:
-    .double 0.15
-k_light_none_d:
-    .double -2.0
-k_light_minus_one_d:
-    .double -1.0
+.balign 4
+k_light_ambient:
+    .float 0.15
+k_light_none:
+    .float -2.0
+k_light_minus_one:
+    .float -1.0
+k_depth_scale:
+    .float 67108864.0
 
 .section .text
 
@@ -92,9 +94,8 @@ lights_gather:
     flw ft1, 0(t0)
     flt.s t1, ft1, fa0
     bnez t1, 2f
-    la t0, k_light_none_d
-    fld ft1, 0(t0)
-    fcvt.s.d ft1, ft1
+    la t0, k_light_none
+    flw ft1, 0(t0)
     fsw ft1, LIGHT_COS(s5)
     j 5f
 2:
@@ -158,7 +159,8 @@ lights_gather:
     ret
 
 # The brightness at a pixel of the surface in hand: the three channels in
-# 16.16 packed CHANNEL_BITS apart, the ambient plus each light in reach.
+# 16.16 packed CHANNEL_BITS apart, the ambient plus each light in reach, in
+# single precision throughout.
 # a0 int The pixel.
 # a1 int The row.
 # a2 int 1/z there, 6.26.
@@ -170,198 +172,153 @@ span_light:
     bge a2, t0, 1f
     mv a2, t0
 1:
-    fcvt.d.l ft0, a2
-    la t0, k_depth_scale_d
-    fld ft1, 0(t0)
-    fdiv.d ft0, ft1, ft0            # z
-    la t0, k_hz_d
-    fld ft1, 0(t0)
-    fdiv.d ft0, ft0, ft1            # z over hz
-    fcvt.d.w ft1, a0
-    la t0, k_half_d
-    fld ft2, 0(t0)
-    fadd.d ft1, ft1, ft2
-    la t0, k_hx_d
-    fld ft3, 0(t0)
-    fsub.d ft1, ft1, ft3            # x + 1/2 - hx
-    fcvt.d.w ft2, a1
-    la t0, k_half_d
-    fld ft3, 0(t0)
-    fadd.d ft2, ft2, ft3
-    la t0, k_hy_d
-    fld ft3, 0(t0)
-    fsub.d ft2, ft2, ft3
-    fneg.d ft2, ft2                 # hy - y - 1/2: the ray's share of up
-    la t0, k_hz_d
-    fld ft3, 0(t0)                  # hz
+    fcvt.s.l ft0, a2
+    la t0, k_depth_scale
+    flw ft1, 0(t0)
+    fdiv.s ft0, ft1, ft0            # z
+    la t0, k_hz
+    flw ft1, 0(t0)
+    fdiv.s ft0, ft0, ft1            # z over hz
+    fcvt.s.w ft1, a0
+    la t0, k_half
+    flw ft2, 0(t0)
+    fadd.s ft1, ft1, ft2
+    la t0, k_hx
+    flw ft3, 0(t0)
+    fsub.s ft1, ft1, ft3            # x + 1/2 - hx
+    fcvt.s.w ft2, a1
+    la t0, k_half
+    flw ft3, 0(t0)
+    fadd.s ft2, ft2, ft3
+    la t0, k_hy
+    flw ft3, 0(t0)
+    fsub.s ft2, ft2, ft3
+    fneg.s ft2, ft2                 # hy - y - 1/2: the ray's share of up
+    la t0, k_hz
+    flw ft3, 0(t0)                  # hz
     # the point: the camera plus (right sx + up sy + forward hz) z/hz
     la t0, camera
     flw ft4, (CAM_RIGHT + 0)(t0)
-    fcvt.d.s ft4, ft4
-    fmul.d ft4, ft4, ft1
+    fmul.s ft4, ft4, ft1
     flw ft5, (CAM_UP + 0)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft2, ft4
+    fmadd.s ft4, ft5, ft2, ft4
     flw ft5, (CAM_FORWARD + 0)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft3, ft4
+    fmadd.s ft4, ft5, ft3, ft4
     flw ft5, CAM_X(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d fa0, ft4, ft0, ft5      # the point's x
+    fmadd.s fa0, ft4, ft0, ft5      # the point's x
     flw ft4, (CAM_RIGHT + 4)(t0)
-    fcvt.d.s ft4, ft4
-    fmul.d ft4, ft4, ft1
+    fmul.s ft4, ft4, ft1
     flw ft5, (CAM_UP + 4)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft2, ft4
+    fmadd.s ft4, ft5, ft2, ft4
     flw ft5, (CAM_FORWARD + 4)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft3, ft4
+    fmadd.s ft4, ft5, ft3, ft4
     flw ft5, CAM_Y(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d fa1, ft4, ft0, ft5      # y
+    fmadd.s fa1, ft4, ft0, ft5      # y
     flw ft4, (CAM_RIGHT + 8)(t0)
-    fcvt.d.s ft4, ft4
-    fmul.d ft4, ft4, ft1
+    fmul.s ft4, ft4, ft1
     flw ft5, (CAM_UP + 8)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft2, ft4
+    fmadd.s ft4, ft5, ft2, ft4
     flw ft5, (CAM_FORWARD + 8)(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d ft4, ft5, ft3, ft4
+    fmadd.s ft4, ft5, ft3, ft4
     flw ft5, CAM_Z(t0)
-    fcvt.d.s ft5, ft5
-    fmadd.d fa2, ft4, ft0, ft5      # z
-    # the normal
+    fmadd.s fa2, ft4, ft0, ft5      # z
+    # the normal, the ambient, and the sector's list
     la t0, poly
     flw fa3, POLY_LNX(t0)
-    fcvt.d.s fa3, fa3
     flw fa4, POLY_LNY(t0)
-    fcvt.d.s fa4, fa4
     flw fa5, POLY_LNZ(t0)
-    fcvt.d.s fa5, fa5
-    la t1, k_light_ambient_d
-    fld fa6, 0(t1)                  # red
-    fmv.d fa7, fa6                  # green
-    fmv.d ft11, fa6                 # blue
-    la t1, k_one_d
-    fld ft8, 0(t1)                  # one
-    ld a7, POLY_FLAT_LIT(t0)        # lit at no angle
+    la t1, k_light_ambient
+    flw fa6, 0(t1)                  # red
+    fmv.s fa7, fa6                  # green
+    fmv.s ft11, fa6                 # blue
+    la t1, k_one
+    flw ft10, 0(t1)                 # one
+    ld t6, POLY_FLAT_LIT(t0)        # lit at no angle
     lw t1, POLY_SECTOR(t0)
-    la a3, sector_lights
+    la t2, sector_lights
     slli t1, t1, 5
-    add a3, a3, t1                  # the list
-    lbu a4, 0(a3)                   # its count
-    addi a3, a3, 1
-    la a6, vec3_scratch
+    add t2, t2, t1                  # the list
+    lbu t3, 0(t2)                   # its count
+    addi t2, t2, 1
 2:
-    beqz a4, 8f
-    lbu a5, 0(a3)
+    beqz t3, 8f
+    lbu t4, 0(t2)
     li t5, LIGHT_SIZE
-    mul a5, a5, t5
+    mul t4, t4, t5
     la t5, lights
-    add a5, a5, t5                  # the light
-    flw ft0, LIGHT_X(a5)
-    fcvt.d.s ft0, ft0
-    fsub.d ft0, ft0, fa0            # d, from the point to the light
-    fsd ft0, 0(a6)
-    flw ft1, LIGHT_Y(a5)
-    fcvt.d.s ft1, ft1
-    fsub.d ft1, ft1, fa1
-    fsd ft1, 8(a6)
-    flw ft2, LIGHT_Z(a5)
-    fcvt.d.s ft2, ft2
-    fsub.d ft2, ft2, fa2
-    fsd ft2, 16(a6)
-    jab.f64.vec3.sqrlen ft9, a6     # the distance squared
-    flw ft4, LIGHT_RADIUS2(a5)
-    fcvt.d.s ft4, ft4
-    flt.d t5, ft4, ft9
+    add t4, t4, t5                  # the light
+    flw ft0, LIGHT_X(t4)
+    fsub.s ft0, ft0, fa0            # d, from the point to the light
+    flw ft1, LIGHT_Y(t4)
+    fsub.s ft1, ft1, fa1
+    flw ft2, LIGHT_Z(t4)
+    fsub.s ft2, ft2, fa2
+    jab.f32.vec3.reg.sqrlen ft3, ft0, ft1, ft2  # the distance squared
+    flw ft4, LIGHT_RADIUS2(t4)
+    flt.s t5, ft4, ft3
     bnez t5, 7f                     # out of reach
-    beqz a7, 3f
-    # lit at no angle: the cosine one
-    jab.f64.vec3.len ft10, a6       # the distance
-    fmv.d ft5, ft8
+    fsqrt.s ft6, ft3                # the distance
+    beqz t6, 3f
+    fmv.s ft5, ft10                 # lit at no angle: the cosine one
     j 4f
 3:
-    fld ft0, 0(a6)
-    fld ft1, 8(a6)
-    fld ft2, 16(a6)
-    fmul.d ft9, ft0, fa3
-    fmadd.d ft9, ft1, fa4, ft9
-    fmadd.d ft9, ft2, fa5, ft9      # n . d
-    fcvt.d.w ft6, zero
-    fle.d t5, ft9, ft6
+    jab.f32.vec3.reg.dot ft5, ft0, ft1, ft2, fa3, fa4, fa5  # n . d
+    fmv.w.x ft7, zero
+    fle.s t5, ft5, ft7
     bnez t5, 7f                     # behind the surface
-    jab.f64.vec3.len ft10, a6       # the distance
-    fdiv.d ft5, ft9, ft10           # the cosine at the surface
+    fdiv.s ft5, ft5, ft6            # the cosine at the surface
 4:
     # the falloff: one at the light, straight to nothing at the radius
-    flw ft7, LIGHT_OVER_RADIUS(a5)
-    fcvt.d.s ft7, ft7
-    fmul.d ft7, ft7, ft10           # the distance over the radius
-    fsub.d ft7, ft8, ft7
-    fmul.d ft5, ft5, ft7            # the cosine times the falloff
-    flw ft7, LIGHT_COS(a5)
-    fcvt.d.s ft7, ft7
-    la t5, k_light_minus_one_d
-    fld ft9, 0(t5)
-    flt.d t5, ft7, ft9
+    flw ft7, LIGHT_OVER_RADIUS(t4)
+    fmul.s ft7, ft7, ft6            # the distance over the radius
+    fsub.s ft7, ft10, ft7
+    fmul.s ft5, ft5, ft7            # the cosine times the falloff
+    flw ft7, LIGHT_COS(t4)
+    la t5, k_light_minus_one
+    flw ft9, 0(t5)
+    flt.s t5, ft7, ft9
     bnez t5, 6f                     # a point light
     # the spotlight: the cosine from the light's axis to the point,
     # from the spread's edge scaled to one on the axis
-    fld ft0, 0(a6)
-    fld ft1, 8(a6)
-    fld ft2, 16(a6)
-    flw ft9, (LIGHT_AXIS + 0)(a5)
-    fcvt.d.s ft9, ft9
-    fmul.d ft6, ft0, ft9
-    flw ft9, (LIGHT_AXIS + 4)(a5)
-    fcvt.d.s ft9, ft9
-    fmadd.d ft6, ft1, ft9, ft6
-    flw ft9, (LIGHT_AXIS + 8)(a5)
-    fcvt.d.s ft9, ft9
-    fmadd.d ft6, ft2, ft9, ft6      # d . axis
-    fneg.d ft6, ft6
-    fdiv.d ft6, ft6, ft10           # the cosine from the axis
-    fsub.d ft6, ft6, ft7
-    fsub.d ft9, ft8, ft7            # 1 - cos spread
-    fdiv.d ft6, ft6, ft9
-    fcvt.d.w ft9, zero
-    fle.d t5, ft6, ft9
+    flw ft8, (LIGHT_AXIS + 0)(t4)
+    flw ft9, (LIGHT_AXIS + 4)(t4)
+    flw ft4, (LIGHT_AXIS + 8)(t4)
+    jab.f32.vec3.reg.dot ft3, ft0, ft1, ft2, ft8, ft9, ft4  # d . axis
+    fneg.s ft3, ft3
+    fdiv.s ft3, ft3, ft6            # the cosine from the axis
+    fsub.s ft3, ft3, ft7
+    fsub.s ft9, ft10, ft7           # 1 - cos spread
+    fdiv.s ft3, ft3, ft9
+    fmv.w.x ft9, zero
+    fle.s t5, ft3, ft9
     bnez t5, 7f                     # outside the cone
-    fmul.d ft5, ft5, ft6
+    fmul.s ft5, ft5, ft3
 6:
-    flw ft9, LIGHT_R(a5)
-    fcvt.d.s ft9, ft9
-    fmadd.d fa6, ft9, ft5, fa6
-    flw ft9, LIGHT_G(a5)
-    fcvt.d.s ft9, ft9
-    fmadd.d fa7, ft9, ft5, fa7
-    flw ft9, LIGHT_B(a5)
-    fcvt.d.s ft9, ft9
-    fmadd.d ft11, ft9, ft5, ft11
+    flw ft9, LIGHT_R(t4)
+    fmadd.s fa6, ft9, ft5, fa6
+    flw ft9, LIGHT_G(t4)
+    fmadd.s fa7, ft9, ft5, fa7
+    flw ft9, LIGHT_B(t4)
+    fmadd.s ft11, ft9, ft5, ft11
 7:
-    addi a3, a3, 1
-    addi a4, a4, -1
+    addi t2, t2, 1
+    addi t3, t3, -1
     j 2b
 8:
     # each channel clamped to one, in 16.16, packed
-    la t0, k_one_d
-    fld ft0, 0(t0)
-    la t0, k_uv_scale_d
-    fld ft1, 0(t0)
-    fmin.d fa6, fa6, ft0
-    fmul.d fa6, fa6, ft1
-    fcvt.l.d a0, fa6, rne
-    fmin.d fa7, fa7, ft0
-    fmul.d fa7, fa7, ft1
-    fcvt.l.d t1, fa7, rne
+    la t0, k_sixty_four_k
+    flw ft1, 0(t0)
+    fmin.s fa6, fa6, ft10
+    fmul.s fa6, fa6, ft1
+    fcvt.l.s a0, fa6, rne
+    fmin.s fa7, fa7, ft10
+    fmul.s fa7, fa7, ft1
+    fcvt.l.s t1, fa7, rne
     slli t1, t1, CHANNEL_BITS
     or a0, a0, t1
-    fmin.d ft11, ft11, ft0
-    fmul.d ft11, ft11, ft1
-    fcvt.l.d t1, ft11, rne
+    fmin.s ft11, ft11, ft10
+    fmul.s ft11, ft11, ft1
+    fcvt.l.s t1, ft11, rne
     slli t1, t1, (2 * CHANNEL_BITS)
     or a0, a0, t1
     ret

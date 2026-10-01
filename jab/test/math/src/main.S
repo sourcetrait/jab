@@ -11,7 +11,7 @@
 .set ANGLE_COUNT, 11
 .set VEC3_PAIRS, 4
 .set VEC2_COUNT, 4
-.set F32_PAIRS, 3
+.set F32_PAIRS, 4
 .set RNG_BYTES, 16
 .set LINE_BYTES, 256
 
@@ -25,6 +25,7 @@ _start:
     call vec3_cases
     call vec2_cases
     call f32_vec_cases
+    call reg_cases
     call rng_cases
     call expand_all
     call trapped
@@ -363,6 +364,179 @@ f32_vec_cases:
     addi sp, sp, 32
     ret
 
+# The register forms: `f32.vec3.reg.dot <a> <b> <r>`, `f32.vec3.reg.sqrlen
+# <a> <r>`, `len`, `norm <a> <n>`, and the vec2 forms over each pair's first
+# two singles, over f32_pairs; the f64 forms over vec3_pairs and vec2s.
+reg_cases:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
+    fsd fs0, 0(sp)
+    la s3, f32_pairs
+    li s2, F32_PAIRS
+1:
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    flw fa2, 8(s3)
+    flw fa3, 12(s3)
+    flw fa4, 16(s3)
+    flw fa5, 20(s3)
+    jab.f32.vec3.reg.dot fs0, fa0, fa1, fa2, fa3, fa4, fa5
+    call line_reset
+    la a0, word_f32_reg_dot
+    call line_str
+    mv a0, s3
+    li a1, 6
+    call line_floats
+    fmv.x.w a0, fs0
+    call line_hex32
+    call line_nl
+    jab.sys.uart.print line
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    flw fa2, 8(s3)
+    jab.f32.vec3.reg.sqrlen fs0, fa0, fa1, fa2
+    la a0, word_f32_reg_sqrlen
+    li a1, 3
+    call f32_vec_line
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    flw fa2, 8(s3)
+    jab.f32.vec3.reg.len fs0, fa0, fa1, fa2
+    la a0, word_f32_reg_len
+    li a1, 3
+    call f32_vec_line
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    jab.f32.vec2.reg.sqrlen fs0, fa0, fa1
+    la a0, word_f32_vec2_reg_sqrlen
+    li a1, 2
+    call f32_vec_line
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    jab.f32.vec2.reg.len fs0, fa0, fa1
+    la a0, word_f32_vec2_reg_len
+    li a1, 2
+    call f32_vec_line
+    flw fa0, 0(s3)
+    flw fa1, 4(s3)
+    flw fa2, 8(s3)
+    jab.f32.vec3.reg.norm fa0, fa1, fa2
+    la t3, norm_out_f
+    fsw fa0, 0(t3)
+    fsw fa1, 4(t3)
+    fsw fa2, 8(t3)
+    call line_reset
+    la a0, word_f32_reg_norm
+    call line_str
+    mv a0, s3
+    li a1, 3
+    call line_floats
+    la a0, norm_out_f
+    li a1, 3
+    call line_floats
+    call line_nl
+    jab.sys.uart.print line
+    addi s3, s3, 24
+    addi s2, s2, -1
+    bnez s2, 1b
+    la s3, vec3_pairs
+    li s2, VEC3_PAIRS
+2:
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    fld fa2, 16(s3)
+    fld fa3, 24(s3)
+    fld fa4, 32(s3)
+    fld fa5, 40(s3)
+    jab.f64.vec3.reg.dot fs0, fa0, fa1, fa2, fa3, fa4, fa5
+    call line_reset
+    la a0, word_f64_reg_dot
+    call line_str
+    mv a0, s3
+    li a1, 6
+    call line_doubles
+    fmv.x.d a0, fs0
+    call line_hex64
+    call line_nl
+    jab.sys.uart.print line
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    fld fa2, 16(s3)
+    jab.f64.vec3.reg.sqrlen fs0, fa0, fa1, fa2
+    la a0, word_f64_reg_sqrlen
+    call vec3_result_line
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    fld fa2, 16(s3)
+    jab.f64.vec3.reg.len fs0, fa0, fa1, fa2
+    la a0, word_f64_reg_len
+    call vec3_result_line
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    fld fa2, 16(s3)
+    jab.f64.vec3.reg.norm fa0, fa1, fa2
+    la t3, norm_out
+    fsd fa0, 0(t3)
+    fsd fa1, 8(t3)
+    fsd fa2, 16(t3)
+    la a0, word_f64_reg_norm
+    call vec3_norm_line
+    addi s3, s3, 48
+    addi s2, s2, -1
+    bnez s2, 2b
+    la s3, vec2s
+    li s2, VEC2_COUNT
+3:
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    jab.f64.vec2.reg.sqrlen fs0, fa0, fa1
+    la a0, word_f64_vec2_reg_sqrlen
+    call vec2_result_line
+    fld fa0, 0(s3)
+    fld fa1, 8(s3)
+    jab.f64.vec2.reg.len fs0, fa0, fa1
+    la a0, word_f64_vec2_reg_len
+    call vec2_result_line
+    addi s3, s3, 16
+    addi s2, s2, -1
+    bnez s2, 3b
+    ld ra, 24(sp)
+    ld s2, 16(sp)
+    ld s3, 8(sp)
+    fld fs0, 0(sp)
+    addi sp, sp, 32
+    ret
+
+# The line `<word> <a1 singles at s3> <fs0>`.
+# a0 address The word, NUL-terminated.
+# a1 int How many singles.
+# s3 address The singles.
+# fs0 f32 The result.
+f32_vec_line:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s2, 16(sp)
+    sd s4, 8(sp)
+    mv s2, a0
+    mv s4, a1
+    call line_reset
+    mv a0, s2
+    call line_str
+    mv a0, s3
+    mv a1, s4
+    call line_floats
+    fmv.x.w a0, fs0
+    call line_hex32
+    call line_nl
+    jab.sys.uart.print line
+    ld ra, 24(sp)
+    ld s2, 16(sp)
+    ld s4, 8(sp)
+    addi sp, sp, 32
+    ret
+
 # `rng` lines for a fixed seed and a zero seed, then `rngsys` from jab.sys.random.
 rng_cases:
     addi sp, sp, -16
@@ -448,6 +622,15 @@ expand_all:
     la t3, f32_pairs
     addi t4, t3, 12
     jab.f32.vec3.dot fa1, t3, t4
+    flw fa0, 0(t3)
+    flw fa2, 4(t3)
+    flw fa3, 8(t3)
+    jab.f32.vec3.reg.dot fa1, fa0, fa2, fa3, fa0, fa2, fa3
+    jab.f32.vec3.reg.sqrlen fa1, fa0, fa2, fa3
+    jab.f32.vec3.reg.len fa1, fa0, fa2, fa3
+    jab.f32.vec3.reg.norm fa0, fa2, fa3
+    jab.f32.vec2.reg.sqrlen fa1, fa0, fa2
+    jab.f32.vec2.reg.len fa1, fa0, fa2
     jab.f64.PI fa1
     jab.f64.TAU fa1
     jab.f64.FRAC_PI_2 fa1
@@ -461,6 +644,16 @@ expand_all:
     la t3, vec2s
     jab.f64.vec2.len fa1, t3
     jab.f64.vec2.sqrlen fa1, t3
+    la t3, vec3_pairs
+    fld fa0, 0(t3)
+    fld fa2, 8(t3)
+    fld fa3, 16(t3)
+    jab.f64.vec3.reg.dot fa1, fa0, fa2, fa3, fa0, fa2, fa3
+    jab.f64.vec3.reg.sqrlen fa1, fa0, fa2, fa3
+    jab.f64.vec3.reg.len fa1, fa0, fa2, fa3
+    jab.f64.vec3.reg.norm fa0, fa2, fa3
+    jab.f64.vec2.reg.sqrlen fa1, fa0, fa2
+    jab.f64.vec2.reg.len fa1, fa0, fa2
     la t3, rng_state
     li t4, 1
     jab.rng.seed t3, t4
@@ -754,6 +947,7 @@ f32_pairs:
     .float 1.0, 2.0, 3.0, 4.0, -5.0, 6.0
     .float 0.5, -0.25, 8.0, -1.5, 2.0, 0.125
     .float 0.1, 0.2, 0.3, 0.4, 0.5, 0.6
+    .float 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
 word_sin:
     .asciz "sin "
 word_cos:
@@ -794,6 +988,30 @@ word_vec2_sqrlen:
     .asciz "f64.vec2.sqrlen "
 word_f32_vec3_dot:
     .asciz "f32.vec3.dot "
+word_f32_reg_dot:
+    .asciz "f32.vec3.reg.dot "
+word_f32_reg_sqrlen:
+    .asciz "f32.vec3.reg.sqrlen "
+word_f32_reg_len:
+    .asciz "f32.vec3.reg.len "
+word_f32_reg_norm:
+    .asciz "f32.vec3.reg.norm "
+word_f32_vec2_reg_sqrlen:
+    .asciz "f32.vec2.reg.sqrlen "
+word_f32_vec2_reg_len:
+    .asciz "f32.vec2.reg.len "
+word_f64_reg_dot:
+    .asciz "f64.vec3.reg.dot "
+word_f64_reg_sqrlen:
+    .asciz "f64.vec3.reg.sqrlen "
+word_f64_reg_len:
+    .asciz "f64.vec3.reg.len "
+word_f64_reg_norm:
+    .asciz "f64.vec3.reg.norm "
+word_f64_vec2_reg_sqrlen:
+    .asciz "f64.vec2.reg.sqrlen "
+word_f64_vec2_reg_len:
+    .asciz "f64.vec2.reg.len "
 word_rng:
     .asciz "rng "
 word_rngsys:
@@ -809,5 +1027,8 @@ lineptr:
     .skip 8
 norm_out:
     .skip 24
+norm_out_f:
+    .skip 12
+.balign 8
 rng_state:
     .skip 8

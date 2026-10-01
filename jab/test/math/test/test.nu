@@ -30,6 +30,9 @@ const RAD_DEG = 1.0e-7
 const F64 = 1.0e-15
 # the single-precision dot product, relative (measured 1.8e-8)
 const F32_DOT = 1.0e-7
+# the single-precision register forms, lengths and normals among them,
+# relative (measured 5.7e-8)
+const F32_REG = 1.0e-7
 # what jab.rng.seed puts in place of a zero seed
 const RNG_DEFAULT = "2545f4914f6cdd1d"
 const SWEEP_POINTS = 1601
@@ -55,8 +58,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let cos_sweep = (do $whole $coss)
     assert ($sin_turn <= $TRIG_TURN) $"jab.f32.sin within a half turn: ($sin_turn) under ($TRIG_TURN)"
     assert ($cos_turn <= $TRIG_TURN) $"jab.f32.cos within a half turn: ($cos_turn) under ($TRIG_TURN)"
-    assert ($sin_sweep <= $TRIG_SWEEP) $"jab.f32.sin over six turns either way: ($sin_sweep) under ($TRIG_SWEEP)"
-    assert ($cos_sweep <= $TRIG_SWEEP) $"jab.f32.cos over six turns either way: ($cos_sweep) under ($TRIG_SWEEP)"
+    assert ($sin_sweep <= $TRIG_SWEEP) $"jab.f32.sin over three turns either way: ($sin_sweep) under ($TRIG_SWEEP)"
+    assert ($cos_sweep <= $TRIG_SWEEP) $"jab.f32.cos over three turns either way: ($cos_sweep) under ($TRIG_SWEEP)"
 
     # atan2 over every octant, the axes, and both zero
     let atans = (do $by "atan2" | each {|w|
@@ -137,9 +140,33 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let want = ($v.0 * $v.3 + $v.1 * $v.4 + $v.2 * $v.5)
         { err: (rel-err (f32-of $w.7) $want) }
     })
-    assert equal ($f32_dots | length) 3 "a single dot product for every pair"
+    assert equal ($f32_dots | length) 4 "a single dot product for every pair"
     let f32_max = ($f32_dots | get err | math max)
     assert ($f32_max <= $F32_DOT) $"jab.f32.vec3.dot: ($f32_max) relative under ($F32_DOT)"
+
+    # the register forms, the same checks over values in registers
+    let f64_reg = (
+        (do $by "f64.vec3.reg.dot" | each {|w| let v = ($w | slice 1..6 | each {|h| f64-of $h }); { err: (rel-err (f64-of $w.7) ($v.0 * $v.3 + $v.1 * $v.4 + $v.2 * $v.5)) } })
+        ++ (do $by "f64.vec3.reg.len" | each {|w| let v = ($w | slice 1..3 | each {|h| f64-of $h }); { err: (rel-err (f64-of $w.4) (($v.0 * $v.0 + $v.1 * $v.1 + $v.2 * $v.2) | math sqrt)) } })
+        ++ (do $by "f64.vec3.reg.sqrlen" | each {|w| let v = ($w | slice 1..3 | each {|h| f64-of $h }); { err: (rel-err (f64-of $w.4) ($v.0 * $v.0 + $v.1 * $v.1 + $v.2 * $v.2)) } })
+        ++ (do $by "f64.vec3.reg.norm" | each {|w| norm-check $w })
+        ++ (do $by "f64.vec2.reg.len" | each {|w| let v = ($w | slice 1..2 | each {|h| f64-of $h }); { err: (rel-err (f64-of $w.3) (($v.0 * $v.0 + $v.1 * $v.1) | math sqrt)) } })
+        ++ (do $by "f64.vec2.reg.sqrlen" | each {|w| let v = ($w | slice 1..2 | each {|h| f64-of $h }); { err: (rel-err (f64-of $w.3) ($v.0 * $v.0 + $v.1 * $v.1)) } })
+    )
+    assert equal ($f64_reg | length) 24 $"a double register-form case for every vector: ($f64_reg | length)"
+    let f64_reg_max = ($f64_reg | get err | math max)
+    assert ($f64_reg_max <= $F64) $"the jab.f64 register forms: ($f64_reg_max) relative under ($F64)"
+    let f32_reg = (
+        (do $by "f32.vec3.reg.dot" | each {|w| let v = ($w | slice 1..6 | each {|h| f32-of $h }); { err: (rel-err (f32-of $w.7) ($v.0 * $v.3 + $v.1 * $v.4 + $v.2 * $v.5)) } })
+        ++ (do $by "f32.vec3.reg.len" | each {|w| let v = ($w | slice 1..3 | each {|h| f32-of $h }); { err: (rel-err (f32-of $w.4) (($v.0 * $v.0 + $v.1 * $v.1 + $v.2 * $v.2) | math sqrt)) } })
+        ++ (do $by "f32.vec3.reg.sqrlen" | each {|w| let v = ($w | slice 1..3 | each {|h| f32-of $h }); { err: (rel-err (f32-of $w.4) ($v.0 * $v.0 + $v.1 * $v.1 + $v.2 * $v.2)) } })
+        ++ (do $by "f32.vec3.reg.norm" | each {|w| norm-check $w --single })
+        ++ (do $by "f32.vec2.reg.len" | each {|w| let v = ($w | slice 1..2 | each {|h| f32-of $h }); { err: (rel-err (f32-of $w.3) (($v.0 * $v.0 + $v.1 * $v.1) | math sqrt)) } })
+        ++ (do $by "f32.vec2.reg.sqrlen" | each {|w| let v = ($w | slice 1..2 | each {|h| f32-of $h }); { err: (rel-err (f32-of $w.3) ($v.0 * $v.0 + $v.1 * $v.1)) } })
+    )
+    assert equal ($f32_reg | length) 24 $"a single register-form case for every vector: ($f32_reg | length)"
+    let f32_reg_max = ($f32_reg | get err | math max)
+    assert ($f32_reg_max <= $F32_REG) $"the jab.f32 register forms: ($f32_reg_max) relative under ($F32_REG)"
 
     # the generator: a fixed seed gives the sequence run here, the zero
     # seed is replaced and does not stick, and the kernel's entropy
@@ -174,7 +201,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert $control.paged $"trapped lies within one page of code: ($control)"
     assert equal $control.ecalls 1 $"the check sees the kernel call in trapped: ($control)"
 
-    print $"math: sin within a half turn ($sin_turn), over the sweep ($sin_sweep); cos ($cos_turn) and ($cos_sweep); atan2 ($atan_max) rad; rad ($rad_max), deg ($deg_max), the round trip ($trip_max) relative; f64 vectors ($f64_max) relative; f32 dot ($f32_max) relative; ($consts | length) constants bit for bit; the rng pinned and the entropy's own; expand_all ($all.end - $all.start) bytes in its page with no trap"
+    print $"math: sin within a half turn ($sin_turn), over the sweep ($sin_sweep); cos ($cos_turn) and ($cos_sweep); atan2 ($atan_max) rad; rad ($rad_max), deg ($deg_max), the round trip ($trip_max) relative; f64 vectors ($f64_max) relative, the register forms ($f64_reg_max); f32 dot ($f32_max) relative, the register forms ($f32_reg_max); ($consts | length) constants bit for bit; the rng pinned and the entropy's own; expand_all ($all.end - $all.start) bytes in its page with no trap"
     print "math: ok"
 }
 
@@ -220,10 +247,11 @@ def atan2 [y: float, x: float]: nothing -> float {
 }
 
 # A normal's line checked: the inputs decoded, the outputs at unit
-# length along the input, or the input itself for the zero vector.
-def norm-check [w: list<string>]: nothing -> record<err: float> {
-    let v = ($w | slice 1..3 | each {|h| f64-of $h })
-    let n = ($w | slice 4..6 | each {|h| f64-of $h })
+# length along the input, or the input itself for the zero vector;
+# singles with --single.
+def norm-check [w: list<string>, --single]: nothing -> record<err: float> {
+    let v = ($w | slice 1..3 | each {|h| if $single { f32-of $h } else { f64-of $h } })
+    let n = ($w | slice 4..6 | each {|h| if $single { f32-of $h } else { f64-of $h } })
     let len = (($v.0 * $v.0 + $v.1 * $v.1 + $v.2 * $v.2) | math sqrt)
     let want = (if $len == 0.0 { $v } else { $v | each {|c| $c / $len } })
     { err: ([(rel-err $n.0 $want.0) (rel-err $n.1 $want.1) (rel-err $n.2 $want.2)] | math max) }

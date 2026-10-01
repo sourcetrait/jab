@@ -17,8 +17,8 @@ A floor within a step above or anywhere below within a step is stood on, the
 fall speed zeroed, so a ramp walks itself and a step down lands at once; a
 floor further below is fallen to under GRAVITY. A ceiling is not yet met.
 
-The lengths ride the vec2 macros through vec3_scratch, the vectors being
-register-resident: body_push stores the offset once and takes the square and
-the length from it; wall_push stores the push vector and reloads it after the
-macro, whose scratch set covers the registers it sat in. bodies_push holds
-its loop in t4 and t5 because body_push's macros clobber t0 to t2.
+The lengths are the vec2 register forms, the vectors being register-resident:
+body_push takes the square of the offset through `reg.sqrlen`, compares it,
+and roots it only when the bodies overlap; wall_push takes the push vector's
+length in place. The register forms touch only their destination, so the
+vectors survive them and nothing is stored or reloaded.

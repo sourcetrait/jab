@@ -713,10 +713,7 @@ actor_walk:
     fsub.d fs3, fa0, ft0            # to the point
     fld ft0, ACTOR_Y(s2)
     fsub.d fs4, fa1, ft0
-    la t3, vec3_scratch
-    fsd fs3, 0(t3)
-    fsd fs4, 8(t3)
-    jab.f64.vec2.len fs5, t3        # the distance
+    jab.f64.vec2.reg.len fs5, fs3, fs4  # the distance
     la t0, k_arrive_d
     fld ft1, 0(t0)
     flt.d t1, fs5, ft1
@@ -1168,14 +1165,10 @@ action_fire:
     fmadd.d ft3, ft7, ft8, ft3
     fmadd.d ft4, ft6, ft8, ft4
     fadd.d ft5, ft5, ft9
-    la t5, vec3_scratch
-    fsd ft3, 0(t5)
-    fsd ft4, 8(t5)
-    fsd ft5, 16(t5)
-    jab.f64.vec3.norm t5, t5
-    fld fa3, 0(t5)
-    fld fa4, 8(t5)
-    fld fa5, 16(t5)
+    jab.f64.vec3.reg.norm ft3, ft4, ft5
+    fmv.d fa3, ft3
+    fmv.d fa4, ft4
+    fmv.d fa5, ft5
     fld fa0, AIM_OX(t4)
     fld fa1, AIM_OY(t4)
     fld fa2, AIM_OZ(t4)

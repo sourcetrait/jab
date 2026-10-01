@@ -230,7 +230,7 @@ feet_move:
 # every solid android but the walker, and the player's when the walker is
 # an android.
 # a0 address The walker, 0 for the player.
-# returns Clobbers t0 to t6, ft0 to ft10.
+# returns Clobbers t2 to t5, ft0 to ft7.
 bodies_push:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -275,7 +275,7 @@ bodies_push:
 # the radius in the plan when within it and the heights overlap; two on one
 # spot part eastward.
 # ft0 f64 Its feet's x; ft1 y; ft2 z.
-# returns Clobbers t0 to t3, t6, ft0 to ft10.
+# returns Clobbers t2, t3, ft3 to ft7.
 body_push:
     fsub.d ft3, fs2, ft2
     fabs.d ft3, ft3
@@ -285,30 +285,25 @@ body_push:
     bnez t3, 9f                     # one over the other
     fsub.d ft3, fs0, ft0            # from its feet to these
     fsub.d ft4, fs1, ft1
-    la t6, vec3_scratch
-    fsd ft3, 0(t6)
-    fsd ft4, 8(t6)
-    jab.f64.vec2.sqrlen ft8, t6     # the distance squared
+    jab.f64.vec2.reg.sqrlen ft5, ft3, ft4   # the distance squared
     la t2, k_body_radius_d
-    fld ft10, 0(t2)
-    fadd.d ft10, ft10, ft10         # the radii
-    fmul.d ft7, ft10, ft10
-    fle.d t3, ft7, ft8
+    fld ft6, 0(t2)
+    fadd.d ft6, ft6, ft6            # the radii
+    fmul.d ft7, ft6, ft6
+    fle.d t3, ft7, ft5
     bnez t3, 9f                     # clear
     la t2, k_thousandth_d
     fld ft7, 0(t2)
-    flt.d t3, ft8, ft7
+    flt.d t3, ft5, ft7
     bnez t3, 8f
-    jab.f64.vec2.len ft9, t6
-    fsub.d ft7, ft10, ft9           # the shortfall
-    fdiv.d ft7, ft7, ft9
-    fld ft3, 0(t6)
-    fld ft4, 8(t6)
+    fsqrt.d ft5, ft5                # the distance
+    fsub.d ft7, ft6, ft5            # the shortfall
+    fdiv.d ft7, ft7, ft5
     fmadd.d fs0, ft3, ft7, fs0
     fmadd.d fs1, ft4, ft7, fs1
     ret
 8:
-    fadd.d fs0, fs0, ft10           # on one spot: eastward
+    fadd.d fs0, fs0, ft6            # on one spot: eastward
 9:
     ret
 
@@ -412,10 +407,7 @@ wall_push:
     # the feet sit on the wall
     fsub.d ft4, fs0, fs5
     fsub.d ft5, fs1, fs6
-    la t3, vec3_scratch
-    fsd ft4, 0(t3)
-    fsd ft5, 8(t3)
-    jab.f64.vec2.len ft9, t3        # the distance
+    jab.f64.vec2.reg.len ft9, ft4, ft5  # the distance
     fcvt.d.w ft8, zero
     flt.d t1, ft8, ft9
     bnez t1, 6f
@@ -431,14 +423,8 @@ wall_push:
     fcvt.d.s ft4, ft4
     fsub.s ft5, ft2, ft0
     fcvt.d.s ft5, ft5
-    la t3, vec3_scratch
-    fsd ft4, 0(t3)
-    fsd ft5, 8(t3)
-    jab.f64.vec2.len ft9, t3
+    jab.f64.vec2.reg.len ft9, ft4, ft5
 6:
-    la t3, vec3_scratch
-    fld ft4, 0(t3)
-    fld ft5, 8(t3)
     la t0, k_body_radius_d
     fld ft0, 0(t0)
     fsub.d ft0, ft0, ft9            # how far in

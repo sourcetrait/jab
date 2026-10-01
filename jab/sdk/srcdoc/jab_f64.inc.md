@@ -42,3 +42,12 @@ lets dst be a. 22 instructions.
 ## .macro jab.f64.vec2.len
 
 5 instructions.
+
+## The register forms
+
+The twins of jab_f32.inc's `reg` forms, whose mirror carries the reason: a
+vector computed in registers pays stores and reloads to go through the
+memory form. The fps engine's cold sites, the body's and the walls'
+distances, a sound's distance, an actor's walk, the normal of the plane and
+of a strayed round, all hold their vectors in registers and take these.
+Exact against the host's doubles, 0 relative, as the memory forms.

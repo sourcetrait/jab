@@ -8,9 +8,9 @@ world gradient of u in repeats and the texture's size folded in, and v the
 same. surface_setup computes the nine coefficients in double once a polygon,
 the half pixel folded into each C, and stores them as 64-bit integers, 1/z in
 6.26 and u/z and v/z in 48.16. The plane is widened into plane_d first, since
-the dot macros read doubles from memory; the normal is made unit by
-jab.f64.vec3.norm into vec3_scratch and flipped to face the camera by the
-sign of n.(q - p).
+the dot macros read doubles from memory; the normal is loaded from it into
+ft8 to ft10, made unit by jab.f64.vec3.reg.norm there, and flipped to face
+the camera by the sign of n.(q - p).
 
 span_fill holds no float: a float helper under TCG costs about 5 ns, and the
 probe measured the float span at 12 to 14 ms a megapixel against 5.4 for the

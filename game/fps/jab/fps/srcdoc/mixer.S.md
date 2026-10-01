@@ -14,9 +14,10 @@ not run it dry; with the kernel's eight periods in flight a sound lands about
 200 ms after its start. The kernel adds the synthesizer's voices at full
 scale over the game's frames.
 
-The distance and the level distance are the vec3 and vec2 lengths over one
-store of the eye-to-point vector into vec3_scratch, the vec2 reading the
-first two doubles.
+The distance and the level distance are the vec3 and vec2 register lengths
+of the eye-to-point vector; its x and y are copied to ft10 and ft11 first
+because the yaw's sine and cosine, taken after, clobber the scratch set the
+vector was computed in.
 
 mixer_update is page-aligned for its per-sample loops; its two traps a frame,
 the stream's room and the write, are the calls the hot check allows it.

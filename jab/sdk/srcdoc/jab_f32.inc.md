@@ -93,3 +93,20 @@ Measured: 1.9e-6 radians over every octant, held under 3e-6. 57 instructions.
 
 A multiply and two fused multiply-adds, three roundings. Measured 1.8e-8
 relative, held under 1e-7. 9 instructions.
+
+## The register forms
+
+`jab.f32.vec3.reg.dot`, `reg.sqrlen`, `reg.len`, `reg.norm`, and the `vec2`
+pair take the vector's values as float registers, for a vector that was
+computed in registers and never stored. The memory form on such a vector
+costs the stores, the loads inside the macro, and the loads to recover the
+registers the macro's scratch set clobbered; in the fps engine's light loop
+that was twelve memory operations a light, about a millisecond a frame on
+a lit view, which is what the register forms remove. The dot, the lengths,
+and the squares touch only their destination, so they may be used on values
+in the scratch set and cost 2 to 4 instructions; the destination must not
+be one of the operands, since the first instruction writes it. `reg.norm`
+scales its three registers in place by their length through ft0, ft1, and
+t0, 13 instructions, a zero vector left as it is as the memory form leaves
+it. Measured by test/math over the same vectors as the memory forms: 5.7e-8
+relative, held under 1e-7.

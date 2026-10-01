@@ -1,6 +1,8 @@
 # Double-precision mathematics as macros expanded in place: no call, no trap.
 # Operands are registers, the destination first; a vecN is N consecutive
-# doubles at the address in an integer register. Scratch: ft0-ft7, t0-t2.
+# doubles at the address in an integer register, and a `reg` form takes its
+# values as float registers instead, touching only its destination.
+# Scratch: ft0-ft7, t0-t2, which a `reg` form leaves alone but `reg.norm`.
 
 # Pi.
 # returns
@@ -119,5 +121,76 @@
     fmul.d \dst, ft0, ft0
     fld ft0, 8(\a)
     fmadd.d \dst, ft0, ft0, \dst
+    fsqrt.d \dst, \dst
+.endm
+
+# Dot product of two vec3 in registers.
+# ax f64; ay f64; az f64 The first.
+# bx f64; by f64; bz f64 The second.
+# returns Touches nothing else; dst is none of the operands.
+#   dst f64 The dot product.
+.macro jab.f64.vec3.reg.dot dst, ax, ay, az, bx, by, bz
+    fmul.d \dst, \ax, \bx
+    fmadd.d \dst, \ay, \by, \dst
+    fmadd.d \dst, \az, \bz, \dst
+.endm
+
+# Squared length of a vec3 in registers.
+# x f64; y f64; z f64
+# returns Touches nothing else; dst is none of the operands.
+#   dst f64 The squared length.
+.macro jab.f64.vec3.reg.sqrlen dst, x, y, z
+    fmul.d \dst, \x, \x
+    fmadd.d \dst, \y, \y, \dst
+    fmadd.d \dst, \z, \z, \dst
+.endm
+
+# Length of a vec3 in registers.
+# x f64; y f64; z f64
+# returns Touches nothing else; dst is none of the operands.
+#   dst f64 The length.
+.macro jab.f64.vec3.reg.len dst, x, y, z
+    fmul.d \dst, \x, \x
+    fmadd.d \dst, \y, \y, \dst
+    fmadd.d \dst, \z, \z, \dst
+    fsqrt.d \dst, \dst
+.endm
+
+# A vec3 in registers scaled to unit length in place.
+# x f64; y f64; z f64 Outside ft0 and ft1.
+# returns A zero vector is left as it is. Uses ft0, ft1, t0.
+#   x, y, z The unit vector.
+.macro jab.f64.vec3.reg.norm x, y, z
+    fmul.d ft0, \x, \x
+    fmadd.d ft0, \y, \y, ft0
+    fmadd.d ft0, \z, \z, ft0
+    fsqrt.d ft0, ft0                # the length
+    fmv.d.x ft1, zero
+    feq.d t0, ft0, ft1
+    beqz t0, .Ljab_f64_vec3_reg_norm_scale\@
+    li t0, 0x3ff0000000000000       # 1.0: a zero vector divides by one
+    fmv.d.x ft0, t0
+.Ljab_f64_vec3_reg_norm_scale\@:
+    fdiv.d \x, \x, ft0
+    fdiv.d \y, \y, ft0
+    fdiv.d \z, \z, ft0
+.endm
+
+# Squared length of a vec2 in registers.
+# x f64; y f64
+# returns Touches nothing else; dst is none of the operands.
+#   dst f64 The squared length.
+.macro jab.f64.vec2.reg.sqrlen dst, x, y
+    fmul.d \dst, \x, \x
+    fmadd.d \dst, \y, \y, \dst
+.endm
+
+# Length of a vec2 in registers.
+# x f64; y f64
+# returns Touches nothing else; dst is none of the operands.
+#   dst f64 The length.
+.macro jab.f64.vec2.reg.len dst, x, y
+    fmul.d \dst, \x, \x
+    fmadd.d \dst, \y, \y, \dst
     fsqrt.d \dst, \dst
 .endm

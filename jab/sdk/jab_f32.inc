@@ -1,6 +1,8 @@
 # Single-precision mathematics as macros expanded in place: no call, no trap.
 # Operands are registers, the destination first; a vecN is N consecutive
-# singles at the address in an integer register. Scratch: ft0-ft7, t0-t2.
+# singles at the address in an integer register, and a `reg` form takes its
+# values as float registers instead, touching only its destination.
+# Scratch: ft0-ft7, t0-t2, which a `reg` form leaves alone but `reg.norm`.
 
 # Pi.
 # returns
@@ -218,4 +220,75 @@
     flw ft0, 8(\a)
     flw ft1, 8(\b)
     fmadd.s \dst, ft0, ft1, \dst
+.endm
+
+# Dot product of two vec3 in registers.
+# ax f32; ay f32; az f32 The first.
+# bx f32; by f32; bz f32 The second.
+# returns Touches nothing else; dst is none of the operands.
+#   dst f32 The dot product.
+.macro jab.f32.vec3.reg.dot dst, ax, ay, az, bx, by, bz
+    fmul.s \dst, \ax, \bx
+    fmadd.s \dst, \ay, \by, \dst
+    fmadd.s \dst, \az, \bz, \dst
+.endm
+
+# Squared length of a vec3 in registers.
+# x f32; y f32; z f32
+# returns Touches nothing else; dst is none of the operands.
+#   dst f32 The squared length.
+.macro jab.f32.vec3.reg.sqrlen dst, x, y, z
+    fmul.s \dst, \x, \x
+    fmadd.s \dst, \y, \y, \dst
+    fmadd.s \dst, \z, \z, \dst
+.endm
+
+# Length of a vec3 in registers.
+# x f32; y f32; z f32
+# returns Touches nothing else; dst is none of the operands.
+#   dst f32 The length.
+.macro jab.f32.vec3.reg.len dst, x, y, z
+    fmul.s \dst, \x, \x
+    fmadd.s \dst, \y, \y, \dst
+    fmadd.s \dst, \z, \z, \dst
+    fsqrt.s \dst, \dst
+.endm
+
+# A vec3 in registers scaled to unit length in place.
+# x f32; y f32; z f32 Outside ft0 and ft1.
+# returns A zero vector is left as it is. Uses ft0, ft1, t0.
+#   x, y, z The unit vector.
+.macro jab.f32.vec3.reg.norm x, y, z
+    fmul.s ft0, \x, \x
+    fmadd.s ft0, \y, \y, ft0
+    fmadd.s ft0, \z, \z, ft0
+    fsqrt.s ft0, ft0                # the length
+    fmv.w.x ft1, zero
+    feq.s t0, ft0, ft1
+    beqz t0, .Ljab_f32_vec3_reg_norm_scale\@
+    li t0, 0x3f800000               # 1.0: a zero vector divides by one
+    fmv.w.x ft0, t0
+.Ljab_f32_vec3_reg_norm_scale\@:
+    fdiv.s \x, \x, ft0
+    fdiv.s \y, \y, ft0
+    fdiv.s \z, \z, ft0
+.endm
+
+# Squared length of a vec2 in registers.
+# x f32; y f32
+# returns Touches nothing else; dst is none of the operands.
+#   dst f32 The squared length.
+.macro jab.f32.vec2.reg.sqrlen dst, x, y
+    fmul.s \dst, \x, \x
+    fmadd.s \dst, \y, \y, \dst
+.endm
+
+# Length of a vec2 in registers.
+# x f32; y f32
+# returns Touches nothing else; dst is none of the operands.
+#   dst f32 The length.
+.macro jab.f32.vec2.reg.len dst, x, y
+    fmul.s \dst, \x, \x
+    fmadd.s \dst, \y, \y, \dst
+    fsqrt.s \dst, \dst
 .endm

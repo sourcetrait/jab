@@ -348,26 +348,25 @@ surface_setup:
     li t0, -1
     sw t0, POLY_LIT_ROW(t1)         # no brightness taken yet
     sd zero, POLY_FLAT_LIT(t1)      # lit at its angle unless the caller says
-    la t5, vec3_scratch
-    jab.f64.vec3.norm t5, t3
+    fld ft8, 0(t3)
+    fld ft9, 8(t3)
+    fld ft10, 16(t3)
+    jab.f64.vec3.reg.norm ft8, ft9, ft10
     la t0, k_one_d
-    fld ft8, 0(t0)
+    fld ft11, 0(t0)
     fcvt.d.w ft0, zero
     flt.d t0, ft0, fs3
     beqz t0, 81f
-    fneg.d ft8, ft8                 # the plane's point lies ahead along n: n points away
+    fneg.d ft11, ft11               # the plane's point lies ahead along n: n points away
 81:
     la t1, poly
-    fld ft2, 0(t5)
-    fmul.d ft2, ft2, ft8
+    fmul.d ft2, ft8, ft11
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNX(t1)
-    fld ft2, 8(t5)
-    fmul.d ft2, ft2, ft8
+    fmul.d ft2, ft9, ft11
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNY(t1)
-    fld ft2, 16(t5)
-    fmul.d ft2, ft2, ft8
+    fmul.d ft2, ft10, ft11
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNZ(t1)
     fmul.d ft1, fs4, fs3

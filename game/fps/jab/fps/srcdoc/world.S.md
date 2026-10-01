@@ -23,7 +23,7 @@ it is.
 A wall's u runs along it from its first vertex and its v down from the
 author's anchor height, the same for every piece of the wall and over its
 openings. The wall's unit direction is a vec2 norm by hand over
-jab.f64.vec2.len through vec3_scratch, the library carrying no vec2 norm.
+jab.f64.vec2.reg.len, the library carrying no vec2 norm.
 
 The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the

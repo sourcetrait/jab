@@ -628,16 +628,10 @@ wall_surface:
     # e, the unit direction along the wall, and the start's distance
     fsub.d ft0, fs2, fs0
     fsub.d ft1, fs3, fs1
-    la t3, vec3_scratch
-    fsd ft0, 0(t3)
-    fsd ft1, 8(t3)
-    jab.f64.vec2.len ft8, t3
-    la t0, plane
+    jab.f64.vec2.reg.len ft8, ft0, ft1
     la t1, k_one_d
     fld ft3, 0(t1)
     fdiv.d ft2, ft3, ft8
-    fld ft0, 0(t3)
-    fld ft1, 8(t3)
     fmul.d ft0, ft0, ft2            # ex
     fmul.d ft1, ft1, ft2            # ey
     fmul.d ft4, ft0, fs0
