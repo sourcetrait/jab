@@ -1,9 +1,5 @@
-# jab.inc: the Jab SDK header. `.include "jab.inc"` and call the kernel
-# with the jab.sys.* macros, assembler style: `jab.sys.print message`;
-# every one of them is a trap into the kernel, which is what the name
-# says. The mathematics of jab_f32.inc, jab_f64.inc, and jab_rng.inc
-# beside this file is carried code the program expands in place, never
-# a call and never a trap, and a program includes what it names.
+# The Jab SDK header: the jab.sys.* macros, each a trap into the kernel.
+# jab_f32.inc, jab_f64.inc, and jab_rng.inc beside it are included by name.
 .include "jab_keys.inc"
 .include "jab_pad.inc"
 

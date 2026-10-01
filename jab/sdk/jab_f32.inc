@@ -1,72 +1,55 @@
-# jab_f32.inc: single-precision mathematics as macros the program
-# expands in place. Nothing here is a call and nothing traps: a macro's
-# code lands where it is written, at the cost of its size per use, so
-# a hot loop pays no call pair and no trap. The library carries no
-# data: a constant is written as its bit pattern, loaded as an integer
-# immediate and moved into the register. `.include "jab_f32.inc"` after
-# jab.inc, which includes none of these: a program pays for what it
-# names.
-#
-# Operands are registers, the destination first, and a macro is named
-# for what its destination becomes: `jab.f32.sin fa0, fa1` makes fa0
-# the sine of fa1, `jab.f32.rad fa0, fa1` the radians of the degrees in
-# fa1, `jab.f32.PI ft8` makes ft8 pi. A scalar is a float register; a
-# vector of N values is N consecutive singles in memory, 12 bytes for a
-# vec3, named by the integer register holding its address. The scratch
-# set, which any macro here may use and no operand or live value sits
-# in, is ft0 to ft7 and t0 to t2. A macro carries no clobber list
-# beyond that and no page guard: a caller aligning a hot function to a
-# page sizes it to the expanded code. Each macro states its operands,
-# what it computes, its precision as test/math measures it, and its
-# size in instructions.
+# Single-precision mathematics as macros expanded in place: no call, no trap.
+# Operands are registers, the destination first; a vecN is N consecutive
+# singles at the address in an integer register. Scratch: ft0-ft7, t0-t2.
 
-# jab.f32.PI dst: dst becomes pi, 0x40490fdb, 3.14159274. 3
-# instructions.
+# Pi.
+# returns
+#   dst f32 0x40490fdb.
 .macro jab.f32.PI dst
     li t0, 0x40490fdb
     fmv.w.x \dst, t0
 .endm
 
-# jab.f32.TAU dst: dst becomes two pi, 0x40c90fdb, 6.28318548. 3
-# instructions.
+# Two pi.
+# returns
+#   dst f32 0x40c90fdb.
 .macro jab.f32.TAU dst
     li t0, 0x40c90fdb
     fmv.w.x \dst, t0
 .endm
 
-# jab.f32.FRAC_PI_2 dst: dst becomes pi over two, 0x3fc90fdb,
-# 1.57079637. 3 instructions.
+# Pi over two.
+# returns
+#   dst f32 0x3fc90fdb.
 .macro jab.f32.FRAC_PI_2 dst
     li t0, 0x3fc90fdb
     fmv.w.x \dst, t0
 .endm
 
-# jab.f32.rad dst, src: dst becomes the radians of src, degrees: src
-# times pi over 180, 0x3c8efa35, 0.0174532924. One rounding; measured
-# (test/math) 3e-8 relative, held under 1e-7. 4 instructions.
+# Degrees to radians.
+# src f32 Degrees.
+# returns
+#   dst f32 Radians.
 .macro jab.f32.rad dst, src
-    li t0, 0x3c8efa35
+    li t0, 0x3c8efa35               # pi/180, 0.0174532924
     fmv.w.x ft0, t0
     fmul.s \dst, \src, ft0
 .endm
 
-# jab.f32.deg dst, src: dst becomes the degrees of src, radians: src
-# times 180 over pi, 0x42652ee1, 57.2957802. One rounding; measured
-# (test/math) 3e-8 relative, held under 1e-7. 4 instructions.
+# Radians to degrees.
+# src f32 Radians.
+# returns
+#   dst f32 Degrees.
 .macro jab.f32.deg dst, src
-    li t0, 0x42652ee1
+    li t0, 0x42652ee1               # 180/pi, 57.2957802
     fmv.w.x ft0, t0
     fmul.s \dst, \src, ft0
 .endm
 
-# jab.f32.sin dst, src: dst becomes the sine of src, radians of any
-# size: src brought into a turn by subtracting the nearest whole number
-# of turns, reflected into a quarter, and a ninth-order odd polynomial
-# fitted on Chebyshev nodes over the quarter. Measured (test/math):
-# 1.3e-7 within a half turn either way, the single's own rounding, held
-# under 2e-7; 5.3e-7 over six turns either way, the fold losing bits as
-# the angle grows, held under 1e-6, so a program keeps its angles within
-# a turn where it can. 45 instructions.
+# Sine.
+# src f32 Radians, any size.
+# returns
+#   dst f32 The sine of src.
 .macro jab.f32.sin dst, src
     li t0, 0x3e22f983               # 1/tau, 0.159154937
     fmv.w.x ft0, t0
@@ -109,12 +92,10 @@
     fmul.s \dst, ft1, ft3
 .endm
 
-# jab.f32.cos dst, src: dst becomes the cosine of src, radians of any
-# size: src brought into a turn, folded into a quarter so the even
-# series is taken near zero where it is exact, and a tenth-order even
-# polynomial fitted on Chebyshev nodes over the quarter. Measured
-# (test/math): 1.4e-7 within a half turn either way, held under 2e-7;
-# 5.4e-7 over six turns either way, held under 1e-6. 46 instructions.
+# Cosine.
+# src f32 Radians, any size.
+# returns
+#   dst f32 The cosine of src.
 .macro jab.f32.cos dst, src
     li t0, 0x3e22f983               # 1/tau
     fmv.w.x ft0, t0
@@ -158,14 +139,11 @@
     fmv.s \dst, ft3
 .endm
 
-# jab.f32.atan2 dst, y, x: dst becomes the angle of the point x, y
-# from the x axis counter-clockwise, radians within a half turn either
-# way, Rust's `y.atan2(x)`: the ratio of the lesser magnitude to the
-# greater through an eleventh-order odd polynomial for the arctangent
-# on 0 to 1, unfolded by the octant; both zero gives zero, and a zero y
-# of either sign reads as zero, so x under zero with it gives pi.
-# Measured (test/math): 1.9e-6 radians over every octant, held under
-# 3e-6. 57 instructions.
+# The angle of the point x, y from the x axis, counter-clockwise.
+# y f32
+# x f32
+# returns Both zero gives zero, and a zero y of either sign reads as zero.
+#   dst f32 Radians, within a half turn either way.
 .macro jab.f32.atan2 dst, y, x
     fabs.s ft0, \y
     fabs.s ft1, \x
@@ -225,10 +203,11 @@
 .Ljab_f32_atan2_done\@:
 .endm
 
-# jab.f32.vec3.dot dst, a, b: dst becomes the dot product of the vec3
-# at a with the vec3 at b, a multiply and two fused multiply-adds, so
-# three roundings. Measured (test/math): 1.8e-8 relative, held under
-# 1e-7. 9 instructions.
+# Dot product of two vec3.
+# a address Three singles.
+# b address Three singles.
+# returns
+#   dst f32 The dot product.
 .macro jab.f32.vec3.dot dst, a, b
     flw ft0, 0(\a)
     flw ft1, 0(\b)

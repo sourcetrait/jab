@@ -1,20 +1,11 @@
-# math: the SDK's type libraries under test, jab_f32.inc, jab_f64.inc,
-# and jab_rng.inc. Every macro of the first cut is expanded over fixed
-# inputs, and each result goes to the UART as its bit pattern, one case
-# a line, so the guest formats no float: the test decodes the patterns
-# on the host and holds them against nushell's own sine, cosine,
-# arctangent, and arithmetic, and each constant's expansion against the
-# assembler's own .float or .double of the value. Two functions sit on
-# pages of their own for the hot-code check: expand_all expands every
-# macro once and traps nowhere, and trapped makes one kernel call,
-# which the check must see.
+# The type libraries under test: every macro over fixed inputs, each result
+# to the UART as its bit pattern, decoded and checked on the host.
 .include "jab.inc"
 .include "jab_f32.inc"
 .include "jab_f64.inc"
 .include "jab_rng.inc"
 
-# sin and cos over SWEEP_POINTS angles from k_start, k_step apart: six
-# turns either way, a sixteenth of a radian at a time
+# sin and cos over SWEEP_POINTS angles from k_start, k_step apart
 .set SWEEP_POINTS, 1601
 .set ATAN_PAIRS, 24
 .set ANGLE_COUNT, 11
@@ -39,8 +30,7 @@ _start:
     call trapped
     jab.sys.exit 0
 
-# sweep: `sin <x> <y>` and `cos <x> <y>` for every angle of the sweep,
-# the angle made in single precision from its index.
+# `sin <x> <y>` and `cos <x> <y>` lines for every angle of the sweep.
 sweep:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -72,7 +62,7 @@ sweep:
     addi sp, sp, 32
     ret
 
-# atan_cases: `atan2 <y> <x> <r>` for every pair of the table.
+# `atan2 <y> <x> <r>` lines, one a pair of atan_pairs.
 atan_cases:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -114,9 +104,7 @@ atan_cases:
     addi sp, sp, 48
     ret
 
-# angle_cases: for every angle of the table, `rad <x> <r>` with x in
-# degrees, `deg <x> <r>` with x in radians, and `roundtrip <x> <r>`,
-# the degrees back from their radians.
+# `rad <x> <r>`, `deg <x> <r>`, and `roundtrip <x> <r>` lines, one each an angle.
 angle_cases:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -151,8 +139,7 @@ angle_cases:
     addi sp, sp, 48
     ret
 
-# const_cases: `const <name> <macro> <assembled>`, each constant's
-# expansion beside the assembler's .float or .double of the value.
+# `const <name> <macro> <assembled>` lines for the six constants.
 const_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -194,10 +181,7 @@ const_cases:
     addi sp, sp, 32
     ret
 
-# vec3_cases: for every pair of the table, `f64.vec3.dot <a> <b> <r>`,
-# `f64.vec3.len <a> <r>`, `f64.vec3.sqrlen <a> <r>`, `f64.vec3.norm <a>
-# <n>` into a buffer of its own, and `f64.vec3.norm.aliased <a> <n>`
-# with the destination its own source.
+# `f64.vec3.dot`, `len`, `sqrlen`, `norm`, and `norm.aliased` lines, one a pair.
 vec3_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -249,8 +233,10 @@ vec3_cases:
     addi sp, sp, 32
     ret
 
-# vec3_result_line: the line `<a0, a word> <the three doubles at s3>
-# <fs0's pattern>`.
+# The line `<word> <the vec3 at s3> <fs0>`.
+# a0 address The word, NUL-terminated.
+# s3 address The vec3.
+# fs0 f64 The result.
 vec3_result_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -271,8 +257,9 @@ vec3_result_line:
     addi sp, sp, 16
     ret
 
-# vec3_norm_line: the line `<a0, a word> <the three doubles at s3> <the
-# three at norm_out>`.
+# The line `<word> <the vec3 at s3> <the vec3 at norm_out>`.
+# a0 address The word, NUL-terminated.
+# s3 address The vec3.
 vec3_norm_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -294,8 +281,7 @@ vec3_norm_line:
     addi sp, sp, 16
     ret
 
-# vec2_cases: for every vector of the table, `f64.vec2.len <a> <r>` and
-# `f64.vec2.sqrlen <a> <r>`.
+# `f64.vec2.len <a> <r>` and `f64.vec2.sqrlen <a> <r>` lines, one a vec2.
 vec2_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -321,8 +307,10 @@ vec2_cases:
     addi sp, sp, 32
     ret
 
-# vec2_result_line: the line `<a0, a word> <the two doubles at s3>
-# <fs0's pattern>`.
+# The line `<word> <the vec2 at s3> <fs0>`.
+# a0 address The word, NUL-terminated.
+# s3 address The vec2.
+# fs0 f64 The result.
 vec2_result_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -343,8 +331,7 @@ vec2_result_line:
     addi sp, sp, 16
     ret
 
-# f32_vec_cases: `f32.vec3.dot <a> <b> <r>` for every pair of the
-# single-precision table.
+# `f32.vec3.dot <a> <b> <r>` lines, one a pair of f32_pairs.
 f32_vec_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -376,10 +363,7 @@ f32_vec_cases:
     addi sp, sp, 32
     ret
 
-# rng_cases: the generator seeded with a fixed word, then with zero,
-# then with a word the kernel's entropy device gave, each reported as
-# `rng <seed as given> <state after seeding> <RNG_BYTES bytes>`, the
-# last as `rngsys`, or `rngsys none` on a machine with no rng device.
+# `rng` lines for a fixed seed and a zero seed, then `rngsys` from jab.sys.random.
 rng_cases:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -412,9 +396,10 @@ rng_cases:
     addi sp, sp, 16
     ret
 
-# rng_report: the line `<a1, a word> <a0, the seed as given> <the state
-# word at s3> <RNG_BYTES bytes>`, each byte drawn by jab.rng.byte over
-# the state at s3.
+# The line `<word> <seed> <state> <RNG_BYTES bytes>`, the bytes drawn from s3.
+# a0 u64 The seed as given.
+# a1 address The word, NUL-terminated.
+# s3 address The state word.
 rng_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -447,9 +432,7 @@ rng_report:
     addi sp, sp, 32
     ret
 
-# expand_all: every macro of the first cut expanded once, over the
-# tables, on a page of its own with no kernel call, so the hot-code
-# check has a function holding all of them; nothing is printed.
+# Every macro expanded once on a page of its own, with no kernel call.
 .balign 4096
 expand_all:
     la t3, angles
@@ -484,15 +467,14 @@ expand_all:
     jab.rng.byte t4, t3
     ret
 
-# trapped: one kernel call on a page of its own, the hot-code check's
-# control: the check must see its ecall.
+# One kernel call on a page of its own.
 .balign 4096
 trapped:
     jab.sys.kernel.flags
     ret
 
-# pair_line: the line `<a0, a word> <fs0's pattern> <fs1's pattern>`,
-# singles.
+# The line `<word> <fs0> <fs1>`, singles.
+# a0 address The word, NUL-terminated.
 pair_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -514,7 +496,8 @@ pair_line:
     addi sp, sp, 16
     ret
 
-# pair_line64: the same, doubles.
+# The line `<word> <fs0> <fs1>`, doubles.
+# a0 address The word, NUL-terminated.
 pair_line64:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -536,14 +519,15 @@ pair_line64:
     addi sp, sp, 16
     ret
 
-# The line: reset, bytes and strings appended, ended, sent.
+# Empties the line.
 line_reset:
     la t0, line
     la t1, lineptr
     sd t0, 0(t1)
     ret
 
-# line_char: a0 is a byte, appended.
+# Appends a byte.
+# a0 u8
 line_char:
     la t1, lineptr
     ld t0, 0(t1)
@@ -552,7 +536,7 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: the newline and the terminator.
+# Ends the line: a newline, then NUL.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)
@@ -563,7 +547,8 @@ line_nl:
     sd t0, 0(t1)
     ret
 
-# line_str: a0 is a NUL-terminated string, appended.
+# Appends a string.
+# a0 address NUL-terminated.
 line_str:
     mv t2, a0
     la t1, lineptr
@@ -579,7 +564,8 @@ line_str:
     sd t0, 0(t1)
     ret
 
-# line_hex: a0 is a byte, appended as two hex digits.
+# Appends a byte as two hex digits.
+# a0 u8
 line_hex:
     mv t2, a0
     la t1, lineptr
@@ -607,8 +593,8 @@ line_hex:
     sd t0, 0(t1)
     ret
 
-# line_hex32: a0's low 32 bits, appended as eight hex digits, the
-# highest first.
+# Appends the low 32 bits as eight hex digits, highest first.
+# a0 u32
 line_hex32:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -628,7 +614,8 @@ line_hex32:
     addi sp, sp, 32
     ret
 
-# line_hex64: a0, appended as sixteen hex digits, the highest first.
+# Appends sixteen hex digits, highest first.
+# a0 u64
 line_hex64:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -648,8 +635,9 @@ line_hex64:
     addi sp, sp, 32
     ret
 
-# line_doubles: a0 is an address of a1 doubles, each appended as its
-# sixteen hex digits and a space.
+# Appends doubles, each sixteen hex digits and a space.
+# a0 address The doubles.
+# a1 count How many.
 line_doubles:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -673,8 +661,9 @@ line_doubles:
     addi sp, sp, 32
     ret
 
-# line_floats: a0 is an address of a1 singles, each appended as its
-# eight hex digits and a space.
+# Appends singles, each eight hex digits and a space.
+# a0 address The singles.
+# a1 count How many.
 line_floats:
     addi sp, sp, -32
     sd ra, 24(sp)
