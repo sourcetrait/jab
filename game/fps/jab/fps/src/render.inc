@@ -98,7 +98,11 @@
 # Set for a surface lit at no angle, a sprite facing the camera: every
 # light within reach lights it by its falloff alone
 .set POLY_FLAT_LIT, (POLY_LIT_TABLE + LIT_HELD * LIT_ENTRY)
-.set POLY_SIZE, (POLY_FLAT_LIT + 8)
+# The polygon's own light list, the sector's culled to the lights whose
+# sphere meets its world box and which lie ahead of its plane: a count
+# byte, then that many light indices, as a sector's list is shaped
+.set POLY_LIGHTS, (POLY_FLAT_LIT + 8)
+.set POLY_SIZE, (POLY_LIGHTS + SECTOR_LIGHTS_SIZE)
 .set LIGHT_ROWS, 8
 .set LIGHT_SLACK, 32
 .set CHANNEL_BITS, 21

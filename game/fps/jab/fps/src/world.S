@@ -475,6 +475,37 @@ plane_draw:
     flw ft0, SURFACE_V_OFFSET(s5)
     fsw ft0, PLANE_V0(t0)
     call surface_setup
+    # the sector's lights within the plane's box: its bounds in the plan
+    # and the plane's height at their corners
+    flw fa0, SECTOR_MIN_X(s4)
+    flw fa1, SECTOR_MAX_X(s4)
+    flw fa2, SECTOR_MIN_Y(s4)
+    flw fa3, SECTOR_MAX_Y(s4)
+    li t1, SECTOR_CEILING
+    mul t1, s3, t1
+    add t1, t1, s4
+    flw ft0, PLANE_A(t1)
+    flw ft1, PLANE_B(t1)
+    flw ft2, PLANE_C(t1)
+    fmul.s ft3, ft0, fa0
+    fmadd.s ft3, ft1, fa2, ft3
+    fadd.s ft3, ft3, ft2
+    fmul.s ft4, ft0, fa1
+    fmadd.s ft4, ft1, fa2, ft4
+    fadd.s ft4, ft4, ft2
+    fmul.s ft5, ft0, fa0
+    fmadd.s ft5, ft1, fa3, ft5
+    fadd.s ft5, ft5, ft2
+    fmul.s ft6, ft0, fa1
+    fmadd.s ft6, ft1, fa3, ft6
+    fadd.s ft6, ft6, ft2
+    fmin.s fa4, ft3, ft4
+    fmin.s fa4, fa4, ft5
+    fmin.s fa4, fa4, ft6
+    fmax.s fa5, ft3, ft4
+    fmax.s fa5, fa5, ft5
+    fmax.s fa5, fa5, ft6
+    call lights_cull
     # the loops' edges, each loop a polygon of its walls' first
     # vertices at the plane's height
     call edges_reset
@@ -955,6 +986,8 @@ wall_draw:
     beqz t0, 20f
     li a0, POLY_MASKED
     call poly_mode
+    call verts_bounds
+    call lights_cull
     call poly_fill
 20:
     # the piece's bottom: the next neighbour's ceiling, or the floor
@@ -994,6 +1027,8 @@ wall_draw:
     ld t1, STAT_PIECES(t0)
     addi t1, t1, 1
     sd t1, STAT_PIECES(t0)
+    call verts_bounds
+    call lights_cull
     call poly_fill
 30:
     addi s6, s6, 1

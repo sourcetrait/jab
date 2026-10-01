@@ -158,9 +158,125 @@ lights_gather:
     addi sp, sp, 80
     ret
 
+# The world box of the polygon in hand's points
+# returns Clobbers t0, t1, ft0
+#   fa0 f32 min x
+#   fa1 f32 max x
+#   fa2 f32 min y
+#   fa3 f32 max y
+#   fa4 f32 min z
+#   fa5 f32 max z
+verts_bounds:
+    la t0, verts
+    la t1, vert_count
+    ld t1, 0(t1)
+    flw fa0, 0(t0)
+    fmv.s fa1, fa0
+    flw fa2, 4(t0)
+    fmv.s fa3, fa2
+    flw fa4, 8(t0)
+    fmv.s fa5, fa4
+1:
+    beqz t1, 9f
+    flw ft0, 0(t0)
+    fmin.s fa0, fa0, ft0
+    fmax.s fa1, fa1, ft0
+    flw ft0, 4(t0)
+    fmin.s fa2, fa2, ft0
+    fmax.s fa3, fa3, ft0
+    flw ft0, 8(t0)
+    fmin.s fa4, fa4, ft0
+    fmax.s fa5, fa5, ft0
+    addi t0, t0, VERT_SIZE
+    addi t1, t1, -1
+    j 1b
+9:
+    ret
+
+# The surface's sector's lights culled into the polygon's own list: a light
+# stays when its sphere meets the box and, unless the surface is lit at no
+# angle, it lies ahead of the plane's normal facing the camera
+# fa0 f32 min x
+# fa1 f32 max x
+# fa2 f32 min y
+# fa3 f32 max y
+# fa4 f32 min z
+# fa5 f32 max z
+# returns Clobbers t0 to t6, a5, ft0 to ft7
+lights_cull:
+    la t0, poly
+    lw t1, POLY_SECTOR(t0)
+    la t2, sector_lights
+    slli t1, t1, 5
+    add t2, t2, t1                  # the sector's list
+    lbu t3, 0(t2)                   # its count
+    addi t2, t2, 1
+    addi t5, t0, (POLY_LIGHTS + 1)  # the polygon's next index
+    ld a5, POLY_FLAT_LIT(t0)
+    fmv.w.x ft3, zero
+1:
+    beqz t3, 9f
+    lbu t6, 0(t2)
+    li t1, LIGHT_SIZE
+    mul t1, t6, t1
+    la t4, lights
+    add t4, t4, t1                  # the light
+    # the box's gap to the light on each axis, none inside, squared
+    flw ft0, LIGHT_X(t4)
+    fsub.s ft1, fa0, ft0
+    fsub.s ft2, ft0, fa1
+    fmax.s ft1, ft1, ft2
+    fmax.s ft1, ft1, ft3
+    flw ft0, LIGHT_Y(t4)
+    fsub.s ft2, fa2, ft0
+    fsub.s ft4, ft0, fa3
+    fmax.s ft2, ft2, ft4
+    fmax.s ft2, ft2, ft3
+    flw ft0, LIGHT_Z(t4)
+    fsub.s ft4, fa4, ft0
+    fsub.s ft5, ft0, fa5
+    fmax.s ft4, ft4, ft5
+    fmax.s ft4, ft4, ft3
+    jab.f32.vec3.reg.sqrlen ft6, ft1, ft2, ft4
+    flw ft7, LIGHT_RADIUS2(t4)
+    flt.s t1, ft7, ft6
+    bnez t1, 7f                     # out of reach
+    bnez a5, 6f                     # lit at no angle: kept
+    # ahead of the plane: n . (light - q) > 0
+    la t1, plane
+    flw ft0, LIGHT_X(t4)
+    flw ft1, (PLANE_Q + 0)(t1)
+    fsub.s ft0, ft0, ft1
+    flw ft1, LIGHT_Y(t4)
+    flw ft2, (PLANE_Q + 4)(t1)
+    fsub.s ft1, ft1, ft2
+    flw ft2, LIGHT_Z(t4)
+    flw ft4, (PLANE_Q + 8)(t1)
+    fsub.s ft2, ft2, ft4
+    la t1, poly
+    flw ft4, POLY_LNX(t1)
+    flw ft5, POLY_LNY(t1)
+    flw ft6, POLY_LNZ(t1)
+    jab.f32.vec3.reg.dot ft7, ft0, ft1, ft2, ft4, ft5, ft6
+    fle.s t1, ft7, ft3
+    bnez t1, 7f                     # behind the surface
+6:
+    sb t6, 0(t5)
+    addi t5, t5, 1
+7:
+    addi t2, t2, 1
+    addi t3, t3, -1
+    j 1b
+9:
+    la t0, poly
+    addi t1, t0, (POLY_LIGHTS + 1)
+    sub t1, t5, t1
+    sb t1, POLY_LIGHTS(t0)          # the count
+    ret
+
 # The brightness at a pixel of the surface in hand: the three channels in
-# 16.16 packed CHANNEL_BITS apart, the ambient plus each light in reach, in
-# single precision throughout.
+# 16.16 packed CHANNEL_BITS apart, the ambient plus each light of the
+# polygon's list in reach, in single precision throughout.
 # a0 int The pixel.
 # a1 int The row.
 # a2 int 1/z there, 6.26.
@@ -234,10 +350,7 @@ span_light:
     la t1, k_one
     flw ft10, 0(t1)                 # one
     ld t6, POLY_FLAT_LIT(t0)        # lit at no angle
-    lw t1, POLY_SECTOR(t0)
-    la t2, sector_lights
-    slli t1, t1, 5
-    add t2, t2, t1                  # the list
+    addi t2, t0, POLY_LIGHTS        # the polygon's list
     lbu t3, 0(t2)                   # its count
     addi t2, t2, 1
 2:

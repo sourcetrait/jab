@@ -305,6 +305,8 @@ sprite_draw:
     call poly_project
     li t0, 3
     bltu a0, t0, 90f
+    call verts_bounds
+    call lights_cull
     call poly_fill
     la t0, stats
     ld t1, STAT_SPRITES(t0)

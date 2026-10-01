@@ -22,6 +22,23 @@ vertices are all far from it; per row the cost was a microsecond a row of
 every polygon, which the stride cuts: two evaluations a row over 57 pieces of
 500 rows was 30 ms, the eight-row stride 7.
 
+## lights_cull
+
+The sector's list is the compiler's, by bounds and radius in the plan without
+z, so the bay's holds nineteen lights, the garage's four below the slab among
+them, and span_light looped them all for every sample. Per polygon the list
+is culled once into the polygon's own: a light stays when its sphere meets the
+polygon's world box, the gap on each axis clamped at zero and squared, and
+when it lies ahead of the plane's normal facing the camera, a light behind the
+surface adding nothing at any pixel; a surface lit at no angle keeps every
+light in reach. The box comes from the polygon's world points for a wall
+piece or a sprite, and for a plane from the sector's bounds with the plane's
+height at their corners, since a plane's loops are appended one at a time.
+Measured on the gauge, five runs: the evaluation's median from 2.6 to 1.8 ms
+on the spawn view and 3.4 to 2.6 on the up flight, the frames half a
+millisecond to one lower, the captures within a level on a few hundred pixels
+from the summation order and identical on four views.
+
 ## span_light
 
 Single precision throughout. The brightness ends as a 16.16 fraction per
