@@ -31,6 +31,12 @@ meet without a crack. Walking by rows matters under TCG: a column walk
 touches a new cache line of each 8 MB buffer per pixel and measured 180 ms
 for a million pixels against 16 by rows.
 
+span_fill counts every span it fills and the pixels it enters, the lit ones
+beside, and times the two span_light evaluations of a lit stride row with
+rdtime, into the frame's stats for the frame line: the instrument that
+splits the light's cost between the evaluation and the lit pixel loop, and
+that reads the overdraw as pixels entered against the screen's.
+
 span_fill and poly_shows are page-aligned and kept under a page: QEMU's
 translator ends a block at a page boundary and chains blocks within a page
 only, so a loop straddling one leaves the translated code every iteration,

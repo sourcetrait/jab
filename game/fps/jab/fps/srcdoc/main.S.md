@@ -9,7 +9,12 @@ drawing's and times each: the game's microseconds cover the pad, the console,
 the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 
 The first frame is reported on the UART, and one after each console placement,
-so a test reads the frame it posed; the DEBUG build adds the walk's order.
+so a test reads the frame it posed; the DEBUG build adds the walk's order. The
+line's tail, the spans and the pixels they entered, the lit ones among them,
+and the light's microseconds, is the light's instrument: pixels entered over
+the screen's 2,073,600 is the overdraw, and the light's microseconds against
+the frame's say how much of the light is the evaluation rather than the lit
+pixel loop.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,

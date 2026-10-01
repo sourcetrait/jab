@@ -14,6 +14,11 @@ doubles from memory: the camera's doubles are written once a frame with the
 basis, the plane's once a polygon in surface_setup, each at twice the float
 record's offsets.
 
+The stats record grew its span, pixel, and light-tick fields for the light's
+instrument; a field is added by extending the record, zeroed in world_draw,
+and printed by frame_report, with the test's frame template extended to
+match, since the template names every field.
+
 The brightness word packs three 16.16 channels CHANNEL_BITS apart, which
 integer addition steps exactly while every channel stays in range; the lit
 pixel loops unpack each channel to 8.8 by two shifts.

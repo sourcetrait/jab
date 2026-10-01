@@ -64,6 +64,11 @@ world_draw:
     sd zero, STAT_PORTAL_TICKS(t1)
     sd zero, STAT_SPRITES(t1)
     sd zero, STAT_SPRITE_TICKS(t1)
+    sd zero, STAT_SPANS(t1)
+    sd zero, STAT_PIXELS(t1)
+    sd zero, STAT_LIT_SPANS(t1)
+    sd zero, STAT_LIT_PIXELS(t1)
+    sd zero, STAT_LIGHT_TICKS(t1)
     call sky_setup
     # the walk's start
     section_count KIND_SECTORS, s2

@@ -680,6 +680,13 @@ span_fill:
     add s5, s5, t1
     add s5, s5, t2                  # v/z
     sub s10, a1, a0                 # the pixels left
+    la t3, stats
+    ld t4, STAT_SPANS(t3)
+    addi t4, t4, 1
+    sd t4, STAT_SPANS(t3)
+    ld t4, STAT_PIXELS(t3)
+    add t4, t4, s10
+    sd t4, STAT_PIXELS(t3)
     # lit: the brightness at both ends, taken afresh every LIGHT_ROWS
     # rows of a polygon and held between, its step a pixel into s0
     la t3, poly
@@ -688,6 +695,13 @@ span_fill:
     beqz t4, 5f
     sd a0, 0(sp)
     sd a1, 8(sp)
+    la t6, stats
+    ld t5, STAT_LIT_SPANS(t6)
+    addi t5, t5, 1
+    sd t5, STAT_LIT_SPANS(t6)
+    ld t5, STAT_LIT_PIXELS(t6)
+    add t5, t5, s10
+    sd t5, STAT_LIT_PIXELS(t6)
     lw t5, POLY_LIT_ROW(t3)
     bltz t5, 41f
     sub t5, a2, t5
@@ -695,6 +709,8 @@ span_fill:
     bltu t5, t6, 42f                # within the stride: the last taken
 41:
     sw a2, POLY_LIT_ROW(t3)
+    rdtime t5
+    sd t5, 40(sp)                   # the evaluation's start
     mv a1, a2
     mv a2, s2
     call span_light
@@ -710,6 +726,13 @@ span_fill:
     call span_light
     la t3, poly
     sd a0, POLY_B1(t3)
+    rdtime t0
+    ld t5, 40(sp)
+    sub t0, t0, t5
+    la t6, stats
+    ld t5, STAT_LIGHT_TICKS(t6)
+    add t5, t5, t0
+    sd t5, STAT_LIGHT_TICKS(t6)
 42:
     ld t0, POLY_B0(t3)
     ld t1, POLY_B1(t3)

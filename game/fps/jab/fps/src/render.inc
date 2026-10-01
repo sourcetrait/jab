@@ -155,7 +155,14 @@
 .set STAT_PORTAL_TICKS, 64
 .set STAT_SPRITES, 72
 .set STAT_SPRITE_TICKS, 80
-.set STAT_SIZE, 88
+# The spans filled and the pixels they entered, the lit ones among them,
+# and the ticks the light's evaluation took
+.set STAT_SPANS, 88
+.set STAT_PIXELS, 96
+.set STAT_LIT_SPANS, 104
+.set STAT_LIT_PIXELS, 112
+.set STAT_LIGHT_TICKS, 120
+.set STAT_SIZE, 128
 # The records over the API, 64 bytes each: the state a frame, kind
 # REPORT_STATE, the camera's sector, the eye, the yaw, pitch, and roll
 # in degrees, the drawing's and the game's microseconds, zero to the

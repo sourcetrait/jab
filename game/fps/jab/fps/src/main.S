@@ -406,7 +406,8 @@ load_report:
     addi sp, sp, 16
     ret
 
-# The frame line on the UART: the counts and the ticks by phase.
+# The frame line on the UART: the counts, the ticks by phase, the spans and
+# the pixels they entered, the lit ones among them, and the light's ticks.
 # s10 int The frame's ticks.
 frame_report:
     addi sp, sp, -16
@@ -486,6 +487,33 @@ frame_report:
     call append_str
     la t0, stats
     ld a1, STAT_SPRITE_TICKS(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
+    la a1, word_spans
+    call append_str
+    la t0, stats
+    ld a1, STAT_SPANS(t0)
+    call append_dec
+    la a1, word_pixels
+    call append_str
+    la t0, stats
+    ld a1, STAT_PIXELS(t0)
+    call append_dec
+    la a1, word_lit_spans
+    call append_str
+    la t0, stats
+    ld a1, STAT_LIT_SPANS(t0)
+    call append_dec
+    la a1, word_lit_pixels
+    call append_str
+    la t0, stats
+    ld a1, STAT_LIT_PIXELS(t0)
+    call append_dec
+    la a1, word_light_us
+    call append_str
+    la t0, stats
+    ld a1, STAT_LIGHT_TICKS(t0)
     li t0, US_TICKS
     divu a1, a1, t0
     call append_dec
@@ -890,6 +918,16 @@ word_uncovered:
     .asciz " uncovered; clear, planes, walls, portals, sprites us "
 word_comma:
     .asciz ", "
+word_spans:
+    .asciz "; spans "
+word_pixels:
+    .asciz ", pixels "
+word_lit_spans:
+    .asciz ", lit spans "
+word_lit_pixels:
+    .asciz ", lit pixels "
+word_light_us:
+    .asciz ", light us "
 
 .balign 4
 k_seconds_a_tick:
