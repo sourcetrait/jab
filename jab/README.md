@@ -7,8 +7,11 @@ runs only under QEMU's `virt` machine.
 - `workspace.jab.toml` the workspace: the kernel and the programs.
 - `kernel/` the kernel: `kernel.jab.toml`, a `justfile`, sources under
   `src/`.
-- `sdk/` what a program uses: `jab.inc`, the program link script, and
-  `nu/jab.nu` for its test.
+- `sdk/` what a program uses: `jab.inc`, whose `jab.sys.*` macros are
+  the kernel's calls, each a trap into it; `jab_f32.inc`,
+  `jab_f64.inc`, and `jab_rng.inc`, mathematics and chance as macros
+  the program carries and expands in place, never a call and never a
+  trap; the program link script; and `nu/jab.nu` for its test.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `example/<name>/`, `test/<name>/` programs by category, each with
@@ -51,28 +54,28 @@ release kernel carries no debug code and no debug text, which
 `test/purity` checks.
 
 The kernel reports what it was built with to a program through
-`jab.kernel.flags`, a mask with `JAB_KERNEL_DEBUG` at bit 0, the same
-fact at run time that `.ifdef DEBUG` is at build. `jab.random buffer,
+`jab.sys.kernel.flags`, a mask with `JAB_KERNEL_DEBUG` at bit 0, the same
+fact at run time that `.ifdef DEBUG` is at build. `jab.sys.random buffer,
 length` fills a buffer from the machine's entropy device, virtio-rng
 on every line, which is where a program's randomness comes from;
 `example/pad` seeds its colours from it. Sound is virtio-sound in one
 format, 48 kHz stereo signed 16-bit interleaved, a stream the kernel
-keeps running on the device's clock: `jab.sound.open` starts it,
-`jab.sound.write buffer, frames` queues frames into a ring the stream
-plays in order, `jab.sound.ready` says how many fit, `jab.sound.await`
+keeps running on the device's clock: `jab.sys.sound.open` starts it,
+`jab.sys.sound.write buffer, frames` queues frames into a ring the stream
+plays in order, `jab.sys.sound.ready` says how many fit, `jab.sys.sound.await`
 waits for room, and a program's exit plays the ring out. Mixed into
 the same stream is the kernel's synthesizer, chip-tune voices behind
-MIDI's numbers: `jab.midi.program` picks a General MIDI program on a
-channel, `jab.midi.note.on` and `jab.midi.note.off` play it,
-`jab.midi.control` and `jab.midi.bend` shape it, `jab.midi.instrument`
+MIDI's numbers: `jab.sys.midi.program` picks a General MIDI program on a
+channel, `jab.sys.midi.note.on` and `jab.sys.midi.note.off` play it,
+`jab.sys.midi.control` and `jab.sys.midi.bend` shape it, `jab.sys.midi.instrument`
 puts a spec of the program's own in place of a program's default, its
-wave, duty, envelope, and vibrato, and `jab.midi.silence` stops
+wave, duty, envelope, and vibrato, and `jab.sys.midi.silence` stops
 everything; channel 10 is a drum kit. A Standard MIDI File the
 program holds, format 0 or 1, plays through the same voices with
-`jab.midi.play source, length`, its tempo changes honoured, and
-`jab.midi.stop` and `jab.midi.playing` go with it. A SoundFont 2 file
+`jab.sys.midi.play source, length`, its tempo changes honoured, and
+`jab.sys.midi.stop` and `jab.sys.midi.playing` go with it. A SoundFont 2 file
 the program holds, read off a disk into its own memory and handed to
-`jab.midi.soundfont buffer, length`, plays the notes after it through
+`jab.sys.midi.soundfont buffer, length`, plays the notes after it through
 sampled voices instead of the chip-tune ones, the file's presets
 picked by bank and program, channel 10 by its kits; the generic disk
 carries FluidR3 GM at `/mix/snd/font/FluidR3_GM.sf2`. `example/techno`
@@ -111,7 +114,7 @@ back as `debug` from `jab launch`. The console UART carries only what
 the program sends it, and the fault lines, in every build.
 
 The API is a second port, bytes both ways between a program and the
-host through `jab.api.write`, `jab.api.read`, and `jab.api.await`.
+host through `jab.sys.api.write`, `jab.sys.api.read`, and `jab.sys.api.await`.
 Every kernel carries it and any build runs with or without it: `just
 run example wasd --api` puts the port on the machine, and without the
 flag the calls report that there is none. The host's end sits beside
@@ -164,17 +167,17 @@ beside QEMU, a bridge built with cargo from `shim/crates/pad` that
 reads the pad through gilrs and writes its name, its ranges, and every
 event into the port in evdev's shapes (`doc/padport.md`); the kernel
 takes the port as the pad. `--no-pad` leaves the pad off either way.
-A program reads it with `jab.pad.read`, the
+A program reads it with `jab.sys.pad.read`, the
 keys as a mask and every axis by its evdev code normalised to signed
-16 bits, `jab.pad.input` for the events as evdev sends them, and
-`jab.pad.axis` for an axis's own range and `jab.pad.name` for its name;
+16 bits, `jab.sys.pad.input` for the events as evdev sends them, and
+`jab.sys.pad.axis` for an axis's own range and `jab.sys.pad.name` for its name;
 `example/pad` is wasd on the left stick and the dpad, the sticks
 pressed in (THUMBL, THUMBR) stopping the sphere, every other button
 painting it a colour of its own and naming itself at the top of the
 screen for three seconds after it is let go, the pad's own name there
 at startup, and the right stick painting the sphere a colour made from
 its exact position while driving it by thirds of its throw at a
-quarter, one, and twice the usual push, through `jab.display.text`,
+quarter, one, and twice the usual push, through `jab.sys.display.text`,
 which draws a string anywhere in the framebuffer with the console's
 font at any scale. The window is titled `jab <program>` inside QEMU's
 own prefix, which every front end hardcodes. The keyboard and the
@@ -208,7 +211,7 @@ naming its base, its size, and the stack top at its end. A program's
 assets ship on a romfs disk the tool builds from the directory its
 manifest names, a virtio-blk device on the PCI Express root the kernel
 brings up itself, BARs and all, since no firmware runs before it; read
-with `jab.romfs.*`. A second disk, serial `mix`, rides beside it on
+with `jab.sys.romfs.*`. A second disk, serial `mix`, rides beside it on
 every run and launch: the workspace's generic assets, `generic/`
 mirrored to the image's root plus what `generic/manifest.nuon`
 fetches, today the FluidR3 GM and GS soundfonts under `/mix/snd/font`
@@ -218,5 +221,5 @@ Both asset disks are attached read-only, so a program's write to one
 comes back as the device's error and the image the next run reads is
 the one the tool built; the blank data disk a run carries when a
 program ships no assets stays writable. A PNG among a program's assets, as GIMP 3
-exports one, decodes in the kernel into a sprite with `jab.sprite.png`
-and draws with `jab.sprite.draw`, which `example/logo` shows.
+exports one, decodes in the kernel into a sprite with `jab.sys.sprite.png`
+and draws with `jab.sys.sprite.draw`, which `example/logo` shows.

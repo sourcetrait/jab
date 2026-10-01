@@ -3,7 +3,7 @@
 .include "synth.inc"
 
 # The SoundFont: an SF2 file the program holds, read in place by
-# jab.midi.soundfont, and the sampled voices that play through it in
+# jab.sys.midi.soundfont, and the sampled voices that play through it in
 # place of the chip-tune voices of synth.S once it is loaded. The file
 # is the SoundFont 2.04 specification's RIFF form: an INFO list, an
 # sdta list holding the 16-bit sample data, and a pdta list holding
@@ -174,7 +174,7 @@
 
 .section .text
 
-# sys_midi_soundfont (jab.midi.soundfont): a0 is the file inside the
+# sys_midi_soundfont (jab.sys.midi.soundfont): a0 is the file inside the
 # program's window on a 4-byte boundary, a1 its length; a length of 0
 # unloads. a0 becomes 0 with a1, a2, a3 the presets, instruments, and
 # samples; or sound_open's code, 3 for a file that is not a SoundFont,

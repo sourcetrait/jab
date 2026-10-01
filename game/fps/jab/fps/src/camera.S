@@ -415,7 +415,7 @@ camera_look:
     sd s2, 8(sp)
     fmv.s fs0, fa0
     la t0, pad_state
-    jab.pad.read t0
+    jab.sys.pad.read t0
     beqz a0, 1f
     # no pad: the body stands where it is
     fmv.s fa0, fs0
@@ -435,7 +435,7 @@ camera_look:
     not t2, t2
     and s2, t1, t2
 11:
-    jab.pad.input
+    jab.sys.pad.input
     beqz a0, 12f
     li t0, JAB_EV_KEY
     bne a0, t0, 11b
@@ -582,7 +582,7 @@ state_report:
     sw zero, REPORT_FIELD3(t0)
     sw zero, REPORT_FIELD4(t0)
     li t1, REPORT_SIZE
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
@@ -601,7 +601,7 @@ event_report:
     sw a4, REPORT_FIELD3(t0)
     sw a5, REPORT_FIELD4(t0)
     li t1, REPORT_SIZE
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

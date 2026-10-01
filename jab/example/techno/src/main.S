@@ -19,9 +19,9 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     call read_piece
     la t0, piece_length
@@ -32,35 +32,35 @@ _start:
     li t3, TITLE_COLOR
     li t4, JAB_TEXT_BOLD
     li t5, TITLE_SCALE
-    jab.display.text title, t1, t2, t3, t4, t5
-    jab.display.await
-    jab.display.flip
+    jab.sys.display.text title, t1, t2, t3, t4, t5
+    jab.sys.display.await
+    jab.sys.display.flip
     la t0, piece
     la t1, piece_length
     ld t1, 0(t1)
-    jab.midi.play t0, t1
+    jab.sys.midi.play t0, t1
     bnez a0, refused
 playing:
-    jab.display.await
-    jab.midi.playing
+    jab.sys.display.await
+    jab.sys.midi.playing
     bnez a0, playing
-    jab.exit 0
+    jab.sys.exit 0
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 no_piece:
-    jab.uart.print msg_no_piece
-    jab.exit 3
+    jab.sys.uart.print msg_no_piece
+    jab.sys.exit 3
 
 refused:
-    jab.uart.print msg_refused
-    jab.exit 4
+    jab.sys.uart.print msg_refused
+    jab.sys.exit 4
 
 # read_piece: the piece off the romfs into memory, its length kept; a
 # missing file leaves the length 0.
@@ -70,7 +70,7 @@ read_piece:
     la t0, rec
     li t1, DISK
     li t2, JAB_ROMFS_ROOT
-    jab.romfs.find t0, t1, t2, piece_path
+    jab.sys.romfs.find t0, t1, t2, piece_path
     bnez a0, 9f
     la t0, rec
     lwu s0, JAB_ROMFS_OFFSET(t0)
@@ -84,7 +84,7 @@ read_piece:
     mv t3, s1
     li t4, PIECE_BYTES
     sub t4, t4, s2
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 2f
     add s2, s2, a0
     mv s1, a1

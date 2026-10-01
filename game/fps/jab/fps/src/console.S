@@ -122,7 +122,7 @@ console_frame:
     lbu t1, 0(s2)
     sw t1, 4(t0)
     li t1, REPORT_SIZE
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
     ld ra, 24(sp)
     ld s2, 16(sp)
     addi sp, sp, 32

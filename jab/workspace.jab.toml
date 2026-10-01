@@ -17,6 +17,7 @@ programs = [
   'test/keys',
   'test/pad',
   'test/random',
+  'test/math',
   'test/sound',
   'test/midi',
   'test/smf',

@@ -12,7 +12,7 @@ use std/assert
 const JAB_PNG_OK = 0
 
 # The program's first table: the file, the frames it asks for, and the
-# codes expected from jab.png.size and jab.sprite.png.
+# codes expected from jab.sys.png.size and jab.sys.sprite.png.
 const table = [
     [name, frames, size_code, png_code];
     ["rgba8.png", 1, 0, 0]
@@ -42,7 +42,7 @@ const table = [
     ["rgba8.png", 1, 0, 10]
 ]
 
-# The second: the directory and the code expected from jab.sprite.load.
+# The second: the directory and the code expected from jab.sys.sprite.load.
 const loads = [
     [name, code];
     ["walker", 0]
@@ -96,17 +96,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let size_line = (if $want.size_code == $JAB_PNG_OK {
             $"s 0 ($fixture.width) ($fixture.height)"
         } else { $"s ($want.size_code) 0 0" })
-        assert equal $got.s $size_line $"($want.name): jab.png.size"
+        assert equal $got.s $size_line $"($want.name): jab.sys.png.size"
         if $want.png_code == $JAB_PNG_OK {
             let fh = ($fixture.height // $want.frames)
-            assert equal $got.p $"p 0 ($fixture.width) ($fh) ($want.frames)" $"($want.name): jab.sprite.png with ($want.frames) frames"
+            assert equal $got.p $"p 0 ($fixture.width) ($fh) ($want.frames)" $"($want.name): jab.sys.sprite.png with ($want.frames) frames"
             compare-pixels $want.name $got.hex $fixture.native $fixture.width
             assert equal $got.spans $fixture.spans $"($want.name): the span table, first and last opaque column per row"
             assert equal $got.flags "1" $"($want.name): the record is flagged spanned"
             $decoded += 1
             $pixels += ($fixture.width * $fixture.height)
         } else {
-            assert equal $got.p $"p ($want.png_code)" $"($want.name): jab.sprite.png refuses with ($want.png_code)"
+            assert equal $got.p $"p ($want.png_code)" $"($want.name): jab.sys.sprite.png refuses with ($want.png_code)"
         }
     }
 
@@ -116,14 +116,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let got = ($answers | get (($table | length) + $row.index))
         if $want.code == $JAB_PNG_OK {
             let dir = ($made.dirs | where name == $want.name | first)
-            assert equal $got.s $"l 0 ($dir.width) ($dir.height) ($dir.frames)" $"($want.name): jab.sprite.load"
+            assert equal $got.s $"l 0 ($dir.width) ($dir.height) ($dir.frames)" $"($want.name): jab.sys.sprite.load"
             compare-pixels $want.name $got.hex $dir.native $dir.width
             assert equal $got.spans $dir.spans $"($want.name): the span table of every frame"
             assert equal $got.flags "1" $"($want.name): the record is flagged spanned"
             $loaded += 1
             $pixels += ($dir.width * $dir.height * $dir.frames)
         } else {
-            assert equal $got.s $"l ($want.code)" $"($want.name): jab.sprite.load refuses with ($want.code)"
+            assert equal $got.s $"l ($want.code)" $"($want.name): jab.sys.sprite.load refuses with ($want.code)"
         }
     }
 

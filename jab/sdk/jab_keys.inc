@@ -1,4 +1,4 @@
-# jab_keys.inc: the key codes jab.keyboard.input reports, Linux's own
+# jab_keys.inc: the key codes jab.sys.keyboard.input reports, Linux's own
 # (input-event-codes.h), and the values that come with them. Included
 # by jab.inc.
 

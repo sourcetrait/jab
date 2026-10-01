@@ -6,11 +6,11 @@
 .section .text
 .global _start
 _start:
-    jab.uart.print ready
+    jab.sys.uart.print ready
 wait:
-    jab.keyboard.await
+    jab.sys.keyboard.await
 next:
-    jab.keyboard.input
+    jab.sys.keyboard.input
     beqz a0, wait
     mv s0, a0
     mv s1, a1
@@ -32,11 +32,11 @@ next:
     la t0, value_digit
     addi t1, s1, '0'
     sb t1, 0(t0)
-    jab.uart.print report
+    jab.sys.uart.print report
     li t0, JAB_KEY_SPACE
     bne s0, t0, next
     bnez s1, next
-    jab.exit 0
+    jab.sys.exit 0
 
 .section .data
 report:

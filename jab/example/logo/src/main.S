@@ -23,7 +23,7 @@ _start:
     la t0, rec
     li t1, DISK
     li t2, JAB_ROMFS_ROOT
-    jab.romfs.find t0, t1, t2, path
+    jab.sys.romfs.find t0, t1, t2, path
     bnez a0, no_file
     la t0, rec
     lwu s0, JAB_ROMFS_OFFSET(t0)
@@ -37,7 +37,7 @@ _start:
     mv t3, s1
     li t4, PNG_BYTES
     sub t4, t4, s2
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 2f
     add s2, s2, a0
     mv s1, a1
@@ -47,28 +47,28 @@ _start:
     la t0, sprite
     la t1, png
     mv t2, s2
-    jab.sprite.png t0, t1, t2, SPRITE_BYTES
+    jab.sys.sprite.png t0, t1, t2, SPRITE_BYTES
     bnez a0, bad_png
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     la t0, sprite
     li t1, X
     li t2, Y
-    jab.sprite.draw t0, zero, t1, t2
-    jab.display.flip
+    jab.sys.sprite.draw t0, zero, t1, t2
+    jab.sys.display.flip
 3:
-    jab.display.await
+    jab.sys.display.await
     j 3b
 
 no_file:
-    jab.uart.print msg_no_file
-    jab.exit 1
+    jab.sys.uart.print msg_no_file
+    jab.sys.exit 1
 bad_png:
-    jab.uart.print msg_bad_png
-    jab.exit 1
+    jab.sys.uart.print msg_bad_png
+    jab.sys.exit 1
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 .section .rodata
 path:

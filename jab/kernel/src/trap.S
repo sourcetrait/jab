@@ -109,7 +109,7 @@ message_bounds:
     bgeu a0, a1, bad_address
     ret
 
-# sys_uart_print (jab.uart.print): a0 is the message, which must lie
+# sys_uart_print (jab.sys.uart.print): a0 is the message, which must lie
 # inside the program's window; the write stops at the terminator or the
 # window's end. a0 becomes 0. The UART is polled, so a long message
 # looks at the sound stream every UART_PRINT_TICK bytes.
@@ -183,7 +183,7 @@ bad_address:
     li a0, 1
     j qemu_exit
 
-# sys_exit (jab.exit): a0 is the status. The sound stream, if live,
+# sys_exit (jab.sys.exit): a0 is the status. The sound stream, if live,
 # plays out first (sound.S); then QEMU ends with the status, since no
 # launcher exists yet to return to; with DEBUG the status is also
 # reported on the debug channel.

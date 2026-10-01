@@ -3,8 +3,8 @@
 .include "jab.inc"
 
 # The frame clock and the wait: a tick every 1/JAB_DISPLAY_FPS_CAP of a
-# second, kept as the time of the next tick. jab.display.flip moves it,
-# jab.display.ready reads it, and jab.await halts the hart until it,
+# second, kept as the time of the next tick. jab.sys.display.flip moves it,
+# jab.sys.display.ready reads it, and jab.sys.await halts the hart until it,
 # or until a key arrives, through the supervisor timer (stimecmp) and
 # the PLIC, with the interrupts enabled only while waiting and taken by
 # wfi rather than by the trap vector. A tick that has passed is
@@ -57,7 +57,7 @@ frame_flipped:
     sd zero, 0(t2)
     ret
 
-# sys_await (jab.await): a0 is the mask of events to wait for, and
+# sys_await (jab.sys.await): a0 is the mask of events to wait for, and
 # the wait is for those and nothing else, since a program claims the
 # inputs it reads: the display's next tick (JAB_AWAIT_DISPLAY), a key
 # event (JAB_AWAIT_KEYBOARD), which brings the keyboard up and is

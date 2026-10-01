@@ -80,7 +80,7 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     # your sphere at the centre, still, on the black the framebuffer
     # starts with
@@ -118,7 +118,7 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
-    jab.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API
+    jab.sys.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API
     mv s0, a0
     call read_keys
     call read_api
@@ -133,8 +133,8 @@ frame:
     j frame
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 # elapsed: the clock's ticks since the last frame into dt, held to
 # DT_MAX, and the clock noted for the next frame.
@@ -169,7 +169,7 @@ read_keys:
     addi sp, sp, -16
     sd ra, 8(sp)
 1:
-    jab.keyboard.input
+    jab.sys.keyboard.input
     beqz a0, 9f
     call apply_key
     j 1b
@@ -186,7 +186,7 @@ read_api:
     sd ra, 40(sp)
 1:
     la t0, cmd_read
-    jab.api.read t0, CMD_READ_BYTES
+    jab.sys.api.read t0, CMD_READ_BYTES
     beqz a0, 9f
     la t0, cmd_read
     sd t0, 0(sp)                # the next byte to take
@@ -773,7 +773,7 @@ report:
     li t2, REPORT_SIZE
     mul t1, t1, t2
     la t0, report_buffer
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
 13:
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -895,7 +895,7 @@ render:
     sub a3, a3, a1
     mv a0, s2
     mv a2, s3
-    jab.display.flip.rect
+    jab.sys.display.flip.rect
     call remember
     ld ra, 8(sp)
     addi sp, sp, 16

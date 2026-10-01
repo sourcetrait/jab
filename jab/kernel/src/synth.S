@@ -11,7 +11,7 @@
 # decay to the sustain, release from wherever it was), and a vibrato.
 # The percussion channel's notes are drums from a table of their own.
 # The instruments come from a table of General MIDI defaults, each
-# replaceable by jab.midi.instrument. With a SoundFont loaded
+# replaceable by jab.sys.midi.instrument. With a SoundFont loaded
 # (soundfont.S) a note on goes to its sampled voices instead, through
 # the same channels; the calls below reach both kinds. The voices are
 # rendered a period at a time into the mixer's accumulator (sound.S)
@@ -175,7 +175,7 @@ synth_channel:
 # that, masked to their ranges rather than checked; and the notes a
 # call touches are the calls' own (synth_live).
 
-# sys_midi_program (jab.midi.program): a0 is the channel, a1 the
+# sys_midi_program (jab.sys.midi.program): a0 is the channel, a1 the
 # program. a0 becomes 0.
 .global sys_midi_program
 sys_midi_program:
@@ -194,7 +194,7 @@ midi_refused:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_note (jab.midi.note): a0 is the channel, a1 the note, a2
+# sys_midi_note (jab.sys.midi.note): a0 is the channel, a1 the note, a2
 # the velocity, a3 whether it starts: with a3 set and a velocity the
 # note starts on a voice, otherwise every voice sounding it on the
 # channel from the calls is released. a0 becomes 0.
@@ -220,7 +220,7 @@ sys_midi_note:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_control (jab.midi.control): a0 is the channel, a1 the
+# sys_midi_control (jab.sys.midi.control): a0 is the channel, a1 the
 # controller, a2 its value, to synth_control. a0 becomes 0.
 .global sys_midi_control
 sys_midi_control:
@@ -337,7 +337,7 @@ synth_bend:
     sh a1, CHANNEL_BEND(a0)
     ret
 
-# sys_midi_bend (jab.midi.bend): a0 is the channel, a1 the bend, to
+# sys_midi_bend (jab.sys.midi.bend): a0 is the channel, a1 the bend, to
 # synth_bend. a0 becomes 0.
 .global sys_midi_bend
 sys_midi_bend:
@@ -349,7 +349,7 @@ sys_midi_bend:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_instrument (jab.midi.instrument): a0 is a program, a1 a
+# sys_midi_instrument (jab.sys.midi.instrument): a0 is a program, a1 a
 # spec of JAB_MIDI_INSTRUMENT_ENTRY bytes inside the program's window,
 # which becomes that program's instrument for the notes after. a0
 # becomes 0.
@@ -372,7 +372,7 @@ sys_midi_instrument:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_silence (jab.midi.silence): the piece stopped (smf.S),
+# sys_midi_silence (jab.sys.midi.silence): the piece stopped (smf.S),
 # every voice free at once, whoever's, and every channel's controllers
 # back to their defaults, the programs kept. a0 becomes 0.
 .global sys_midi_silence

@@ -91,7 +91,7 @@ msg_banner:
     li t6, 0
     sret
 
-# sys_kernel_flags (jab.kernel.flags): a0 becomes kernel_flags.
+# sys_kernel_flags (jab.sys.kernel.flags): a0 becomes kernel_flags.
 .global sys_kernel_flags
 sys_kernel_flags:
     la t0, kernel_flags

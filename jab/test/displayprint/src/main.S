@@ -1,4 +1,4 @@
-# displayprint: the print calls by device. jab.print goes to the UART
+# displayprint: the print calls by device. jab.sys.print goes to the UART
 # until the display is open and to the screen console after; the named
 # calls go where they say. The program then idles so the screen can be
 # read.
@@ -7,19 +7,19 @@
 .section .text
 .global _start
 _start:
-    jab.print uart_first
-    jab.display.open
+    jab.sys.print uart_first
+    jab.sys.display.open
     bnez a0, no_display
-    jab.print on_screen
-    jab.uart.print uart_again
-    jab.display.print line_two
+    jab.sys.print on_screen
+    jab.sys.uart.print uart_again
+    jab.sys.display.print line_two
 idle:
-    jab.display.await
+    jab.sys.display.await
     j idle
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 .section .rodata
 uart_first:

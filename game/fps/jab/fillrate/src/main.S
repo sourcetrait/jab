@@ -63,7 +63,7 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     call make_texture
     la a0, frame_fill
@@ -106,12 +106,12 @@ _start:
     call mode_run
     # the last frame stays up, so a capture reads what the stores wrote
 idle:
-    jab.display.await
+    jab.sys.display.await
     j idle
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 # mode_run: render frames with the routine at a0 for DURATION of the
 # clock, flipping the whole screen after each when a2 is set, then
@@ -138,7 +138,7 @@ mode_run:
     jalr s0
     addi s3, s3, 1
     beqz s2, 2f
-    jab.display.flip
+    jab.sys.display.flip
     bnez a0, 2f
     addi s4, s4, 1
 2:
@@ -171,7 +171,7 @@ mode_run:
     li t0, '\n'
     sb t0, 0(a0)
     sb zero, 1(a0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ld ra, 56(sp)
     ld s0, 48(sp)
     ld s1, 40(sp)

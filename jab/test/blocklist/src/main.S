@@ -9,7 +9,7 @@
 .global _start
 _start:
     la t0, disks
-    jab.block.list t0
+    jab.sys.block.list t0
     mv s0, a0                   # the records written
     mv s1, a1                   # where the next page would start
     la s2, disks
@@ -34,7 +34,7 @@ _start:
     addi a0, s2, JAB_BLOCK_SERIAL
     call line_str
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     addi s3, s3, 1
     li t0, JAB_BLOCK_ENTRY
     add s2, s2, t0
@@ -50,13 +50,13 @@ _start:
     mv a0, s1
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     # a sector written to the first disk, which is read-only
     la t0, sector
     li t1, 1
     li t2, 0
     li t3, 1
-    jab.block.write t0, t1, t2, t3
+    jab.sys.block.write t0, t1, t2, t3
     mv s4, a0
     call line_reset
     la a0, word_write
@@ -64,8 +64,8 @@ _start:
     mv a0, s4
     call line_dec
     call line_nl
-    jab.uart.print line
-    jab.exit 0
+    jab.sys.uart.print line
+    jab.sys.exit 0
 
 # The line being built: reset it, add to it, then print it.
 line_reset:

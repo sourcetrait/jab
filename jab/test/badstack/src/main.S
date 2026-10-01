@@ -9,12 +9,12 @@
 .global _start
 _start:
     li sp, 0x80000100
-    jab.uart.print msg_kernel
+    jab.sys.uart.print msg_kernel
     li sp, 0
-    jab.uart.print msg_zero
+    jab.sys.uart.print msg_zero
     li sp, JAB_STACK_TOP + 4096
-    jab.uart.print msg_past
-    jab.exit 3
+    jab.sys.uart.print msg_past
+    jab.sys.exit 3
 
 .section .rodata
 msg_kernel:

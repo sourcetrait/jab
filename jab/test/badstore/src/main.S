@@ -6,11 +6,11 @@
 .section .text
 .global _start
 _start:
-    jab.print before
+    jab.sys.print before
     li t0, 0x80000000
     sw zero, 0(t0)
-    jab.print after
-    jab.exit 0
+    jab.sys.print after
+    jab.sys.exit 0
 
 .section .rodata
 before:

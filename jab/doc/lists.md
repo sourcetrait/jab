@@ -15,7 +15,7 @@ more records than you said would fit.
 ```
         .lcomm  disks, JAB_BLOCK_LIST_SIZE
 
-        jab.block.list disks
+        jab.sys.block.list disks
 ```
 
 ## What comes back
@@ -29,7 +29,7 @@ Pass it straight back in as the cursor to get the page after this one.
 
 ```
         la      t0, disks
-        jab.block.list t0
+        jab.sys.block.list t0
         beqz    a0, none
         mv      t1, a0
 1:      lbu     t2, JAB_BLOCK_ID(t0)
@@ -48,7 +48,7 @@ zero.
 
 ```
         mv      t3, zero                  # start at the first entry
-1:      jab.romfs.list page, t0, t1, t3, 16
+1:      jab.sys.romfs.list page, t0, t1, t3, 16
         ...                               # a0 records are in the page
         mv      t3, a1
         bnez    a1, 1b

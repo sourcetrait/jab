@@ -15,7 +15,7 @@
 
 .section .text
 
-# sys_keyboard_input (jab.keyboard.input): a0 becomes the next key
+# sys_keyboard_input (jab.sys.keyboard.input): a0 becomes the next key
 # event's code, or 0 when none is waiting; a1 its value. The keyboard
 # comes up on the first call; with no keyboard on the machine there is
 # never an event.

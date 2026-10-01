@@ -7,14 +7,14 @@
 .global _start
 _start:
 .ifdef DEBUG
-    jab.uart.print msg_debug
+    jab.sys.uart.print msg_debug
 .pushsection .rodata
 msg_debug:
     .asciz "purity: debug build\n"
 .popsection
 .endif
-    jab.uart.print msg_done
-    jab.exit 0
+    jab.sys.uart.print msg_done
+    jab.sys.exit 0
 
 .section .rodata
 msg_done:

@@ -11,8 +11,8 @@
 # closes the file. Everything else is skipped by rule.
 #
 # The file comes from one of two sources through png_fetch: bytes the
-# program holds (jab.sprite.png) or a file on a romfs disk, read through
-# the kernel's own bounce (jab.sprite.load), so a program need hold no
+# program holds (jab.sys.sprite.png) or a file on a romfs disk, read through
+# the kernel's own bounce (jab.sys.sprite.load), so a program need hold no
 # buffer for a file at all. Either way the bytes arrive in pieces: the
 # chunk headers and the small chunks into kernel buffers, each IDAT's
 # data as segments of PNG_SEGMENT bytes handed to deflate.S as the one
@@ -56,7 +56,7 @@
 
 .section .text
 
-# sys_png_size (jab.png.size): a0 is the PNG bytes and a1 how many. a0
+# sys_png_size (jab.sys.png.size): a0 is the PNG bytes and a1 how many. a0
 # becomes the width and a1 the height, with a2 JAB_PNG_OK; or both 0
 # with a2 the code.
 .global sys_png_size
@@ -83,7 +83,7 @@ sys_png_size:
     sd a0, 96(sp)
     j trap_return
 
-# sys_sprite_png (jab.sprite.png): a0 is the sprite record, a1 the PNG
+# sys_sprite_png (jab.sys.sprite.png): a0 is the sprite record, a1 the PNG
 # bytes, a2 how many, a3 how many bytes the record's buffer holds, a4
 # the frames the sheet is cut into, top to bottom. a0 becomes a
 # JAB_PNG_* code.
@@ -141,7 +141,7 @@ sys_sprite_png:
     sd a0, 80(sp)
     j trap_return
 
-# sys_sprite_load (jab.sprite.load): a0 is the sprite record, a1 the
+# sys_sprite_load (jab.sys.sprite.load): a0 is the sprite record, a1 the
 # disk, a2 a path to a directory on it, a3 how many bytes the record's
 # buffer holds. The frames are the files 0.png, 1.png, and on in that
 # directory, in order until one is missing, each decoded straight off

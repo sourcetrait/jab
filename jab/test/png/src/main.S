@@ -1,5 +1,5 @@
 # png: the decoder. Reads a set of PNG files out of the romfs disk and,
-# for each row of its table, asks jab.png.size and reports `s <code>
+# for each row of its table, asks jab.sys.png.size and reports `s <code>
 # <width> <height>`, then decodes the file into a sprite of that many
 # frames with that much buffer and reports `p <code> <frame width>
 # <height> <frames>`, or `p <code>` when the decode failed; a decoded
@@ -46,7 +46,7 @@ _start:
     mv t3, s3
     li t4, PNGBUF
     sub t4, t4, s4
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 3f
     add s4, s4, a0
     mv s3, a1
@@ -55,7 +55,7 @@ _start:
     # what the header says
     la t0, pngbuf
     mv t1, s4
-    jab.png.size t0, t1
+    jab.sys.png.size t0, t1
     mv s5, a0
     mv s6, a1
     mv s7, a2
@@ -73,7 +73,7 @@ _start:
     mv a0, s6
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     # the decode, with the table's frames and capacity
     la a0, sprite
     la a1, pngbuf
@@ -104,11 +104,11 @@ _start:
     addi s0, s0, 16
     j 4b
 5:
-    jab.uart.print msg_done
-    jab.exit 0
+    jab.sys.uart.print msg_done
+    jab.sys.exit 0
 9:
-    jab.uart.print msg_missing
-    jab.exit 1
+    jab.sys.uart.print msg_missing
+    jab.sys.exit 1
 
 # report: a0 is a sprite call's code and a1 the word that opens the
 # line. The line, and on success the sprite's pixels as hex.
@@ -140,7 +140,7 @@ report:
     call line_dec
 1:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     bnez s8, 4f
     # the pixels, byte by byte
     la t0, sprite
@@ -171,7 +171,7 @@ report:
     j 3b
 31:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     j 2b
 4:
     bnez s8, 6f
@@ -204,7 +204,7 @@ report:
     j 52b
 53:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     j 5b
 51:
     call line_reset
@@ -214,7 +214,7 @@ report:
     lwu a0, JAB_SPRITE_FLAGS(t0)
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
 6:
     ld ra, 8(sp)
     addi sp, sp, 16

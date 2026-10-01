@@ -14,7 +14,7 @@
 .section .text
 .global _start
 _start:
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     li s0, PERIODS_TO_PLAY
     li s1, 0                    # the phase, 32 bits
@@ -43,23 +43,23 @@ next:
     la s2, period
     li s3, JAB_SOUND_PERIOD
 3:
-    jab.sound.write s2, s3
+    jab.sys.sound.write s2, s3
     bnez a0, no_sound
     sub s3, s3, a1
     slli t0, a1, 2
     add s2, s2, t0
     beqz s3, 4f
-    jab.sound.await
+    jab.sys.sound.await
     j 3b
 4:
     addi s0, s0, -1
     j next
 done:
-    jab.exit 0
+    jab.sys.exit 0
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 .section .bss
 .balign 4

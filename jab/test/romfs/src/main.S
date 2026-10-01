@@ -46,7 +46,7 @@ _start:
     call line_str
 3:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     addi s0, s0, 8
     j 1b
 
@@ -66,7 +66,7 @@ _start:
     mv t2, s3
     mv t3, s4
     li t4, PAGE
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 5f
     mv s7, a0
     mv s4, a1
@@ -90,7 +90,7 @@ _start:
     j 8b
 10:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     j 6b
 7:
     add s6, s6, s7
@@ -102,7 +102,7 @@ _start:
     mv a0, s6
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
 
     # the empty file: no bytes, and no offset to go on from
     la a0, path_empty
@@ -115,7 +115,7 @@ _start:
     mv t2, s3
     li t3, 0
     li t4, PAGE
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     mv s4, a0
     mv s5, a1
     call line_reset
@@ -128,7 +128,7 @@ _start:
     mv a0, s5
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
 
     # the directory holding a name longer than a record carries
     la a0, path_over_dir
@@ -138,7 +138,7 @@ _start:
     la t0, recs
     li t1, DISK
     mv t2, s3
-    jab.romfs.list t0, t1, t2
+    jab.sys.romfs.list t0, t1, t2
     mv s4, a0
     la s5, recs
     li s6, 0
@@ -155,15 +155,15 @@ _start:
     addi a0, s5, JAB_ROMFS_NAME
     call line_str
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     addi s6, s6, 1
     li t0, JAB_ROMFS_ENTRY
     add s5, s5, t0
     j 11b
 12:
-    jab.exit 0
+    jab.sys.exit 0
 9:
-    jab.exit 1
+    jab.sys.exit 1
 
 # find_one: a0 is a path. The SDK's macro takes a label, which is what a
 # program writing one out does; walking a table of them reaches the same

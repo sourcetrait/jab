@@ -35,7 +35,7 @@
 
 .section .text
 
-# sys_hash (jab.hash): a0 is an address in the program's window and a1
+# sys_hash (jab.sys.hash): a0 is an address in the program's window and a1
 # how many bytes. a0 becomes the hash, which is one register wide.
 .global sys_hash
 sys_hash:

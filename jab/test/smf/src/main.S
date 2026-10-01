@@ -14,13 +14,13 @@
 .section .text
 .global _start
 _start:
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     # the file, out of the romfs and into memory
     la t0, rec
     li t1, DISK
     li t2, JAB_ROMFS_ROOT
-    jab.romfs.find t0, t1, t2, path
+    jab.sys.romfs.find t0, t1, t2, path
     bnez a0, no_file
     la t0, rec
     lwu s0, JAB_ROMFS_OFFSET(t0)
@@ -34,17 +34,17 @@ _start:
     mv t3, s1
     li t4, PIECE_BYTES
     sub t4, t4, s2
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 2f
     add s2, s2, a0
     mv s1, a1
     bnez s1, 1b
 2:
     la t0, piece
-    jab.midi.play t0, s2
+    jab.sys.midi.play t0, s2
     bnez a0, refused
 3:
-    jab.midi.playing
+    jab.sys.midi.playing
     bnez a0, 3b
     rdtime t0
     li t1, LINGER
@@ -52,17 +52,17 @@ _start:
 4:
     rdtime t0
     bltu t0, t1, 4b
-    jab.exit 0
+    jab.sys.exit 0
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 no_file:
-    jab.uart.print msg_no_file
-    jab.exit 1
+    jab.sys.uart.print msg_no_file
+    jab.sys.exit 1
 refused:
-    jab.uart.print msg_refused
-    jab.exit 3
+    jab.sys.uart.print msg_refused
+    jab.sys.exit 3
 
 .section .rodata
 path:

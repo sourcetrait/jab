@@ -16,12 +16,12 @@
 # a second and the kernel drains only when the program asks or waits.
 # A drain keeps EV_KEY events, setting or clearing the key's bit in
 # the mask, and EV_ABS events, storing the axis's raw value, and pushes
-# both into a ring of PAD_RING events for jab.pad.input; EV_SYN and
+# both into a ring of PAD_RING events for jab.sys.pad.input; EV_SYN and
 # EV_MSC are dropped. Each axis's range comes from the device's config
 # space, or the port's header, when the pad comes up, and its raw value
 # starts at rest, the middle of its range or its minimum for the
 # one-sided ABS_GAS and ABS_BRAKE, so an axis that has not moved reads
-# 0 once normalised. jab.pad.read normalises every axis into the
+# 0 once normalised. jab.sys.pad.read normalises every axis into the
 # program's record at the call. A program never learns which way its
 # pad came.
 .set PAD_RING, 256
@@ -51,7 +51,7 @@
 
 .section .text
 
-# sys_pad_read (jab.pad.read): a0 is the record, JAB_PAD_ENTRY bytes
+# sys_pad_read (jab.sys.pad.read): a0 is the record, JAB_PAD_ENTRY bytes
 # inside the program's window. a0 becomes 0 with the record written,
 # the keys held and every axis normalised, or 1 with no pad on the
 # machine.
@@ -97,7 +97,7 @@ sys_pad_read:
     sd a0, 80(sp)
     j trap_return
 
-# sys_pad_input (jab.pad.input): a0 becomes the oldest waiting event's
+# sys_pad_input (jab.sys.pad.input): a0 becomes the oldest waiting event's
 # type, or 0 when none waits; a1 its code; a2 its value. The pad comes
 # up on the first call; with no pad on the machine there is never an
 # event.
@@ -117,7 +117,7 @@ sys_pad_input:
     sd zero, 96(sp)
     j trap_return
 
-# sys_pad_axis (jab.pad.axis): a0 is a buffer of JAB_PAD_AXIS_ENTRY
+# sys_pad_axis (jab.sys.pad.axis): a0 is a buffer of JAB_PAD_AXIS_ENTRY
 # bytes inside the program's window, a1 an axis code. a0 becomes 0
 # with the axis's absinfo written as virtio reported it; 1 with no pad;
 # 2 when the pad has no such axis.
@@ -152,7 +152,7 @@ sys_pad_axis:
     sd a0, 80(sp)
     j trap_return
 
-# sys_pad_name (jab.pad.name): a0 is a buffer of JAB_PAD_NAME_BYTES
+# sys_pad_name (jab.sys.pad.name): a0 is a buffer of JAB_PAD_NAME_BYTES
 # inside the program's window. a0 becomes 0 with the pad's name in it,
 # NUL-terminated, or 1 with no pad; a1 the name's length.
 .global sys_pad_name

@@ -94,7 +94,7 @@ const input_devices = [
     "-device" "virtio-tablet-device"
 ]
 # The entropy device, on a run and on a launch alike, since the
-# kernel's jab.random draws from it
+# kernel's jab.sys.random draws from it
 const rng_device = ["-device" "virtio-rng-device"]
 const devices = [
     "-device" "virtio-net-device,netdev=net0" "-netdev" "user,id=net0"
@@ -135,7 +135,7 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 }
 
 # Run a program on the kernel under QEMU with no window, the UART to
-# serial.log in `out`, for at most `seconds`. The status is what jab.exit
+# serial.log in `out`, for at most `seconds`. The status is what jab.sys.exit
 # gave, 1 on a program fault, 124 when the bound ended the run. With
 # `capture`, the screen is taken into screen.ppm that long after the
 # start and the run is then ended (status 0); with `keys`, each key is
@@ -355,12 +355,43 @@ export def strings [path: path, prefix: string]: nothing -> list<string> {
     }
 }
 
+# The named functions of a program's ELF as QEMU's translator sees
+# them: each one's start and end from the ELF's symbols, the end being
+# the next symbol's address, whether it lies within one page of code,
+# since a translation block ends at a page boundary and chains within
+# a page only, so a loop straddling one runs several times slower, and
+# how many ecalls its code holds, read from the disassembly, since a
+# kernel call in a hot loop is a trap each time round. The tools are
+# the ones the build's flags stamp names, beside the ELF.
+export def hot [elf: path, names: list<string>]: nothing -> table<name: string, start: int, end: int, paged: bool, ecalls: int> {
+    let elf = ($elf | path expand)
+    let built = ($elf | path dirname)
+    let prefix = (open --raw ($built | path join "flags") | lines | first | split row " " | last)
+    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
+    let ecalls = (^$"($prefix)objdump" -d $elf | lines | parse --regex '^\s*(?P<addr>[0-9a-f]+):\s+[0-9a-f]+\s+ecall\b' | each {|d| $d.addr | into int --radix 16 })
+    $names | each {|name|
+        let at = ($symbols | enumerate | where {|s| $s.item.name == $name } | get -o 0.index)
+        if $at == null { error make {msg: $"($name) is not among the symbols of ($elf)"} }
+        let start = ($symbols | get $at | get addr)
+        let next = ($symbols | get -o ($at + 1))
+        if $next == null { error make {msg: $"($name) is the last symbol of ($elf), so its end is unknown"} }
+        let end = $next.addr
+        {
+            name: $name,
+            start: $start,
+            end: $end,
+            paged: (($start // 4096) == (($end - 1) // 4096)),
+            ecalls: ($ecalls | where {|a| $a >= $start and $a < $end } | length),
+        }
+    }
+}
+
 # The QEMU arguments that put raw images on the machine as virtio-blk
 # disks, in the order given, so the first is disk 1 to the kernel. Each
 # rides the PCI Express root rather than one of the eight mmio slots,
 # modern-only and on INTx (`disable-legacy=on,vectors=0`), which is how
 # the kernel drives it. A serial is what the guest reads back with
-# jab.block.list, so it is how a program tells one disk from another.
+# jab.sys.block.list, so it is how a program tells one disk from another.
 # An image built from assets, the program's own or the generic disk,
 # is attached read-only, so a program cannot change what the next run
 # reads: a write to it comes back to the program as the device's error
@@ -612,7 +643,7 @@ def defsyms [names: list<string>]: nothing -> list<string> { $names | each {|n| 
 # A program's assets as a romfs image, built when the directory it names
 # has moved on: `assets` in its manifest, relative to the manifest, with
 # the program's own name as the volume's. The image is what `just run`
-# puts on the machine, and the program reads it with jab.romfs.*.
+# puts on the machine, and the program reads it with jab.sys.romfs.*.
 def assets-image [c: record]: nothing -> string {
     let declared = ($c.manifest | get -o assets | default "")
     if $declared == "" { return "" }

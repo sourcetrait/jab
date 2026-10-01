@@ -32,31 +32,31 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     li t0, CHANNEL
     li t1, PROGRAM
-    jab.midi.program t0, t1
+    jab.sys.midi.program t0, t1
     call draw_keys
-    jab.display.await
-    jab.display.flip
+    jab.sys.display.await
+    jab.sys.display.flip
 loop:
-    jab.keyboard.await
+    jab.sys.keyboard.await
 1:
-    jab.keyboard.input
+    jab.sys.keyboard.input
     beqz a0, loop
     call apply_key
     j 1b
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 # draw_keys: every key a white rectangle with its label in it.
 draw_keys:
@@ -132,10 +132,10 @@ apply_key:
     li t2, JAB_KEY_PRESSED
     bne t3, t2, 3f
     li t2, VELOCITY
-    jab.midi.note.on t0, t1, t2
+    jab.sys.midi.note.on t0, t1, t2
     j 9f
 3:
-    jab.midi.note.off t0, t1
+    jab.sys.midi.note.off t0, t1
 9:
     ld ra, 8(sp)
     addi sp, sp, 16

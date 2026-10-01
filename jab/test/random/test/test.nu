@@ -1,5 +1,5 @@
 # random's integration test: the kernel finds the machine's rng device
-# and jab.random fills a program's buffer from it. Two draws of 64
+# and jab.sys.random fills a program's buffer from it. Two draws of 64
 # bytes each come back whole, differ from each other, and spread over
 # many values, which is what entropy from the host looks like and what
 # a stuck or zeroed device would not.

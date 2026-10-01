@@ -13,9 +13,9 @@
 .section .text
 .global _start
 _start:
-    jab.uart.print msg_ready
+    jab.sys.uart.print msg_ready
     la t0, name_buffer
-    jab.pad.name t0
+    jab.sys.pad.name t0
     bnez a0, 1f
     call line_begin
     la a0, msg_name
@@ -33,17 +33,17 @@ _start:
     li s0, JAB_ABS_RX
     call print_axis
 frame:
-    jab.pad.await
+    jab.sys.pad.await
     beqz a0, no_pad
     call read_pad
     la t0, quit
     lbu t0, 0(t0)
     beqz t0, frame
-    jab.exit 0
+    jab.sys.exit 0
 
 no_pad:
-    jab.uart.print msg_no_pad
-    jab.exit 2
+    jab.sys.uart.print msg_no_pad
+    jab.sys.exit 2
 
 # print_axis: s0 is an axis code; one line, `axis <code> <min> <max>
 # <fuzz> <flat> <res>`, or `axis <code> none`.
@@ -87,7 +87,7 @@ read_pad:
     addi sp, sp, -16
     sd ra, 8(sp)
 1:
-    jab.pad.input
+    jab.sys.pad.input
     beqz a0, 9f
     mv s1, a0
     mv s2, a1
@@ -127,7 +127,7 @@ print_state:
     addi sp, sp, -16
     sd ra, 8(sp)
     la t0, state_record
-    jab.pad.read t0
+    jab.sys.pad.read t0
     call line_begin
     la a0, msg_state
     call line_str
@@ -232,7 +232,7 @@ line_end:
     sb t3, 0(t2)
     sb zero, 1(t2)
     sd zero, 0(t0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ret
 
 .section .bss

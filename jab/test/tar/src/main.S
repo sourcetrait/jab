@@ -14,7 +14,7 @@ _start:
     # the archive, out of romfs and into the program's own memory
     la t0, rec
     li t1, DISK
-    jab.romfs.find t0, t1, zero, path_tar
+    jab.sys.romfs.find t0, t1, zero, path_tar
     bnez a0, 9f
     la t0, rec
     lwu s0, JAB_ROMFS_OFFSET(t0)
@@ -28,7 +28,7 @@ _start:
     mv t3, s1
     li t4, BUFFER
     sub t4, t4, s2
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 2f
     add s2, s2, a0
     mv s1, a1
@@ -42,7 +42,7 @@ _start:
     mv a0, s2
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
 
     # every entry, a page at a time
     li s3, 0                    # the cursor
@@ -51,7 +51,7 @@ _start:
     la t1, archive
     mv t2, s2
     mv t3, s3
-    jab.tar.list t0, t1, t2, t3, 4
+    jab.sys.tar.list t0, t1, t2, t3, 4
     mv s4, a0
     mv s3, a1
     la s5, recs
@@ -76,7 +76,7 @@ _start:
     addi a0, s5, JAB_TAR_NAME
     call line_str
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     addi s6, s6, 1
     li t0, JAB_TAR_ENTRY
     add s5, s5, t0
@@ -89,9 +89,9 @@ _start:
     call find_one
     la a0, path_missing
     call find_one
-    jab.exit 0
+    jab.sys.exit 0
 9:
-    jab.exit 1
+    jab.sys.exit 1
 
 # find_one: a0 is a path; reports the code, and the size and name when
 # it is there.
@@ -128,7 +128,7 @@ find_one:
     call line_str
 1:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

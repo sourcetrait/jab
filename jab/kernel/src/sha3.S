@@ -24,7 +24,7 @@
 
 .section .text
 
-# sys_checksum (jab.checksum): a0 is an address in the program's window
+# sys_checksum (jab.sys.checksum): a0 is an address in the program's window
 # and a1 how many bytes. a0 to a3 become the digest, the four lanes in
 # the order a program would write them out.
 .global sys_checksum

@@ -1,4 +1,4 @@
-# exitstatus's integration test: a nonzero jab.exit status comes back
+# exitstatus's integration test: a nonzero jab.sys.exit status comes back
 # as QEMU's exit code.
 use ../../../sdk/nu/jab.nu
 use std/assert

@@ -14,7 +14,7 @@
 
 .section .text
 
-# sys_random (jab.random): a0 is a buffer inside the program's window,
+# sys_random (jab.sys.random): a0 is a buffer inside the program's window,
 # a1 how many bytes. a0 becomes 0 with the bytes written and a1 how
 # many the device gave, or 1 with no rng device on the machine.
 .global sys_random

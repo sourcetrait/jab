@@ -8,7 +8,7 @@
 # that gets JAB_GZ_OK back knows the bytes are the bytes that went in.
 #
 # The length in the trailer is what makes one-shot decompression the
-# right shape here: a program reads it with jab.gz.size, sizes its
+# right shape here: a program reads it with jab.sys.gz.size, sizes its
 # buffer, and inflates in one call. DEFLATE cannot be entered in the
 # middle, since a match may reach back 32 KiB and the Huffman state is
 # built as the stream is read, so a resumable cursor would mean the
@@ -29,7 +29,7 @@
 
 .section .text
 
-# sys_gz_size (jab.gz.size): a0 is the gzip bytes and a1 how many. a0
+# sys_gz_size (jab.sys.gz.size): a0 is the gzip bytes and a1 how many. a0
 # becomes the length the contents will be, which the trailer carries,
 # and a1 JAB_GZ_OK or JAB_GZ_NOT_GZIP.
 .global sys_gz_size
@@ -64,7 +64,7 @@ sys_gz_size:
     sd t0, 88(sp)
     j trap_return
 
-# sys_gz_read (jab.gz.read): a0 is the buffer, a1 the gzip bytes, a2 how
+# sys_gz_read (jab.sys.gz.read): a0 is the buffer, a1 the gzip bytes, a2 how
 # many, a3 how much the buffer holds. a0 becomes the bytes written and
 # a1 one of the JAB_GZ_* codes.
 .global sys_gz_read

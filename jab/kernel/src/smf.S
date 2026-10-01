@@ -5,7 +5,7 @@
 # (synth.S) stepped by the sound clock, one step a period as the
 # stream refills (sound.S), so a file's events land on the same
 # calls a program makes live and within a period of their time. The
-# file stays in the program's memory where jab.midi.play found it,
+# file stays in the program's memory where jab.sys.midi.play found it,
 # read in place: the header's format, track count, and division, then
 # every MTrk chunk as a track with a cursor, its running status, and
 # the absolute tick of its next event. A step moves the position by
@@ -38,10 +38,10 @@
 
 .section .text
 
-# sys_midi_play (jab.midi.play): a0 is a Standard MIDI File inside the
+# sys_midi_play (jab.sys.midi.play): a0 is a Standard MIDI File inside the
 # program's window, a1 its length. Whatever was playing stops, its
 # notes released; the file's tracks are read and the piece starts at
-# the next period. a0 becomes 0, or jab.sound.open's code, or 3 when
+# the next period. a0 becomes 0, or jab.sys.sound.open's code, or 3 when
 # the file is not one the player takes: no MThd header, a format past
 # 1, a SMPTE division, no track or more than JAB_MIDI_TRACKS, or a
 # chunk past the end.
@@ -60,8 +60,8 @@ sys_midi_play:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_stop (jab.midi.stop): the piece stops where it is, its
-# notes released. a0 becomes 0, or jab.sound.open's code.
+# sys_midi_stop (jab.sys.midi.stop): the piece stops where it is, its
+# notes released. a0 becomes 0, or jab.sys.sound.open's code.
 .global sys_midi_stop
 sys_midi_stop:
     call sound_open
@@ -72,7 +72,7 @@ sys_midi_stop:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_playing (jab.midi.playing): a0 becomes 1 while a piece
+# sys_midi_playing (jab.sys.midi.playing): a0 becomes 1 while a piece
 # plays, else 0.
 .global sys_midi_playing
 sys_midi_playing:

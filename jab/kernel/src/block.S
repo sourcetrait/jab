@@ -22,7 +22,7 @@
 
 .section .text
 
-# sys_block_list (jab.block.list): a0 is the buffer, a1 the id of the
+# sys_block_list (jab.sys.block.list): a0 is the buffer, a1 the id of the
 # disk to start at (0 for the first), a2 how many records the buffer
 # holds. a0 becomes the records written, a1 the id to start the next
 # page at, or 0 once the last disk is in the buffer.
@@ -68,7 +68,7 @@ sys_block_list:
     sd a1, 88(sp)
     j trap_return
 
-# sys_block_find (jab.block.find): a0 is a NUL-terminated serial inside
+# sys_block_find (jab.sys.block.find): a0 is a NUL-terminated serial inside
 # the program's window. a0 becomes the id of the first disk carrying it,
 # or 0 when none does.
 .global sys_block_find
@@ -116,7 +116,7 @@ sys_block_find:
     sd a0, 80(sp)
     j trap_return
 
-# sys_block_read (jab.block.read): a0 is the buffer, a1 the disk, a2 the
+# sys_block_read (jab.sys.block.read): a0 is the buffer, a1 the disk, a2 the
 # first sector, a3 how many sectors. The device writes the program's
 # buffer itself, so nothing is copied.
 .global sys_block_read
@@ -125,7 +125,7 @@ sys_block_read:
     li s1, VIRTQ_DESC_F_WRITE
     j block_transfer
 
-# sys_block_write (jab.block.write): the same, the other way, so the
+# sys_block_write (jab.sys.block.write): the same, the other way, so the
 # device reads the buffer.
 .global sys_block_write
 sys_block_write:

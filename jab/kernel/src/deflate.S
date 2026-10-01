@@ -31,7 +31,7 @@
 # The sound stream is looked at every this many output bytes (sound.S)
 .set DF_TICK_BYTES, 65536
 
-# what went wrong, as jab.gz.read reports it
+# what went wrong, as jab.sys.gz.read reports it
 .set DF_OK, 0
 .set DF_ERR_INPUT, 1            # the stream ended in the middle of something
 .set DF_ERR_OUTPUT, 2           # the buffer could not hold it

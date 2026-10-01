@@ -28,7 +28,7 @@
 # normalised to -JAB_PAD_FULL through JAB_PAD_FULL, 0 at rest, and the
 # left stick's drive is ACCEL scaled by each over full scale; the hat's
 # axes at full scale add ACCEL outright. The stop is an event, THUMBL
-# or THUMBR pressed, taken from jab.pad.input. With no pad on the machine the
+# or THUMBR pressed, taken from jab.sys.pad.input. With no pad on the machine the
 # state reads zero and the example runs on the keyboard alone.
 #
 # Over the API, wasd's records both ways, little-endian, each field at
@@ -125,7 +125,7 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     # your sphere's colour, and a colour for every button from the
     # clock's randomness
@@ -137,7 +137,7 @@ _start:
     # cannot leave
     la t0, rand_state
     li t1, 8
-    jab.random t0, t1
+    jab.sys.random t0, t1
     beqz a0, 0f
     rdtime t0
     la t1, rand_state
@@ -153,7 +153,7 @@ _start:
     # the pad's own name at the top for three seconds, when there is
     # one
     la t0, pad_name
-    jab.pad.name t0
+    jab.sys.pad.name t0
     bnez a0, 2f
     la t0, pad_name
     la t1, label_text
@@ -177,7 +177,7 @@ _start:
     la t1, right_y
     sd t0, 0(t1)
     la t0, axis_record
-    jab.pad.axis t0, JAB_ABS_Z
+    jab.sys.pad.axis t0, JAB_ABS_Z
     li t1, 2
     bne a0, t1, 3f
     li t0, JAB_PAD_AXES + 2 * JAB_ABS_RX
@@ -223,7 +223,7 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
-    jab.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API | JAB_AWAIT_PAD
+    jab.sys.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API | JAB_AWAIT_PAD
     mv s0, a0
     call read_keys
     call read_api
@@ -232,7 +232,7 @@ frame:
     beqz t0, frame
     call elapsed
     la t0, pad_state
-    jab.pad.read t0
+    jab.sys.pad.read t0
     call label_tick
     call right_stick
     call move_player
@@ -243,8 +243,8 @@ frame:
     j frame
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 # read_keys: take every key event waiting from the keyboard and apply
 # it.
@@ -252,7 +252,7 @@ read_keys:
     addi sp, sp, -16
     sd ra, 8(sp)
 1:
-    jab.keyboard.input
+    jab.sys.keyboard.input
     beqz a0, 9f
     call apply_key
     j 1b
@@ -269,7 +269,7 @@ read_api:
     sd ra, 40(sp)
 1:
     la t0, cmd_read
-    jab.api.read t0, CMD_READ_BYTES
+    jab.sys.api.read t0, CMD_READ_BYTES
     beqz a0, 9f
     la t0, cmd_read
     sd t0, 0(sp)                # the next byte to take
@@ -310,7 +310,7 @@ read_api:
 # name's three seconds; the axes are read as state each tick.
 read_pad:
 1:
-    jab.pad.input
+    jab.sys.pad.input
     beqz a0, 9f
     li t0, JAB_EV_KEY
     bne a0, t0, 1b
@@ -1199,7 +1199,7 @@ report:
     li t2, REPORT_SIZE
     mul t1, t1, t2
     la t0, report_buffer
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
 13:
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1343,10 +1343,10 @@ render:
     call draw_label
     la t0, rects
     li t1, 2
-    jab.display.flip.rects t0, t1
+    jab.sys.display.flip.rects t0, t1
     j 6f
 5:
-    jab.display.flip.rect
+    jab.sys.display.flip.rect
 6:
     call remember
     ld ra, 8(sp)

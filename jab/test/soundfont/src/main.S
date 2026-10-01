@@ -30,10 +30,10 @@
 .section .text
 .global _start
 _start:
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     # the tone font, when its disk is there
-    jab.block.find serial_tone
+    jab.sys.block.find serial_tone
     beqz a0, fluid
     mv s0, a0
     la a0, tone
@@ -44,28 +44,28 @@ _start:
     beqz a0, no_tone
     la t0, tone
     mv t1, a0
-    jab.midi.soundfont t0, t1
+    jab.sys.midi.soundfont t0, t1
     bnez a0, tone_refused
     la a0, label_tone
     call print_counts
     li t0, CHANNEL
     li t1, JAB_MIDI_CC_VOLUME
     li t2, TONE_VOLUME
-    jab.midi.control t0, t1, t2
+    jab.sys.midi.control t0, t1, t2
     li t0, CHANNEL
     li t1, TONE_NOTE
     li t2, TONE_VELOCITY
-    jab.midi.note.on t0, t1, t2
+    jab.sys.midi.note.on t0, t1, t2
     li a0, TONE_HOLD
     call spin
     li t0, CHANNEL
     li t1, TONE_NOTE
-    jab.midi.note.off t0, t1
+    jab.sys.midi.note.off t0, t1
     li a0, TAIL
     call spin
 fluid:
     # FluidR3 GM off the mix disk, the piano's middle C through it
-    jab.block.find serial_mix
+    jab.sys.block.find serial_mix
     beqz a0, no_mix
     mv s0, a0
     la a0, font
@@ -76,53 +76,53 @@ fluid:
     beqz a0, no_fluid
     la t0, font
     mv t1, a0
-    jab.midi.soundfont t0, t1
+    jab.sys.midi.soundfont t0, t1
     bnez a0, fluid_refused
     la a0, label_fluid
     call print_counts
     li t0, CHANNEL
     li t1, PIANO_PROGRAM
-    jab.midi.program t0, t1
+    jab.sys.midi.program t0, t1
     li t0, CHANNEL
     li t1, PIANO_NOTE
     li t2, PIANO_VELOCITY
-    jab.midi.note.on t0, t1, t2
+    jab.sys.midi.note.on t0, t1, t2
     li a0, PIANO_HOLD
     call spin
     li t0, CHANNEL
     li t1, PIANO_NOTE
-    jab.midi.note.off t0, t1
+    jab.sys.midi.note.off t0, t1
     li a0, TAIL
     call spin
-    jab.exit 0
+    jab.sys.exit 0
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 no_tone:
-    jab.uart.print msg_no_tone
-    jab.exit 3
+    jab.sys.uart.print msg_no_tone
+    jab.sys.exit 3
 
 tone_refused:
     mv s1, a0
     la a0, msg_tone_refused
     call print_code
-    jab.exit 4
+    jab.sys.exit 4
 
 no_mix:
-    jab.uart.print msg_no_mix
-    jab.exit 5
+    jab.sys.uart.print msg_no_mix
+    jab.sys.exit 5
 
 no_fluid:
-    jab.uart.print msg_no_fluid
-    jab.exit 6
+    jab.sys.uart.print msg_no_fluid
+    jab.sys.exit 6
 
 fluid_refused:
     mv s1, a0
     la a0, msg_fluid_refused
     call print_code
-    jab.exit 7
+    jab.sys.exit 7
 
 # read_file: the file at the path a3 on disk a2, from its root, into
 # the buffer a0 of a1 bytes, a page at a time; a0 becomes the bytes
@@ -160,7 +160,7 @@ read_file:
     mv t2, s3
     mv t3, s4
     sd a4, 8(sp)
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     ld a4, 8(sp)
     beqz a0, 3f
     add a4, a4, a0
@@ -208,7 +208,7 @@ print_counts:
     li t0, '\n'
     sb t0, 0(a0)
     sb zero, 1(a0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ld ra, 40(sp)
     addi sp, sp, 48
     ret
@@ -225,7 +225,7 @@ print_code:
     li t0, '\n'
     sb t0, 0(a0)
     sb zero, 1(a0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

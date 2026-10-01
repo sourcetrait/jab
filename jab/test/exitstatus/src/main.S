@@ -4,8 +4,8 @@
 .section .text
 .global _start
 _start:
-    jab.print message
-    jab.exit 3
+    jab.sys.print message
+    jab.sys.exit 3
 
 .section .rodata
 message:

@@ -45,14 +45,14 @@
 
 .section .text
 
-# sys_display_open (jab.display.open): a0 becomes display_open's code.
+# sys_display_open (jab.sys.display.open): a0 becomes display_open's code.
 .global sys_display_open
 sys_display_open:
     call display_open
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_ready (jab.display.ready): a0 becomes 1 when a flip would
+# sys_display_ready (jab.sys.display.ready): a0 becomes 1 when a flip would
 # go through now, else 0.
 .global sys_display_ready
 sys_display_ready:
@@ -60,7 +60,7 @@ sys_display_ready:
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip (jab.display.flip): show the framebuffer. a0 becomes
+# sys_display_flip (jab.sys.display.flip): show the framebuffer. a0 becomes
 # 0; 1 when the frame is early, which the cap refuses without a
 # transfer; 2 when the display is not open; 3 when the device refused a
 # command.
@@ -91,7 +91,7 @@ sys_display_flip:
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip_rect (jab.display.flip.rect): show the rectangle at
+# sys_display_flip_rect (jab.sys.display.flip.rect): show the rectangle at
 # a0, a1 of a2 by a3 pixels. a0 becomes 0; 1 when the frame is early,
 # nothing transferred; 2 when the display is not open; 3 when the
 # device refused a command; 4 when the rectangle is empty or reaches
@@ -138,7 +138,7 @@ sys_display_flip_rect:
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip_rects (jab.display.flip.rects): show the a1
+# sys_display_flip_rects (jab.sys.display.flip.rects): show the a1
 # rectangles at a0, JAB_RECT_SIZE bytes each, as one flip. Every
 # rectangle is checked before any is shown. a0 becomes 0; 1 when the
 # frame is early, nothing transferred; 2 when the display is not open;
@@ -537,7 +537,7 @@ gpu_queue_setup:
     li a0, 1
     ret
 
-# sys_display_print (jab.display.print): write the string at a0 to the
+# sys_display_print (jab.sys.display.print): write the string at a0 to the
 # screen console, opening the display if the program has not. a0 becomes
 # 0, or display_open's code.
 .global sys_display_print
@@ -559,7 +559,7 @@ sys_display_print:
     sd a0, 80(sp)
     j trap_return
 
-# sys_print (jab.print): the screen console once the display is open,
+# sys_print (jab.sys.print): the screen console once the display is open,
 # else the UART.
 .global sys_print
 sys_print:
@@ -568,7 +568,7 @@ sys_print:
     bnez t0, sys_display_print
     j sys_uart_print
 
-# sys_display_text (jab.display.text): draw the string at a0 into the
+# sys_display_text (jab.sys.display.text): draw the string at a0 into the
 # framebuffer with the console's font, its top left at a1, a2, signed,
 # in the colour a3, only the glyphs' own pixels, so what is under the
 # text stays; a4 is the style, JAB_TEXT_BOLD striking each glyph twice

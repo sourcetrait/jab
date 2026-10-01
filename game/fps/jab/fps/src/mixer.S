@@ -334,7 +334,7 @@ sound_start:
 mixer_update:
     addi sp, sp, -16
     sd ra, 8(sp)
-    jab.sound.ready
+    jab.sys.sound.ready
     bnez a0, 9f
     li t0, JAB_SOUND_RING
     sub t0, t0, a1                  # queued
@@ -423,7 +423,7 @@ mixer_update:
     bnez t2, 7b
     la t0, mixbuf
     mv t1, a2
-    jab.sound.write t0, t1
+    jab.sys.sound.write t0, t1
 9:
     ld ra, 8(sp)
     addi sp, sp, 16

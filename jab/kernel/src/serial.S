@@ -6,7 +6,7 @@
 # The ports: QEMU's virtio-serial-device over the same mmio transport as
 # every other Jab device, one port per channel. Port SERIAL_API_PORT is
 # the API, bytes both ways between the program and the host through
-# jab.api.write, jab.api.read, and the JAB_AWAIT_API bit; it is there on
+# jab.sys.api.write, jab.sys.api.read, and the JAB_AWAIT_API bit; it is there on
 # a run that put it on the machine (`--api`) and absent otherwise, which
 # the calls report rather than fault on, so one build runs either way.
 # Port SERIAL_PAD_PORT is the pad's, the host's bytes alone, which
@@ -376,8 +376,8 @@ serial_send:
 
 # The API: the program's bytes to the host go straight from its buffer
 # through the port's transmit queue; the host's bytes to the program
-# arrive in the offered buffers and move into a ring, which jab.api.read
-# empties and jab.await watches. With no port on the machine the calls
+# arrive in the offered buffers and move into a ring, which jab.sys.api.read
+# empties and jab.sys.await watches. With no port on the machine the calls
 # say so.
 
 # api_up: a0 becomes 1 when the API's port came up with the device,
@@ -397,7 +397,7 @@ api_up:
     li a0, 0
     ret
 
-# sys_api_write (jab.api.write): a0 is the buffer, a1 how many bytes.
+# sys_api_write (jab.sys.api.write): a0 is the buffer, a1 how many bytes.
 # a0 becomes 0 once the device has taken them, or 1 with no API port on
 # the machine.
 .global sys_api_write
@@ -421,7 +421,7 @@ sys_api_write:
     sd a0, 80(sp)
     j trap_return
 
-# sys_api_read (jab.api.read): a0 is the buffer, a1 how many bytes it
+# sys_api_read (jab.sys.api.read): a0 is the buffer, a1 how many bytes it
 # holds. a0 becomes the bytes written, the oldest first, and a1 how many
 # still wait after them, in the ring and with the device; both 0 with
 # no API port on the machine. Never waits.
@@ -567,7 +567,7 @@ api_waiting:
     ret
 
 # api_pending: a0 becomes 1 when bytes wait for the program, else 0;
-# what jab.await tests for its JAB_AWAIT_API bit.
+# what jab.sys.await tests for its JAB_AWAIT_API bit.
 .global api_pending
 api_pending:
     addi sp, sp, -16

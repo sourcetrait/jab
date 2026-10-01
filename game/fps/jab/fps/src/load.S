@@ -703,7 +703,7 @@ material_read:
     bgeu s3, t0, load_failed
     la t0, file
     mv t1, s3
-    jab.png.size t0, t1
+    jab.sys.png.size t0, t1
     bnez a2, 35f
     # the record's capacity: the header, then a row's pixels and its
     # span for every row
@@ -961,7 +961,7 @@ ambients_load:
 soundfont_load:
     addi sp, sp, -32
     sd ra, 24(sp)
-    jab.block.find serial_mix
+    jab.sys.block.find serial_mix
     beqz a0, 8f
     mv a2, a0
     la a0, font
@@ -971,7 +971,7 @@ soundfont_load:
     beqz a0, 8f
     la t0, font
     mv t1, a0
-    jab.midi.soundfont t0, t1
+    jab.sys.midi.soundfont t0, t1
     bnez a0, 7f
     sd a1, 0(sp)
     sd a2, 8(sp)
@@ -1003,7 +1003,7 @@ soundfont_load:
     call line_end
     j 9f
 8:
-    jab.uart.print msg_no_soundfont
+    jab.sys.uart.print msg_no_soundfont
 9:
     ld ra, 24(sp)
     addi sp, sp, 32
@@ -1039,7 +1039,7 @@ ambient_follow:
     add t3, t3, t4
     ld a1, 0(t3)
     sd t2, 0(sp)
-    jab.midi.play a0, a1
+    jab.sys.midi.play a0, a1
     sd a0, 8(sp)
     la a0, line
     la a1, msg_ambient
@@ -1060,7 +1060,7 @@ ambient_follow:
     call line_end
     j 9f
 3:
-    jab.midi.stop
+    jab.sys.midi.stop
     j 9f
 5:
     bltz t2, 9f
@@ -1070,7 +1070,7 @@ ambient_follow:
     ld t5, 0(t3)
     beqz t5, 9f
     sd t2, 0(sp)
-    jab.midi.playing
+    jab.sys.midi.playing
     bnez a0, 9f
     ld t2, 0(sp)
     la t3, ambient_at
@@ -1080,7 +1080,7 @@ ambient_follow:
     la t3, ambient_bytes
     add t3, t3, t4
     ld a1, 0(t3)
-    jab.midi.play a0, a1
+    jab.sys.midi.play a0, a1
 9:
     ld ra, 24(sp)
     addi sp, sp, 32

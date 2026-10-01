@@ -8,8 +8,8 @@ machine's virtio-serial device, `nr=3`, named `jab.pad`, written by a
 process on the host: the SDK's `jabshim_pad`, which reads the pad
 through gilrs, or `jab launch --pad <file>`, which plays a table. The
 kernel takes the port as the pad when the machine carries no
-virtio-input pad, and a program sees no difference: `jab.pad.read`,
-`jab.pad.input`, `jab.pad.axis`, `jab.pad.name`, and the pad await
+virtio-input pad, and a program sees no difference: `jab.sys.pad.read`,
+`jab.sys.pad.input`, `jab.sys.pad.axis`, `jab.sys.pad.name`, and the pad await
 answer as they do for a device.
 
 This is the port's contract. Everything is little-endian, and the
@@ -53,7 +53,7 @@ keeps in its own ring:
 
 - `EV_KEY` (1), a gamepad code from 304 (`BTN_SOUTH`) to 335, value 1
   pressed and 0 released. The kernel sets or clears the button's bit
-  and queues the event for `jab.pad.input`.
+  and queues the event for `jab.sys.pad.input`.
 - `EV_ABS` (3), an ABS code below 64 and the raw value inside the
   axis's declared range. The kernel stores it and queues the event.
 - Any other type is dropped. No `EV_SYN` is needed and none is sent by

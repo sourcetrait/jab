@@ -39,7 +39,7 @@ _start:
     mv t3, s3
     li t4, GZBUF
     sub t4, t4, s4
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     beqz a0, 3f
     add s4, s4, a0
     mv s3, a1
@@ -48,14 +48,14 @@ _start:
     # how long the contents will be, then all of them at once
     la t0, gzbuf
     mv t1, s4
-    jab.gz.size t0, t1
+    jab.sys.gz.size t0, t1
     mv s5, a0
     mv s6, a1
     la t0, outbuf
     la t1, gzbuf
     mv t2, s4
     mv t3, s5
-    jab.gz.read t0, t1, t2, t3
+    jab.sys.gz.read t0, t1, t2, t3
     mv s7, a0                   # the bytes that came out
     mv s8, a1                   # and what the call made of it
     call line_reset
@@ -76,7 +76,7 @@ _start:
     mv a0, s6
     call line_dec
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     # the first file, byte by byte, so the test sees one whole answer
     la t0, paths
     bne s0, t0, 7f
@@ -100,15 +100,15 @@ _start:
     j 5b
 6:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     j 4b
 7:
     addi s0, s0, 8
     j 1b
 8:
-    jab.exit 0
+    jab.sys.exit 0
 9:
-    jab.exit 1
+    jab.sys.exit 1
 
 line_reset:
     la t0, line

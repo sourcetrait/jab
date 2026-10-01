@@ -29,7 +29,7 @@ _start:
     beq s1, t0, 9f
     la t0, buf
     mv t1, s1
-    jab.hash t0, t1
+    jab.sys.hash t0, t1
     mv s2, a0
     call line_reset
     la a0, word_h
@@ -46,11 +46,11 @@ _start:
     addi s3, s3, -8
     bgez s3, 4b
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     addi s0, s0, 8
     j 3b
 9:
-    jab.exit 0
+    jab.sys.exit 0
 
 line_reset:
     la t0, line

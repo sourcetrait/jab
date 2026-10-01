@@ -75,9 +75,9 @@
 _start:
     la t0, sprite
     li t1, DISK
-    jab.sprite.load t0, t1, path_walker, SPRITE_BYTES
+    jab.sys.sprite.load t0, t1, path_walker, SPRITE_BYTES
     bnez a0, bad_sprite
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     # the seed, never zero, and the clock for the first frame's time
     rdtime t0
@@ -87,7 +87,7 @@ _start:
     la t1, seed
     sd t0, 0(t1)
 frame:
-    jab.display.await
+    jab.sys.display.await
     call elapsed
     la t0, rect_count
     sd zero, 0(t0)
@@ -123,7 +123,7 @@ frame:
     li t6, JAB_SPRITE_SOLID
 33:
     la t0, sprite
-    jab.sprite.draw t0, t1, t2, t3, t4, t5, t6
+    jab.sys.sprite.draw t0, t1, t2, t3, t4, t5, t6
     # move by its speed over the frame's time, and step the animation
     # when its own time has come
     ld a0, W_X(s1)
@@ -218,7 +218,7 @@ frame:
     li t6, 0
 72:
     la t0, sprite
-    jab.sprite.draw t0, t1, t2, t3, t4, t5, t6
+    jab.sys.sprite.draw t0, t1, t2, t3, t4, t5, t6
 8:
     addi s3, s3, 1
     li t0, PER_LANE
@@ -229,13 +229,13 @@ frame:
     # the changed areas, as one flip; with WHOLE set, the whole screen
     # instead, for measuring the difference
 .ifdef WHOLE
-    jab.display.flip
+    jab.sys.display.flip
 .else
     la t0, rect_count
     ld t1, 0(t0)
     beqz t1, frame
     la t0, rects
-    jab.display.flip.rects t0, t1
+    jab.sys.display.flip.rects t0, t1
 .endif
     j frame
 
@@ -255,11 +255,11 @@ bad_sprite:
     li t3, '\n'
     sb t3, 1(t0)
     sb zero, 2(t0)
-    jab.uart.print msg_bad_sprite
-    jab.exit 1
+    jab.sys.uart.print msg_bad_sprite
+    jab.sys.exit 1
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 # admit: a0 is a lane and a1 its number. A new walker enters when the
 # lane has a free place, its wait is over, and the side chosen is
@@ -434,7 +434,7 @@ enter:
     sw t1, R_TINT(t0)
     la t0, record
     li t1, R_SIZE
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
     ld ra, 24(sp)
     addi sp, sp, 32
     ret
@@ -452,7 +452,7 @@ leave:
     sw zero, R_TINT(t0)
     la t0, record
     li t1, R_SIZE
-    jab.api.write t0, t1
+    jab.sys.api.write t0, t1
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

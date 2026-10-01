@@ -77,6 +77,23 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let strays = ($release_found | where {|s| not ($fault_text | any {|f| $s | str starts-with $f }) })
     assert equal $strays [] $"every jab: line in the release kernel is a fault line; not these: ($strays)"
 
+    # the table of record and the SDK agree name for name: every call
+    # in doc/syscalls.nuon has a macro of its name in sdk/jab.inc, the
+    # JAB_SYS_ constant spelled from that name carries the table's
+    # number, and jab.inc defines no call the table lacks
+    let table = (open ($ws | path join "doc" "syscalls.nuon"))
+    let inc = (open --raw ($ws | path join "sdk" "jab.inc") | decode)
+    let macros = ($inc | parse --regex '(?m)^\.macro (?P<name>jab\.[A-Za-z0-9_.]+)' | get name)
+    let numbers = ($inc | parse --regex '(?m)^\.set (?P<sym>JAB_SYS_[A-Z0-9_]+), (?P<n>\d+)' | each {|r| { sym: $r.sym, n: ($r.n | into int) } })
+    for row in $table {
+        assert ($row.name in $macros) $"the table's ($row.name) has a macro of that name in jab.inc"
+        let sym = ("JAB_" + ($row.name | str replace "jab." "" | str uppercase | str replace --all "." "_"))
+        let n = ($numbers | where sym == $sym | get -o 0.n)
+        assert ($n != null) $"jab.inc defines ($sym) for the table's ($row.name)"
+        assert equal $n $row.number $"($row.name) is call ($row.number) in the table and ($sym) is ($n) in jab.inc"
+    }
+    assert equal ($numbers | length) ($table | length) $"every JAB_SYS_ constant in jab.inc has a row in the table: ($numbers | length) against ($table | length)"
+
     # the program: its debug line is there in this debug build, and it
     # runs on the debug kernel with the kernel's own lines on the debug
     # channel rather than the UART

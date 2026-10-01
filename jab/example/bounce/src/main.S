@@ -29,7 +29,7 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     # the ball's centre and its speed
     li s0, 200 * ONE
@@ -40,7 +40,7 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
-    jab.display.await
+    jab.sys.display.await
     call elapsed
     # where it was, in pixels, erased
     srai s4, s0, FIX
@@ -110,12 +110,12 @@ frame:
 8:
     addi a3, a3, RADIUS + 1
     sub a3, a3, a1
-    jab.display.flip.rect
+    jab.sys.display.flip.rect
     j frame
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 # elapsed: the clock's ticks since the last frame into dt, held to
 # DT_MAX, and the clock noted for the next frame.

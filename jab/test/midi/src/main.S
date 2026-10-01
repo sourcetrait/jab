@@ -17,23 +17,23 @@
 .section .text
 .global _start
 _start:
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
     li t0, CHANNEL
     li t1, PROGRAM
-    jab.midi.program t0, t1
+    jab.sys.midi.program t0, t1
     li t0, CHANNEL
     li t1, NOTE
     li t2, VELOCITY
-    jab.midi.note.on t0, t1, t2
+    jab.sys.midi.note.on t0, t1, t2
     li a0, HOLD
     call spin
     li t0, CHANNEL
     li t1, NOTE
-    jab.midi.note.off t0, t1
+    jab.sys.midi.note.off t0, t1
     li a0, TAIL
     call spin
-    jab.exit 0
+    jab.sys.exit 0
 
 # spin: a0 ticks of the clock go by with the hart busy the whole time.
 spin:
@@ -45,8 +45,8 @@ spin:
     ret
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 .section .rodata
 msg_no_sound:

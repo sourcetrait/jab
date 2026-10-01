@@ -30,7 +30,7 @@
 
 .section .text
 
-# sys_tar_list (jab.tar.list): a0 is the buffer, a1 the archive, a2 its
+# sys_tar_list (jab.sys.tar.list): a0 is the buffer, a1 the archive, a2 its
 # length, a3 the offset of the header this page starts at, a4 how many
 # records the buffer holds. a0 becomes the records written and a1 the
 # offset to start the next page at, 0 once the archive has ended.
@@ -84,7 +84,7 @@ sys_tar_list:
     sd a1, 88(sp)
     j trap_return
 
-# sys_tar_find (jab.tar.find): a0 is a one-record buffer, a1 the
+# sys_tar_find (jab.sys.tar.find): a0 is a one-record buffer, a1 the
 # archive, a2 its length, a3 a path inside the program's window, read
 # no further than the window's end. a0 becomes 0 with the record
 # written, or 1 when the archive holds no such name; a1 becomes the

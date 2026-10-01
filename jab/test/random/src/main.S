@@ -1,4 +1,4 @@
-# random: the kernel's entropy call under test. Asks jab.random for 64
+# random: the kernel's entropy call under test. Asks jab.sys.random for 64
 # bytes twice, into two buffers, and prints each answer as `bytes
 # <given>` and then the bytes in decimal on one line, so the test can
 # see that they came, that the two draws differ, and that they look
@@ -16,18 +16,18 @@ _start:
     call draw
     la s0, second
     call draw
-    jab.exit 0
+    jab.sys.exit 0
 
 no_rng:
-    jab.uart.print msg_no_rng
-    jab.exit 2
+    jab.sys.uart.print msg_no_rng
+    jab.sys.exit 2
 
 # draw: fill the buffer at s0 from the device and print it.
 draw:
     addi sp, sp, -16
     sd ra, 8(sp)
     li t1, BYTES
-    jab.random s0, t1
+    jab.sys.random s0, t1
     bnez a0, no_rng
     mv s1, a1
     call line_begin
@@ -123,7 +123,7 @@ line_end:
     sb t3, 0(t2)
     sb zero, 1(t2)
     sd zero, 0(t0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ret
 
 .section .bss

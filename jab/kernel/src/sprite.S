@@ -43,7 +43,7 @@
 
 .section .text
 
-# sys_sprite_draw (jab.sprite.draw): a0 is the sprite record, a1 the
+# sys_sprite_draw (jab.sys.sprite.draw): a0 is the sprite record, a1 the
 # frame, a2 x, a3 y (signed), a4 the tint, a5 the scale, a6 the pose.
 # a0 becomes 0; 1 when the frame is not in the sprite; 2 when the scale
 # is past JAB_SPRITE_SCALE_MAX. A record whose width, height, or frame

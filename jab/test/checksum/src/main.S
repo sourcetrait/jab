@@ -46,7 +46,7 @@ _start:
     la t0, long
     li t1, LONG
     call digest
-    jab.exit 0
+    jab.sys.exit 0
 
 # digest: t0 is the bytes and t1 how many; writes the answer out as hex.
 digest:
@@ -76,7 +76,7 @@ digest:
     j 1b
 2:
     call line_nl
-    jab.uart.print line
+    jab.sys.uart.print line
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

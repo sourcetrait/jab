@@ -1,5 +1,5 @@
 # jab_pad.inc: what the pad's calls speak, evdev's own names
-# (input-event-codes.h): the event types jab.pad.input reports, the
+# (input-event-codes.h): the event types jab.sys.pad.input reports, the
 # gamepad's key codes, and the axis codes that index a state record's
 # axes. Included by jab.inc.
 

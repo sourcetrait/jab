@@ -16,7 +16,7 @@
 # raises the device's line, which the kernel takes wherever it is,
 # in a wait or in the program through the trap vector (trap.S), and
 # fills and offers again from the mix of two sources: the frames a
-# program has queued with jab.sound.write, a ring of JAB_SOUND_RING
+# program has queued with jab.sys.sound.write, a ring of JAB_SOUND_RING
 # of them played in order as they reach the front, and the
 # synthesizer's voices (synth.S). A dry ring and no voice is silence,
 # never a fault. Once the stream is live the external interrupt stays
@@ -47,7 +47,7 @@
 
 .section .text
 
-# sys_sound_open (jab.sound.open): a0 becomes 0, 1 with no sound
+# sys_sound_open (jab.sys.sound.open): a0 becomes 0, 1 with no sound
 # device on the machine, 2 when the device refuses the kernel or the
 # format.
 .global sys_sound_open
@@ -56,7 +56,7 @@ sys_sound_open:
     sd a0, 80(sp)
     j trap_return
 
-# sys_sound_write (jab.sound.write): a0 is a buffer of frames inside
+# sys_sound_write (jab.sys.sound.write): a0 is a buffer of frames inside
 # the program's window, a1 how many. a0 becomes 0 with a1 how many
 # were taken, as many as the ring has room for, or sound_open's code.
 # The count is capped to the room before it is multiplied, so a count
@@ -105,7 +105,7 @@ sys_sound_write:
     sd zero, 88(sp)
     j trap_return
 
-# sys_sound_ready (jab.sound.ready): a0 becomes 0 with a1 how many
+# sys_sound_ready (jab.sys.sound.ready): a0 becomes 0 with a1 how many
 # frames a write would take now, or sound_open's code.
 .global sys_sound_ready
 sys_sound_ready:

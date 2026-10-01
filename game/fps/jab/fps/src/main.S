@@ -51,11 +51,11 @@
 .global _start
 _start:
     rdtime s11                      # the start
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
-    jab.sound.open
+    jab.sys.sound.open
     bnez a0, no_sound
-    jab.block.find serial_fps
+    jab.sys.block.find serial_fps
     beqz a0, no_disk
     mv s0, a0                       # the program's disk
     # the map's name, trailing whitespace dropped
@@ -101,8 +101,8 @@ _start:
     li a5, TITLE_SCALE
     li a7, JAB_SYS_DISPLAY_TEXT
     ecall
-    jab.display.await
-    jab.display.flip
+    jab.sys.display.await
+    jab.sys.display.flip
     # the map read whole, then held to its format
     la a0, map
     li a1, MAP_BYTES
@@ -128,8 +128,8 @@ _start:
     call camera_axes
     # loaded: the screen cleared, the report
     call clear_screen
-    jab.display.await
-    jab.display.flip
+    jab.sys.display.await
+    jab.sys.display.flip
     rdtime t0
     sub t0, t0, s11
     li t1, MS_TICKS
@@ -174,7 +174,7 @@ frame:
     sw t0, 0(t1)                    # the drawing's microseconds
     call hud_draw
     call mixer_update
-    jab.display.flip
+    jab.sys.display.flip
     call state_report
     # the first frame's report, and the first after a console placement
     la t0, report_pending
@@ -189,38 +189,38 @@ frame:
 .endif
 1:
     addi s8, s8, 1
-    jab.await (JAB_AWAIT_DISPLAY | JAB_AWAIT_PAD)
+    jab.sys.await (JAB_AWAIT_DISPLAY | JAB_AWAIT_PAD)
     j frame
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 no_sound:
-    jab.uart.print msg_no_sound
-    jab.exit 2
+    jab.sys.uart.print msg_no_sound
+    jab.sys.exit 2
 
 no_disk:
-    jab.uart.print msg_no_disk
-    jab.exit 3
+    jab.sys.uart.print msg_no_disk
+    jab.sys.exit 3
 
 no_name:
-    jab.uart.print msg_no_name
-    jab.exit 4
+    jab.sys.uart.print msg_no_name
+    jab.sys.exit 4
 
 no_map:
     call line_map
     la a1, word_not_on_disk
     call append_str
     call line_end
-    jab.exit 5
+    jab.sys.exit 5
 
 bad_magic:
     call line_map
     la a1, word_not_map
     call append_str
     call line_end
-    jab.exit 6
+    jab.sys.exit 6
 
 # short_file: the file ends before its structures do: `fps: <path> ends
 # at N bytes before its structures do`, exit 7.
@@ -234,7 +234,7 @@ short_file:
     la a1, word_before_structures
     call append_str
     call line_end
-    jab.exit 7
+    jab.sys.exit 7
 
 map_too_big:
     call line_map
@@ -245,7 +245,7 @@ map_too_big:
     la a1, word_bytes
     call append_str
     call line_end
-    jab.exit 7
+    jab.sys.exit 7
 
 # too_many: the map holds more of a kind than this build does, the
 # kind's word in a1: `fps: <path> holds more walls than this build
@@ -260,7 +260,7 @@ too_many:
     la a1, word_than_build
     call append_str
     call line_end
-    jab.exit 8
+    jab.sys.exit 8
 
 # path_too_long: the material a0's name is too long for a path, exit 9.
 path_too_long:
@@ -273,7 +273,7 @@ path_too_long:
     la a1, word_name_too_long
     call append_str
     call line_end
-    jab.exit 9
+    jab.sys.exit 9
 
 # load_failed: the material a0's texture failed to load with the code
 # a1, exit 10.
@@ -290,7 +290,7 @@ load_failed:
     mv a1, s6
     call append_dec
     call line_end
-    jab.exit 10
+    jab.sys.exit 10
 
 # check_failed: a record broke a rule of the format: a1 the record's
 # word, a2 its index, a3 what is wrong with it: `fps: <path>: wall 12's
@@ -309,7 +309,7 @@ check_failed:
     mv a1, s8
     call append_str
     call line_end
-    jab.exit 11
+    jab.sys.exit 11
 
 # map_lacks: the map lacks what a1 names: `fps: <path> has no spawn`,
 # exit 11.
@@ -319,7 +319,7 @@ map_lacks:
     mv a1, s6
     call append_str
     call line_end
-    jab.exit 11
+    jab.sys.exit 11
 
 # bad_directory: the section directory is broken as a1 says: `fps:
 # <path>'s section directory names a kind twice`, exit 12.
@@ -331,7 +331,7 @@ bad_directory:
     mv a1, s6
     call append_str
     call line_end
-    jab.exit 12
+    jab.sys.exit 12
 
 # line_map: the line begun with `fps: <map path>`; a0 becomes the
 # cursor past it.
@@ -350,7 +350,7 @@ line_end:
     li t0, '\n'
     sb t0, 0(a0)
     sb zero, 1(a0)
-    jab.uart.print line
+    jab.sys.uart.print line
     ret
 
 # load_report: `fps: <name> loaded in <ms> ms: S sectors, W walls, V
@@ -653,7 +653,7 @@ read_file:
     mv t2, s3
     mv t3, s4
     sd a4, 8(sp)
-    jab.romfs.read t0, t1, t2, t3, t4
+    jab.sys.romfs.read t0, t1, t2, t3, t4
     ld a4, 8(sp)
     beqz a0, 3f
     add a4, a4, a0

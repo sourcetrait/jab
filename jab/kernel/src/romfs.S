@@ -35,7 +35,7 @@
 
 .section .text
 
-# sys_romfs_list (jab.romfs.list): a0 is the buffer, a1 the disk, a2 the
+# sys_romfs_list (jab.sys.romfs.list): a0 is the buffer, a1 the disk, a2 the
 # directory's header offset (JAB_ROMFS_ROOT for the volume's root), a3
 # the offset this page starts at (0 for the directory's first entry), a4
 # how many records the buffer holds. a0 becomes the records written and
@@ -80,7 +80,7 @@ sys_romfs_list:
     sd s3, 88(sp)
     j trap_return
 
-# sys_romfs_find (jab.romfs.find): a0 is a one-record buffer, a1 the
+# sys_romfs_find (jab.sys.romfs.find): a0 is a one-record buffer, a1 the
 # disk, a2 the directory to start from (JAB_ROMFS_ROOT for the root), a3
 # a path inside the program's window. Components are separated by /, a
 # leading / starts at the root, and an empty component is skipped; a
@@ -119,7 +119,7 @@ sys_romfs_find:
 
 # romfs_lookup: a0 is a disk's index, a1 the directory to start from
 # (JAB_ROMFS_ROOT for the root), a2 a path and a3 where it ends. The
-# walk of jab.romfs.find: a0 becomes 0 with the entry's record in
+# walk of jab.sys.romfs.find: a0 becomes 0 with the entry's record in
 # romfs_scratch, 1 when nothing of that name is there, or 2 when a
 # component along the way is not a directory; a1 the entry's own
 # offset, hard links followed. What png.S uses to find a sprite's
@@ -236,7 +236,7 @@ romfs_lookup:
     addi sp, sp, 80
     ret
 
-# sys_romfs_read (jab.romfs.read): a0 is the buffer, a1 the disk, a2 the
+# sys_romfs_read (jab.sys.romfs.read): a0 is the buffer, a1 the disk, a2 the
 # file's header offset, a3 the byte of it to start at, a4 how many bytes
 # at most. The whole sectors go from the device into the buffer and the
 # partial ends through the kernel's bounce. a0 becomes the bytes
@@ -367,7 +367,7 @@ romfs_magic:
 
 # romfs_disk: a0 is the id a program gave; a0 becomes that disk's index.
 # Ends the run when the machine has no such disk or it carries no romfs,
-# both of which a program can see for itself with jab.block.list.
+# both of which a program can see for itself with jab.sys.block.list.
 .global romfs_disk
 romfs_disk:
     addi sp, sp, -16

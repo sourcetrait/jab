@@ -14,12 +14,12 @@
 .section .text
 .global _start
 _start:
-    jab.display.open
+    jab.sys.display.open
     bnez a0, no_display
     li s0, 0
     li s1, FLIPS
 1:
-    jab.display.flip
+    jab.sys.display.flip
     li t0, 1
     bne a0, t0, 2f
     addi s0, s0, 1
@@ -30,74 +30,74 @@ _start:
     mv a0, s0
     la a1, refused_digits
     call two_digits
-    jab.uart.print refused
+    jab.sys.uart.print refused
     # thirty-two whole frames, awaited
     li s1, FLIPS / 2
 3:
-    jab.display.await
-    jab.display.flip
+    jab.sys.display.await
+    jab.sys.display.flip
     bnez a0, flip_failed
     addi s1, s1, -1
     bnez s1, 3b
     # thirty-two rectangles, awaited
     li s1, FLIPS / 2
 4:
-    jab.display.await
+    jab.sys.display.await
     li a0, 100
     li a1, 100
     li a2, 50
     li a3, 50
-    jab.display.flip.rect
+    jab.sys.display.flip.rect
     bnez a0, flip_failed
     addi s1, s1, -1
     bnez s1, 4b
     # a rectangle past the right edge: badrect=N
-    jab.display.await
+    jab.sys.display.await
     li a0, 1900
     li a1, 0
     li a2, 100
     li a3, 10
-    jab.display.flip.rect
+    jab.sys.display.flip.rect
     la a1, badrect_digits
     call two_digits
-    jab.uart.print badrect
+    jab.sys.uart.print badrect
     # a list of two rectangles as one flip, then a list holding one
     # past the edge and a list of none: rects=N badrects=N norects=N
-    jab.display.await
+    jab.sys.display.await
     la t0, two_rects
     li t1, 2
-    jab.display.flip.rects t0, t1
+    jab.sys.display.flip.rects t0, t1
     la a1, rects_digits
     call two_digits
-    jab.uart.print rects
-    jab.display.await
+    jab.sys.uart.print rects
+    jab.sys.display.await
     la t0, bad_rects
     li t1, 2
-    jab.display.flip.rects t0, t1
+    jab.sys.display.flip.rects t0, t1
     la a1, badrects_digits
     call two_digits
-    jab.uart.print badrects
+    jab.sys.uart.print badrects
     la t0, two_rects
     li t1, 0
-    jab.display.flip.rects t0, t1
+    jab.sys.display.flip.rects t0, t1
     la a1, norects_digits
     call two_digits
-    jab.uart.print norects
+    jab.sys.uart.print norects
     # what the kernel was built with: flags=N
-    jab.kernel.flags
+    jab.sys.kernel.flags
     la a1, flags_digits
     call two_digits
-    jab.uart.print flags
-    jab.uart.print paced
-    jab.exit 0
+    jab.sys.uart.print flags
+    jab.sys.uart.print paced
+    jab.sys.exit 0
 
 no_display:
-    jab.uart.print msg_no_display
-    jab.exit 1
+    jab.sys.uart.print msg_no_display
+    jab.sys.exit 1
 
 flip_failed:
-    jab.uart.print msg_flip_failed
-    jab.exit 2
+    jab.sys.uart.print msg_flip_failed
+    jab.sys.exit 2
 
 # two_digits: write a0, under a hundred, as two decimal digits at a1.
 two_digits:
