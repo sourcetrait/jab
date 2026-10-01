@@ -1,17 +1,5 @@
-# light.S: the map's lights, without shadows. A light entity is a
-# point light with a colour and a radius, or a spotlight when its
-# spread is set, along its yaw and pitch. A surface point is lit by
-# the ambient plus, for each light of its sector's list within the
-# radius, the light's colour times the cosine at the surface's normal
-# times the falloff, one at the light falling straight to nothing at
-# the radius; a spotlight scales that from one on its axis to nothing
-# at its spread. Each channel is clamped to one, so a lit texel is
-# never brighter than its texture.
-# The brightness is taken at the two ends of a span in double, every
-# LIGHT_ROWS rows of a polygon, and stepped across in 16.16, the three
-# channels packed CHANNEL_BITS apart in one word, which the lit modes
-# of span_fill scale each texel's channels by. Which lights reach a
-# sector is the file's list. A map with no lights draws unlit.
+# The map's lights, without shadows: a span's brightness in three channels,
+# the ambient plus each light of the sector's list by cosine and falloff.
 
 .section .rodata
 .balign 8
@@ -24,11 +12,8 @@ k_light_minus_one_d:
 
 .section .text
 
-# lights_gather: the light entities into the light table, each with
-# its radius squared and one over its radius, its axis from its yaw
-# and pitch, and the cosine of its spread; then each sector's list of
-# light indices from the file's list of light entities. The count into
-# light_count.
+# The light entities into the light table, then each sector's list of light
+# indices from the file's.
 lights_gather:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -89,29 +74,19 @@ lights_gather:
     fsw ft1, LIGHT_OVER_RADIUS(s5)
     # the axis from the yaw and pitch, and the cosine of the spread; a
     # spread of none makes a point light
-    la t0, k_degree
-    flw fs0, 0(t0)
     flw fa0, ENTITY_YAW(s3)
-    fmul.s fa0, fa0, fs0
-    fsw fa0, 0(sp)
-    call sine
-    fsw fa0, 4(sp)                  # sin yaw
-    flw fa0, 0(sp)
-    call cosine
-    fsw fa0, 8(sp)                  # cos yaw
+    jab.f32.rad fa0, fa0
+    jab.f32.sin fs0, fa0            # sin yaw
+    jab.f32.cos fs1, fa0            # cos yaw
     flw fa0, ENTITY_PITCH(s3)
-    fmul.s fa0, fa0, fs0
-    fsw fa0, 0(sp)
-    call sine
-    fsw fa0, (LIGHT_AXIS + 8)(s5)   # sin pitch
-    flw fa0, 0(sp)
-    call cosine
-    flw ft1, 8(sp)
-    fmul.s ft1, ft1, fa0
-    fsw ft1, (LIGHT_AXIS + 0)(s5)   # cos pitch cos yaw
-    flw ft1, 4(sp)
-    fmul.s ft1, ft1, fa0
-    fsw ft1, (LIGHT_AXIS + 4)(s5)   # cos pitch sin yaw
+    jab.f32.rad fa0, fa0
+    jab.f32.sin fa1, fa0
+    fsw fa1, (LIGHT_AXIS + 8)(s5)   # sin pitch
+    jab.f32.cos fa1, fa0            # cos pitch
+    fmul.s ft8, fs1, fa1
+    fsw ft8, (LIGHT_AXIS + 0)(s5)   # cos pitch cos yaw
+    fmul.s ft8, fs0, fa1
+    fsw ft8, (LIGHT_AXIS + 4)(s5)   # cos pitch sin yaw
     flw fa0, ENTITY_SPREAD(s3)
     la t0, k_zero
     flw ft1, 0(t0)
@@ -123,9 +98,9 @@ lights_gather:
     fsw ft1, LIGHT_COS(s5)
     j 5f
 2:
-    fmul.s fa0, fa0, fs0
-    call cosine
-    fsw fa0, LIGHT_COS(s5)
+    jab.f32.rad fa0, fa0
+    jab.f32.cos fa1, fa0
+    fsw fa1, LIGHT_COS(s5)
 5:
     addi s3, s3, ENTITY_SIZE
     addi s4, s4, 1
@@ -182,12 +157,13 @@ lights_gather:
     addi sp, sp, 80
     ret
 
-# span_light: a0 becomes the brightness at the pixel a0 of the row a1
-# whose surface in hand lies at 1/z a2 (6.26), the three channels in
-# 16.16 packed CHANNEL_BITS apart: the world point down the pixel's
-# ray, then the ambient and each light of the surface's sector within
-# its radius, at the surface's unit normal. A leaf: clobbers t0 to t6
-# and every temporary float register.
+# The brightness at a pixel of the surface in hand: the three channels in
+# 16.16 packed CHANNEL_BITS apart, the ambient plus each light in reach.
+# a0 int The pixel.
+# a1 int The row.
+# a2 int 1/z there, 6.26.
+# returns A leaf; clobbers t0 to t6 and every temporary float register.
+#   a0 The packed brightness.
 .balign CODE_PAGE
 span_light:
     li t0, IZ_MIN
@@ -268,62 +244,65 @@ span_light:
     fld fa6, 0(t1)                  # red
     fmv.d fa7, fa6                  # green
     fmv.d ft11, fa6                 # blue
+    la t1, k_one_d
+    fld ft8, 0(t1)                  # one
+    ld a7, POLY_FLAT_LIT(t0)        # lit at no angle
     lw t1, POLY_SECTOR(t0)
-    la t2, sector_lights
+    la a3, sector_lights
     slli t1, t1, 5
-    add t2, t2, t1                  # the list
-    lbu t3, 0(t2)                   # its count
-    addi t2, t2, 1
+    add a3, a3, t1                  # the list
+    lbu a4, 0(a3)                   # its count
+    addi a3, a3, 1
+    la a6, vec3_scratch
 2:
-    beqz t3, 8f
-    lbu t4, 0(t2)
+    beqz a4, 8f
+    lbu a5, 0(a3)
     li t5, LIGHT_SIZE
-    mul t4, t4, t5
+    mul a5, a5, t5
     la t5, lights
-    add t4, t4, t5                  # the light
-    flw ft0, LIGHT_X(t4)
+    add a5, a5, t5                  # the light
+    flw ft0, LIGHT_X(a5)
     fcvt.d.s ft0, ft0
     fsub.d ft0, ft0, fa0            # d, from the point to the light
-    flw ft1, LIGHT_Y(t4)
+    fsd ft0, 0(a6)
+    flw ft1, LIGHT_Y(a5)
     fcvt.d.s ft1, ft1
     fsub.d ft1, ft1, fa1
-    flw ft2, LIGHT_Z(t4)
+    fsd ft1, 8(a6)
+    flw ft2, LIGHT_Z(a5)
     fcvt.d.s ft2, ft2
     fsub.d ft2, ft2, fa2
-    fmul.d ft3, ft0, ft0
-    fmadd.d ft3, ft1, ft1, ft3
-    fmadd.d ft3, ft2, ft2, ft3      # the distance squared
-    flw ft4, LIGHT_RADIUS2(t4)
+    fsd ft2, 16(a6)
+    jab.f64.vec3.sqrlen ft9, a6     # the distance squared
+    flw ft4, LIGHT_RADIUS2(a5)
     fcvt.d.s ft4, ft4
-    flt.d t5, ft4, ft3
+    flt.d t5, ft4, ft9
     bnez t5, 7f                     # out of reach
-    la t5, poly
-    ld t5, POLY_FLAT_LIT(t5)
-    beqz t5, 3f
+    beqz a7, 3f
     # lit at no angle: the cosine one
-    fsqrt.d ft6, ft3                # the distance
-    la t5, k_one_d
-    fld ft5, 0(t5)
+    jab.f64.vec3.len ft10, a6       # the distance
+    fmv.d ft5, ft8
     j 4f
 3:
-    fmul.d ft5, ft0, fa3
-    fmadd.d ft5, ft1, fa4, ft5
-    fmadd.d ft5, ft2, fa5, ft5      # n . d
+    fld ft0, 0(a6)
+    fld ft1, 8(a6)
+    fld ft2, 16(a6)
+    fmul.d ft9, ft0, fa3
+    fmadd.d ft9, ft1, fa4, ft9
+    fmadd.d ft9, ft2, fa5, ft9      # n . d
     fcvt.d.w ft6, zero
-    fle.d t5, ft5, ft6
+    fle.d t5, ft9, ft6
     bnez t5, 7f                     # behind the surface
-    fsqrt.d ft6, ft3                # the distance
-    fdiv.d ft5, ft5, ft6            # the cosine at the surface
+    jab.f64.vec3.len ft10, a6       # the distance
+    fdiv.d ft5, ft9, ft10           # the cosine at the surface
 4:
     # the falloff: one at the light, straight to nothing at the radius
-    flw ft7, LIGHT_OVER_RADIUS(t4)
+    flw ft7, LIGHT_OVER_RADIUS(a5)
     fcvt.d.s ft7, ft7
-    fmul.d ft7, ft7, ft6            # the distance over the radius
-    la t5, k_one_d
-    fld ft8, 0(t5)
+    fmul.d ft7, ft7, ft10           # the distance over the radius
     fsub.d ft7, ft8, ft7
     fmul.d ft5, ft5, ft7            # the cosine times the falloff
-    flw ft7, LIGHT_COS(t4)
+    flw ft7, LIGHT_COS(a5)
     fcvt.d.s ft7, ft7
     la t5, k_light_minus_one_d
     fld ft9, 0(t5)
@@ -331,37 +310,40 @@ span_light:
     bnez t5, 6f                     # a point light
     # the spotlight: the cosine from the light's axis to the point,
     # from the spread's edge scaled to one on the axis
-    flw ft9, (LIGHT_AXIS + 0)(t4)
+    fld ft0, 0(a6)
+    fld ft1, 8(a6)
+    fld ft2, 16(a6)
+    flw ft9, (LIGHT_AXIS + 0)(a5)
     fcvt.d.s ft9, ft9
-    fmul.d ft10, ft0, ft9
-    flw ft9, (LIGHT_AXIS + 4)(t4)
+    fmul.d ft6, ft0, ft9
+    flw ft9, (LIGHT_AXIS + 4)(a5)
     fcvt.d.s ft9, ft9
-    fmadd.d ft10, ft1, ft9, ft10
-    flw ft9, (LIGHT_AXIS + 8)(t4)
+    fmadd.d ft6, ft1, ft9, ft6
+    flw ft9, (LIGHT_AXIS + 8)(a5)
     fcvt.d.s ft9, ft9
-    fmadd.d ft10, ft2, ft9, ft10    # d . axis
-    fneg.d ft10, ft10
-    fdiv.d ft10, ft10, ft6          # the cosine from the axis
-    fsub.d ft10, ft10, ft7
+    fmadd.d ft6, ft2, ft9, ft6      # d . axis
+    fneg.d ft6, ft6
+    fdiv.d ft6, ft6, ft10           # the cosine from the axis
+    fsub.d ft6, ft6, ft7
     fsub.d ft9, ft8, ft7            # 1 - cos spread
-    fdiv.d ft10, ft10, ft9
+    fdiv.d ft6, ft6, ft9
     fcvt.d.w ft9, zero
-    fle.d t5, ft10, ft9
+    fle.d t5, ft6, ft9
     bnez t5, 7f                     # outside the cone
-    fmul.d ft5, ft5, ft10
+    fmul.d ft5, ft5, ft6
 6:
-    flw ft9, LIGHT_R(t4)
+    flw ft9, LIGHT_R(a5)
     fcvt.d.s ft9, ft9
     fmadd.d fa6, ft9, ft5, fa6
-    flw ft9, LIGHT_G(t4)
+    flw ft9, LIGHT_G(a5)
     fcvt.d.s ft9, ft9
     fmadd.d fa7, ft9, ft5, fa7
-    flw ft9, LIGHT_B(t4)
+    flw ft9, LIGHT_B(a5)
     fcvt.d.s ft9, ft9
     fmadd.d ft11, ft9, ft5, ft11
 7:
-    addi t2, t2, 1
-    addi t3, t3, -1
+    addi a3, a3, 1
+    addi a4, a4, -1
     j 2b
 8:
     # each channel clamped to one, in 16.16, packed

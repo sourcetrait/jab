@@ -1,25 +1,14 @@
-# console.S: the console, a test channel over the API's input: frames
-# of CONSOLE_FRAME bytes, a kind byte, three of padding, and the rest by
-# the kind, zero to the frame's end; every whole frame done each turn,
-# a partial one kept. P: the camera placed, six floats from byte 4, the
-# eye's x, y, and z then the yaw, pitch, and roll in degrees, its
-# sector found from the whole map, its basis derived at once, and the
-# next frame drawn reported on the UART as the first was. T: a trace
-# from the eye along the camera's
-# forward over the trace's range, answered over the API as kind
-# REPORT_TRACE with what it met, the distance, and the point in
-# millimetres. F: one round, as the trigger fires it. N: a noise at the
-# player, as a shot makes one. Each frame is reported over the API as kind
-# REPORT_CONSOLE with the command's byte at 4. Without the port nothing
-# arrives.
+# The console, a test channel over the API's input: CONSOLE_FRAME-byte frames
+# by kind, P placing the camera, T a trace, F a round, N a noise, each
+# reported back as REPORT_CONSOLE.
 
 .set CONSOLE_FRAME, 64
 .set CONSOLE_CAPACITY, 1024
 
 .section .text
 
-# console_read: what the host has sent taken in behind what waits,
-# every whole frame done, the rest kept.
+# What the host has sent taken in behind what waits, every whole frame done,
+# the rest kept.
 console_read:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -64,8 +53,8 @@ console_read:
     addi sp, sp, 32
     ret
 
-# console_frame: the frame at a0 done by its kind byte, then reported;
-# an unknown kind does nothing but the report.
+# A frame done by its kind byte, then reported; an unknown kind only reports.
+# a0 address The frame.
 console_frame:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -74,24 +63,22 @@ console_frame:
     lbu t0, 0(s2)
     li t1, 'P'
     bne t0, t1, 2f
-    la t0, camera
+    la t3, camera
     lw t1, 4(s2)
-    sw t1, CAM_X(t0)
+    sw t1, CAM_X(t3)
     lw t1, 8(s2)
-    sw t1, CAM_Y(t0)
+    sw t1, CAM_Y(t3)
     lw t1, 12(s2)
-    sw t1, CAM_Z(t0)
-    la t2, k_degree
-    flw ft0, 0(t2)
-    flw ft1, 16(s2)
-    fmul.s ft1, ft1, ft0
-    fsw ft1, CAM_YAW(t0)
-    flw ft1, 20(s2)
-    fmul.s ft1, ft1, ft0
-    fsw ft1, CAM_PITCH(t0)
-    flw ft1, 24(s2)
-    fmul.s ft1, ft1, ft0
-    fsw ft1, CAM_ROLL(t0)
+    sw t1, CAM_Z(t3)
+    flw ft8, 16(s2)
+    jab.f32.rad ft8, ft8
+    fsw ft8, CAM_YAW(t3)
+    flw ft8, 20(s2)
+    jab.f32.rad ft8, ft8
+    fsw ft8, CAM_PITCH(t3)
+    flw ft8, 24(s2)
+    jab.f32.rad ft8, ft8
+    fsw ft8, CAM_ROLL(t3)
     la t0, cam_sector
     li t1, -1
     sw t1, 0(t0)
@@ -128,10 +115,8 @@ console_frame:
     addi sp, sp, 32
     ret
 
-# console_trace: a trace from the eye along the camera's forward over
-# the trace's range, from the camera's sector, the geometry and the
-# androids alone; answered as REPORT_TRACE: the kind met, the distance,
-# and the point, each in millimetres.
+# A trace from the eye along the forward over the trace's range, the geometry
+# and the androids alone, answered as REPORT_TRACE in millimetres.
 console_trace:
     addi sp, sp, -16
     sd ra, 8(sp)

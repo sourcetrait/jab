@@ -1,12 +1,5 @@
-# sector.S: the world's geometry asked about a point. A sector's plane
-# is z = a x + b y + c, so its height at a point is two multiplies and
-# two adds. A sector holds a point in the plan by the even-odd rule over
-# the walls of its loops, and holds it outright when the point's z lies
-# between its floor and its ceiling there, with a thousandth's slack
-# either way, the same rule the host's reader applies. The sector
-# holding a point is found from the sector it was last in: itself, else
-# a breadth-first walk through the portals of its walls, then every
-# sector not reached, from the top.
+# The world's geometry asked about a point: a plane's height, the even-odd
+# rule, the sector holding a point.
 
 .section .rodata
 .balign 8
@@ -15,9 +8,13 @@ k_hold_slack_d:
 
 .section .text
 
-# plane_height: fa0 becomes the height of the sector a0's plane a1, 0
-# the floor and 1 the ceiling, at the point fa0, fa1, doubles.
-# Clobbers t0 to t2, ft0 to ft2.
+# The height of a sector's plane at a point.
+# a0 int The sector.
+# a1 int 0 the floor, 1 the ceiling.
+# fa0 f64 x.
+# fa1 f64 y.
+# returns Clobbers t0 to t2, ft0 to ft2.
+#   fa0 f64 The height.
 plane_height:
     li t0, SECTOR_SIZE
     mul t0, a0, t0
@@ -37,11 +34,13 @@ plane_height:
     fadd.d fa0, fa0, ft2
     ret
 
-# sector_holds_plan: a0 becomes 1 when the sector a0 holds the point
-# fa0, fa1 (doubles) in the plan by the even-odd rule over the walls of
-# its loops, else 0: a wall whose ends straddle the point's y crosses
-# when the wall's x at that y lies past the point's. Clobbers t0 to t6,
-# a1 to a5, ft0 to ft7.
+# Whether a sector holds a point in the plan, by the even-odd rule over the
+# walls of its loops.
+# a0 int The sector.
+# fa0 f64 x.
+# fa1 f64 y.
+# returns Clobbers t0 to t6, a1 to a5, ft0 to ft7.
+#   a0 1 or 0.
 sector_holds_plan:
     li t0, SECTOR_SIZE
     mul t0, a0, t0
@@ -110,9 +109,12 @@ sector_holds_plan:
     andi a0, a0, 1
     ret
 
-# sector_holds: a0 becomes 1 when the sector a0 holds the point fs0,
-# fs1, fs2 (doubles): inside its loops in the plan and between its
-# floor and its ceiling there, a thousandth's slack either way; else 0.
+# Whether a sector holds a point: in the plan and between its planes there,
+# a thousandth's slack either way.
+# a0 int The sector.
+# fs0 f64 x; fs1 y; fs2 z.
+# returns
+#   a0 1 or 0.
 sector_holds:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -152,11 +154,14 @@ sector_holds:
     addi sp, sp, 32
     ret
 
-# sector_find: a0 becomes the sector holding the point fa0, fa1, fa2
-# (doubles), starting from the sector a0: the sector itself, else a
-# breadth-first walk from it through the portals of its walls, the
-# sectors left unreached taken from the top down; a start outside the
-# map is a search from the top; -1 when no sector holds the point.
+# The sector holding a point, from the sector it was last in: itself, else a
+# breadth-first walk through its portals, then every sector from the top.
+# a0 int The sector before, or past the count for a search from the top.
+# fa0 f64 x.
+# fa1 f64 y.
+# fa2 f64 z.
+# returns
+#   a0 The sector, -1 when none holds the point.
 sector_find:
     addi sp, sp, -112
     sd ra, 104(sp)

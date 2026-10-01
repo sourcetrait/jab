@@ -1,13 +1,5 @@
-# player.S: the player's frame beyond the camera and the body: its
-# health and its rounds. The right trigger's button, or the console's
-# F, fires a round: the G-1's report at the player, a trace from the
-# eye along the camera's forward over the round's range, an android
-# met hurt by the round's damage, a spark where the round lands, and
-# the shot heard by the androids near (noise_heard, a flood from the
-# player's sector through the walls' portals). A round from an android
-# hurts the player (player_hurt), the health floored at 0 and reported;
-# what follows at 0 is the respawn's, to come. A magazine within reach
-# of the feet is taken, its rounds added and reported (player_pickups).
+# The player's frame beyond the camera and the body: its health and its
+# rounds; a round fired, the frame hurt, a magazine taken, a noise heard.
 
 .set HEALTH_START, 100
 .set MAGAZINE_ROUNDS, 30
@@ -31,8 +23,8 @@ k_noise_range_sq_d:
 
 .section .text
 
-# player_reset: the frame's health and rounds at the start, the chance
-# seeded, the pad's last keys none.
+# The frame's health and rounds at the start, the chance seeded from the
+# kernel's entropy, the clock without it, the pad's last keys none.
 player_reset:
     li t0, HEALTH_START
     la t1, health
@@ -41,15 +33,20 @@ player_reset:
     sw zero, 0(t1)
     la t1, pad_prev
     sw zero, 0(t1)
-    rdtime t0
-    ori t0, t0, 1
-    la t1, rng
-    sd t0, 0(t1)
+    la t3, rng
+    li t4, 8
+    jab.sys.random t3, t4
+    beqz a0, 1f
+    rdtime t4
+    j 2f
+1:
+    ld t4, 0(t3)
+2:
+    jab.rng.seed t3, t4
     ret
 
-# player_fire: one round: the G-1's report at the player, the trace
-# from the eye along the camera's forward, an android met hurt, a spark
-# where the round lands, the round reported, the shot heard.
+# One round: the G-1's report at the player, the trace from the eye along
+# the forward, an android met hurt, a spark where it lands, the shot heard.
 player_fire:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -132,8 +129,8 @@ player_fire:
     addi sp, sp, 32
     ret
 
-# player_hurt: the frame hurt by a0: the health less it, floored at 0,
-# reported with the damage.
+# The frame hurt: the health less the damage, floored at 0, reported.
+# a0 int The damage.
 player_hurt:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -155,9 +152,8 @@ player_hurt:
     addi sp, sp, 16
     ret
 
-# player_pickups: every magazine within a metre of the feet in the plan
-# and a metre in height taken: gone, its rounds added, the pickup sound
-# at the player, the rounds reported.
+# Every magazine within a metre of the feet in the plan and a metre in
+# height taken: its rounds added, the pickup sound, the rounds reported.
 player_pickups:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -225,10 +221,8 @@ player_pickups:
     addi sp, sp, 32
     ret
 
-# noise_heard: a noise at the player: a flood from the camera's sector
-# through the walls' portals NOISE_HOPS sectors deep, then every
-# android not yet roused in a flooded sector within the noise's range
-# of the eye roused.
+# A noise at the player: a flood from the camera's sector through the walls'
+# portals NOISE_HOPS deep, every unroused android in it within range roused.
 noise_heard:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -375,24 +369,9 @@ noise_heard:
     addi sp, sp, 48
     ret
 
-# random_byte: a0 becomes a byte of chance, an xorshift over rng.
-# Clobbers t0 to t2.
-random_byte:
-    la t0, rng
-    ld t1, 0(t0)
-    slli t2, t1, 13
-    xor t1, t1, t2
-    srli t2, t1, 7
-    xor t1, t1, t2
-    slli t2, t1, 17
-    xor t1, t1, t2
-    sd t1, 0(t0)
-    srli a0, t1, 24
-    andi a0, a0, 255
-    ret
-
 .section .bss
 .balign 8
+# The generator's state word
 rng:
     .skip 8
 health:

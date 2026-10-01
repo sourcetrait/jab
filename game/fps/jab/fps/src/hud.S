@@ -1,8 +1,4 @@
-# hud.S: what the player sees over the world. The crosshair: a
-# semi-translucent white dot at the screen's centre, CROSSHAIR_RADIUS
-# pixels in radius, each pixel of the frame under it blended half with
-# white after the world is drawn, so the aim's mark is read against
-# anything. The rounds and the magazines to come.
+# What the player sees over the world: the crosshair.
 
 .set CROSSHAIR_RADIUS, 5
 .set CROSSHAIR_X, (SCREEN_W / 2)
@@ -10,7 +6,9 @@
 
 .section .text
 
-# hud_draw: the crosshair over the frame. Clobbers t0 to t6, a0, a1.
+# The crosshair over the frame: a disc at the centre, each pixel under it
+# halved and added to half of white.
+# returns Clobbers t0 to t6, a0, a1.
 hud_draw:
     li t0, -CROSSHAIR_RADIUS        # the row, from the top
 1:

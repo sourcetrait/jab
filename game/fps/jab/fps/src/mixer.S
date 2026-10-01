@@ -1,14 +1,6 @@
-# mixer.S: the game's sounds into the kernel's stream. The sounds the
-# content holds load at start by name, mono 16-bit at the kernel's rate
-# as the tree carries them, a missing one named on the UART and silent.
-# MIX_CHANNELS channels each play one sound with a gain a side; a frame
-# asks the stream for its room, keeps MIX_AHEAD frames queued beyond
-# what plays, and mixes that many frames of every channel into a stereo
-# buffer, clipped, and writes them; the kernel's periods in flight then
-# land a sound about a fifth of a second after its start. A sound
-# starts at the player, centred and full, or from a world point: full
-# within MIX_NEAR metres and falling straight to nothing at MIX_FAR,
-# panned by the point's share along the camera's level right.
+# The game's sounds into the kernel's stream: MIX_CHANNELS channels mixed
+# into stereo frames kept MIX_AHEAD ahead of what plays, a sound at the
+# player or from a world point by distance and pan.
 
 .set MIX_CHANNELS, 8
 .set MIX_AHEAD, (JAB_SOUND_PERIOD * 3)
@@ -85,11 +77,8 @@ msg_sounds:
 
 .section .text
 
-# sounds_load: every sound of the engine's stems read off the disk at
-# /sound/<stem>.pcm into the sound arena, its samples and their count
-# into sound_at and sound_frames; one not there, or one that does not
-# fit, is named on the UART and left as none; `fps: sounds N loaded, M
-# missing` on the UART.
+# Every sound of the engine's stems read off the disk into the sound arena;
+# one not there or not fitting is named on the UART and left as none.
 sounds_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -190,20 +179,19 @@ sounds_load:
     addi sp, sp, 48
     ret
 
-# sound_start: the sound a0 started, at the player when a1 is 1, else
-# from the world point fa0, fa1, fa2, doubles: its gains a side from
-# the point's distance to the eye and its share along the camera's
-# level right; a free channel, else the one nearest its end. A sound
-# the tree lacks starts nothing.
+# A sound started on a channel, at the player or from a world point: full
+# within MIX_NEAR of the eye, nothing past the range, panned by its side.
+# a0 int The sound.
+# a1 int 1 at the player, else from the point.
+# fa0 f64 The point's x; fa1 y; fa2 z.
 sound_start:
-    addi sp, sp, -80
-    sd ra, 72(sp)
-    sd s2, 64(sp)
-    sd s3, 56(sp)
-    fsd fs0, 48(sp)
-    fsd fs1, 40(sp)
-    fsd fs2, 32(sp)
-    fsd fs3, 24(sp)
+    addi sp, sp, -48
+    sd s2, 40(sp)
+    sd s3, 32(sp)
+    fsd fs0, 24(sp)
+    fsd fs1, 16(sp)
+    fsd fs2, 8(sp)
+    fsd fs3, 0(sp)
     li t0, SOUND_COUNT
     bgeu a0, t0, 9f
     la t0, sound_at
@@ -219,25 +207,26 @@ sound_start:
     fmv.d fs1, fs0                  # and the right
     bnez a1, 3f
     # from the world: the volume by the distance to the eye
-    la t0, camera
-    flw ft0, CAM_X(t0)
+    la t3, camera
+    flw ft0, CAM_X(t3)
     fcvt.d.s ft0, ft0
     fsub.d ft0, fa0, ft0            # from the eye to the point
-    flw ft1, CAM_Y(t0)
+    flw ft1, CAM_Y(t3)
     fcvt.d.s ft1, ft1
     fsub.d ft1, fa1, ft1
-    flw ft2, CAM_Z(t0)
+    flw ft2, CAM_Z(t3)
     fcvt.d.s ft2, ft2
     fsub.d ft2, fa2, ft2
-    fmul.d ft3, ft0, ft0
-    fmadd.d ft3, ft1, ft1, ft3
-    fmadd.d ft3, ft2, ft2, ft3
-    fsqrt.d ft3, ft3                # the distance
+    la t3, vec3_scratch
+    fsd ft0, 0(t3)
+    fsd ft1, 8(t3)
+    fsd ft2, 16(t3)
+    jab.f64.vec3.len ft8, t3        # the distance
     la t0, k_mix_near_d
     fld ft4, 0(t0)
-    fle.d t1, ft3, ft4
+    fle.d t1, ft8, ft4
     bnez t1, 2f
-    fsub.d ft4, ft3, ft4
+    fsub.d ft4, ft8, ft4
     la t0, k_mix_range_d
     fld ft5, 0(t0)
     fdiv.d ft4, ft4, ft5            # past near, over the range
@@ -251,30 +240,22 @@ sound_start:
 2:
     # the pan: the point's share to the right, along the level right
     # (sin yaw, -cos yaw), over the level distance
-    fmul.d ft4, ft0, ft0
-    fmadd.d ft4, ft1, ft1, ft4
-    fsqrt.d ft4, ft4
+    jab.f64.vec2.len ft9, t3
     la t0, k_mix_level_eps_d
     fld ft5, 0(t0)
-    flt.d t1, ft4, ft5
+    flt.d t1, ft9, ft5
     bnez t1, 3f                     # under the eye: centred
-    fsd ft0, 0(sp)
-    fsd ft1, 8(sp)
-    fsd ft4, 16(sp)
-    la t0, camera
-    flw fa0, CAM_YAW(t0)
-    call sine
-    fcvt.d.s fs2, fa0               # sin yaw
-    la t0, camera
-    flw fa0, CAM_YAW(t0)
-    call cosine
-    fcvt.d.s fs3, fa0               # cos yaw
-    fld ft0, 0(sp)
-    fld ft1, 8(sp)
-    fld ft4, 16(sp)
+    la t4, camera
+    flw fa3, CAM_YAW(t4)
+    jab.f32.sin fa4, fa3
+    fcvt.d.s fs2, fa4               # sin yaw
+    jab.f32.cos fa4, fa3
+    fcvt.d.s fs3, fa4               # cos yaw
+    fld ft0, 0(t3)
+    fld ft1, 8(t3)
     fmul.d ft5, ft0, fs2
     fnmsub.d ft5, ft1, fs3, ft5     # dx sin - dy cos
-    fdiv.d ft5, ft5, ft4
+    fdiv.d ft5, ft5, ft9
     la t0, k_mix_pan_d
     fld ft6, 0(t0)
     fmul.d ft5, ft5, ft6            # the pan, -0.6 to 0.6
@@ -318,18 +299,17 @@ sound_start:
     sw a4, CHANNEL_LEFT(t2)
     sw a5, CHANNEL_RIGHT(t2)
 9:
-    ld ra, 72(sp)
-    ld s2, 64(sp)
-    ld s3, 56(sp)
-    fld fs0, 48(sp)
-    fld fs1, 40(sp)
-    fld fs2, 32(sp)
-    fld fs3, 24(sp)
-    addi sp, sp, 80
+    ld s2, 40(sp)
+    ld s3, 32(sp)
+    fld fs0, 24(sp)
+    fld fs1, 16(sp)
+    fld fs2, 8(sp)
+    fld fs3, 0(sp)
+    addi sp, sp, 48
     ret
 
-# mixer_update: the stream kept MIX_AHEAD frames ahead: what the ring
-# lacks of that mixed from every channel and written.
+# The stream kept MIX_AHEAD frames ahead: what the ring lacks mixed from
+# every channel and written.
 .balign CODE_PAGE
 mixer_update:
     addi sp, sp, -16

@@ -1,19 +1,10 @@
-# render.inc: the engine's own records and limits beyond the map's,
-# read after map.inc: the screen, the sections as the loader placed
-# them, the camera, the polygon and the surface in hand, the lights,
-# the frame's counts, and the records over the API.
+# The engine's own records and limits beyond the map's, read after map.inc.
 .set SCREEN_W, JAB_DISPLAY_WIDTH
 .set SCREEN_H, JAB_DISPLAY_HEIGHT
 .set SCREEN_PITCH, JAB_DISPLAY_PITCH
 .set ZBUF_BYTES, (SCREEN_W * SCREEN_H * 4)
-# A page of code under QEMU: its translator ends a block at a page
-# boundary and chains blocks within a page only, so a loop straddling
-# one leaves and re-enters the translator every iteration, seven times
-# the loop (the sky fill measured 8 ms in a page and 54 ms across one).
-# A function whose loops run a pixel or a sample is aligned to a page
-# and kept under one, which the test holds from the symbols; a loop of
-# that kind inside a larger function is aligned to a power of two past
-# its length
+# A page of code under QEMU: a function whose loops run a pixel or a sample
+# is aligned to one and kept under one, which the test holds
 .set CODE_PAGE, 4096
 # The sections as the loader placed them, an entry a kind from 1: the
 # section's address in the map buffer and its record count, 64 bits
@@ -34,6 +25,13 @@
 .set CAM_UP, 36
 .set CAM_FORWARD, 48
 .set CAM_SIZE, 60
+# The camera as doubles, written with the basis each frame for the surface
+# mathematics, at twice the camera's offsets
+.set CAMD_X, 0
+.set CAMD_RIGHT, 48
+.set CAMD_UP, 72
+.set CAMD_FORWARD, 96
+.set CAMD_SIZE, 120
 # A polygon before clipping, its points world positions of three
 # floats; a sector's loop is one polygon, so it holds a room's whole
 # ring; clipping against the near plane can add one point an edge
@@ -124,6 +122,14 @@
 .set PLANE_AV, 40
 .set PLANE_V0, 52
 .set PLANE_SIZE, 56
+# The plane in hand as doubles, widened once a polygon, at twice its offsets
+.set PLANED_N, 0
+.set PLANED_Q, 24
+.set PLANED_AU, 48
+.set PLANED_U0, 72
+.set PLANED_AV, 80
+.set PLANED_V0, 104
+.set PLANED_SIZE, 112
 # The depth: 1/z as an integer in 6.26, z as 2^42 over it in 48.16, a
 # span in blocks of BLOCK pixels; a 1/z under IZ_MIN is clamped to it
 # for the divide, a sky pixel stores SKY_DEPTH so anything drawn later
@@ -331,13 +337,19 @@
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
 
-# section_at kind, reg: reg becomes the section's address in the map.
+# A section's address in the map.
+# kind int The kind.
+# returns
+#   reg The address.
 .macro section_at kind, reg
     la \reg, sections
     ld \reg, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\reg)
 .endm
 
-# section_count kind, reg: reg becomes the section's record count.
+# A section's record count.
+# kind int The kind.
+# returns
+#   reg The count.
 .macro section_count kind, reg
     la \reg, sections
     ld \reg, (SECTION_COUNT + SECTION_ENTRY * (\kind - 1))(\reg)

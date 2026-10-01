@@ -1,26 +1,11 @@
-# fps: the game's program. The map's name is read off the program's disk
-# and drawn bold in the middle of a black screen while the map loads:
-# the file read whole, its header and section directory held to the
-# format and every section placed, its records held to the format's
-# rules (load.S), every material's texture decoded off the disk into
-# the pixel arena and every ambient piece read, the soundfont loaded
-# off the generic disk when it is there, the lights gathered
-# (light.S), and the camera set at the spawn (camera.S). The load is
-# reported on the UART with every count. Then the loop: every frame the
-# pad read, the camera turned and the body walked by the time since the
-# frame before (camera.S, body.S), the console read (console.S), the
-# camera's sector followed and its basis derived, the actors run
-# (actor.S), the sector's ambient followed, the world drawn from the
-# camera through the portal walk (world.S) over the integer span
-# (raster.S) with the sprites, the actors, and the light (sprite.S,
-# actor.S, light.S), the crosshair over it (hud.S), the frame flipped,
-# the state reported over the API, and the display's tick or the pad
-# awaited; the first frame is
-# reported on the UART with its phases and counts. The engine's own
-# images, the android's frames among them, load after the map's
-# materials (load.S). A step it cannot take says so on the UART and
-# exits with its own code.
+# The game's program: the map loaded off its disk and held to its format, the
+# title drawn, then the frame loop: the pad, the camera and the body, the
+# console, the actors, the ambient, the world drawn, the HUD, the flip, the
+# state over the API, and the display's tick or the pad awaited.
 .include "jab.inc"
+.include "jab_f32.inc"
+.include "jab_f64.inc"
+.include "jab_rng.inc"
 .include "src/map.inc"
 .include "src/render.inc"
 
@@ -222,8 +207,7 @@ bad_magic:
     call line_end
     jab.sys.exit 6
 
-# short_file: the file ends before its structures do: `fps: <path> ends
-# at N bytes before its structures do`, exit 7.
+# Exit 7: the file ends before its structures do.
 short_file:
     call line_map
     la a1, word_ends_at
@@ -247,9 +231,8 @@ map_too_big:
     call line_end
     jab.sys.exit 7
 
-# too_many: the map holds more of a kind than this build does, the
-# kind's word in a1: `fps: <path> holds more walls than this build
-# holds`, exit 8.
+# Exit 8: the map holds more of a kind than this build does.
+# a1 address The kind's word.
 too_many:
     mv s6, a1
     call line_map
@@ -262,7 +245,8 @@ too_many:
     call line_end
     jab.sys.exit 8
 
-# path_too_long: the material a0's name is too long for a path, exit 9.
+# Exit 9: a material's name is too long for a path.
+# a0 int The material.
 path_too_long:
     mv s6, a0
     la a0, line
@@ -275,8 +259,9 @@ path_too_long:
     call line_end
     jab.sys.exit 9
 
-# load_failed: the material a0's texture failed to load with the code
-# a1, exit 10.
+# Exit 10: a material's texture failed to load.
+# a0 int The material.
+# a1 int The code.
 load_failed:
     mv s6, a1
     mv s7, a0
@@ -292,9 +277,10 @@ load_failed:
     call line_end
     jab.sys.exit 10
 
-# check_failed: a record broke a rule of the format: a1 the record's
-# word, a2 its index, a3 what is wrong with it: `fps: <path>: wall 12's
-# vertices are out of range`, exit 11.
+# Exit 11: a record broke a rule of the format.
+# a1 address The record's word.
+# a2 int Its index.
+# a3 address What is wrong with it.
 check_failed:
     mv s6, a1
     mv s7, a2
@@ -311,8 +297,8 @@ check_failed:
     call line_end
     jab.sys.exit 11
 
-# map_lacks: the map lacks what a1 names: `fps: <path> has no spawn`,
-# exit 11.
+# Exit 11: the map lacks what a1 names.
+# a1 address The lack, NUL-terminated.
 map_lacks:
     mv s6, a1
     call line_map
@@ -321,8 +307,8 @@ map_lacks:
     call line_end
     jab.sys.exit 11
 
-# bad_directory: the section directory is broken as a1 says: `fps:
-# <path>'s section directory names a kind twice`, exit 12.
+# Exit 12: the section directory is broken.
+# a1 address How, NUL-terminated.
 bad_directory:
     mv s6, a1
     call line_map
@@ -333,8 +319,9 @@ bad_directory:
     call line_end
     jab.sys.exit 12
 
-# line_map: the line begun with `fps: <map path>`; a0 becomes the
-# cursor past it.
+# Begins the line with the prefix and the map's path.
+# returns
+#   a0 The cursor past it.
 line_map:
     la a0, line
     la a1, msg_prefix
@@ -345,7 +332,8 @@ line_map:
     mv ra, t1
     ret
 
-# line_end: the line at a0 ended with a newline and printed on the UART.
+# Ends the line at the cursor with a newline and prints it on the UART.
+# a0 address The cursor.
 line_end:
     li t0, '\n'
     sb t0, 0(a0)
@@ -353,9 +341,8 @@ line_end:
     jab.sys.uart.print line
     ret
 
-# load_report: `fps: <name> loaded in <ms> ms: S sectors, W walls, V
-# vertices, P portals, E entities, G lights, X sprites, M materials, T
-# textures, U missing` on the UART, the milliseconds in s5.
+# The load line on the UART: the counts of what loaded.
+# s5 int The milliseconds.
 load_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -419,9 +406,8 @@ load_report:
     addi sp, sp, 16
     ret
 
-# frame_report: `fps: frame in <us> us: S sectors, W walls, P pieces,
-# F planes, O openings, X sprites, U uncovered; clear, planes, walls,
-# portals, sprites us a, b, c, d, e` on the UART, the ticks in s10.
+# The frame line on the UART: the counts and the ticks by phase.
+# s10 int The frame's ticks.
 frame_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -509,8 +495,7 @@ frame_report:
     ret
 
 .ifdef DEBUG
-# sectors_report: `fps: sectors a b c ...` on the UART, the sectors the
-# last frame drew in the walk's order, for a capture's review.
+# The sectors line on the UART: the last frame's walk in order.
 sectors_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -542,8 +527,10 @@ sectors_report:
     ret
 .endif
 
-# The map's records by index, each a0 becoming the record's address.
-# Clobbers t0.
+# The map's records by index.
+# a0 int The index.
+# returns Clobbers t0.
+#   a0 The record's address.
 sector_at:
     li t0, SECTOR_SIZE
     mul a0, a0, t0
@@ -593,17 +580,20 @@ material_at:
     add a0, a0, t0
     ret
 
-# name_at: a0 becomes the address of the name at the offset a0 in the
-# names table. Clobbers t0.
+# A name in the names table.
+# a0 int The offset.
+# returns Clobbers t0.
+#   a0 The name's address.
 name_at:
     section_at KIND_NAMES, t0
     add a0, a0, t0
     ret
 
-# clear_screen: the framebuffer black.
+# The framebuffer black.
 clear_screen:
     li a0, 0
-# fill_screen: the framebuffer the colour a0.
+# The framebuffer one colour.
+# a0 u32 The colour.
 fill_screen:
     slli t2, a0, 32
     or t2, t2, a0
@@ -617,9 +607,13 @@ fill_screen:
     bltu t0, t1, 1b
     ret
 
-# read_file: the file at the path a3, an address, on disk a2, from its
-# root, into the buffer a0 of a1 bytes, a page at a time; a0 becomes
-# the bytes read, 0 when the file is not there.
+# Reads a file off a disk whole, a page at a time.
+# a0 address The buffer.
+# a1 int Its bytes.
+# a2 int The disk.
+# a3 address The path from the root, NUL-terminated.
+# returns
+#   a0 The bytes read, 0 when the file is not there.
 read_file:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -674,8 +668,10 @@ read_file:
     addi sp, sp, 64
     ret
 
-# str_len: a1 becomes the length of the NUL-terminated string at a0,
-# a0 kept. Clobbers t0.
+# The length of a string.
+# a0 address NUL-terminated, kept.
+# returns Clobbers t0.
+#   a1 The length.
 str_len:
     li a1, 0
 1:
@@ -687,8 +683,11 @@ str_len:
 2:
     ret
 
-# append_str: the NUL-terminated string at a1 copied to a0, which moves
-# past it. Clobbers t0.
+# Appends a string at the cursor.
+# a0 address The cursor.
+# a1 address NUL-terminated.
+# returns Clobbers t0.
+#   a0 The cursor past it.
 append_str:
 1:
     lbu t0, 0(a1)
@@ -700,8 +699,11 @@ append_str:
 2:
     ret
 
-# append_dec: a1, unsigned, written in decimal at a0, which moves past
-# the digits. Clobbers t0 to t3.
+# Appends a number in decimal at the cursor.
+# a0 address The cursor.
+# a1 u64
+# returns Clobbers t0 to t3.
+#   a0 The cursor past the digits.
 append_dec:
     la t0, digits
     addi t0, t0, DIGITS_BYTES
@@ -744,6 +746,9 @@ pixel_cursor:
     .skip 8
 ambient_cursor:
     .skip 8
+# Three doubles a library macro reads a register vector through
+vec3_scratch:
+    .skip 24
 # The sections as the loader placed them, an entry a kind
 sections:
     .skip (KIND_COUNT * SECTION_ENTRY)

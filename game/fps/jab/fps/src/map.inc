@@ -1,8 +1,5 @@
-# map.inc: the Jab FPS map, <name>.jabfps.map, as byte offsets, the
-# format the loader reads in place: a header, a section directory the
-# loader validates, and packed sections; every field 32-bit and
-# little-endian, floats singles, positions metres, the world z up. The
-# program's own limits on what a map may hold are here as well.
+# The Jab FPS map, <name>.jabfps.map, as byte offsets, and the program's
+# limits on what a map may hold.
 .set MAP_MAGIC, 0x0042414a          # JAB and a zero
 .set MAP_MAGIC_AT, 0
 .set MAP_SECTION_COUNT, 4

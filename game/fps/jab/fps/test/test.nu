@@ -114,9 +114,10 @@ const SKY_PIXEL = [960, 100]
 const SKY_TOP = 0x[3a 6f b0]
 const CROSSHAIR = [960, 540]
 # the functions whose loops run a pixel or a sample, each within one
-# page of code (render.inc's CODE_PAGE)
+# page of code (render.inc's CODE_PAGE) and trapping only where the
+# mixer's two calls a frame are
 const HOT_FUNCTIONS = [span_fill poly_shows span_light mixer_update]
-const CODE_PAGE = 4096
+const HOT_ECALLS = { span_fill: 0, poly_shows: 0, span_light: 0, mixer_update: 2 }
 # The engine's own images and sounds, every one in a tree of ours
 const FRAMES_LINE = "fps: frames 69 loaded, 0 missing"
 const SOUNDS_LINE = "fps: sounds 16 loaded, 0 missing"
@@ -141,7 +142,7 @@ const TRACE_SLACK = 50
 
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
     assert (($assets | path exists)) "the sdk built the assets image"
-    hot-functions-paged $image
+    hot-functions $image
     let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let trees = ($game | path join ".target" "asset")
     mut runs = []
@@ -551,21 +552,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     print "fps: ok"
 }
 
-# Each hot function within one page of code, read from the symbols of
-# the ELF beside the image with the toolchain the build's flags name:
-# QEMU's translator ends a block at a page boundary and chains blocks
-# within a page only, so a loop straddling one runs seven times slower.
-def hot-functions-paged [image: path]: nothing -> nothing {
-    let built = ($image | path dirname)
-    let prefix = (open --raw ($built | path join "flags") | lines | first | split row " " | last)
-    let elf = ($built | path join "fps.elf")
-    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}")
-    for name in $HOT_FUNCTIONS {
-        let at = ($symbols | enumerate | where {|s| $s.item.name == $name } | get -o 0.index)
-        assert ($at != null) $"($name) among the program's symbols"
-        let start = ($symbols | get $at | get addr | into int --radix 16)
-        let next = ($symbols | get ($at + 1) | get addr | into int --radix 16)
-        assert equal ($start // $CODE_PAGE) (($next - 1) // $CODE_PAGE) $"($name) within one page of code: ($symbols | get $at | get addr) to ($symbols | get ($at + 1) | get addr)"
+# Each hot function within one page of code and trapping no more than
+# its table says, through the SDK's `jab hot` over the ELF beside the
+# image: QEMU's translator ends a block at a page boundary and chains
+# blocks within a page only, so a loop straddling one runs seven times
+# slower, and a trap in a per-pixel loop would cost more.
+def hot-functions [image: path]: nothing -> nothing {
+    let elf = ($image | path dirname | path join "fps.elf")
+    for h in (jab hot $elf $HOT_FUNCTIONS) {
+        assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
+        assert equal $h.ecalls ($HOT_ECALLS | get $h.name) $"($h.name) traps inside its page"
     }
 }
 

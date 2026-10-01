@@ -1,13 +1,5 @@
-# sprite.S: the sprite entities drawn after the walk, every one whose
-# sector the walk reached, each a flat quad of its width and height
-# with its material once across it, masked by the texel's alpha. Its
-# position is its feet: a sprite facing the camera stands on them and
-# turns to the eye about the vertical, upright under any roll; a fixed
-# sprite stands on them facing its yaw; a flat sprite lies on them,
-# along its yaw, its face up. A one-sided sprite is skipped when the
-# camera is behind its face. The quad is pulled a hundredth of the way
-# toward the camera, so a sprite laid on a wall wins the depth test. A
-# sprite with no material draws nothing.
+# The sprite entities drawn after the walk, each a flat quad facing the
+# camera, fixed along its yaw, or flat on the floor, masked by alpha.
 
 .section .rodata
 .balign 8
@@ -18,7 +10,7 @@ k_tiny_d:
 
 .section .text
 
-# sprites_draw: every sprite entity in a sector the walk reached drawn.
+# Every sprite entity in a sector the walk reached drawn.
 sprites_draw:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -49,10 +41,9 @@ sprites_draw:
     addi sp, sp, 32
     ret
 
-# sprite_draw: the sprite entity at a0 drawn when it has a texture and
-# faces the camera or is two-sided: its centre c, its half axes r
-# across and d down, and its normal d cross r, the side the texture
-# faces.
+# A sprite entity drawn when it has a texture and faces the camera or is
+# two-sided.
+# a0 address The entity.
 sprite_draw:
     addi sp, sp, -128
     sd ra, 120(sp)
@@ -92,15 +83,11 @@ sprite_draw:
     fmul.d fs10, ft0, ft1           # half the height
     # the yaw's sine and cosine, doubles
     flw fa0, ENTITY_YAW(s2)
-    la t0, k_degree
-    flw ft0, 0(t0)
-    fmul.s fa0, fa0, ft0
-    fsw fa0, 0(sp)
-    call sine
-    fcvt.d.s fs11, fa0              # sin yaw
-    flw fa0, 0(sp)
-    call cosine
-    fcvt.d.s ft9, fa0               # cos yaw
+    jab.f32.rad fa0, fa0
+    jab.f32.sin fa1, fa0
+    fcvt.d.s fs11, fa1              # sin yaw
+    jab.f32.cos fa1, fa0
+    fcvt.d.s ft9, fa1               # cos yaw
     andi t0, s3, ENTITY_FLAT
     bnez t0, 2f
     # standing: the centre half the height up, d straight down
@@ -119,17 +106,12 @@ sprite_draw:
 1:
     # facing the camera: r along the camera's right kept level; a
     # right that stands on end leaves the sprite facing its yaw
-    la t0, camera
-    flw ft2, (CAM_RIGHT + 0)(t0)
-    fcvt.d.s ft2, ft2
-    flw ft3, (CAM_RIGHT + 4)(t0)
-    fcvt.d.s ft3, ft3
-    fmul.d ft4, ft2, ft2
-    fmadd.d ft4, ft3, ft3, ft4
-    fsqrt.d ft4, ft4                # the level length of right
+    la t3, camera_d
+    addi t3, t3, CAMD_RIGHT
+    jab.f64.vec2.len ft8, t3        # the level length of right
     la t0, k_tiny_d
     fld ft5, 0(t0)
-    flt.d t1, ft4, ft5
+    flt.d t1, ft8, ft5
     beqz t1, 11f
     fneg.d fs3, fs11
     fmul.d fs3, fs3, fs9
@@ -137,8 +119,10 @@ sprite_draw:
     fcvt.d.w fs5, zero
     j 3f
 11:
-    fdiv.d ft4, fs9, ft4
+    fdiv.d ft4, fs9, ft8
+    fld ft2, 0(t3)
     fmul.d fs3, ft2, ft4
+    fld ft3, 8(t3)
     fmul.d fs4, ft3, ft4
     fcvt.d.w fs5, zero
     j 3f

@@ -1,20 +1,6 @@
-# load.S: the map held to its format, and what a run carries beside
-# it. map_parse takes the header and the section directory: the magic,
-# every section within the file at its kind's record size and on a
-# word boundary, each kind once and every kind present, the counts
-# within the build's limits; each section's address and count go into
-# `sections`. map_check holds the records to the format's rules: every
-# name within the names table, every index in range, every loop three
-# walls or more running around its sector, every portal exact, every
-# entity inside the sector the file names by the loops and the spawn
-# between its planes too, at least one spawn. materials_load decodes
-# every material's texture off the disk into the pixel arena at the
-# path its name composes, a missing one named on the UART and counted;
-# ambients_load reads every ambient piece into its arena,
-# soundfont_load puts the generic disk's soundfont into the
-# synthesizer when the disk carries it, and ambient_follow plays the
-# piece of the camera's sector. A fault says so on the UART and exits
-# with its code.
+# The map held to its format: the header and the sections parsed, the
+# records checked, the materials, the engine's images, the ambients, and the
+# soundfont loaded; a fault says so on the UART and exits with its code.
 
 .section .rodata
 .balign 8
@@ -37,8 +23,8 @@ k_slack_d:
 
 .section .text
 
-# map_parse: the header and the section directory held to the format,
-# every section's address and count into `sections`; a fault exits.
+# The header and the section directory held to the format, every section's
+# address and count into sections; a fault exits.
 map_parse:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -164,8 +150,10 @@ directory_missing:
     la a1, word_directory_missing
     j bad_directory
 
-# name_check: a0 becomes 1 when the names table holds a NUL-terminated
-# name at the offset a0, else 0. Clobbers t0 to t3.
+# Whether the names table holds a NUL-terminated name at an offset.
+# a0 int The offset.
+# returns Clobbers t0 to t3.
+#   a0 1 or 0.
 name_check:
     section_count KIND_NAMES, t1
     bgeu a0, t1, 8f
@@ -185,9 +173,8 @@ name_check:
     li a0, 1
     ret
 
-# map_check: the records held to the format's rules; the first record
-# that breaks one is named on the UART and the program exits 11. The
-# first spawn's index and the sprite count are taken on the way.
+# The records held to the format's rules, the first to break one named on
+# the UART with exit 11; the first spawn's index and the sprite count taken.
 map_check:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -598,9 +585,8 @@ map_check:
     addi sp, sp, 112
     ret
 
-# materials_load: every material's texture read off the disk at
-# /<name>.png through material_read, its record into material_record;
-# the counts into texture_count and missing_count.
+# Every material's texture read off the disk at /<name>.png into
+# material_record; texture_count and missing_count.
 materials_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -660,11 +646,11 @@ materials_load:
     addi sp, sp, 48
     ret
 
-# material_read: the texture at the path in tile_path read whole off
-# the disk and decoded into the pixel arena as the material a0, the
-# index the UART names it by after the message at a1; a0 becomes its
-# record, or 0 when the file is not there, that named on the UART as
-# missing; a load that fails exits.
+# The texture at tile_path read whole and decoded into the pixel arena.
+# a0 int The material's index, for the UART.
+# a1 address The message before it on the UART.
+# returns A load that fails exits.
+#   a0 The record, or 0 when the file is not there, named as missing.
 material_read:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -747,11 +733,8 @@ material_read:
     addi sp, sp, 48
     ret
 
-# frames_load: the engine's own images, the android's frames, the
-# sparks, and the magazine, read off the disk at /sprite/<stem>.png
-# through material_read into the material records after the map's, the
-# first at frame_base; `fps: frames N loaded, M missing` on the UART.
-# The records must fit under the build's material count.
+# The engine's own images read off the disk at /sprite/<stem>.png into the
+# material records after the map's, the first at frame_base.
 frames_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -844,10 +827,8 @@ frames_load:
     addi sp, sp, 48
     ret
 
-# ambients_load: every ambient piece read off the disk at /<name>.mid
-# into its arena, its bytes and their count into ambient_at and
-# ambient_bytes; a piece not there, too long a name, or one that does
-# not fit is named on the UART and left as none. Nothing plays yet.
+# Every ambient piece read off the disk at /<name>.mid into its arena; one
+# not there, too long a name, or not fitting is named on the UART.
 ambients_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -954,10 +935,8 @@ ambients_load:
     addi sp, sp, 48
     ret
 
-# soundfont_load: the generic disk's soundfont, FluidR3 GM at its path
-# on the disk of serial mix, read in pages into its arena and put into
-# the synthesizer, its counts on the UART; without the disk or the
-# file the chip voices play, and the UART says so.
+# The generic disk's soundfont put into the synthesizer, its counts on the
+# UART; without the disk or the file the chip voices play.
 soundfont_load:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1009,11 +988,8 @@ soundfont_load:
     addi sp, sp, 32
     ret
 
-# ambient_follow: the piece of the camera's sector played: when its
-# ambient is not the one playing, the one playing stops and the new one
-# starts, said on the UART with its index, or the code the player
-# refused it with; a piece that has ended starts again; a sector with
-# no ambient, or the camera in none, plays nothing.
+# The piece of the camera's sector played: a change stops the one playing
+# and starts the new, said on the UART; a piece that has ended starts again.
 ambient_follow:
     addi sp, sp, -32
     sd ra, 24(sp)

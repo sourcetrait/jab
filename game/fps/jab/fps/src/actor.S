@@ -1,14 +1,6 @@
-# actor.S: the engine's things in play, the actors: the androids the
-# map places, the magazines they drop, the sparks where a round lands.
-# An android runs its rows, a frame set for its milliseconds with an
-# action on entry: it stands or patrols its waypoints looking for the
-# player, rouses when it sees or hears one, aims and fires the G-1,
-# searches where it last saw the player, flinches when struck, and
-# falls when destroyed, dropping its magazine. Every actor draws through
-# sprite_draw from a scratch entity record, an android's frame chosen
-# by its row's set and the eighth of a turn its facing makes with the
-# direction to the eye, so its front shows when it faces the eye and its
-# right side two eighths on.
+# The actors: the androids the map places, the magazines they drop, the
+# sparks where a round lands; an android runs rows of a frame set, a time,
+# and an action.
 
 .section .rodata
 .balign 8
@@ -80,10 +72,8 @@ word_single_magazine:
 
 .section .text
 
-# actors_place: every actor gone, then one placed for each android and
-# magazine entity of the map: facing the entity's yaw, its target the
-# entity's, its feet on its sector's floor; an android whole in its
-# first row.
+# Every actor gone, then one placed for each android and magazine entity:
+# facing its yaw, its target the entity's, its feet on its sector's floor.
 actors_place:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -126,11 +116,9 @@ actors_place:
     flw ft0, ENTITY_Y(s5)
     fcvt.d.s ft0, ft0
     fsd ft0, ACTOR_Y(s4)
-    flw ft0, ENTITY_YAW(s5)
-    la t3, k_degree
-    flw ft1, 0(t3)
-    fmul.s ft0, ft0, ft1
-    fsw ft0, ACTOR_YAW(s4)
+    flw ft8, ENTITY_YAW(s5)
+    jab.f32.rad ft8, ft8
+    fsw ft8, ACTOR_YAW(s4)
     lw t3, ENTITY_SECTOR(s5)
     sw t3, ACTOR_SECTOR(s4)
     lw t3, ENTITY_TARGET(s5)
@@ -173,8 +161,9 @@ actors_place:
     addi sp, sp, 48
     ret
 
-# actor_row: the actor a0 put in the row a1: its timer the row's
-# milliseconds in seconds, and the row's action taken.
+# An actor put in a row: its timer the row's milliseconds, the action taken.
+# a0 address The actor.
+# a1 int The row.
 actor_row:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -202,8 +191,10 @@ actor_row:
     addi sp, sp, 32
     ret
 
-# actor_ms: t0 becomes the milliseconds of the actor a0's row, negative
-# for a held row. Clobbers t0, t1.
+# The milliseconds of an actor's row, negative for a held row.
+# a0 address The actor.
+# returns Clobbers t1.
+#   t0 The milliseconds.
 actor_ms:
     lwu t0, ACTOR_ROW(a0)
     la t1, android_rows
@@ -212,11 +203,8 @@ actor_ms:
     lw t0, ROW_MS(t0)
     ret
 
-# actors_tick: one frame of every actor: an android's row's timer run
-# by the frame's seconds, a row ended entering the next with the
-# leftover carried, a held row staying; a spark's frame advanced every
-# SPARK_FRAMES of a second's twentieths and the spark gone after its
-# last.
+# One frame of every actor: an android's walk and its row's timer, a row
+# ended entering the next with the leftover carried; a spark's frames.
 actors_tick:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -321,7 +309,7 @@ actors_tick:
     addi sp, sp, 48
     ret
 
-# actors_draw: every actor whose sector the walk reached drawn.
+# Every actor whose sector the walk reached drawn.
 actors_draw:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -352,13 +340,9 @@ actors_draw:
     addi sp, sp, 32
     ret
 
-# actor_draw: the actor a0 drawn through sprite_draw from the scratch
-# entity: its feet, its yaw, its sector, and by its class and row the
-# frame's material, the quad's size, and the facing: a rotating set a
-# metre by two, or two by two for aim and fire, facing the camera;
-# fallen two metres by half a metre facing the camera, the body lying
-# on the floor seen from its side; a spark half a metre facing the
-# camera, two-sided; the magazine half a metre flat.
+# An actor drawn through sprite_draw from the scratch entity: by its class
+# and row the frame's material, the quad's size, and the facing.
+# a0 address The actor.
 actor_draw:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -367,6 +351,8 @@ actor_draw:
     sd s4, 16(sp)
     sd s5, 8(sp)
     mv s2, a0
+    flw ft8, ACTOR_YAW(s2)
+    jab.f32.deg ft8, ft8
     la t0, actor_entity
     li t1, CLASS_SPRITE
     sw t1, ENTITY_CLASS(t0)
@@ -379,11 +365,7 @@ actor_draw:
     fld ft0, ACTOR_Z(s2)
     fcvt.s.d ft0, ft0
     fsw ft0, ENTITY_Z(t0)
-    flw ft0, ACTOR_YAW(s2)
-    la t1, k_degrees
-    flw ft1, 0(t1)
-    fmul.s ft0, ft0, ft1
-    fsw ft0, ENTITY_YAW(t0)
+    fsw ft8, ENTITY_YAW(t0)
     sw zero, ENTITY_PITCH(t0)
     lw t1, ACTOR_SECTOR(s2)
     sw t1, ENTITY_SECTOR(t0)
@@ -461,24 +443,20 @@ actor_draw:
     addi sp, sp, 48
     ret
 
-# actor_rotation: a0 becomes the rotation frame, 0 to 7, of the actor
-# a0 as the eye sees it: the eighth of a turn nearest the angle from
-# the direction toward the eye to the actor's facing, 0 facing the eye
-# and 2 showing its right side; by the octant of the angle's cosine and
-# sine, each from the facing and the direction in the plan.
+# The rotation frame of an actor as the eye sees it: the eighth of a turn
+# nearest the angle from the direction toward the eye to the facing.
+# a0 address The actor.
+# returns
+#   a0 The frame, 0 facing the eye, 2 showing its right side.
 actor_rotation:
     addi sp, sp, -32
-    sd ra, 24(sp)
     sd s2, 16(sp)
     fsd fs0, 8(sp)
     fsd fs1, 0(sp)
     mv s2, a0
     flw fa0, ACTOR_YAW(s2)
-    call sine
-    fmv.s fs1, fa0                  # the facing's y
-    flw fa0, ACTOR_YAW(s2)
-    call cosine
-    fmv.s fs0, fa0                  # and x
+    jab.f32.sin fs1, fa0            # the facing's y
+    jab.f32.cos fs0, fa0            # and x
     la t0, camera
     flw ft0, CAM_X(t0)
     fld ft1, ACTOR_X(s2)
@@ -528,15 +506,15 @@ actor_rotation:
     bnez t2, 9f
     li a0, 5
 9:
-    ld ra, 24(sp)
     ld s2, 16(sp)
     fld fs0, 8(sp)
     fld fs1, 0(sp)
     addi sp, sp, 32
     ret
 
-# actor_alloc: a0 becomes a free actor, cleared, or 0 when the table is
-# full. Clobbers t0 to t3.
+# A free actor, cleared.
+# returns Clobbers t0 to t3.
+#   a0 The actor, 0 when the table is full.
 actor_alloc:
     la a0, actors
     li t1, MAX_ACTORS
@@ -560,8 +538,10 @@ actor_alloc:
     li a0, 0
     ret
 
-# actor_index: a0 becomes the index of the actor a0 in the table.
-# Clobbers t0, t1.
+# An actor's index in the table.
+# a0 address The actor.
+# returns Clobbers t0, t1.
+#   a0 The index.
 actor_index:
     la t0, actors
     sub a0, a0, t0
@@ -569,8 +549,9 @@ actor_index:
     divu a0, a0, t1
     ret
 
-# actor_event: the actor a0's event a1 reported over the API with its
-# index and its row.
+# An actor's event reported over the API with its index and its row.
+# a0 address The actor.
+# a1 int The event.
 actor_event:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -585,8 +566,12 @@ actor_event:
     addi sp, sp, 16
     ret
 
-# actor_chest: fa0, fa1, fa2 become the point at the actor a0's chest,
-# CHEST_HEIGHT over its feet, doubles. Clobbers t0.
+# The point at an actor's chest.
+# a0 address The actor.
+# returns Clobbers t0.
+#   fa0 f64 x.
+#   fa1 f64 y.
+#   fa2 f64 z.
 actor_chest:
     fld fa0, ACTOR_X(a0)
     fld fa1, ACTOR_Y(a0)
@@ -596,8 +581,8 @@ actor_chest:
     fadd.d fa2, fa2, ft0
     ret
 
-# actor_rouse: the actor a0 roused, into ALERT, unless it is already or
-# is no longer shootable.
+# An actor roused into ALERT, unless it is already or is no longer shootable.
+# a0 address The actor.
 actor_rouse:
     lwu t0, ACTOR_FLAGS(a0)
     andi t1, t0, ACTOR_ROUSED
@@ -621,9 +606,10 @@ actor_rouse:
 9:
     ret
 
-# actor_hurt: the actor a0 hurt by a1: its health less it; at none,
-# destroyed, neither solid nor shootable, else struck, either reported
-# and its row entered.
+# An actor hurt: its health less the damage; destroyed at none, else struck,
+# either reported and its row entered.
+# a0 address The actor.
+# a1 int The damage.
 actor_hurt:
     lwu t0, ACTOR_FLAGS(a0)
     andi t1, t0, ACTOR_SHOOTABLE
@@ -660,10 +646,12 @@ actor_hurt:
 9:
     ret
 
-# spark_spawn: a spark at the point fa0, fa1, fa2, doubles, in the
-# sector a0: a free actor of class spark on its first frame, its feet a
-# quarter metre under the point so the quad centres on it; the spark's
-# sound there.
+# A spark at a point: a free actor on its first frame, its feet a quarter
+# metre under the point so the quad centres on it; the spark's sound there.
+# a0 int The sector.
+# fa0 f64 x.
+# fa1 f64 y.
+# fa2 f64 z.
 spark_spawn:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -701,12 +689,13 @@ spark_spawn:
     addi sp, sp, 48
     ret
 
-# actor_walk: the actor a0 walked toward the point fa0, fa1, doubles,
-# for the frame: at its speed times the seconds, no further than the
-# point, facing its heading, the feet through feet_move; a step that
-# made under a quarter of itself counts the frame as blocked. a0
-# becomes 1 arrived within the arrival radius, 2 blocked for
-# BLOCKED_SECONDS, else 0.
+# An actor walked toward a point for the frame: at its speed, no further
+# than the point, facing its heading, the feet through feet_move.
+# a0 address The actor.
+# fa0 f64 The point's x.
+# fa1 f64 The point's y.
+# returns
+#   a0 1 arrived, 2 blocked past the blocked seconds, else 0.
 actor_walk:
     addi sp, sp, -96
     sd ra, 88(sp)
@@ -724,9 +713,10 @@ actor_walk:
     fsub.d fs3, fa0, ft0            # to the point
     fld ft0, ACTOR_Y(s2)
     fsub.d fs4, fa1, ft0
-    fmul.d ft0, fs3, fs3
-    fmadd.d ft0, fs4, fs4, ft0
-    fsqrt.d fs5, ft0                # the distance
+    la t3, vec3_scratch
+    fsd fs3, 0(t3)
+    fsd fs4, 8(t3)
+    jab.f64.vec2.len fs5, t3        # the distance
     la t0, k_arrive_d
     fld ft1, 0(t0)
     flt.d t1, fs5, ft1
@@ -749,7 +739,7 @@ actor_walk:
     # facing the heading
     fcvt.s.d fa0, fs4
     fcvt.s.d fa1, fs3
-    call atan2
+    jab.f32.atan2 fa0, fa0, fa1
     fsw fa0, ACTOR_YAW(s2)
     lw a0, ACTOR_SECTOR(s2)
     addi a1, s2, ACTOR_FALL
@@ -806,10 +796,9 @@ actor_walk:
     addi sp, sp, 96
     ret
 
-# actor_patrol_step: the actor a0's frame of its patrol: walked toward
-# its target waypoint; arrived or blocked, the waypoint's own target
-# becomes its, the servo sounds at its chest and the waypoint is
-# reported, and a waypoint with no target leaves it standing.
+# An actor's frame of its patrol: walked toward its target waypoint;
+# arrived or blocked, the next waypoint, or standing when there is none.
+# a0 address The actor.
 actor_patrol_step:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -852,9 +841,9 @@ actor_patrol_step:
     addi sp, sp, 32
     ret
 
-# actor_seek_step: the actor a0's frame of its search: walked toward
-# where it last saw the player; arrived or blocked, its patrol resumes
-# at its waypoint, or it stands when it has none.
+# An actor's frame of its search: walked toward where it last saw the
+# player; arrived or blocked, its patrol resumes, or it stands.
+# a0 address The actor.
 actor_seek_step:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -878,74 +867,56 @@ actor_seek_step:
     addi sp, sp, 32
     ret
 
-# actor_to_eye: the line from the actor a0's eye to the player's into
-# aim: the eye, the unit direction, and the distance, doubles, and its
-# level direction to the player in the plan against the actor's facing
-# as the cosine's share, fa0. Clobbers t0, ft0 to ft7; sine and cosine
-# clobber theirs.
+# The line from an actor's eye to the player's into aim: the eye, the unit
+# direction, and the distance.
+# a0 address The actor.
+# returns Clobbers t0 to t4, ft0 to ft10, fa1.
+#   fa0 f64 The facing's share of the level direction, the cosine off it.
 actor_to_eye:
-    addi sp, sp, -32
-    sd ra, 24(sp)
-    sd s2, 16(sp)
-    mv s2, a0
-    la t0, aim
-    fld ft0, ACTOR_X(s2)
-    fsd ft0, AIM_OX(t0)
-    fld ft1, ACTOR_Y(s2)
-    fsd ft1, AIM_OY(t0)
-    fld ft2, ACTOR_Z(s2)
+    la t3, aim
+    fld ft0, ACTOR_X(a0)
+    fsd ft0, AIM_OX(t3)
+    fld ft1, ACTOR_Y(a0)
+    fsd ft1, AIM_OY(t3)
+    fld ft2, ACTOR_Z(a0)
     la t1, k_body_eye_d
     fld ft3, 0(t1)
     fadd.d ft2, ft2, ft3
-    fsd ft2, AIM_OZ(t0)
+    fsd ft2, AIM_OZ(t3)
     la t1, camera
     flw ft3, CAM_X(t1)
     fcvt.d.s ft3, ft3
     fsub.d ft3, ft3, ft0            # to the player's eye
+    fsd ft3, AIM_DX(t3)
     flw ft4, CAM_Y(t1)
     fcvt.d.s ft4, ft4
     fsub.d ft4, ft4, ft1
+    fsd ft4, AIM_DY(t3)
     flw ft5, CAM_Z(t1)
     fcvt.d.s ft5, ft5
     fsub.d ft5, ft5, ft2
-    fmul.d ft6, ft3, ft3
-    fmadd.d ft6, ft4, ft4, ft6
-    fmadd.d ft6, ft5, ft5, ft6
-    fsqrt.d ft6, ft6                # the distance
-    fsd ft6, AIM_DIST(t0)
-    la t1, k_trace_eps_d
-    fld ft7, 0(t1)
-    fmax.d ft7, ft6, ft7
-    fdiv.d ft3, ft3, ft7
-    fdiv.d ft4, ft4, ft7
-    fdiv.d ft5, ft5, ft7
-    fsd ft3, AIM_DX(t0)
-    fsd ft4, AIM_DY(t0)
-    fsd ft5, AIM_DZ(t0)
+    fsd ft5, AIM_DZ(t3)
+    addi t4, t3, AIM_DX
+    jab.f64.vec3.len ft8, t4        # the distance
+    fsd ft8, AIM_DIST(t3)
+    jab.f64.vec3.norm t4, t4        # the unit direction
     # the facing's share of the level direction
-    flw fa0, ACTOR_YAW(s2)
-    call sine
-    fcvt.d.s ft1, fa0
-    fsd ft1, 0(sp)                  # sin yaw, held past the cosine
-    flw fa0, ACTOR_YAW(s2)
-    call cosine
-    fcvt.d.s ft0, fa0
-    fld ft1, 0(sp)
-    la t0, aim
-    fld ft3, AIM_DX(t0)
-    fld ft4, AIM_DY(t0)
-    fmul.d fa0, ft0, ft3
-    fmadd.d fa0, ft1, ft4, fa0
-    ld ra, 24(sp)
-    ld s2, 16(sp)
-    addi sp, sp, 32
+    flw fa0, ACTOR_YAW(a0)
+    jab.f32.sin fa1, fa0
+    fcvt.d.s ft9, fa1               # sin yaw
+    jab.f32.cos fa1, fa0
+    fcvt.d.s ft10, fa1              # cos yaw
+    fld ft3, AIM_DX(t3)
+    fld ft4, AIM_DY(t3)
+    fmul.d fa0, ft10, ft3
+    fmadd.d fa0, ft9, ft4, fa0
     ret
 
-# actor_sight: a0 becomes 1 when the actor a0 sees the player: within
-# sight range and the front half turn, or within the near range all
-# round, and the trace from eye to eye reaching the player's capsule;
-# then its last sight is the player's feet and it is sighted; else 0
-# and not sighted.
+# Whether an actor sees the player: within range and the front half turn,
+# or near all round, and the trace from eye to eye reaching its capsule.
+# a0 address The actor.
+# returns Sighted, its last sight is the player's feet.
+#   a0 1 or 0.
 actor_sight:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1010,30 +981,26 @@ actor_sight:
     addi sp, sp, 32
     ret
 
-# actor_face: the actor a0 turned to the player.
+# An actor turned to the player.
+# a0 address The actor.
+# returns Clobbers t0 to t3, ft0 to ft5, fa0, fa1.
 actor_face:
-    addi sp, sp, -32
-    sd ra, 24(sp)
-    sd s2, 16(sp)
-    mv s2, a0
-    la t0, camera
-    flw fa0, CAM_Y(t0)
-    fld ft0, ACTOR_Y(s2)
+    la t3, camera
+    flw fa0, CAM_Y(t3)
+    fld ft0, ACTOR_Y(a0)
     fcvt.s.d ft0, ft0
     fsub.s fa0, fa0, ft0
-    flw fa1, CAM_X(t0)
-    fld ft0, ACTOR_X(s2)
+    flw fa1, CAM_X(t3)
+    fld ft0, ACTOR_X(a0)
     fcvt.s.d ft0, ft0
     fsub.s fa1, fa1, ft0
-    call atan2
-    fsw fa0, ACTOR_YAW(s2)
-    ld ra, 24(sp)
-    ld s2, 16(sp)
-    addi sp, sp, 32
+    jab.f32.atan2 fa0, fa0, fa1
+    fsw fa0, ACTOR_YAW(a0)
     ret
 
-# actor_footstep: the actor a0's footstep for its row, the first on the
-# first walking frame and the second on the third, at its feet.
+# An actor's footstep for its row, the first on the first walking frame and
+# the second on the third, at its feet.
+# a0 address The actor.
 actor_footstep:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1063,11 +1030,12 @@ actor_footstep:
     addi sp, sp, 32
     ret
 
-# The actions, each the actor a0's on entering a row.
+# The actions, each on entering a row.
+# a0 address The actor.
 action_none:
     ret
 
-# action_look: the player seen rouses it.
+# The player seen rouses it.
 action_look:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1083,7 +1051,7 @@ action_look:
     addi sp, sp, 32
     ret
 
-# action_walk: a patrol row: its footstep, then the look.
+# A patrol row: its footstep, then the look.
 action_walk:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1097,7 +1065,7 @@ action_walk:
     addi sp, sp, 32
     ret
 
-# action_alert: the alert sound at its chest, faced to the player.
+# Faced to the player, the alert at its chest.
 action_alert:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1114,9 +1082,8 @@ action_alert:
     addi sp, sp, 32
     ret
 
-# action_aim: faced to the player and the sight taken; the sight lost
-# for LOST_SECONDS, counted a cycle of aim and fire at a time, sends it
-# searching where it last saw the player.
+# Faced to the player and the sight taken; the sight lost for the lost
+# seconds, a cycle at a time, sends it searching.
 action_aim:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1145,12 +1112,8 @@ action_aim:
     addi sp, sp, 32
     ret
 
-# action_fire: with the player sighted, a round, the first after
-# rousing certain and the rest by FIRE_CHANCE in 256: the G-1's report
-# at its chest, the line from its eye to the player's strayed by chance
-# within the G-1's stray, traced to the player's capsule; the player
-# met hurt by the round's damage, else a spark where the round lands;
-# the round reported.
+# With the player sighted, a round, the first after rousing certain and the
+# rest by FIRE_CHANCE in 256: the line to the player's eye strayed, traced.
 action_fire:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1161,7 +1124,8 @@ action_fire:
     beqz t1, 9f
     andi t1, t0, ACTOR_FIRST
     bnez t1, 1f
-    call random_byte
+    la t3, rng
+    jab.rng.byte a0, t3
     li t0, FIRE_CHANCE
     bgeu a0, t0, 9f                 # held this cycle
     j 2f
@@ -1178,46 +1142,43 @@ action_fire:
     call actor_to_eye
     # the stray: the direction moved along the level right and up by
     # two shares of chance, then made unit again
-    call random_byte
+    la t3, rng
+    jab.rng.byte a0, t3
     addi t0, a0, -128
-    fcvt.d.w ft0, t0
+    fcvt.d.w ft8, t0
     la t1, k_stray_d
     fld ft1, 0(t1)
-    fmul.d ft0, ft0, ft1            # along the right
-    fsd ft0, 0(sp)
-    call random_byte
+    fmul.d ft8, ft8, ft1            # along the right
+    jab.rng.byte a0, t3
     addi t0, a0, -128
-    fcvt.d.w ft2, t0
-    la t1, k_stray_d
-    fld ft1, 0(t1)
-    fmul.d ft2, ft2, ft1            # upward
-    fld ft0, 0(sp)
-    la t0, aim
-    fld ft3, AIM_DX(t0)
-    fld ft4, AIM_DY(t0)
-    fld ft5, AIM_DZ(t0)
-    fmul.d ft6, ft3, ft3
-    fmadd.d ft6, ft4, ft4, ft6
-    fsqrt.d ft6, ft6                # the level length
+    fcvt.d.w ft9, t0
+    fmul.d ft9, ft9, ft1            # upward
+    la t4, aim
+    addi t5, t4, AIM_DX
+    jab.f64.vec2.len ft10, t5       # the level length
     la t1, k_trace_eps_d
     fld ft7, 0(t1)
-    fmax.d ft6, ft6, ft7
-    fdiv.d ft7, ft4, ft6            # the level right, (dy, -dx) over it
-    fdiv.d ft8, ft3, ft6
-    fneg.d ft8, ft8
-    fmadd.d ft3, ft7, ft0, ft3
-    fmadd.d ft4, ft8, ft0, ft4
-    fadd.d ft5, ft5, ft2
-    fmul.d ft6, ft3, ft3
-    fmadd.d ft6, ft4, ft4, ft6
-    fmadd.d ft6, ft5, ft5, ft6
-    fsqrt.d ft6, ft6
-    fdiv.d fa3, ft3, ft6
-    fdiv.d fa4, ft4, ft6
-    fdiv.d fa5, ft5, ft6
-    fld fa0, AIM_OX(t0)
-    fld fa1, AIM_OY(t0)
-    fld fa2, AIM_OZ(t0)
+    fmax.d ft10, ft10, ft7
+    fld ft3, AIM_DX(t4)
+    fld ft4, AIM_DY(t4)
+    fld ft5, AIM_DZ(t4)
+    fdiv.d ft7, ft4, ft10           # the level right, (dy, -dx) over it
+    fdiv.d ft6, ft3, ft10
+    fneg.d ft6, ft6
+    fmadd.d ft3, ft7, ft8, ft3
+    fmadd.d ft4, ft6, ft8, ft4
+    fadd.d ft5, ft5, ft9
+    la t5, vec3_scratch
+    fsd ft3, 0(t5)
+    fsd ft4, 8(t5)
+    fsd ft5, 16(t5)
+    jab.f64.vec3.norm t5, t5
+    fld fa3, 0(t5)
+    fld fa4, 8(t5)
+    fld fa5, 16(t5)
+    fld fa0, AIM_OX(t4)
+    fld fa1, AIM_OY(t4)
+    fld fa2, AIM_OZ(t4)
     la t1, k_round_range_d
     fld fa6, 0(t1)
     lw a0, ACTOR_SECTOR(s2)
@@ -1247,8 +1208,8 @@ action_fire:
     addi sp, sp, 32
     ret
 
-# action_seek: a search row: its footstep, then the look, the player
-# seen rousing it afresh.
+# A search row: its footstep, then the look, the player seen rousing it
+# afresh.
 action_seek:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1267,7 +1228,7 @@ action_seek:
     addi sp, sp, 32
     ret
 
-# action_struck: the struck sound at its chest; roused.
+# The struck sound at its chest; roused.
 action_struck:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1282,8 +1243,7 @@ action_struck:
     addi sp, sp, 16
     ret
 
-# action_destroy: the destruction's sound at its chest and three sparks
-# about it, each within half a metre by chance.
+# The destruction's sound at its chest and three sparks about it by chance.
 action_destroy:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1297,18 +1257,17 @@ action_destroy:
     li s3, 3
 1:
     beqz s3, 9f
-    call random_byte
+    la t3, rng
+    jab.rng.byte a0, t3
     addi t0, a0, -128
     fcvt.d.w ft0, t0
     la t1, k_spark_spread_d
     fld ft1, 0(t1)
     fmul.d ft0, ft0, ft1
     fsd ft0, 0(sp)
-    call random_byte
+    jab.rng.byte a0, t3
     addi t0, a0, -128
     fcvt.d.w ft0, t0
-    la t1, k_spark_spread_d
-    fld ft1, 0(t1)
     fmul.d ft2, ft0, ft1
     mv a0, s2
     call actor_chest
@@ -1326,8 +1285,8 @@ action_destroy:
     addi sp, sp, 32
     ret
 
-# action_fall: the magazine dropped beside the fallen frame, half a
-# metre to the android's right, on its floor; the fall reported.
+# The magazine dropped half a metre to the android's right, on its floor;
+# the fall reported.
 action_fall:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1342,20 +1301,17 @@ action_fall:
     lw t0, ACTOR_SECTOR(s2)
     sw t0, ACTOR_SECTOR(s3)
     flw fa0, ACTOR_YAW(s2)
-    call sine
-    fcvt.d.s ft2, fa0
-    fsd ft2, 0(sp)                  # sin yaw, held past the cosine
-    flw fa0, ACTOR_YAW(s2)
-    call cosine
-    fcvt.d.s ft3, fa0               # cos yaw
-    fld ft2, 0(sp)
+    jab.f32.sin fa1, fa0
+    fcvt.d.s ft8, fa1               # sin yaw
+    jab.f32.cos fa1, fa0
+    fcvt.d.s ft9, fa1               # cos yaw
     la t0, k_half_d
     fld ft4, 0(t0)
     fld ft0, ACTOR_X(s2)
-    fmadd.d ft0, ft2, ft4, ft0      # to its right: (sin yaw, -cos yaw)
+    fmadd.d ft0, ft8, ft4, ft0      # to its right: (sin yaw, -cos yaw)
     fsd ft0, ACTOR_X(s3)
     fld ft0, ACTOR_Y(s2)
-    fnmsub.d ft0, ft3, ft4, ft0
+    fnmsub.d ft0, ft9, ft4, ft0
     fsd ft0, ACTOR_Y(s3)
     fld ft0, ACTOR_Z(s2)
     fsd ft0, ACTOR_Z(s3)

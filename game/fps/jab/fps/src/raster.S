@@ -1,19 +1,5 @@
-# raster.S: the polygon rasteriser, one for every surface. A polygon is
-# built as world points, taken into the camera's basis, clipped against
-# the near plane, projected through the focal length, and kept as
-# edges; a sector's planes put the edges of every loop in one list and
-# the fill is even-odd over them, so a concave plane with holes fills
-# right. The surface's 1/z, u/z, and v/z are affine over the screen for
-# any camera basis, so they are set up once a polygon from the plane's
-# equation in double and thereafter the span holds no float: a row's
-# start is a multiply and an add in 64-bit fixed point, a block of
-# sixteen pixels takes one divide for z and two multiplies for u and v
-# at its end and steps in 16.16 within, a pixel is a texel read, a depth
-# compare against 1/z in 6.26, and a pixel and depth store when nearer;
-# a lit span steps three channels of brightness packed in one word and
-# scales each texel's channels by them. The same edges serve the portal
-# test, which samples the depth buffer within the opening for a pixel
-# not yet covered as near.
+# The polygon rasteriser: world points into the camera's basis, clipped and
+# projected into edges, the even-odd fill, the integer span, the portal test.
 
 .section .rodata
 .balign 8
@@ -47,14 +33,18 @@ k_big:
 
 .section .text
 
-# poly_reset: the polygon in hand emptied. Clobbers t0.
+# Empties the polygon in hand.
+# returns Clobbers t0.
 poly_reset:
     la t0, vert_count
     sd zero, 0(t0)
     ret
 
-# poly_point: the world point fa0, fa1, fa2 appended to the polygon in
-# hand; one past MAX_VERTS is dropped. Clobbers t0 to t3.
+# Appends a world point to the polygon in hand; one past MAX_VERTS is dropped.
+# fa0 f32 x.
+# fa1 f32 y.
+# fa2 f32 z.
+# returns Clobbers t0 to t3.
 poly_point:
     la t0, vert_count
     ld t1, 0(t0)
@@ -72,8 +62,8 @@ poly_point:
 1:
     ret
 
-# edges_reset: the edge list emptied, its rows unbounded. Clobbers t0,
-# t1, ft0.
+# Empties the edge list, its rows unbounded.
+# returns Clobbers t0, t1, ft0.
 edges_reset:
     la t0, edge_count
     sd zero, 0(t0)
@@ -86,10 +76,10 @@ edges_reset:
     fsw ft0, 0(t1)
     ret
 
-# poly_project: the polygon in hand taken into the camera's basis as
-# right, down, and forward, clipped to the near plane, projected, and
-# its edges appended to the list; a0 becomes the clipped point count,
-# 0 when nothing is left.
+# The polygon in hand into the camera's basis, clipped to the near plane,
+# projected, its edges appended to the list.
+# returns
+#   a0 The clipped point count, 0 when nothing is left.
 poly_project:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -300,34 +290,9 @@ poly_project:
     addi sp, sp, 80
     ret
 
-# dot3: fa0 becomes the dot product, in double, of the three floats at
-# a0 with the three floats at a1. Clobbers t0, ft0 to ft3.
-dot3:
-    flw ft0, 0(a0)
-    fcvt.d.s ft0, ft0
-    flw ft1, 0(a1)
-    fcvt.d.s ft1, ft1
-    fmul.d fa0, ft0, ft1
-    flw ft0, 4(a0)
-    fcvt.d.s ft0, ft0
-    flw ft1, 4(a1)
-    fcvt.d.s ft1, ft1
-    fmadd.d fa0, ft0, ft1, fa0
-    flw ft0, 8(a0)
-    fcvt.d.s ft0, ft0
-    flw ft1, 8(a1)
-    fcvt.d.s ft1, ft1
-    fmadd.d fa0, ft0, ft1, fa0
-    ret
-
-# surface_setup: the surface's affine coefficients over the screen from
-# the plane in hand and the camera, in double, into the polygon in
-# hand: 1/z = n.dir / (hz * n.(q - p)) with dir the pixel's ray
-# right * (x - hx) + down * (y - hy) + forward * hz, so it is
-# A x + B y + C; u/z = (a.p + u0) / z + a.dir / hz likewise, the
-# texture's size folded in, and the same for v. The C of each carries
-# the half pixel in x and y. A plane through the camera sets every
-# coefficient to zero, so nothing of it is drawn.
+# The surface's affine coefficients over the screen from the plane in hand
+# and the camera, in double, into the polygon in hand, with the unit normal
+# facing the camera; a plane through the eye zeroes them all.
 surface_setup:
     addi sp, sp, -144
     sd ra, 136(sp)
@@ -343,31 +308,32 @@ surface_setup:
     fsd fs9, 56(sp)
     fsd fs10, 48(sp)
     fsd fs11, 40(sp)
+    # the plane as doubles, a float at a time
+    la t3, plane
+    la t4, plane_d
+    li t5, (PLANED_SIZE / 8)
+1:
+    flw ft0, 0(t3)
+    fcvt.d.s ft0, ft0
+    fsd ft0, 0(t4)
+    addi t3, t3, 4
+    addi t4, t4, 8
+    addi t5, t5, -1
+    bnez t5, 1b
     # n.right, n.down, n.forward, and n.(q - p)
-    la a0, plane
-    la a1, camera
-    addi a1, a1, CAM_RIGHT
-    call dot3
-    fmv.d fs0, fa0                  # n.r
-    la a0, plane
-    la a1, camera
-    addi a1, a1, CAM_UP
-    call dot3
-    fneg.d fs1, fa0                 # n.d
-    la a0, plane
-    la a1, camera
-    addi a1, a1, CAM_FORWARD
-    call dot3
-    fmv.d fs2, fa0                  # n.f
-    la a0, plane
-    la a1, plane
-    addi a1, a1, PLANE_Q
-    call dot3
-    fmv.d fs3, fa0                  # n.q
-    la a0, plane
-    la a1, camera
-    call dot3
-    fsub.d fs3, fs3, fa0            # n.(q - p)
+    la t3, plane_d
+    la t4, camera_d
+    addi t5, t4, CAMD_RIGHT
+    jab.f64.vec3.dot fs0, t3, t5    # n.r
+    addi t5, t4, CAMD_UP
+    jab.f64.vec3.dot fs1, t3, t5
+    fneg.d fs1, fs1                 # n.d
+    addi t5, t4, CAMD_FORWARD
+    jab.f64.vec3.dot fs2, t3, t5    # n.f
+    addi t5, t3, PLANED_Q
+    jab.f64.vec3.dot fs3, t3, t5    # n.q
+    jab.f64.vec3.dot ft8, t3, t4
+    fsub.d fs3, fs3, ft8            # n.(q - p)
     la t0, k_hz_d
     fld fs4, 0(t0)                  # hz
     la t0, k_hx_d
@@ -382,33 +348,26 @@ surface_setup:
     li t0, -1
     sw t0, POLY_LIT_ROW(t1)         # no brightness taken yet
     sd zero, POLY_FLAT_LIT(t1)      # lit at its angle unless the caller says
-    la a0, plane
-    la a1, plane
-    call dot3
-    fsqrt.d fa0, fa0
+    la t5, vec3_scratch
+    jab.f64.vec3.norm t5, t3
     la t0, k_one_d
-    fld ft1, 0(t0)
-    fdiv.d ft1, ft1, fa0
+    fld ft8, 0(t0)
     fcvt.d.w ft0, zero
     flt.d t0, ft0, fs3
     beqz t0, 81f
-    fneg.d ft1, ft1                 # the plane's point lies ahead along n: n points away
+    fneg.d ft8, ft8                 # the plane's point lies ahead along n: n points away
 81:
-    la t0, plane
     la t1, poly
-    flw ft2, (PLANE_N + 0)(t0)
-    fcvt.d.s ft2, ft2
-    fmul.d ft2, ft2, ft1
+    fld ft2, 0(t5)
+    fmul.d ft2, ft2, ft8
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNX(t1)
-    flw ft2, (PLANE_N + 4)(t0)
-    fcvt.d.s ft2, ft2
-    fmul.d ft2, ft2, ft1
+    fld ft2, 8(t5)
+    fmul.d ft2, ft2, ft8
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNY(t1)
-    flw ft2, (PLANE_N + 8)(t0)
-    fcvt.d.s ft2, ft2
-    fmul.d ft2, ft2, ft1
+    fld ft2, 16(t5)
+    fmul.d ft2, ft2, ft8
     fcvt.s.d ft2, ft2
     fsw ft2, POLY_LNZ(t1)
     fmul.d ft1, fs4, fs3
@@ -439,15 +398,15 @@ surface_setup:
     fcvt.l.d t2, ft5, rne
     sd t2, POLY_IZC(t1)
     # u/z: K = (a.p + u0) * w; the coefficients K A + a.r / hz and on
-    la a0, plane
-    addi a0, a0, PLANE_AU
-    li a1, PLANE_U0
+    la a0, plane_d
+    addi a0, a0, PLANED_AU
+    li a1, PLANED_U0
     flw fa1, POLY_TEXW(t1)
     li a2, POLY_UZA
     call surface_axis
-    la a0, plane
-    addi a0, a0, PLANE_AV
-    li a1, PLANE_V0
+    la a0, plane_d
+    addi a0, a0, PLANED_AV
+    li a1, PLANED_V0
     la t1, poly
     flw fa1, POLY_TEXH(t1)
     li a2, POLY_VZA
@@ -481,63 +440,41 @@ surface_setup:
     addi sp, sp, 144
     ret
 
-# surface_axis: one texture coordinate's affine coefficients: a0 the
-# gradient's three floats in the plane record, a1 the offset field, fa1
-# the texture's size as a float, a2 the first of the three polygon
-# fields to write; fs4 hz, fs5 hx, fs6 hy, fs8 A, fs9 B, fs10 C from
-# surface_setup. Clobbers t0 to t3, ft0 to ft7, fa0, fs11.
+# One texture coordinate's affine coefficients into the polygon in hand.
+# a0 address The gradient, three doubles in plane_d.
+# a1 int The offset's field in plane_d.
+# a2 int The first of the three polygon fields written.
+# fa1 f32 The texture's size.
+# fs4 f64 hz; fs5 hx; fs6 hy; fs8, fs9, fs10 A, B, C, from surface_setup.
+# returns Clobbers t0 to t4, ft0 to ft11, fs11.
 surface_axis:
-    addi sp, sp, -64
-    sd ra, 56(sp)
-    sd a0, 32(sp)
-    sd a1, 24(sp)
-    sd a2, 16(sp)
-    fsd fa1, 8(sp)
-    la a1, camera
-    call dot3
-    fmv.d fs11, fa0                 # a.p
-    ld a0, 32(sp)
-    ld t0, 24(sp)
-    la t1, plane
-    add t0, t0, t1
-    flw ft0, 0(t0)
-    fcvt.d.s ft0, ft0
-    fadd.d fs11, fs11, ft0          # a.p + u0
-    fld ft0, 8(sp)
-    fcvt.d.s ft0, ft0
-    fmul.d fs11, fs11, ft0          # K, in texels
-    fsd ft0, 0(sp)                  # the size
-    la a1, camera
-    addi a1, a1, CAM_RIGHT
-    call dot3
-    fld ft0, 0(sp)
-    fmul.d ft1, fa0, ft0
-    fsd ft1, 40(sp)                 # a.r, in texels
-    ld a0, 32(sp)
-    la a1, camera
-    addi a1, a1, CAM_UP
-    call dot3
-    fld ft0, 0(sp)
-    fmul.d ft2, fa0, ft0
-    fneg.d ft2, ft2
-    fsd ft2, 48(sp)                 # a.d
-    ld a0, 32(sp)
-    la a1, camera
-    addi a1, a1, CAM_FORWARD
-    call dot3
-    fld ft0, 0(sp)
-    fmul.d ft3, fa0, ft0            # a.f
-    fld ft1, 40(sp)
-    fld ft2, 48(sp)
+    la t3, camera_d
+    jab.f64.vec3.dot fs11, a0, t3   # a.p
+    la t4, plane_d
+    add t4, t4, a1
+    fld ft8, 0(t4)
+    fadd.d fs11, fs11, ft8          # a.p + u0
+    fcvt.d.s ft8, fa1               # the size
+    fmul.d fs11, fs11, ft8          # K, in texels
+    addi t4, t3, CAMD_RIGHT
+    jab.f64.vec3.dot ft9, a0, t4
+    fmul.d ft9, ft9, ft8            # a.r, in texels
+    addi t4, t3, CAMD_UP
+    jab.f64.vec3.dot ft10, a0, t4
+    fmul.d ft10, ft10, ft8
+    fneg.d ft10, ft10               # a.d
+    addi t4, t3, CAMD_FORWARD
+    jab.f64.vec3.dot ft11, a0, t4
+    fmul.d ft11, ft11, ft8          # a.f
     # UA = K A + a.r / hz; UB = K B + a.d / hz; UC = K C + a.f - (a.r hx + a.d hy) / hz
-    fdiv.d ft4, ft1, fs4
+    fdiv.d ft4, ft9, fs4
     fmadd.d ft4, fs11, fs8, ft4     # UA
-    fdiv.d ft5, ft2, fs4
+    fdiv.d ft5, ft10, fs4
     fmadd.d ft5, fs11, fs9, ft5     # UB
-    fmul.d ft6, ft1, fs5
-    fmadd.d ft6, ft2, fs6, ft6      # a.r hx + a.d hy
+    fmul.d ft6, ft9, fs5
+    fmadd.d ft6, ft10, fs6, ft6     # a.r hx + a.d hy
     fdiv.d ft6, ft6, fs4
-    fsub.d ft6, ft3, ft6
+    fsub.d ft6, ft11, ft6
     fmadd.d ft6, fs11, fs10, ft6    # UC
     fadd.d ft7, ft4, ft5
     la t0, k_half_d
@@ -545,9 +482,8 @@ surface_axis:
     fmadd.d ft6, ft7, ft0, ft6      # the half pixel
     la t0, k_uv_scale_d
     fld ft0, 0(t0)
-    ld t1, 16(sp)
     la t2, poly
-    add t2, t2, t1
+    add t2, t2, a2
     fmul.d ft4, ft4, ft0
     fcvt.l.d t3, ft4, rne
     sd t3, 0(t2)
@@ -557,14 +493,12 @@ surface_axis:
     fmul.d ft6, ft6, ft0
     fcvt.l.d t3, ft6, rne
     sd t3, 16(t2)
-    ld ra, 56(sp)
-    addi sp, sp, 64
     ret
 
-# row_crossings: a0 becomes the count of the edges the row centre fa0
-# crosses, their x in crossings sorted ascending; an edge holds a row
-# whose centre is at or past its top and before its bottom. Clobbers
-# t0 to t5, ft0 to ft6.
+# The edges the row centre crosses, their x in crossings sorted ascending.
+# fa0 f32 The row's centre.
+# returns Clobbers t0 to t5, ft0 to ft6.
+#   a0 The count.
 row_crossings:
     li a0, 0
     la t0, edges
@@ -603,8 +537,10 @@ row_crossings:
 9:
     ret
 
-# span_bound: a0 becomes the first pixel whose centre is at or past
-# fa0, clamped to the screen's columns. Clobbers t0, ft0.
+# The first pixel whose centre is at or past fa0, within the screen's columns.
+# fa0 f32
+# returns Clobbers t0, ft0.
+#   a0 The pixel.
 span_bound:
     la t0, k_half
     flw ft0, 0(t0)
@@ -619,8 +555,10 @@ span_bound:
 2:
     ret
 
-# row_range: a0 becomes the first row the edges cover and a1 the row
-# past the last, within the screen. Clobbers t0, ft0, ft1.
+# The rows the edges cover, within the screen.
+# returns Clobbers t0, ft0, ft1.
+#   a0 The first row.
+#   a1 The row past the last.
 row_range:
     la t0, k_half
     flw ft0, 0(t0)
@@ -641,8 +579,7 @@ row_range:
 2:
     ret
 
-# poly_fill: the polygon in hand filled by scanlines with the surface
-# in hand: every row's crossings paired into spans, each span filled.
+# The polygon in hand filled by scanlines with the surface in hand.
 poly_fill:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -700,15 +637,11 @@ poly_fill:
     addi sp, sp, 48
     ret
 
-# span_fill: the pixels a0 to a1 of the row a2 filled with the surface
-# in hand: 1/z, u/z, and v/z at the first pixel from the affine
-# coefficients, then blocks of BLOCK pixels, u and v exact at each
-# block's ends and stepped in 16.16 within; a pixel drawn when its
-# depth is nearer than the buffer's. Textured, masked (a texel with no
-# alpha skipped), or sky (the texel by screen position, the depth
-# SKY_DEPTH where nothing has drawn); lit, the texel's channels scaled
-# by the brightness stepped across the span, three channels 21 bits
-# apart in one word.
+# The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
+# masked, sky, or lit, no float in the loop.
+# a0 int The first pixel.
+# a1 int The pixel past the last.
+# a2 int The row.
 .balign CODE_PAGE
 span_fill:
     addi sp, sp, -144
@@ -1108,10 +1041,9 @@ span_fill:
     addi sp, sp, 144
     ret
 
-# poly_shows: a0 becomes 1 when any of the polygon in hand shows
-# against what is drawn, sampled every PORTAL_STEP_X columns and
-# PORTAL_STEP_Y rows: a sample whose depth in the buffer is under the
-# surface's 1/z there; else 0.
+# Whether any of the polygon in hand shows against what is drawn, sampled.
+# returns
+#   a0 1 when a sample's buffer depth is under the surface's 1/z, else 0.
 .balign CODE_PAGE
 poly_shows:
     addi sp, sp, -64
@@ -1223,6 +1155,9 @@ poly:
     .skip POLY_SIZE
 plane:
     .skip PLANE_SIZE
+.balign 8
+plane_d:
+    .skip PLANED_SIZE
 .balign 8
 verts:
     .skip (MAX_VERTS * VERT_SIZE)

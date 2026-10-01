@@ -1,18 +1,5 @@
-# trace.S: the 3D trace, a ray from a point in a sector along a unit
-# direction for a distance, walked sector to sector. In the sector in
-# hand the ray's nearest crossing of a wall of its loops in the plan is
-# found; the floor and the ceiling met before it stop the ray at their
-# point, the ray's height against the plane's along it being linear in
-# the distance; at the wall's crossing the ray's height there is held
-# against each portal's sector's floor and ceiling at that point, the
-# first that holds it entered, none stopping the ray at the wall, a
-# piece; no wall crossed within the distance ends the ray in the sector.
-# An opening passes the ray whatever its wall's solid or masked flags,
-# those being the body's. Then every android's capsule, the circle at
-# its feet in the plan and the body's height over them, and, when asked,
-# the player's; the nearest within the distance met wins over the
-# geometry. The answer is trace_hit: the kind met, the distance, the
-# point, the actor, and the sector.
+# The 3D trace: a ray from a point in a sector along a unit direction for a
+# distance, walked sector to sector, then against the capsules.
 
 .section .rodata
 .balign 8
@@ -29,10 +16,15 @@ k_trace_range_d:
 
 .section .text
 
-# trace_ray: from the point fa0, fa1, fa2 in the sector a0 along the
-# unit direction fa3, fa4, fa5 for the distance fa6, doubles; the actor
-# a1 left out, 0 for none; a2 TRACE_TO_PLAYER to test the player's
-# capsule too. trace_hit filled and a0 the kind met.
+# The ray walked: the geometry, then the capsules; trace_hit filled.
+# a0 int The sector the origin is in.
+# a1 address The actor left out, 0 for none.
+# a2 int TRACE_TO_PLAYER to test the player's capsule too.
+# fa0 f64 The origin's x; fa1 y; fa2 z.
+# fa3 f64 The direction's x; fa4 y; fa5 z, unit.
+# fa6 f64 The distance.
+# returns
+#   a0 The kind met.
 trace_ray:
     addi sp, sp, -208
     sd ra, 200(sp)
@@ -354,9 +346,10 @@ trace_ray:
     addi sp, sp, 208
     ret
 
-# trace_point: trace_hit's point set to the ray's at the distance fa0,
-# from the origin and direction trace_ray holds in fs0 to fs5; fa0
-# kept. Clobbers t0, ft0.
+# trace_hit's point set to the ray's at a distance, from the origin and
+# direction trace_ray holds in fs0 to fs5.
+# fa0 f64 The distance, kept.
+# returns Clobbers t0, ft0.
 trace_point:
     la t0, trace_hit
     fmadd.d ft0, fs3, fa0, fs0
@@ -367,12 +360,12 @@ trace_point:
     fsd ft0, TRACE_PZ(t0)
     ret
 
-# trace_capsule: whether the ray trace_ray holds in fs0 to fs5 meets
-# the capsule standing on the feet fa0, fa1, fa2 before the distance in
-# trace_hit: the circle of the body's radius in the plan, the ray's
-# height at the meeting within the body's height over the feet; a0
-# becomes 1 with fa0 the distance, else 0. Clobbers t0, t1, ft0 to
-# ft11.
+# Whether the ray trace_ray holds in fs0 to fs5 meets the capsule on the
+# feet fa0, fa1, fa2 before the distance in trace_hit.
+# fa0 f64 The feet's x; fa1 y; fa2 z.
+# returns Clobbers t0, t1, ft0 to ft11.
+#   a0 1 or 0.
+#   fa0 f64 The distance when met.
 trace_capsule:
     fmul.d ft0, fs3, fs3
     fmadd.d ft0, fs4, fs4, ft0      # the direction's share in the plan

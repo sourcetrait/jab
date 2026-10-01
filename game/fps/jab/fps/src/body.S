@@ -1,20 +1,6 @@
-# body.S: the body, a capsule BODY_RADIUS wide and BODY_HEIGHT tall with
-# the eye EYE_HEIGHT above its feet, the player's and every android's.
-# The player's is walked by the left stick along the level forward and
-# right of the camera's yaw at WALK_SPEED a second at full throw; an
-# android's by its own rows (actor.S); both through feet_move. The feet
-# follow the floor plane of their sector: a floor within STEP_HEIGHT
-# above is stepped onto, a floor below is fallen to under GRAVITY, and
-# the player's eye rides EYE_HEIGHT above them. Walls being vertical,
-# the body against a wall is a circle against the wall's segment in the
-# plan: a wall of the sector blocks when its surface is solid, when it
-# has no portal, or when no sector across its portals admits the body,
-# a floor no more than a step above the feet under a ceiling
-# BODY_HEIGHT above that floor; a blocking wall within the radius pushes
-# the feet out along the nearest point's normal, twice over the
-# sector's walls so a corner holds. Then the other bodies, circle
-# against circle in the plan where their heights overlap. The sector
-# then follows the feet.
+# The body under the camera and under every android: a capsule walked along
+# the level forward and right, held off the walls and the other bodies, on
+# the floor plane of its sector.
 
 .section .rodata
 .balign 8
@@ -38,9 +24,11 @@ k_walk_speed:
 
 .section .text
 
-# body_move: the player's feet moved for the frame: fa0 the seconds,
-# fa1 the strafe and fa2 the forward throws, -1 to 1; then the walls,
-# the sector, and the floor through feet_move, and the eye placed.
+# The player's feet moved for the frame, then the walls, the sector, the
+# floor, and the eye placed.
+# fa0 f32 The seconds.
+# fa1 f32 The strafe throw, -1 to 1.
+# fa2 f32 The forward throw.
 body_move:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -62,13 +50,10 @@ body_move:
     # the level forward and right from the yaw
     la t0, camera
     flw fa0, CAM_YAW(t0)
-    call sine
-    fmv.s fs5, fa0                  # forward y, held across the cosine
-    la t0, camera
-    flw fa0, CAM_YAW(t0)
-    call cosine
-    fmv.s ft0, fa0                  # forward x
-    fmv.s ft1, fs5                  # forward y
+    jab.f32.cos ft8, fa0
+    jab.f32.sin ft9, fa0
+    fmv.s ft0, ft8                  # forward x
+    fmv.s ft1, ft9                  # forward y
     fmv.s ft4, ft1                  # right: forward turned a quarter to the right
     fneg.s ft5, ft0
     flw fa1, 0(sp)
@@ -126,13 +111,16 @@ body_move:
     addi sp, sp, 112
     ret
 
-# feet_move: the feet fs0, fs1, fs2, doubles, placed after a step: the
-# walls of the sector a0 they were in twice over, then the other
-# bodies, the sector followed from the moved feet, then the floor met,
-# the fall speed at a1 (a double) grown under gravity for the seconds
-# fa0 (a single) while the feet fall; a2 the actor walking, 0 for the
-# player. fs0, fs1, fs2 become the feet placed and a0 the sector, -1
-# when none holds them; in no sector nothing holds the body.
+# The feet placed after a step: the walls of their sector twice over, the
+# other bodies, the sector followed, then the floor met and the fall.
+# a0 int The sector the feet were in.
+# a1 address The fall speed, a double.
+# a2 address The actor walking, 0 for the player.
+# fa0 f32 The seconds.
+# fs0 f64 The feet's x; fs1 y; fs2 z.
+# returns In no sector nothing holds the body.
+#   fs0, fs1, fs2 The feet placed.
+#   a0 The sector, -1 when none holds them.
 feet_move:
     addi sp, sp, -96
     sd ra, 88(sp)
@@ -238,33 +226,32 @@ feet_move:
     addi sp, sp, 96
     ret
 
-# bodies_push: the feet at fs0, fs1 (z fs2) pushed out of every other
-# body in the plan: every solid actor but the walker a0, and the
-# player's when the walker is an actor; a body within twice the radius
-# whose height overlaps pushes the feet away from its own to that
-# distance, two on one spot parting eastward. Clobbers t0 to t3, ft0
-# to ft7.
+# The feet at fs0, fs1, fs2 pushed out of every other body in the plan:
+# every solid android but the walker, and the player's when the walker is
+# an android.
+# a0 address The walker, 0 for the player.
+# returns Clobbers t0 to t6, ft0 to ft10.
 bodies_push:
     addi sp, sp, -16
     sd ra, 8(sp)
-    la t0, actors
-    li t1, MAX_ACTORS
+    la t4, actors
+    li t5, MAX_ACTORS
 1:
-    beqz t1, 5f
-    beq t0, a0, 4f
-    lwu t2, ACTOR_CLASS(t0)
+    beqz t5, 5f
+    beq t4, a0, 4f
+    lwu t2, ACTOR_CLASS(t4)
     li t3, ACTOR_ANDROID
     bne t2, t3, 4f
-    lwu t2, ACTOR_FLAGS(t0)
+    lwu t2, ACTOR_FLAGS(t4)
     andi t2, t2, ACTOR_SOLID
     beqz t2, 4f
-    fld ft0, ACTOR_X(t0)
-    fld ft1, ACTOR_Y(t0)
-    fld ft2, ACTOR_Z(t0)
+    fld ft0, ACTOR_X(t4)
+    fld ft1, ACTOR_Y(t4)
+    fld ft2, ACTOR_Z(t4)
     call body_push
 4:
-    addi t0, t0, ACTOR_SIZE
-    addi t1, t1, -1
+    addi t4, t4, ACTOR_SIZE
+    addi t5, t5, -1
     j 1b
 5:
     beqz a0, 9f
@@ -284,9 +271,11 @@ bodies_push:
     addi sp, sp, 16
     ret
 
-# body_push: the feet at fs0, fs1, fs2 pushed out of the body standing
-# at ft0, ft1, ft2, doubles, to twice the radius in the plan when they
-# lie within it and the heights overlap. Clobbers t2, t3, ft3 to ft7.
+# The feet at fs0, fs1, fs2 pushed out of the body at ft0, ft1, ft2 to twice
+# the radius in the plan when within it and the heights overlap; two on one
+# spot part eastward.
+# ft0 f64 Its feet's x; ft1 y; ft2 z.
+# returns Clobbers t0 to t3, t6, ft0 to ft10.
 body_push:
     fsub.d ft3, fs2, ft2
     fabs.d ft3, ft3
@@ -296,32 +285,37 @@ body_push:
     bnez t3, 9f                     # one over the other
     fsub.d ft3, fs0, ft0            # from its feet to these
     fsub.d ft4, fs1, ft1
-    fmul.d ft5, ft3, ft3
-    fmadd.d ft5, ft4, ft4, ft5      # the distance squared
+    la t6, vec3_scratch
+    fsd ft3, 0(t6)
+    fsd ft4, 8(t6)
+    jab.f64.vec2.sqrlen ft8, t6     # the distance squared
     la t2, k_body_radius_d
-    fld ft6, 0(t2)
-    fadd.d ft6, ft6, ft6            # the radii
-    fmul.d ft7, ft6, ft6
-    fle.d t3, ft7, ft5
+    fld ft10, 0(t2)
+    fadd.d ft10, ft10, ft10         # the radii
+    fmul.d ft7, ft10, ft10
+    fle.d t3, ft7, ft8
     bnez t3, 9f                     # clear
     la t2, k_thousandth_d
     fld ft7, 0(t2)
-    flt.d t3, ft5, ft7
+    flt.d t3, ft8, ft7
     bnez t3, 8f
-    fsqrt.d ft5, ft5
-    fsub.d ft7, ft6, ft5            # the shortfall
-    fdiv.d ft7, ft7, ft5
+    jab.f64.vec2.len ft9, t6
+    fsub.d ft7, ft10, ft9           # the shortfall
+    fdiv.d ft7, ft7, ft9
+    fld ft3, 0(t6)
+    fld ft4, 8(t6)
     fmadd.d fs0, ft3, ft7, fs0
     fmadd.d fs1, ft4, ft7, fs1
     ret
 8:
-    fadd.d fs0, fs0, ft6            # on one spot: eastward
+    fadd.d fs0, fs0, ft10           # on one spot: eastward
 9:
     ret
 
-# wall_push: the feet at fs0, fs1 (z fs2) pushed out of the wall a0
-# when it blocks the body and lies within its radius. Clobbers t0 to
-# t6, a0 to a5, ft0 to ft11, fa0 to fa3; fs5 to fs7 are its own.
+# The feet at fs0, fs1, fs2 pushed out of a wall when it blocks the body and
+# lies within its radius.
+# a0 int The wall.
+# returns Clobbers t0 to t6, a0 to a5, ft0 to ft11, fa0 to fa3; fs5 to fs7.
 wall_push:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -418,9 +412,10 @@ wall_push:
     # the feet sit on the wall
     fsub.d ft4, fs0, fs5
     fsub.d ft5, fs1, fs6
-    fmul.d ft9, ft4, ft4
-    fmadd.d ft9, ft5, ft5, ft9
-    fsqrt.d ft9, ft9                # the distance
+    la t3, vec3_scratch
+    fsd ft4, 0(t3)
+    fsd ft5, 8(t3)
+    jab.f64.vec2.len ft9, t3        # the distance
     fcvt.d.w ft8, zero
     flt.d t1, ft8, ft9
     bnez t1, 6f
@@ -436,10 +431,14 @@ wall_push:
     fcvt.d.s ft4, ft4
     fsub.s ft5, ft2, ft0
     fcvt.d.s ft5, ft5
-    fmul.d ft9, ft4, ft4
-    fmadd.d ft9, ft5, ft5, ft9
-    fsqrt.d ft9, ft9
+    la t3, vec3_scratch
+    fsd ft4, 0(t3)
+    fsd ft5, 8(t3)
+    jab.f64.vec2.len ft9, t3
 6:
+    la t3, vec3_scratch
+    fld ft4, 0(t3)
+    fld ft5, 8(t3)
     la t0, k_body_radius_d
     fld ft0, 0(t0)
     fsub.d ft0, ft0, ft9            # how far in
