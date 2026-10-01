@@ -1,4 +1,4 @@
-# The engine's own records and limits beyond the map's, read after map.inc.
+# The engine's own records and limits beyond the map's, read after map.inc
 .set SCREEN_W, JAB_DISPLAY_WIDTH
 .set SCREEN_H, JAB_DISPLAY_HEIGHT
 .set SCREEN_PITCH, JAB_DISPLAY_PITCH
@@ -156,13 +156,15 @@
 .set STAT_SPRITES, 72
 .set STAT_SPRITE_TICKS, 80
 # The spans filled and the pixels they entered, the lit ones among them,
-# and the ticks the light's evaluation took
+# the ticks the light's evaluation took, and the pixels the depth test
+# rejected
 .set STAT_SPANS, 88
 .set STAT_PIXELS, 96
 .set STAT_LIT_SPANS, 104
 .set STAT_LIT_PIXELS, 112
 .set STAT_LIGHT_TICKS, 120
-.set STAT_SIZE, 128
+.set STAT_REJECTED, 128
+.set STAT_SIZE, 136
 # The records over the API, 64 bytes each: the state a frame, kind
 # REPORT_STATE, the camera's sector, the eye, the yaw, pitch, and roll
 # in degrees, the drawing's and the game's microseconds, zero to the
@@ -344,19 +346,19 @@
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
 
-# A section's address in the map.
-# kind int The kind.
+# A section's address in the map
+# kind int The kind
 # returns
-#   reg The address.
+#   reg The address
 .macro section_at kind, reg
     la \reg, sections
     ld \reg, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\reg)
 .endm
 
-# A section's record count.
-# kind int The kind.
+# A section's record count
+# kind int The kind
 # returns
-#   reg The count.
+#   reg The count
 .macro section_count kind, reg
     la \reg, sections
     ld \reg, (SECTION_COUNT + SECTION_ENTRY * (\kind - 1))(\reg)

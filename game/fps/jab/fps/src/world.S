@@ -1,6 +1,6 @@
 # The world drawn from the camera: the portal walk breadth-first through the
 # compiler's portals, each sector's planes and wall pieces, the openings
-# sampled against the depth buffer.
+# sampled against the depth buffer
 
 .section .rodata
 .balign 8
@@ -12,7 +12,7 @@ k_zero_d:
 .section .text
 
 # The frame drawn: the depth buffer cleared, the walk from the camera's
-# sector or from every sector, then the sprites and the actors.
+# sector or from every sector, then the sprites and the actors
 world_draw:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -69,6 +69,7 @@ world_draw:
     sd zero, STAT_LIT_SPANS(t1)
     sd zero, STAT_LIT_PIXELS(t1)
     sd zero, STAT_LIGHT_TICKS(t1)
+    sd zero, STAT_REJECTED(t1)
     call sky_setup
     # the walk's start
     section_count KIND_SECTORS, s2
@@ -137,9 +138,9 @@ world_draw:
     addi sp, sp, 48
     ret
 
-# Queues a sector and marks it reached.
-# a0 int The sector.
-# returns Clobbers t0 to t2.
+# Queues a sector and marks it reached
+# a0 int The sector
+# returns Clobbers t0 to t2
 walk_push:
     la t0, walk_seen
     add t0, t0, a0
@@ -156,8 +157,9 @@ walk_push:
     sd t1, 0(t0)
     ret
 
-# A sector's planes facing the camera, then its walls facing the camera.
-# a0 int The sector.
+# A sector's planes facing the camera, then its walls facing the camera,
+# nearest first
+# a0 int The sector
 sector_draw:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -167,7 +169,9 @@ sector_draw:
     sd s5, 40(sp)
     sd s6, 32(sp)
     sd s7, 24(sp)
+    sd s8, 16(sp)
     mv s2, a0
+    li s8, 0                        # the facing walls gathered
     la t0, stats
     ld t1, STAT_SECTORS(t0)
     addi t1, t1, 1
@@ -217,7 +221,9 @@ sector_draw:
     rdtime t0
     sd t0, 0(sp)
     # the walls facing the camera: the camera on the sector's side of
-    # the wall's line, its left from a to b
+    # the wall's line, its left from a to b; each gathered with the
+    # squared distance to its nearest point as the key, then drawn
+    # nearest first, so the depth test rejects more of the far ones
     mv a0, s2
     call sector_at
     lwu s3, SECTOR_FIRST_LOOP(a0)
@@ -254,9 +260,41 @@ sector_draw:
     fmul.s ft7, ft5, ft0
     flt.s t1, ft7, ft6              # (bx - ax)(py - ay) > (by - ay)(px - ax): in front
     beqz t1, 61f
-    mv a0, s2
-    mv a1, s5
-    call wall_draw
+    # the key: the eye's offset from a less its share along the run,
+    # clamped to the segment, squared
+    fmul.s ft6, ft0, ft4
+    fmadd.s ft6, ft1, ft5, ft6      # along the run
+    fmul.s ft7, ft4, ft4
+    fmadd.s ft7, ft5, ft5, ft7      # the run squared
+    fdiv.s ft6, ft6, ft7
+    la t0, k_zero
+    flw ft7, 0(t0)
+    fmax.s ft6, ft6, ft7
+    la t0, k_one
+    flw ft7, 0(t0)
+    fmin.s ft6, ft6, ft7            # the nearest point's share
+    fnmsub.s ft0, ft6, ft4, ft0     # from the nearest point to the eye
+    fnmsub.s ft1, ft6, ft5, ft1
+    fmul.s ft6, ft0, ft0
+    fmadd.s ft6, ft1, ft1, ft6
+    # inserted in order of the key
+    la t0, wall_order
+    slli t1, s8, 3
+    add t1, t1, t0                  # past the last entry
+62:
+    beq t1, t0, 63f
+    flw ft7, -8(t1)
+    fle.s t2, ft7, ft6
+    bnez t2, 63f
+    fsw ft7, 0(t1)
+    lwu t2, -4(t1)
+    sw t2, 4(t1)
+    addi t1, t1, -8
+    j 62b
+63:
+    fsw ft6, 0(t1)
+    sw s5, 4(t1)
+    addi s8, s8, 1
 61:
     addi s5, s5, 1
     j 6b
@@ -264,6 +302,19 @@ sector_draw:
     addi s3, s3, 1
     j 5b
 8:
+    # drawn in that order
+    li s3, 0
+81:
+    bgeu s3, s8, 82f
+    la t0, wall_order
+    slli t1, s3, 3
+    add t0, t0, t1
+    lwu a1, 4(t0)
+    mv a0, s2
+    call wall_draw
+    addi s3, s3, 1
+    j 81b
+82:
     rdtime t0
     ld t1, 0(sp)
     sub t0, t0, t1
@@ -278,13 +329,14 @@ sector_draw:
     ld s5, 40(sp)
     ld s6, 32(sp)
     ld s7, 24(sp)
+    ld s8, 16(sp)
     addi sp, sp, 80
     ret
 
-# A material's texture into the surface in hand: pixels, size, and wraps.
-# a0 int The material.
-# returns Clobbers t0 to t4, a1.
-#   a0 1, or 0 with the sizes 1 when the material is none or has no texture.
+# A material's texture into the surface in hand: pixels, size, and wraps
+# a0 int The material
+# returns Clobbers t0 to t4, a1
+#   a0 1, or 0 with the sizes 1 when the material is none or has no texture
 material_bind:
     la t1, poly
     bltz a0, 8f
@@ -338,9 +390,9 @@ material_bind:
     li a0, 0
     ret
 
-# POLY_MODE from a surface's flags: the sky, else textured, lit with lights.
-# a0 u32 The flags.
-# returns Clobbers t0, t1.
+# POLY_MODE from a surface's flags: the sky, else textured, lit with lights
+# a0 u32 The flags
+# returns Clobbers t0, t1
 surface_mode:
     andi t0, a0, SURFACE_SKY
     li a0, POLY_TEXTURED
@@ -350,9 +402,9 @@ surface_mode:
     sd a0, POLY_MODE(t0)
     ret
 
-# POLY_MODE set, the lit flag added when the map has lights.
-# a0 int The mode.
-# returns Clobbers t0, t1.
+# POLY_MODE set, the lit flag added when the map has lights
+# a0 int The mode
+# returns Clobbers t0, t1
 poly_mode:
     la t0, light_count
     lwu t0, 0(t0)
@@ -364,9 +416,9 @@ poly_mode:
     ret
 
 # A sector's plane when its surface has a material: every loop's points at
-# the plane's height into one edge list and one even-odd fill.
-# a0 int The sector.
-# a1 int 0 the floor, 1 the ceiling.
+# the plane's height into one edge list and one even-odd fill
+# a0 int The sector
+# a1 int 0 the floor, 1 the ceiling
 plane_draw:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -486,14 +538,14 @@ plane_draw:
     ret
 
 # The polygon in hand set to the wall piece between two heights at each
-# end: the quad, the triangle where the planes cross, or nothing.
-# fa0 f64 The top at the start.
-# fa1 f64 The top at the end.
-# fa2 f64 The bottom at the start.
-# fa3 f64 The bottom at the end.
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y.
+# end: the quad, the triangle where the planes cross, or nothing
+# fa0 f64 The top at the start
+# fa1 f64 The top at the end
+# fa2 f64 The bottom at the start
+# fa3 f64 The bottom at the end
+# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
 # returns
-#   a0 The clipped point count, 0 for nothing.
+#   a0 The clipped point count, 0 for nothing
 piece_polygon:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -579,12 +631,12 @@ piece_polygon:
     ret
 
 # The point a fraction along the wall from its start, at the top's height
-# there.
-# ft3 f64 The fraction.
-# returns Clobbers ft4.
-#   fa0 f32 x.
-#   fa1 f32 y.
-#   fa2 f32 z.
+# there
+# ft3 f64 The fraction
+# returns Clobbers ft4
+#   fa0 f32 x
+#   fa1 f32 y
+#   fa2 f32 z
 piece_cross:
     fsub.d ft4, fs2, fs0
     fmadd.d ft4, ft4, ft3, fs0
@@ -598,12 +650,12 @@ piece_cross:
     ret
 
 # The plane and surface in hand set for a wall: the normal into the sector,
-# u along the wall from its first vertex, v down from its anchor height.
-# a0 int The sector.
-# a1 int The wall.
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y.
+# u along the wall from its first vertex, v down from its anchor height
+# a0 int The sector
+# a1 int The wall
+# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
 # returns
-#   a0 1 when the wall's material has a texture, else 0.
+#   a0 1 when the wall's material has a texture, else 0
 wall_surface:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -688,9 +740,9 @@ wall_surface:
     ret
 
 # Whether the camera is within the near distance of the wall in hand, in
-# the plan.
-# returns Clobbers t0, ft0 to ft7.
-#   a0 1 or 0.
+# the plan
+# returns Clobbers t0, ft0 to ft7
+#   a0 1 or 0
 wall_near:
     la t0, camera
     flw ft0, CAM_X(t0)
@@ -722,9 +774,9 @@ wall_near:
     ret
 
 # A wall of a sector facing the camera: its portals from the top down, the
-# solid pieces between them and, at each, the opening into its neighbour.
-# a0 int The sector.
-# a1 int The wall.
+# solid pieces between them and, at each, the opening into its neighbour
+# a0 int The sector
+# a1 int The wall
 wall_draw:
     addi sp, sp, -192
     sd ra, 168(sp)
@@ -971,9 +1023,9 @@ wall_draw:
     addi sp, sp, 192
     ret
 
-# How many pixels no surface reached this frame, the depth buffer's zeros.
-# returns Clobbers t0 to t2.
-#   a0 The count.
+# How many pixels no surface reached this frame, the depth buffer's zeros
+# returns Clobbers t0 to t2
+#   a0 The count
 uncovered:
     la t0, zbuf
     li t1, ZBUF_BYTES
@@ -999,3 +1051,9 @@ walk_fifo:
     .skip (MAX_SECTORS * 4)
 walk_seen:
     .skip MAX_SECTORS
+# A sector's facing walls in the order they are drawn: the key, the
+# squared distance from the eye to the wall's nearest point, a float,
+# and the wall
+.balign 8
+wall_order:
+    .skip (MAX_WALLS * 8)

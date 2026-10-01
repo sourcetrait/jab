@@ -1,5 +1,5 @@
 # The polygon rasteriser: world points into the camera's basis, clipped and
-# projected into edges, the even-odd fill, the integer span, the portal test.
+# projected into edges, the even-odd fill, the integer span, the portal test
 
 .section .rodata
 .balign 8
@@ -33,18 +33,18 @@ k_big:
 
 .section .text
 
-# Empties the polygon in hand.
-# returns Clobbers t0.
+# Empties the polygon in hand
+# returns Clobbers t0
 poly_reset:
     la t0, vert_count
     sd zero, 0(t0)
     ret
 
-# Appends a world point to the polygon in hand; one past MAX_VERTS is dropped.
-# fa0 f32 x.
-# fa1 f32 y.
-# fa2 f32 z.
-# returns Clobbers t0 to t3.
+# Appends a world point to the polygon in hand; one past MAX_VERTS is dropped
+# fa0 f32 x
+# fa1 f32 y
+# fa2 f32 z
+# returns Clobbers t0 to t3
 poly_point:
     la t0, vert_count
     ld t1, 0(t0)
@@ -62,8 +62,8 @@ poly_point:
 1:
     ret
 
-# Empties the edge list, its rows unbounded.
-# returns Clobbers t0, t1, ft0.
+# Empties the edge list, its rows unbounded
+# returns Clobbers t0, t1, ft0
 edges_reset:
     la t0, edge_count
     sd zero, 0(t0)
@@ -77,9 +77,9 @@ edges_reset:
     ret
 
 # The polygon in hand into the camera's basis, clipped to the near plane,
-# projected, its edges appended to the list.
+# projected, its edges appended to the list
 # returns
-#   a0 The clipped point count, 0 when nothing is left.
+#   a0 The clipped point count, 0 when nothing is left
 poly_project:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -292,7 +292,7 @@ poly_project:
 
 # The surface's affine coefficients over the screen from the plane in hand
 # and the camera, in double, into the polygon in hand, with the unit normal
-# facing the camera; a plane through the eye zeroes them all.
+# facing the camera; a plane through the eye zeroes them all
 surface_setup:
     addi sp, sp, -144
     sd ra, 136(sp)
@@ -439,13 +439,13 @@ surface_setup:
     addi sp, sp, 144
     ret
 
-# One texture coordinate's affine coefficients into the polygon in hand.
-# a0 address The gradient, three doubles in plane_d.
-# a1 int The offset's field in plane_d.
-# a2 int The first of the three polygon fields written.
-# fa1 f32 The texture's size.
-# fs4 f64 hz; fs5 hx; fs6 hy; fs8, fs9, fs10 A, B, C, from surface_setup.
-# returns Clobbers t0 to t4, ft0 to ft11, fs11.
+# One texture coordinate's affine coefficients into the polygon in hand
+# a0 address The gradient, three doubles in plane_d
+# a1 int The offset's field in plane_d
+# a2 int The first of the three polygon fields written
+# fa1 f32 The texture's size
+# fs4 f64 hz; fs5 hx; fs6 hy; fs8, fs9, fs10 A, B, C, from surface_setup
+# returns Clobbers t0 to t4, ft0 to ft11, fs11
 surface_axis:
     la t3, camera_d
     jab.f64.vec3.dot fs11, a0, t3   # a.p
@@ -494,10 +494,10 @@ surface_axis:
     sd t3, 16(t2)
     ret
 
-# The edges the row centre crosses, their x in crossings sorted ascending.
-# fa0 f32 The row's centre.
-# returns Clobbers t0 to t5, ft0 to ft6.
-#   a0 The count.
+# The edges the row centre crosses, their x in crossings sorted ascending
+# fa0 f32 The row's centre
+# returns Clobbers t0 to t5, ft0 to ft6
+#   a0 The count
 row_crossings:
     li a0, 0
     la t0, edges
@@ -536,10 +536,10 @@ row_crossings:
 9:
     ret
 
-# The first pixel whose centre is at or past fa0, within the screen's columns.
+# The first pixel whose centre is at or past fa0, within the screen's columns
 # fa0 f32
-# returns Clobbers t0, ft0.
-#   a0 The pixel.
+# returns Clobbers t0, ft0
+#   a0 The pixel
 span_bound:
     la t0, k_half
     flw ft0, 0(t0)
@@ -554,10 +554,10 @@ span_bound:
 2:
     ret
 
-# The rows the edges cover, within the screen.
-# returns Clobbers t0, ft0, ft1.
-#   a0 The first row.
-#   a1 The row past the last.
+# The rows the edges cover, within the screen
+# returns Clobbers t0, ft0, ft1
+#   a0 The first row
+#   a1 The row past the last
 row_range:
     la t0, k_half
     flw ft0, 0(t0)
@@ -578,7 +578,7 @@ row_range:
 2:
     ret
 
-# The polygon in hand filled by scanlines with the surface in hand.
+# The polygon in hand filled by scanlines with the surface in hand
 poly_fill:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -637,13 +637,13 @@ poly_fill:
     ret
 
 # The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
-# masked, sky, or lit, no float in the loop.
-# a0 int The first pixel.
-# a1 int The pixel past the last.
-# a2 int The row.
+# masked, sky, or lit, no float in the loop
+# a0 int The first pixel
+# a1 int The pixel past the last
+# a2 int The row
 .balign CODE_PAGE
 span_fill:
-    addi sp, sp, -144
+    addi sp, sp, -160
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -657,6 +657,7 @@ span_fill:
     sd s11, 56(sp)
     sd s0, 48(sp)
     sd a2, 24(sp)                   # the row
+    sd zero, 144(sp)                # the pixels the depth test rejected, as entered less passed
     la t0, poly
     ld s3, POLY_IZA(t0)
     ld t1, POLY_IZB(t0)
@@ -827,19 +828,24 @@ span_fill:
     sd t5, 8(sp)
     mv t5, t4
     mv t2, s11
+    li t4, 0                        # the pixels past the depth test this block
     ld t3, 16(sp)
-    andi t4, t3, POLY_LIT
-    bnez t4, 44f
-    li t4, POLY_MASKED
-    beq t3, t4, 50f
+    andi a5, t3, POLY_LIT
+    bnez a5, 44f
+    li a5, POLY_MASKED
+    beq t3, a5, 50f
     j 40f
 44:
-    andi t4, t3, POLY_MASKED
+    andi a5, t3, POLY_MASKED
     ld t3, 32(sp)                   # the brightness, packed
-    bnez t4, 55f
+    bnez a5, 55f
 45:
-    # textured, lit: each channel of the texel scaled by its brightness,
-    # the texel's bytes blue, green, red from the low end
+    # textured, lit: the depth first, then the texel, each channel
+    # scaled by its brightness, the texel's bytes blue, green, red from
+    # the low end
+    lwu a7, 0(t1)
+    bgeu a7, s2, 46f
+    addi t4, t4, 1
     srli a5, s9, 16
     and a5, a5, a2
     sll a5, a5, a4
@@ -849,8 +855,6 @@ span_fill:
     add a5, a5, a6
     add a5, a5, a1
     lw a0, 0(a5)
-    lwu a7, 0(t1)
-    bgeu a7, s2, 46f
     slli a5, t3, (64 - 3 * CHANNEL_BITS)
     srli a5, a5, (64 - CHANNEL_BITS + 8)    # blue's brightness, 8.8
     andi a6, a0, 0xff
@@ -889,7 +893,10 @@ span_fill:
     sd t3, 32(sp)
     j 60f
 55:
-    # masked, lit
+    # masked, lit: the depth, the texel, its alpha
+    lwu a7, 0(t1)
+    bgeu a7, s2, 56f
+    addi t4, t4, 1
     srli a5, s9, 16
     and a5, a5, a2
     sll a5, a5, a4
@@ -901,8 +908,6 @@ span_fill:
     lw a0, 0(a5)
     srli a6, a0, 24
     beqz a6, 56f
-    lwu a7, 0(t1)
-    bgeu a7, s2, 56f
     slli a5, t3, (64 - 3 * CHANNEL_BITS)
     srli a5, a5, (64 - CHANNEL_BITS + 8)
     andi a6, a0, 0xff
@@ -941,7 +946,10 @@ span_fill:
     sd t3, 32(sp)
     j 60f
 40:
-    # textured: the texel, the depth test, the stores
+    # textured: the depth test, then the texel and the stores
+    lwu a7, 0(t1)
+    bgeu a7, s2, 41f
+    addi t4, t4, 1
     srli a5, s9, 16
     and a5, a5, a2
     sll a5, a5, a4
@@ -951,8 +959,6 @@ span_fill:
     add a5, a5, a6
     add a5, a5, a1
     lw a0, 0(a5)
-    lwu a7, 0(t1)
-    bgeu a7, s2, 41f
     sw a0, 0(t0)
     sw s2, 0(t1)
 41:
@@ -965,7 +971,11 @@ span_fill:
     bnez t2, 40b
     j 60f
 50:
-    # masked: a texel with no alpha leaves the pixel
+    # masked: the depth test, then the texel, whose empty alpha leaves
+    # the pixel
+    lwu a7, 0(t1)
+    bgeu a7, s2, 51f
+    addi t4, t4, 1
     srli a5, s9, 16
     and a5, a5, a2
     sll a5, a5, a4
@@ -977,8 +987,6 @@ span_fill:
     lw a0, 0(a5)
     srli a6, a0, 24
     beqz a6, 51f
-    lwu a7, 0(t1)
-    bgeu a7, s2, 51f
     sw a0, 0(t0)
     sw s2, 0(t1)
 51:
@@ -990,7 +998,12 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 50b
 60:
-    # the block's end is the next block's start
+    # the block's end is the next block's start; its rejected pixels,
+    # the block's less those past the depth test, kept
+    sub t3, s11, t4
+    ld t5, 144(sp)
+    add t5, t5, t3
+    sd t5, 144(sp)
     ld s8, 0(sp)
     ld s9, 8(sp)
     mul t3, s11, s6
@@ -1030,15 +1043,17 @@ span_fill:
     sll s9, s9, a4                  # the texel row's bytes
     li s2, SKY_DEPTH
     mv t2, s10
+    li t4, 0                        # the pixels past the depth test
 71:
+    lwu a7, 0(t1)
+    bgeu a7, s2, 72f
+    addi t4, t4, 1
     srai a6, s8, 16
     and a6, a6, a3
     slli a6, a6, 2
     add a5, s9, a6
     add a5, a5, a1
     lw a0, 0(a5)
-    lwu a7, 0(t1)
-    bgeu a7, s2, 72f
     sw a0, 0(t0)
     sw s2, 0(t1)
 72:
@@ -1047,7 +1062,14 @@ span_fill:
     addi t1, t1, 4
     addi t2, t2, -1
     bnez t2, 71b
+    sub t3, s10, t4
+    sd t3, 144(sp)
 90:
+    la t3, stats
+    ld t4, STAT_REJECTED(t3)
+    ld t5, 144(sp)
+    add t4, t4, t5
+    sd t4, STAT_REJECTED(t3)
     ld ra, 136(sp)
     ld s2, 128(sp)
     ld s3, 120(sp)
@@ -1060,12 +1082,12 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 144
+    addi sp, sp, 160
     ret
 
-# Whether any of the polygon in hand shows against what is drawn, sampled.
+# Whether any of the polygon in hand shows against what is drawn, sampled
 # returns
-#   a0 1 when a sample's buffer depth is under the surface's 1/z, else 0.
+#   a0 1 when a sample's buffer depth is under the surface's 1/z, else 0
 .balign CODE_PAGE
 poly_shows:
     addi sp, sp, -64

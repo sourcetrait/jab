@@ -17,14 +17,38 @@ probe measured the float span at 12 to 14 ms a megapixel against 5.4 for the
 integer one. 1/z, u/z, and v/z at the span's first pixel are a multiply and
 an add each; blocks of 16 pixels, at whose end one divide gives z as 2^42
 over 1/z, clamped to IZ_MIN for it, and two multiplies give u and v exact
-there, the steps within by two divides; a pixel is the texel at (v & vmask)
-<< wshift + (u & umask) << 2, a depth load, a skip when the buffer's 1/z is
-at or past the surface's, else the pixel and the depth stored. The lit modes
-unpack each channel of the stepped brightness to 8.8 by two shifts and scale
-the texel's byte by it; a framebuffer pixel's bytes are blue, green, red from
-the low end. The sky mode takes the texel by screen position, offset by the
-camera's yaw and pitch at four repeats a turn, and stores SKY_DEPTH so any
-surface overwrites it.
+there, the steps within by two divides; a pixel is a depth load and a skip
+when the buffer's 1/z is at or past the surface's, else the texel at (v &
+vmask) << wshift + (u & umask) << 2 and the pixel and the depth stored. The
+lit modes unpack each channel of the stepped brightness to 8.8 by two shifts
+and scale the texel's byte by it; a framebuffer pixel's bytes are blue, green,
+red from the low end. The sky mode takes the texel by screen position, offset
+by the camera's yaw and pitch at four repeats a turn, and stores SKY_DEPTH so
+any surface overwrites it.
+
+The depth test comes before the texel's address in every pixel loop, so a
+rejected pixel costs the depth load, the compare, and the steps. It changes
+no stored pixel: the seven gauge captures on the androidless factory are byte
+for byte the same before and after. It saves little: the up flight's walls
+phase moved from a minimum of 28.8 to 27.3 ms over five runs and the other
+views within their noise, because a texel address is eight integer ops and a
+load that mostly hits the host's cache, and because the rejected share was
+smaller than the overdraw suggested, below.
+
+The pixels the depth test rejects are counted on the pass path, one add per
+pixel that passes, so a block's rejected count is its length less the passes
+and the span's lands in the frame's stats; the frame line prints it. The
+count sat on the reject path first, behind a label and a jump over it, and
+that jump cost every stored pixel a translation-block hop under QEMU, about
+a millisecond on the yard view, which is why it moved: a loop body that falls
+through into its step is one block, and a branch target in the middle splits
+it. The count is what separates overdraw into its two kinds, since pixels
+entered less the screen counts both the rejected and the stored-then-
+overwritten, and only the first kind is what an early depth test saves. On
+the stairwell views the up flight enters 3.9 M pixels, rejects 1.2 M, and
+overwrites 0.6 M; the down flight enters 3.3 M, rejects 0.59 M, and
+overwrites 0.65 M. The overwritten share is the walk's order between sectors
+(world.S).
 
 The pixel-centre rule everywhere, ceil(v - 0.5), so surfaces sharing an edge
 meet without a crack. Walking by rows matters under TCG: a column walk

@@ -5,6 +5,21 @@ sector, or from every sector when the camera is in none; a sector reached is
 drawn once and whole, and the depth buffer resolves every overlap, so there
 are no screen boxes and no redraws.
 
+A sector's facing walls are gathered with the squared distance from the eye
+to each wall's nearest point as the key, insertion-sorted into wall_order,
+and drawn nearest first, after the planes. The order changes no stored pixel
+(the gauge captures match byte for byte) and measured no gain: the rejected
+count rose by 30k on the spawn view and not at all on the up flight. A probe
+that counted, per sector, the pixels whose store replaced an earlier one
+placed the overwrite between sectors, not within one: on the up flight the
+hall's own walls overwrite 56k pixels while up1's side walls overwrite 375k,
+half of what they enter, and on the down flight down1's walls 404k. The
+camera's hall is T-shaped and drawn first and whole, so the far wall of its
+stem, seven metres off, is stored where the flight's near side walls land a
+sector later. A within-sector sort cannot reach that; a nearest-first order
+over every reached sector's walls could, and is held in reserve for a review
+(the fps iter's FpsThreeD campaign).
+
 A wall is drawn as pieces between the sectors across it, which the file's
 portals give sorted from the top down: for k over the portals plus one, the
 piece's top is the sector's ceiling for k 0 and portal k-1's sector's floor

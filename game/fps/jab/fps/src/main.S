@@ -1,7 +1,7 @@
 # The game's program: the map loaded off its disk and held to its format, the
 # title drawn, then the frame loop: the pad, the camera and the body, the
 # console, the actors, the ambient, the world drawn, the HUD, the flip, the
-# state over the API, and the display's tick or the pad awaited.
+# state over the API, and the display's tick or the pad awaited
 .include "jab.inc"
 .include "jab_f32.inc"
 .include "jab_f64.inc"
@@ -207,7 +207,7 @@ bad_magic:
     call line_end
     jab.sys.exit 6
 
-# Exit 7: the file ends before its structures do.
+# Exit 7: the file ends before its structures do
 short_file:
     call line_map
     la a1, word_ends_at
@@ -231,8 +231,8 @@ map_too_big:
     call line_end
     jab.sys.exit 7
 
-# Exit 8: the map holds more of a kind than this build does.
-# a1 address The kind's word.
+# Exit 8: the map holds more of a kind than this build does
+# a1 address The kind's word
 too_many:
     mv s6, a1
     call line_map
@@ -245,8 +245,8 @@ too_many:
     call line_end
     jab.sys.exit 8
 
-# Exit 9: a material's name is too long for a path.
-# a0 int The material.
+# Exit 9: a material's name is too long for a path
+# a0 int The material
 path_too_long:
     mv s6, a0
     la a0, line
@@ -259,9 +259,9 @@ path_too_long:
     call line_end
     jab.sys.exit 9
 
-# Exit 10: a material's texture failed to load.
-# a0 int The material.
-# a1 int The code.
+# Exit 10: a material's texture failed to load
+# a0 int The material
+# a1 int The code
 load_failed:
     mv s6, a1
     mv s7, a0
@@ -277,10 +277,10 @@ load_failed:
     call line_end
     jab.sys.exit 10
 
-# Exit 11: a record broke a rule of the format.
-# a1 address The record's word.
-# a2 int Its index.
-# a3 address What is wrong with it.
+# Exit 11: a record broke a rule of the format
+# a1 address The record's word
+# a2 int Its index
+# a3 address What is wrong with it
 check_failed:
     mv s6, a1
     mv s7, a2
@@ -297,8 +297,8 @@ check_failed:
     call line_end
     jab.sys.exit 11
 
-# Exit 11: the map lacks what a1 names.
-# a1 address The lack, NUL-terminated.
+# Exit 11: the map lacks what a1 names
+# a1 address The lack, NUL-terminated
 map_lacks:
     mv s6, a1
     call line_map
@@ -307,8 +307,8 @@ map_lacks:
     call line_end
     jab.sys.exit 11
 
-# Exit 12: the section directory is broken.
-# a1 address How, NUL-terminated.
+# Exit 12: the section directory is broken
+# a1 address How, NUL-terminated
 bad_directory:
     mv s6, a1
     call line_map
@@ -319,9 +319,9 @@ bad_directory:
     call line_end
     jab.sys.exit 12
 
-# Begins the line with the prefix and the map's path.
+# Begins the line with the prefix and the map's path
 # returns
-#   a0 The cursor past it.
+#   a0 The cursor past it
 line_map:
     la a0, line
     la a1, msg_prefix
@@ -332,8 +332,8 @@ line_map:
     mv ra, t1
     ret
 
-# Ends the line at the cursor with a newline and prints it on the UART.
-# a0 address The cursor.
+# Ends the line at the cursor with a newline and prints it on the UART
+# a0 address The cursor
 line_end:
     li t0, '\n'
     sb t0, 0(a0)
@@ -341,8 +341,8 @@ line_end:
     jab.sys.uart.print line
     ret
 
-# The load line on the UART: the counts of what loaded.
-# s5 int The milliseconds.
+# The load line on the UART: the counts of what loaded
+# s5 int The milliseconds
 load_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -407,8 +407,9 @@ load_report:
     ret
 
 # The frame line on the UART: the counts, the ticks by phase, the spans and
-# the pixels they entered, the lit ones among them, and the light's ticks.
-# s10 int The frame's ticks.
+# the pixels they entered, the lit ones among them, the light's ticks, and
+# the pixels the depth test rejected
+# s10 int The frame's ticks
 frame_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -517,13 +518,18 @@ frame_report:
     li t0, US_TICKS
     divu a1, a1, t0
     call append_dec
+    la a1, word_rejected
+    call append_str
+    la t0, stats
+    ld a1, STAT_REJECTED(t0)
+    call append_dec
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
 
 .ifdef DEBUG
-# The sectors line on the UART: the last frame's walk in order.
+# The sectors line on the UART: the last frame's walk in order
 sectors_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -555,10 +561,10 @@ sectors_report:
     ret
 .endif
 
-# The map's records by index.
-# a0 int The index.
-# returns Clobbers t0.
-#   a0 The record's address.
+# The map's records by index
+# a0 int The index
+# returns Clobbers t0
+#   a0 The record's address
 sector_at:
     li t0, SECTOR_SIZE
     mul a0, a0, t0
@@ -608,20 +614,20 @@ material_at:
     add a0, a0, t0
     ret
 
-# A name in the names table.
-# a0 int The offset.
-# returns Clobbers t0.
-#   a0 The name's address.
+# A name in the names table
+# a0 int The offset
+# returns Clobbers t0
+#   a0 The name's address
 name_at:
     section_at KIND_NAMES, t0
     add a0, a0, t0
     ret
 
-# The framebuffer black.
+# The framebuffer black
 clear_screen:
     li a0, 0
-# The framebuffer one colour.
-# a0 u32 The colour.
+# The framebuffer one colour
+# a0 u32 The colour
 fill_screen:
     slli t2, a0, 32
     or t2, t2, a0
@@ -635,13 +641,13 @@ fill_screen:
     bltu t0, t1, 1b
     ret
 
-# Reads a file off a disk whole, a page at a time.
-# a0 address The buffer.
-# a1 int Its bytes.
-# a2 int The disk.
-# a3 address The path from the root, NUL-terminated.
+# Reads a file off a disk whole, a page at a time
+# a0 address The buffer
+# a1 int Its bytes
+# a2 int The disk
+# a3 address The path from the root, NUL-terminated
 # returns
-#   a0 The bytes read, 0 when the file is not there.
+#   a0 The bytes read, 0 when the file is not there
 read_file:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -696,10 +702,10 @@ read_file:
     addi sp, sp, 64
     ret
 
-# The length of a string.
-# a0 address NUL-terminated, kept.
-# returns Clobbers t0.
-#   a1 The length.
+# The length of a string
+# a0 address NUL-terminated, kept
+# returns Clobbers t0
+#   a1 The length
 str_len:
     li a1, 0
 1:
@@ -711,11 +717,11 @@ str_len:
 2:
     ret
 
-# Appends a string at the cursor.
-# a0 address The cursor.
-# a1 address NUL-terminated.
-# returns Clobbers t0.
-#   a0 The cursor past it.
+# Appends a string at the cursor
+# a0 address The cursor
+# a1 address NUL-terminated
+# returns Clobbers t0
+#   a0 The cursor past it
 append_str:
 1:
     lbu t0, 0(a1)
@@ -727,11 +733,11 @@ append_str:
 2:
     ret
 
-# Appends a number in decimal at the cursor.
-# a0 address The cursor.
+# Appends a number in decimal at the cursor
+# a0 address The cursor
 # a1 u64
-# returns Clobbers t0 to t3.
-#   a0 The cursor past the digits.
+# returns Clobbers t0 to t3
+#   a0 The cursor past the digits
 append_dec:
     la t0, digits
     addi t0, t0, DIGITS_BYTES
@@ -928,6 +934,8 @@ word_lit_pixels:
     .asciz ", lit pixels "
 word_light_us:
     .asciz ", light us "
+word_rejected:
+    .asciz ", rejected "
 
 .balign 4
 k_seconds_a_tick:
