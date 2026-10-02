@@ -12,7 +12,10 @@
 # a list of {at, kind} in milliseconds, sends further console frames
 # of a bare kind, F for a round or N for a noise; `pad` names a pad
 # table for the launch; `capture` and `seconds` in milliseconds and
-# seconds move the capture and the run's end. Every event the run
+# seconds move the capture and the run's end; `report` in milliseconds
+# places the same pose again then, so the frame line printed is the
+# frame after that placement, for a cost read once the frame has
+# settled. Every event the run
 # reports over the API, a round, an android's, the frame struck, a
 # pickup, or a trace, is printed with its fields. `just pose` builds
 # and runs it.
@@ -36,6 +39,7 @@ def main [map: string, poses: path, out: path, --kernel: path, --image: path, --
     for p in (open $poses) {
         let run_out = ($out | path join $"($map)_($p.name)")
         let sends = ([{ at: 2000ms, bytes: (pose-frame $p) }]
+            | append (if (($p.report? | default 0) | into int) > 0 { [{ at: ((($p.report | into int)) * 1ms), bytes: (pose-frame $p) }] } else { [] })
             | append (if ($p.trace? | default false) { [{ at: 2500ms, bytes: (command-frame "T") }] } else { [] })
             | append (($p.sends? | default []) | each {|s| { at: (($s.at | into int) * 1ms), bytes: (command-frame $s.kind) } }))
         let capture = ((($p.capture? | default 3000) | into int) * 1ms)

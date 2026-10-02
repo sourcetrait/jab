@@ -141,6 +141,27 @@ within the gauge's noise. A lit block ends by carrying its brightness into
 the slot only while its interval continues; where the interval ended the
 slot already holds the exact end sample.
 
+## The lit texture cache, tried and rejected
+
+The lit loop's three multiplies and their unpacking are about twenty
+integer ops a pixel over the unlit loop's eight, and a cache of the lit
+texture would pay them once: a tile per lumel cell at the texture's
+resolution, the texel times the brightness bilinear across the cell,
+read by a loop of fifteen ops and one load. Built and measured twice. A
+whole-surface build read every block from tiles and measured the
+settled planes phase near twice the lit loop's; a hybrid built cells on
+demand from a per-block wanted map and read tiles only for near blocks,
+the texel step a pixel under two, and still lost 8 to 13 ms on every
+plane-heavy view of the gauge, level on the wall-heavy ones. A probe
+that pinned every tiled read to one tile, cache-hot, read the planes
+phase level with the lit loop's. So the loop's arithmetic is not the
+frame's cost on this lane: under TCG the integer ops are near free and
+the loads are the price, and the texture of 64 KiB stays in cache where
+an atlas of megabytes misses on any walk off its rows; a wall span
+walks a row and costs the same from either, a floor span walks a
+diagonal and misses a line a pixel. No layout of the tiles beats a
+level reading, so the renderer keeps the lit loop and the texture.
+
 ## The flat path
 
 A polygon with no lumel map, a sprite, is lit flat: its one brightness
