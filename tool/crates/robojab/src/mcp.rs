@@ -122,11 +122,38 @@ fn reply(outcome: Result<RoboResult<Frame>, tokio::task::JoinError>) -> r::mcp::
 }
 
 /// The server run over stdio until the client goes; the machine ended after.
+/// A client that dies without closing the pipes, or a host that signals the
+/// server, must not leave the machine running: a watcher ends the machine and
+/// the process when the parent is gone (reparented to 1), and TERM, INT, and
+/// HUP end it the same way.
 pub(crate) fn serve_mcp(driver: Driver) -> RoboResult<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(RoboError::io("the runtime"))?;
     let robo = Robo::new(driver);
     let driver = robo.driver.clone();
+    let watched = driver.clone();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(1));
+            if std::os::unix::process::parent_id() == 1 {
+                let _ = lock(&watched).quit();
+                std::process::exit(0);
+            }
+        }
+    });
     let outcome = runtime.block_on(async {
+        let signalled = driver.clone();
+        tokio::spawn(async move {
+            let mut term = r::tk::signal(r::tk::SignalKind::terminate()).expect("a TERM handler");
+            let mut interrupt = r::tk::signal(r::tk::SignalKind::interrupt()).expect("an INT handler");
+            let mut hangup = r::tk::signal(r::tk::SignalKind::hangup()).expect("a HUP handler");
+            tokio::select! {
+                _ = term.recv() => {}
+                _ = interrupt.recv() => {}
+                _ = hangup.recv() => {}
+            }
+            let _ = lock(&signalled).quit();
+            std::process::exit(0);
+        });
         let service = robo.serve(r::mcp::stdio()).await.map_err(|error| RoboError::Machine(format!("mcp: {error}")))?;
         service.waiting().await.map_err(|error| RoboError::Machine(format!("mcp: {error}")))?;
         Ok(())

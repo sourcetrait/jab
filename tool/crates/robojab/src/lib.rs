@@ -37,6 +37,9 @@ pub(crate) mod r {
             transport::stdio,
         };
     }
+    pub(crate) mod tk {
+        pub(crate) use tokio::signal::unix::{SignalKind, signal};
+    }
 }
 
 mod client;
