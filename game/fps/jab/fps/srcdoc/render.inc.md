@@ -53,6 +53,19 @@ The interval constants size the cadence: a lit span samples at the ends of
 one, two, or four blocks, INTERVAL_SHIFT_MAX being four blocks' shift, by
 the texel step a pixel against the lumel's 2^k texels.
 
+POLY_SURFACE names the polygon as a surface in one index space: the lumel
+maps' order for planes and walls, then the map sprites by entity, then
+the actors by index, so the span record and the owner build name a
+surface in one word and a reader of either can tell a wall from a sprite.
+The screen rectangle is four words with its ends past the last, as the
+fill bounds its rows and spans; the flow's ring is twice the sectors long
+so its read and write never meet while sectors wait, the most that can
+wait being every sector once; the span record is the fill's output before
+drawing, sized for the frames measured and counted past its end rather
+than stopped, so a reader knows an overflow. The owner_pixel macro is a
+load from span_fill's slot under OWNER and nothing otherwise, so the
+pixel loops carry the instrument at no cost to a normal build.
+
 The tile record and the polygon's six tile fields carry what the span's
 block judgement and its tile loop need beyond the map's word: the atlas,
 the column shift, the cells across and down that a block's box must lie

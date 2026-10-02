@@ -32,3 +32,11 @@ only per-frame evaluation left.
 
 The level length of the camera's right is jab.f64.vec2.len over camera_d's
 right, the doubles the basis already wrote.
+
+The quad is clipped to its sector's rectangle from the flow (world.S), as
+the sector's own surfaces are: a sprite is seen only through the openings
+its sector is, and a quad that pokes through a wall, an android walking
+along one, no longer shows its sliver in the sector beyond. The surface
+index the caller names in sprite_surface, a map sprite's by its entity and
+an actor's by its index, goes into the polygon for the span record and the
+owner build.

@@ -110,7 +110,13 @@
 # The material bound, its index, for the level's alpha scale at a tile's
 # build
 .set POLY_MATERIAL, 272
-.set POLY_SIZE, 280
+# The surface the polygon is, for the span record and the owner build: a
+# plane at twice its sector's index and its ceiling after and a wall at
+# LUMAP_PLANES past them, as the lumel maps are indexed, a map sprite at
+# SURFACE_SPRITES plus its entity, an actor at SURFACE_ACTORS plus its
+# index
+.set POLY_SURFACE, 280
+.set POLY_SIZE, 288
 .set LUMEL_OFFSET_BITS, 24
 .set LUMEL_ROWBYTES_SHIFT, 24
 .set LUMEL_ROWS_SHIFT, 40
@@ -143,6 +149,29 @@
 .set LUMAP_COUNT, (LUMAP_PLANES + MAX_WALLS)
 .set LUMEL_BYTES, 8
 .set LUMEL_ARENA_BYTES, (8 * 1024 * 1024)
+.set SURFACE_SPRITES, LUMAP_COUNT
+.set SURFACE_ACTORS, (LUMAP_COUNT + MAX_ENTITIES)
+# A screen rectangle: the columns x0 to x1 and the rows y0 to y1, the ends
+# past the last; empty when an end is at or before its start
+.set RECT_X0, 0
+.set RECT_X1, 4
+.set RECT_Y0, 8
+.set RECT_Y1, 12
+.set RECT_SIZE, 16
+# The flow's queue, a ring of sector indices twice the sectors long, so
+# its read and its write never meet while sectors wait
+.set FLOW_RING, (MAX_SECTORS * 2)
+.set FLOW_RING_MASK, (FLOW_RING - 1)
+# A span the fill emits before drawing it: the row, the first pixel, the
+# pixel past the last, and the surface; SPAN_RECORDS of them a frame, the
+# count running on past the table when a frame has more, so a reader
+# takes the lesser
+.set SPAN_ROW, 0
+.set SPAN_X0, 4
+.set SPAN_X1, 8
+.set SPAN_SURFACE, 12
+.set SPAN_RECORD_SIZE, 16
+.set SPAN_RECORDS, (1 << 16)
 # The frame a map is baked over, in texels: the world point at texel
 # (0, 0) of the surface's mapping, the world step a texel along u, and
 # the step a texel along v, doubles; the unit normal into the room,
@@ -270,10 +299,6 @@
 .set BLOCK, 16
 .set IZ_MIN, 4096
 .set SKY_DEPTH, 1
-# How the portal test samples an opening: every second column, every
-# fourth row
-.set PORTAL_STEP_X, 2
-.set PORTAL_STEP_Y, 4
 # The frame's counts and its ticks by phase, 64 bits each
 .set STAT_SECTORS, 0
 .set STAT_WALLS, 8
@@ -482,6 +507,16 @@
 .set SOUND_GATE, 14
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
+
+# Under OWNER a pixel loop stores the surface's index in place of its
+# colour, from the slot span_fill's prologue fills, so a capture reads which
+# surface won each pixel; the crosshair stays off
+# reg The register the loop is about to store
+.macro owner_pixel reg
+.ifdef OWNER
+    ld \reg, 32(sp)
+.endif
+.endm
 
 # A section's address in the map
 # kind int The kind

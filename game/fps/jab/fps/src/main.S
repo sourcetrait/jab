@@ -165,7 +165,9 @@ frame:
     divu t0, s10, t1
     la t1, frame_us
     sw t0, 0(t1)                    # the drawing's microseconds
+.ifndef OWNER
     call hud_draw
+.endif
     call mixer_update
     jab.sys.display.flip
     call state_report

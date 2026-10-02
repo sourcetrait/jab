@@ -249,14 +249,41 @@ line, which reads the overdraw as pixels entered against the screen's and
 the cadence as samples against blocks; the light's microseconds on that
 line are the sprites' evaluations alone.
 
-span_fill and poly_shows are page-aligned and kept under a page: QEMU's
-translator ends a block at a page boundary and chains blocks within a page
-only, so a loop straddling one leaves the translated code every iteration,
-measured seven times slower. The test holds the alignment through the SDK's
-`jab hot`.
+span_fill is page-aligned and kept under a page: QEMU's translator ends a
+block at a page boundary and chains blocks within a page only, so a loop
+straddling one leaves the translated code every iteration, measured seven
+times slower. The test holds the alignment through the SDK's `jab hot`.
 
-## poly_shows
+## poly_fill
 
-The portal test over the same edges: every fourth row's spans sampled every
-second column with 1/z stepped; a sample whose buffer depth is under the
-surface's means the opening shows.
+The rows and every span are held within the rectangle in hand, the
+sector's from the flow (world.S), before the span is recorded and drawn:
+the row range against the rectangle's rows once a polygon, each span's
+ends against its columns. A span clipped starts its blocks at a different
+pixel from the whole span's, and its texel bytes can move by a rounding,
+which is why a clipped frame is compared by the surface each pixel
+belongs to rather than byte for byte. The portal test that sampled an
+opening's spans every fourth row and second column against the depth
+buffer is gone: a sampled test can miss an opening narrower than its
+stride, so it could order sectors but never reject one, and the flow's
+rectangles reject nothing either, the depth buffer resolving every pixel.
+
+The span record, sixteen bytes a span in a table of SPAN_RECORDS, is the
+interface the tile pool and a sorted span renderer share: the pool will
+read the frame's records to learn which cells its spans touch, and a
+span sorter produces the same records from its own machinery. The count
+runs past the table on a frame with more spans, so a reader takes the
+lesser and knows the overflow; the gauge's views run to twenty thousand
+spans against the table's sixty-five thousand.
+
+## The owner build
+
+Under OWNER every pixel loop stores the surface index from a slot the
+prologue filled in place of the texel, the crosshair stays off, and a
+capture then reads which surface won each pixel, the magenta prepaint
+marking the uncovered. The index rides the slot rather than a register
+because every register of the pixel loops is taken; the slot is read at
+the store, where the colour register is dead. The instrument is the
+acceptance measure of a change to what is drawn where: two builds posed
+on the same views must own every pixel alike, which the colour captures
+cannot say once a span's blocks shift.

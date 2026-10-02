@@ -327,6 +327,13 @@ actors_draw:
     add t1, t1, t0
     lbu t1, 0(t1)
     beqz t1, 8f
+    # its surface index: the actors after the map sprites, by index
+    mv a0, s2
+    call actor_index
+    li t0, SURFACE_ACTORS
+    add a0, a0, t0
+    la t0, sprite_surface
+    sd a0, 0(t0)
     mv a0, s2
     call actor_draw
 8:

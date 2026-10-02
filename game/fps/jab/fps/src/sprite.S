@@ -28,6 +28,15 @@ sprites_draw:
     add t1, t1, t0
     lbu t1, 0(t1)
     beqz t1, 8f
+    # its surface index: the map sprites after every map, by entity
+    section_at KIND_ENTITIES, t0
+    sub t0, s3, t0
+    li t1, ENTITY_SIZE
+    divu t0, t0, t1
+    li t1, SURFACE_SPRITES
+    add t0, t0, t1
+    la t1, sprite_surface
+    sd t0, 0(t1)
     mv a0, s3
     call sprite_draw
 8:
@@ -246,11 +255,24 @@ sprite_draw:
     fcvt.s.d ft0, ft6
     fsw ft0, PLANE_V0(t0)
     # no lumel map: a sprite moves, so it is lit flat by one brightness
-    # taken below once the lights are culled
+    # taken below once the lights are culled; the surface index the
+    # caller named
     la t0, poly
     sd zero, POLY_LUMAP(t0)
     lw t1, ENTITY_SECTOR(s2)
     sw t1, POLY_SECTOR(t0)
+    # its sector's rectangle clips the quad, as it clips the sector
+    la t2, sector_rect
+    slli t1, t1, 4
+    add t2, t2, t1
+    la t1, clip_rect
+    ld t3, 0(t2)
+    sd t3, 0(t1)
+    ld t3, 8(t2)
+    sd t3, 8(t1)
+    la t1, sprite_surface
+    ld t1, 0(t1)
+    sd t1, POLY_SURFACE(t0)
     call surface_setup
     # facing the camera, its face is the eye's, so it is lit at no
     # angle, else a light behind it would leave it black; the mode
@@ -363,3 +385,10 @@ sprite_draw:
     fld fs11, 8(sp)
     addi sp, sp, 128
     ret
+
+.section .bss
+.balign 8
+# The surface index the next sprite draws as, a map sprite's by its
+# entity or an actor's by its index, named by the caller
+sprite_surface:
+    .skip 8

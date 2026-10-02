@@ -33,6 +33,11 @@ the near blocks' share, the far and edge ones staying on the lit loop
 (tile.S). The tile arena is reset after the bake, since a map's maps are
 the tiles' frame.
 
+The crosshair is left off under OWNER, the build whose pixel loops store
+the surface index in place of the colour (raster.S), so a capture of it is
+the ownership alone; the build is debug with owner beside it, `just pose
+<map> <poses> <out> debug,owner`.
+
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,
 length, or generator of its own. A vector that lives in a record goes through

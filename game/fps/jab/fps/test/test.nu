@@ -191,8 +191,8 @@ const CROSSHAIR = [960, 540]
 # the functions whose loops run a pixel or a sample, each within one
 # page of code (render.inc's CODE_PAGE) and trapping only where the
 # mixer's two calls a frame are
-const HOT_FUNCTIONS = [span_fill poly_shows span_light tile_build mixer_update]
-const HOT_ECALLS = { span_fill: 0, poly_shows: 0, span_light: 0, tile_build: 0, mixer_update: 2 }
+const HOT_FUNCTIONS = [span_fill span_light tile_build mixer_update]
+const HOT_ECALLS = { span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2 }
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit

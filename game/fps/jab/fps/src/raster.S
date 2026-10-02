@@ -1,5 +1,6 @@
 # The polygon rasteriser: world points into the camera's basis, clipped and
-# projected into edges, the even-odd fill, the integer span, the portal test
+# projected into edges, the even-odd fill within a rectangle, the span
+# record, the integer span
 
 .section .rodata
 .balign 8
@@ -658,7 +659,9 @@ row_range:
 2:
     ret
 
-# The polygon in hand filled by scanlines with the surface in hand
+# The polygon in hand filled by scanlines with the surface in hand, its
+# rows and each span held within the rectangle in hand, each span
+# recorded before it is drawn
 poly_fill:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -668,6 +671,15 @@ poly_fill:
     ld t0, 0(t0)
     beqz t0, 9f
     call row_range
+    la t0, clip_rect
+    lw t1, RECT_Y0(t0)
+    bge a0, t1, 231f
+    mv a0, t1
+231:
+    lw t1, RECT_Y1(t0)
+    ble a1, t1, 232f
+    mv a1, t1
+232:
     mv s0, a0                       # the row
     mv s1, a1                       # the row past the last
 1:
@@ -698,8 +710,18 @@ poly_fill:
     call span_bound
     mv a1, a0
     ld a0, 0(sp)
+    la t2, clip_rect
+    lw t3, RECT_X0(t2)
+    bge a0, t3, 233f
+    mv a0, t3
+233:
+    lw t3, RECT_X1(t2)
+    ble a1, t3, 234f
+    mv a1, t3
+234:
     bge a0, a1, 3f
     mv a2, s0
+    call span_record
     call span_fill
 3:
     ld t0, 8(sp)
@@ -714,6 +736,88 @@ poly_fill:
     ld s0, 32(sp)
     ld s1, 24(sp)
     addi sp, sp, 48
+    ret
+
+# The span recorded before it is drawn: its row, its pixels, and the
+# surface in hand, into the frame's table while it has room; the count
+# runs on past the table, so a reader takes the lesser
+# a0 int The first pixel
+# a1 int The pixel past the last
+# a2 int The row
+# returns Clobbers t0 to t3; a0 to a2 kept
+span_record:
+    la t0, span_count
+    ld t1, 0(t0)
+    addi t2, t1, 1
+    sd t2, 0(t0)
+    li t2, SPAN_RECORDS
+    bgeu t1, t2, 9f
+    la t2, span_records
+    slli t1, t1, 4
+    add t2, t2, t1
+    sw a2, SPAN_ROW(t2)
+    sw a0, SPAN_X0(t2)
+    sw a1, SPAN_X1(t2)
+    la t3, poly
+    ld t3, POLY_SURFACE(t3)
+    sw t3, SPAN_SURFACE(t2)
+9:
+    ret
+
+# The screen rectangle of the projected polygon in hand, a pixel of
+# slack each side, held within the screen
+# a0 int The projected point count
+# returns Clobbers t0, t1, ft0 to ft5
+#   a0 x0; a1 x1; a2 y0; a3 y1
+poly_rect:
+    la t0, pverts
+    flw ft0, 0(t0)
+    fmv.s ft1, ft0                  # min x, max x
+    flw ft2, 4(t0)
+    fmv.s ft3, ft2                  # min y, max y
+    mv t1, a0
+1:
+    beqz t1, 2f
+    flw ft4, 0(t0)
+    fmin.s ft0, ft0, ft4
+    fmax.s ft1, ft1, ft4
+    flw ft4, 4(t0)
+    fmin.s ft2, ft2, ft4
+    fmax.s ft3, ft3, ft4
+    addi t0, t0, PVERT_SIZE
+    addi t1, t1, -1
+    j 1b
+2:
+    # the pixel-centre rule, as the fill bounds a span and its rows, a
+    # pixel of slack against the fill's rounding
+    la t0, k_half
+    flw ft5, 0(t0)
+    fsub.s ft0, ft0, ft5
+    fcvt.w.s a0, ft0, rup
+    addi a0, a0, -1
+    fsub.s ft1, ft1, ft5
+    fcvt.w.s a1, ft1, rup
+    addi a1, a1, 1
+    fsub.s ft2, ft2, ft5
+    fcvt.w.s a2, ft2, rup
+    addi a2, a2, -1
+    fsub.s ft3, ft3, ft5
+    fcvt.w.s a3, ft3, rup
+    addi a3, a3, 1
+    bgez a0, 3f
+    li a0, 0
+3:
+    li t0, SCREEN_W
+    ble a1, t0, 4f
+    mv a1, t0
+4:
+    bgez a2, 5f
+    li a2, 0
+5:
+    li t0, SCREEN_H
+    ble a3, t0, 6f
+    mv a3, t0
+6:
     ret
 
 # The brightness at a texel coordinate of the surface in hand from its
@@ -817,6 +921,11 @@ span_fill:
     sd a2, 24(sp)                   # the row
     sd zero, 144(sp)                # the pixels the depth test rejected, as entered less passed
     sd zero, 176(sp)                # the lumel samples
+.ifdef OWNER
+    la t0, poly
+    ld t0, POLY_SURFACE(t0)
+    sd t0, 32(sp)                   # the surface, stored as the pixel
+.endif
     la t0, poly
     ld s3, POLY_IZA(t0)
     ld t1, POLY_IZB(t0)
@@ -1296,6 +1405,7 @@ span_fill:
     srli a7, a0, 24
     slli a7, a7, 24
     or a6, a6, a7                   # the alpha kept
+    owner_pixel a6
     sw a6, 0(t0)
     sw s2, 0(t1)
 46:
@@ -1348,6 +1458,7 @@ span_fill:
     srli a7, a0, 24
     slli a7, a7, 24
     or a6, a6, a7
+    owner_pixel a6
     sw a6, 0(t0)
     sw s2, 0(t1)
 56:
@@ -1413,6 +1524,7 @@ span_fill:
     add a7, a7, a5
     add a7, a7, a1
     lw a0, 0(a7)
+    owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
 82:
@@ -1447,6 +1559,7 @@ span_fill:
     lw a0, 0(a7)
     srli a5, a0, 31
     beqz a5, 86f
+    owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
 86:
@@ -1485,6 +1598,7 @@ span_fill:
     add a5, a5, a6
     add a5, a5, a1
     lw a0, 0(a5)
+    owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
 41:
@@ -1513,6 +1627,7 @@ span_fill:
     lw a0, 0(a5)
     srli a6, a0, 31
     beqz a6, 51f
+    owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
 51:
@@ -1580,6 +1695,7 @@ span_fill:
     add a5, s9, a6
     add a5, a5, a1
     lw a0, 0(a5)
+    owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
 72:
@@ -1613,99 +1729,6 @@ span_fill:
     ld s11, 56(sp)
     ld s0, 48(sp)
     addi sp, sp, 232
-    ret
-
-# Whether any of the polygon in hand shows against what is drawn, sampled
-# returns
-#   a0 1 when a sample's buffer depth is under the surface's 1/z, else 0
-.balign CODE_PAGE
-poly_shows:
-    addi sp, sp, -64
-    sd ra, 56(sp)
-    sd s0, 48(sp)
-    sd s1, 40(sp)
-    sd s2, 32(sp)
-    sd s3, 24(sp)
-    la t0, edge_count
-    ld t0, 0(t0)
-    beqz t0, 8f
-    call row_range
-    mv s0, a0
-    mv s1, a1
-    la t0, poly
-    ld s2, POLY_IZA(t0)
-    ld s3, POLY_IZB(t0)
-1:
-    bge s0, s1, 8f
-    fcvt.s.w fa0, s0
-    la t0, k_half
-    flw ft0, 0(t0)
-    fadd.s fa0, fa0, ft0
-    call row_crossings
-    andi a0, a0, -2
-    sd a0, 16(sp)
-    sd zero, 8(sp)
-2:
-    ld t0, 8(sp)
-    ld t1, 16(sp)
-    bge t0, t1, 7f
-    la t2, crossings
-    slli t3, t0, 2
-    add t2, t2, t3
-    flw fa0, 0(t2)
-    call span_bound
-    sd a0, 0(sp)
-    ld t0, 8(sp)
-    la t2, crossings
-    slli t3, t0, 2
-    add t2, t2, t3
-    flw fa0, 4(t2)
-    call span_bound
-    mv a1, a0
-    ld a0, 0(sp)
-    bge a0, a1, 3f
-    # the samples along the span
-    la t0, poly
-    ld t1, POLY_IZC(t0)
-    mul t2, s2, a0
-    add t1, t1, t2
-    mul t2, s3, s0
-    add t1, t1, t2                  # 1/z at the first pixel
-    slli t2, s2, 1                  # its step over two pixels
-    li t3, SCREEN_PITCH
-    mul t3, s0, t3
-    slli t4, a0, 2
-    add t3, t3, t4
-    la t4, zbuf
-    add t3, t3, t4                  # the depth
-    sub t4, a1, a0                  # the pixels
-4:
-    lwu t5, 0(t3)
-    bltu t5, t1, 9f
-    add t1, t1, t2
-    addi t3, t3, (PORTAL_STEP_X * 4)
-    addi t4, t4, -PORTAL_STEP_X
-    bgtz t4, 4b
-3:
-    ld t0, 8(sp)
-    addi t0, t0, 2
-    sd t0, 8(sp)
-    j 2b
-7:
-    addi s0, s0, PORTAL_STEP_Y
-    j 1b
-8:
-    li a0, 0
-    j 10f
-9:
-    li a0, 1
-10:
-    ld ra, 56(sp)
-    ld s0, 48(sp)
-    ld s1, 40(sp)
-    ld s2, 32(sp)
-    ld s3, 24(sp)
-    addi sp, sp, 64
     ret
 
 .section .bss
@@ -1746,6 +1769,12 @@ edges:
     .skip (MAX_EDGES * EDGE_SIZE)
 crossings:
     .skip (MAX_EDGES * 4)
+# The frame's spans as the fill emitted them, and their count
+.balign 16
+span_records:
+    .skip (SPAN_RECORDS * SPAN_RECORD_SIZE)
+span_count:
+    .skip 8
 .balign 16
 zbuf:
     .skip ZBUF_BYTES

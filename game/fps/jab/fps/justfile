@@ -41,11 +41,12 @@ test *args: assets sample-trees
 run *args: assets
     let sdk = (open program.jab.toml | get sdk); ^nu ($sdk | path join "nu" "jab.nu") run "{{here}}" {{args}}
 
-# Build with DEBUG set, then capture a map from placed camera poses, a
-# NUON list of {name, x, y, z, yaw, pitch}, as PNGs under out:
-# `just pose cage2 poses.nuon out`
-pose map poses out: assets
-    ^just build --set debug; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel "{{game}}/../../.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab"
+# Build with DEBUG set, or the symbols given with it, then capture a map
+# from placed camera poses, a NUON list of {name, x, y, z, yaw, pitch},
+# as PNGs under out: `just pose cage2 poses.nuon out`; `just pose factory
+# poses.nuon out debug,owner` captures the surface each pixel belongs to
+pose map poses out set='debug': assets
+    ^just build --set {{set}}; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel "{{game}}/../../.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --set {{set}}
 
 # Build with DEBUG set, then play the factory on the pad from seeded
 # random tables for that many seconds a seed, a fault resolved to its
