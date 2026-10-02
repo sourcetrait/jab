@@ -52,6 +52,13 @@ lights per frame any more: the per-polygon list had no reader on the baked
 path, and the box and the cull ran for nothing; a sprite still culls for its
 one evaluation (sprite.S), and the bake culls once a map (light.S).
 
+Every plane and wall piece, and a masked opening's fill, binds its tiles
+right before its fill (tiles_bind, tile.S): after the mode and the map's
+bind, since the tiled flag rides the lit one, and after the loops'
+projection, which is why the plane's bind sits at the end of its loop
+rather than beside the map's. The frame's tile budget is set beside the
+stats' zeroing, so the first polygons drawn build first.
+
 The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached.

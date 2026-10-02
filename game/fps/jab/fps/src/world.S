@@ -71,6 +71,12 @@ world_draw:
     sd zero, STAT_LIGHT_TICKS(t1)
     sd zero, STAT_REJECTED(t1)
     sd zero, STAT_SAMPLES(t1)
+    sd zero, STAT_TILES_BUILT(t1)
+    sd zero, STAT_TILED_PIXELS(t1)
+    la t0, tile_budget_frame
+    ld t1, 0(t0)
+    la t0, tile_budget
+    sd t1, 0(t0)
     call sky_setup
     # the walk's start
     section_count KIND_SECTORS, s2
@@ -545,6 +551,7 @@ plane_draw:
     ld t1, STAT_PLANES(t0)
     addi t1, t1, 1
     sd t1, STAT_PLANES(t0)
+    call tiles_bind
     call poly_fill
 90:
     ld ra, 56(sp)
@@ -987,6 +994,7 @@ wall_draw:
     beqz t0, 20f
     li a0, POLY_MASKED
     call poly_mode
+    call tiles_bind
     call poly_fill
 20:
     # the piece's bottom: the next neighbour's ceiling, or the floor
@@ -1026,6 +1034,7 @@ wall_draw:
     ld t1, STAT_PIECES(t0)
     addi t1, t1, 1
     sd t1, STAT_PIECES(t0)
+    call tiles_bind
     call poly_fill
 30:
     addi s6, s6, 1

@@ -97,7 +97,17 @@
 .set POLY_LUMEL, 192
 # The brightness of a polygon with no map, packed as a brightness word
 .set POLY_FLAT_BRIGHT, 200
-.set POLY_SIZE, 208
+# The surface's tiles, for a lit span's blocks: the atlas of each level,
+# TILE_LEVEL_COUNT of them eight bytes apart; the levels built whole,
+# which a span's levels must stay under; the shift of a cell row in
+# tiles (the columns padded to a power of two); and the cells across
+# and down, which a span's ends must lie within
+.set POLY_TILES, 208
+.set POLY_TILE_READY, 240
+.set POLY_TILE_COLS_SHIFT, 248
+.set POLY_TILE_COLS, 256
+.set POLY_TILE_ROWS, 264
+.set POLY_SIZE, 272
 .set LUMEL_OFFSET_BITS, 24
 .set LUMEL_ROWBYTES_SHIFT, 24
 .set LUMEL_ROWS_SHIFT, 40
@@ -150,6 +160,53 @@
 .set POLY_SKY, 2
 # A flag over the textured and masked modes: the span lit
 .set POLY_LIT, 4
+# A flag over a lit mode: the surface has tiles, the lit texture cached,
+# which a near block of the span reads in place of the texture and the
+# lumel map when its cells are built
+.set POLY_TILED, 8
+# A surface's tiles: the lit texture cached a cell at a time, a cell a
+# lumel's 2^k texels square, each texel the texture's times the lumel
+# brightness bilinear across the cell; the cells across and down are the
+# map's nodes, a node past each end of the surface, the last cell's far
+# nodes the greatest, so a texel coordinate the span can reach has a
+# cell. The atlas holds the cells row-major with the columns padded to a
+# power of two, TILE_COLS_SHIFT, the rows as they are, reserved whole on
+# first sight, which costs no memory until a cell is written. Two bit
+# maps by tile index beside it: the cells built, and the cells a span's
+# near block wanted and found unbuilt, which the surface's next bind
+# builds under the frame's budget, in texels, never past it. The
+# record's base is 0 before the atlas is reserved and -1 for a surface
+# whose atlas is larger than TILE_ATLAS_MAX, which stays on the lit
+# loop. The arena is reset whole, every surface forgotten, when an atlas
+# does not fit. The tiles come in levels, a surface's atlases one a
+# level: level 0 a cell at the texture's resolution, each level after it
+# half a side, built from the level before by averaging two by two,
+# TILE_LEVEL_COUNT levels or k + 1 if fewer. A surface is built whole, a
+# level at a time from the finest, under the frame's budget in texels
+# read, and a span reads tiles only from the levels built whole, so no
+# cell is ever checked; until level 0 is whole the surface draws on the
+# lit loop. A span is judged once: the levels its blocks take from its
+# texel steps at its two ends, the largest of the steps along the span
+# and down a row on each axis, 16.16, level m where the step is under
+# 2^(m + 1) texels, the last level for any step beyond, held under the
+# levels whole, so a block reads about a texel a pixel and the spans a
+# row apart read the same lines; a span whose ends lie past the map's
+# edge keeps the lit loop, which clamps. The records' and the polygon's
+# level fields sit eight bytes apart
+.set TILE_LEVEL_COUNT, 4
+.set TILE_BASE, 0
+.set TILE_READY, 32
+.set TILE_CURSOR, 40
+.set TILE_LEVELS, 48
+.set TILE_COLS_SHIFT, 56
+.set TILE_COLS, 64
+.set TILE_ROWS, 72
+.set TILE_CELLS, 80
+.set TILE_SIZE, 88
+.set TILE_ARENA_BYTES, (1024 * 1024 * 1024)
+.set TILE_ATLAS_MAX, (64 * 1024 * 1024)
+.set TILE_BUDGET, (24 * 64 * 64)
+.set TILE_BUDGET_UNBOUND, (1 << 40)
 # A light as the engine holds it, floats: the position, the colour, the
 # radius squared and one over the radius, the spotlight's unit axis and
 # the cosine of its spread (under -1 for a point light)
@@ -220,7 +277,12 @@
 .set STAT_LIGHT_TICKS, 120
 .set STAT_REJECTED, 128
 .set STAT_SAMPLES, 136
-.set STAT_SIZE, 144
+# The tiles built this frame and the pixels read from tiles
+.set STAT_TILES_BUILT, 144
+.set STAT_TILED_PIXELS, 152
+# The tile arena's resets since the load, never zeroed by the frame
+.set STAT_TILE_RESETS, 160
+.set STAT_SIZE, 168
 # The records over the API, 64 bytes each: the state a frame, kind
 # REPORT_STATE, the camera's sector, the eye, the yaw, pitch, and roll
 # in degrees, the drawing's and the game's microseconds, zero to the

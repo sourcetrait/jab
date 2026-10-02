@@ -108,6 +108,10 @@ _start:
     call soundfont_load
     call lights_gather
     call lumaps_bake
+    call tiles_reset
+    la t0, tile_budget_frame
+    li t1, TILE_BUDGET
+    sd t1, 0(t0)
     call actors_place
     call player_reset
     call camera_spawn
@@ -539,6 +543,21 @@ frame_report:
     la t0, stats
     ld a1, STAT_SAMPLES(t0)
     call append_dec
+    la a1, word_tiles_built
+    call append_str
+    la t0, stats
+    ld a1, STAT_TILES_BUILT(t0)
+    call append_dec
+    la a1, word_tiled
+    call append_str
+    la t0, stats
+    ld a1, STAT_TILED_PIXELS(t0)
+    call append_dec
+    la a1, word_resets
+    call append_str
+    la t0, stats
+    ld a1, STAT_TILE_RESETS(t0)
+    call append_dec
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -957,6 +976,12 @@ word_rejected:
     .asciz ", rejected "
 word_lumel_samples:
     .asciz ", samples "
+word_tiles_built:
+    .asciz ", tiles built "
+word_tiled:
+    .asciz ", tiled "
+word_resets:
+    .asciz ", resets "
 .endif
 
 .balign 4
@@ -972,6 +997,7 @@ k_dt_max:
 .include "src/world.S"
 .include "src/sprite.S"
 .include "src/light.S"
+.include "src/tile.S"
 .include "src/body.S"
 .include "src/console.S"
 .include "src/actor.S"

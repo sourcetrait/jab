@@ -141,26 +141,86 @@ within the gauge's noise. A lit block ends by carrying its brightness into
 the slot only while its interval continues; where the interval ended the
 slot already holds the exact end sample.
 
-## The lit texture cache, tried and rejected
+## The tiled modes
 
-The lit loop's three multiplies and their unpacking are about twenty
-integer ops a pixel over the unlit loop's eight, and a cache of the lit
-texture would pay them once: a tile per lumel cell at the texture's
-resolution, the texel times the brightness bilinear across the cell,
-read by a loop of fifteen ops and one load. Built and measured twice. A
-whole-surface build read every block from tiles and measured the
-settled planes phase near twice the lit loop's; a hybrid built cells on
-demand from a per-block wanted map and read tiles only for near blocks,
-the texel step a pixel under two, and still lost 8 to 13 ms on every
-plane-heavy view of the gauge, level on the wall-heavy ones. A probe
-that pinned every tiled read to one tile, cache-hot, read the planes
-phase level with the lit loop's. So the loop's arithmetic is not the
-frame's cost on this lane: under TCG the integer ops are near free and
-the loads are the price, and the texture of 64 KiB stays in cache where
-an atlas of megabytes misses on any walk off its rows; a wall span
-walks a row and costs the same from either, a floor span walks a
-diagonal and misses a line a pixel. No layout of the tiles beats a
-level reading, so the renderer keeps the lit loop and the texture.
+A tiled surface's span is judged once, in the prologue after its start
+coordinates (tile.S): the end's coordinates at one divide, the step
+along the span from the two ends, the step down a row at each end at a
+divide each from the coordinates a row below by the polygon's gradients,
+and the span's two levels from the larger of the step along and the
+step down at each end, each the step's octave, under two texels level 0,
+under four 1, under eight 2, else 3, held under the levels the surface
+has whole; a span whose ends lie past the map takes the lit loop, which
+clamps. Nothing else is checked, since a surface is built whole a level
+at a time (tile.S): the second to sixth cuts checked cells, per block
+or per span, and the measured cost of that judgement was 3 to 6 ms a
+view, more than the lighting's whole, with the per-span box of a
+diagonal line quadratic at a coarse level. A block then takes its
+level from its own step along the span and the row step interpolated
+along the span, about twenty-five ops, and its level's atlas, shifts,
+and mask ride the texture's four registers, the brightness's two, and
+one spilled saved register, since a hit needs no brightness: the cell
+shift k + 16 and the texel shift m + 16 from a 16.16 coordinate.
+
+A hit pays nothing of the lighting: no sample, no interval, no brightness
+carry. The tile loop ends by marking the interval over and the brightness
+entering the next block stale, a -1 in its slot, and a lit block that
+finds the slot stale samples its own start before its interval; the span
+start no longer samples at all, so a span whose first block is tiled pays
+no sample, and one whose first block is lit samples there instead. The
+second cut decided after the lighting setup and carried the brightness
+across every tiled block, so a hit still paid the sample and the
+interval; the ceiling probe priced that bookkeeping at 0.2 to 3.0 ms a
+view and the multiplies at 1.0 to 2.8, the whole prize of a cache 1.6 to
+5.4 ms a view.
+
+The tiled pixel is the depth load and compare, the cell's row and
+column from the texel coordinates shifted by k, the row shifted by the
+atlas's column shift and the two added, shifted to the tile's bytes, the
+texel within the tile by the cell mask on each axis, one load, and the
+two stores; fourteen integer ops and one load against the lit loop's
+twenty-eight and one, and the unlit loop's eight. The texture's four
+binding registers serve the decision as scratch and the tile loop as
+constants, reloaded by the lit setup, so a lit block costs five loads it
+did not before; one saved register is spilled for the tile shift. Far
+blocks keep the lit loop because their sixteen pixels step texels apart
+in the texture, 64 KiB and cache-resident, where the same pixels' tiles
+lie a tile apart in an atlas of megabytes and miss: the whole-surface
+first cut read every block from tiles and measured the settled planes
+phase near twice the lit loop's. The masked tiled loop is the same with
+the alpha test, the tile keeping the texel's alpha.
+
+A plane's tiles are in blocks of four by four texels (tile.S), and its
+block takes the swizzled pair of loops by the mode's flag: the tile as
+above, then the texel's block row by a shift of k plus four, its block
+along the row by a shift of six, and its row and place in the block from
+the low two bits of each coordinate; ten more ops a pixel and a second
+spilled saved register for the block row's shift. The third cut, with
+every tile row-major, read the walls gaining 2.5 to 4.7 ms and the planes
+losing 5 to 10 in their phase on every view but the yard, whose floor at
+yaw 90 walks along the rows; the lit setup's reload of the texture's
+four registers is skipped for a polygon with no tiles, since every lit
+block of every polygon took it before. The fourth cut, blocks for
+planes, measured against a build with no binds in the same batch: walls
+level to the microsecond, planes 8 to 12 ms worse, the blocks no better
+than rows; and with every tile read pinned to one cache-hot tile, the
+judgement and the address work kept, the frame reads level with no
+binds on every view, so the hit path's own work costs exactly what the
+hit saves, and the tile data costs the rest. The combined ceiling, the
+multiplies and the sampling both cut on a no-bind build, measures the
+lighting's whole at 0 to 4.5 ms a view.
+
+The tile loop's end jumps forward to the block's end, 60f. The numeric
+local labels are shared across every file the program includes into its
+one assembly, so a backward reference first written at the second cut's
+exit, 61f for a label above it, resolved without a word from the
+assembler to the next 61 in the unit, inside sector_draw's wall loop in
+world.S, and the span landed there with its own frame and registers: a
+fault at sector_draw's wall read through a garbage chain of saved
+registers, deterministic at 1.2 s, that three probes placed in this block
+before the disassembly of the jump named the target. A numeric label
+referenced across a function's end is the suspect whenever a block's
+exit lands in another routine.
 
 ## The flat path
 

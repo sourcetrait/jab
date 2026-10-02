@@ -100,8 +100,23 @@ console_frame:
     j 8f
 4:
     li t1, 'N'
-    bne t0, t1, 8f
+    bne t0, t1, 5f
     call noise_heard
+    j 8f
+5:
+    # L: the tiles forgotten and rebuilt under no budget from the next
+    # frame, every lumel set full bright first when the frame's byte 4
+    # is 1, so a capture reads the texture sampled as the lit one is
+    li t1, 'L'
+    bne t0, t1, 8f
+    lbu t1, 4(s2)
+    beqz t1, 6f
+    call lumels_bright
+6:
+    call tiles_reset
+    la t0, tile_budget_frame
+    li t1, TILE_BUDGET_UNBOUND
+    sd t1, 0(t0)
 8:
     la t0, console_record
     li t1, REPORT_CONSOLE

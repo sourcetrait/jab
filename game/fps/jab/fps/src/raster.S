@@ -801,7 +801,7 @@ poly_fill:
 # a2 int The row
 .balign CODE_PAGE
 span_fill:
-    addi sp, sp, -192
+    addi sp, sp, -232
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -893,6 +893,195 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
+    # a tiled surface's span judged once for its tiles: the end's texel
+    # coordinates at one divide, the step along the span from the two
+    # ends, the step down a row at each end at a divide each, and the
+    # levels the span's blocks will take from the steps at its ends,
+    # held under the levels the surface has whole; a span past the
+    # map's edge keeps the lit loop, which clamps. The levels' bounds
+    # and the row step's start and change a pixel ride the frame for
+    # the blocks. The texture's four registers serve as scratch and are
+    # reloaded after
+    li t3, -1
+    sd t3, 200(sp)                  # no tiles for the span
+    ld t3, 16(sp)
+    andi t3, t3, POLY_TILED
+    beqz t3, 29f
+    la a0, poly
+    mul t3, s10, s3
+    add t3, s2, t3                  # 1/z at the end
+    li t4, IZ_MIN
+    bge t3, t4, 21f
+    mv t3, t4
+21:
+    li t4, 1
+    slli t4, t4, Z_SHIFT
+    div t4, t4, t3                  # z at the end
+    mul a5, s10, s6
+    add a5, a5, s4
+    mul a5, a5, t4
+    srai a5, a5, 16                 # u at the end
+    sd a5, 168(sp)
+    mul a6, s10, s7
+    add a6, a6, s5
+    mul a6, a6, t4
+    srai a6, a6, 16                 # v at the end
+    sd a6, 184(sp)
+    # the span's ends inside the map, else the lit loop
+    ld a7, POLY_LUMEL(a0)
+    srli a7, a7, LUMEL_K_SHIFT
+    addi a7, a7, 16                 # k + 16: a coordinate to its cell
+    sra a1, s8, a7
+    bltz a1, 29f
+    sra a2, a5, a7
+    bltz a2, 29f
+    ld t4, POLY_TILE_COLS(a0)
+    bge a1, t4, 29f
+    bge a2, t4, 29f
+    sra a1, s9, a7
+    bltz a1, 29f
+    sra a2, a6, a7
+    bltz a2, 29f
+    ld t4, POLY_TILE_ROWS(a0)
+    bge a1, t4, 29f
+    bge a2, t4, 29f
+    # the step along the span: the end less the start over the pixels
+    sub a5, a5, s8
+    div a5, a5, s10
+    srai a7, a5, 63
+    xor a5, a5, a7
+    sub a5, a5, a7                  # |du| along
+    sub a6, a6, s9
+    div a6, a6, s10
+    srai a7, a6, 63
+    xor a6, a6, a7
+    sub a6, a6, a7                  # |dv| along
+    bge a5, a6, 22f
+    mv a5, a6
+22:
+    sd a5, 32(sp)                   # the step along
+    # the step down a row at the start
+    ld a6, POLY_IZB(a0)
+    add a6, a6, s2
+    li t4, IZ_MIN
+    bge a6, t4, 23f
+    mv a6, t4
+23:
+    li t4, 1
+    slli t4, t4, Z_SHIFT
+    div t4, t4, a6                  # z a row below the start
+    ld a6, POLY_UZB(a0)
+    add a6, a6, s4
+    mul a6, a6, t4
+    srai a6, a6, 16
+    sub a6, a6, s8
+    srai a7, a6, 63
+    xor a6, a6, a7
+    sub a6, a6, a7                  # |du| down
+    ld a7, POLY_VZB(a0)
+    add a7, a7, s5
+    mul a7, a7, t4
+    srai a7, a7, 16
+    sub a7, a7, s9
+    srai t4, a7, 63
+    xor a7, a7, t4
+    sub a7, a7, t4                  # |dv| down
+    bge a6, a7, 24f
+    mv a6, a7
+24:
+    sd a6, 208(sp)                  # the step down a row at the start
+    # and at the end
+    ld a7, POLY_IZB(a0)
+    add a7, a7, t3                  # 1/z a row below the end
+    li t4, IZ_MIN
+    bge a7, t4, 25f
+    mv a7, t4
+25:
+    li t4, 1
+    slli t4, t4, Z_SHIFT
+    div t4, t4, a7                  # z a row below the end
+    mul a6, s10, s6
+    add a6, a6, s4
+    ld a7, POLY_UZB(a0)
+    add a6, a6, a7
+    mul a6, a6, t4
+    srai a6, a6, 16
+    ld a7, 168(sp)
+    sub a6, a6, a7
+    srai a7, a6, 63
+    xor a6, a6, a7
+    sub a6, a6, a7                  # |du| down at the end
+    mul a7, s10, s7
+    add a7, a7, s5
+    ld t3, POLY_VZB(a0)
+    add a7, a7, t3
+    mul a7, a7, t4
+    srai a7, a7, 16
+    ld t3, 184(sp)
+    sub a7, a7, t3
+    srai t3, a7, 63
+    xor a7, a7, t3
+    sub a7, a7, t3                  # |dv| down at the end
+    bge a6, a7, 26f
+    mv a6, a7
+26:
+    ld a7, 208(sp)
+    sub t3, a6, a7
+    div t3, t3, s10
+    sd t3, 216(sp)                  # the row step's change a pixel
+    # the levels at the two ends, each the larger of the step along and
+    # the step down as an octave under two, four, eight texels, held
+    # under the levels whole; the lesser to 200, the greater to 224
+    ld t3, 32(sp)
+    bge a7, t3, 27f
+    mv a7, t3
+27:
+    bge a6, t3, 28f
+    mv a6, t3
+28:
+    srli t3, a7, 17
+    li t5, 0
+    beqz t3, 281f
+    li t5, 1
+    srli t3, t3, 1
+    beqz t3, 281f
+    li t5, 2
+    srli t3, t3, 1
+    beqz t3, 281f
+    li t5, 3
+281:
+    srli t3, a6, 17
+    li t6, 0
+    beqz t3, 282f
+    li t6, 1
+    srli t3, t3, 1
+    beqz t3, 282f
+    li t6, 2
+    srli t3, t3, 1
+    beqz t3, 282f
+    li t6, 3
+282:
+    ld t3, POLY_TILE_READY(a0)
+    addi t3, t3, -1
+    ble t5, t3, 283f
+    mv t5, t3
+283:
+    ble t6, t3, 284f
+    mv t6, t3
+284:
+    bge t6, t5, 285f
+    mv t3, t5
+    mv t5, t6
+    mv t6, t3
+285:
+    sd t5, 200(sp)
+    sd t6, 224(sp)
+29:
+    la a0, poly
+    ld a1, POLY_TEX(a0)
+    ld a2, POLY_VMASK(a0)
+    ld a3, POLY_UMASK(a0)
+    ld a4, POLY_WSHIFT(a0)
     # lit: a polygon with no map takes its one brightness over the whole
     # span, no step and no sample; a mapped one samples its map at the
     # span's start, an interval starting at the first block
@@ -909,13 +1098,9 @@ span_fill:
     sd t4, 152(sp)                  # an interval that never ends
     j 30f
 20:
-    mv a5, s8
-    mv a6, s9
-    lumel_sample
-    sd a5, 160(sp)
+    li t3, -1
+    sd t3, 160(sp)                  # the brightness entering the first block: unsampled yet
     sd zero, 152(sp)                # the interval's pixels left: none, so one starts
-    li t3, 1
-    sd t3, 176(sp)
 30:
     # the block: its length, its end's u and v, the steps
     li s11, BLOCK
@@ -957,12 +1142,65 @@ span_fill:
     beq t3, a5, 50f
     j 40f
 44:
-    # lit: the brightness entering the block; at an interval's start the
-    # interval's length from the lumel's size on screen, the sample at
-    # its end, and the step a pixel over it
+    # lit: a span judged for its tiles (the prologue) takes them block
+    # by block at the block's level, the largest of its texel steps
+    # along the span and down a row, the row's interpolated along the
+    # span, held within the span's levels; a block read from tiles pays
+    # no sample, no interval, and no brightness carry. A span with no
+    # tiles takes the lit loop whole
+    ld a5, 200(sp)
+    bltz a5, 4300f
+    srai a6, t5, 63
+    xor a7, t5, a6
+    sub a7, a7, a6                  # |du|
+    srai a6, t6, 63
+    xor a0, t6, a6
+    sub a0, a0, a6                  # |dv|
+    bge a7, a0, 432f
+    mv a7, a0
+432:
+    ld a0, 208(sp)                  # the step down a row here
+    bge a7, a0, 433f
+    mv a7, a0
+433:
+    ld a0, 216(sp)
+    mul a0, a0, s11
+    ld a6, 208(sp)
+    add a6, a6, a0
+    sd a6, 208(sp)                  # and at the next block
+    srli a7, a7, 17
+    li a6, 0
+    beqz a7, 434f
+    li a6, 1
+    srli a7, a7, 1
+    beqz a7, 434f
+    li a6, 2
+    srli a7, a7, 1
+    beqz a7, 434f
+    li a6, 3
+434:
+    bge a6, a5, 435f
+    mv a6, a5
+435:
+    ld a5, 224(sp)
+    ble a6, a5, 436f
+    mv a6, a5
+436:
+    sd a6, 192(sp)                  # the block's level
+    j 80f
+4300:
     ld t3, 160(sp)
     ld a5, 152(sp)
     bnez a5, 49f
+    bgez t3, 431f
+    mv a5, s8
+    mv a6, s9
+    lumel_sample
+    sd a5, 160(sp)
+    ld a0, 176(sp)
+    addi a0, a0, 1
+    sd a0, 176(sp)
+431:
     # the texel step a pixel, the larger of |du| and |dv|, against the
     # lumel's 2^k texels: four blocks when they stay within half a
     # lumel over 64 pixels, two when within it over 32, else one, so a
@@ -1192,6 +1430,111 @@ span_fill:
     beqz t5, 60f
     sd t3, 160(sp)
     j 60f
+80:
+    # a block on its tiles at its level: the depth first, then the texel
+    # read from the level's atlas, the cell from the coordinate shifted
+    # by k, the texel within the cell at the level's resolution; no
+    # multiply, no sample, no brightness. The constants ride the
+    # texture's four registers, the brightness's two, and one spilled
+    # saved register, all free here
+    li t4, 0
+    sd s5, 40(sp)
+    la a0, poly
+    ld a5, 192(sp)                  # the block's level
+    slli a6, a5, 3
+    add a6, a6, a0
+    ld a1, POLY_TILES(a6)           # the level's atlas
+    ld a4, POLY_TILE_COLS_SHIFT(a0)
+    ld a3, POLY_LUMEL(a0)
+    srli a3, a3, LUMEL_K_SHIFT      # k
+    addi t3, a3, 16                 # a coordinate to its cell
+    addi s0, a5, 16                 # a coordinate to its texel at the level
+    sub a3, a3, a5                  # the cell's texels a side at the level, as a shift
+    li a2, 1
+    sll a2, a2, a3
+    addi a2, a2, -1                 # the texels of a cell less one, at the level
+    slli s5, a3, 1
+    addi s5, s5, 2                  # a tile's bytes as a shift
+    ld a6, 16(sp)
+    andi a6, a6, POLY_MASKED
+    bnez a6, 85f
+81:
+    lwu a7, 0(t1)
+    bgeu a7, s2, 82f
+    addi t4, t4, 1
+    srl a5, s9, t3                  # the cell's row
+    sll a7, a5, a4
+    srl a0, s8, t3                  # and column
+    add a7, a7, a0                  # the tile's index
+    sll a7, a7, s5                  # the tile
+    srl a5, s9, s0                  # v at the level
+    and a5, a5, a2
+    sll a5, a5, a3
+    srl a6, s8, s0                  # u
+    and a6, a6, a2
+    add a5, a5, a6
+    slli a5, a5, 2
+    add a7, a7, a5
+    add a7, a7, a1
+    lw a0, 0(a7)
+    sw a0, 0(t0)
+    sw s2, 0(t1)
+82:
+    add s2, s2, s3
+    add s8, s8, t5
+    add s9, s9, t6
+    addi t0, t0, 4
+    addi t1, t1, 4
+    addi t2, t2, -1
+    bnez t2, 81b
+    j 83f
+85:
+    # masked, on its tiles: the tile's texel, whose empty alpha leaves
+    # the pixel
+    lwu a7, 0(t1)
+    bgeu a7, s2, 86f
+    addi t4, t4, 1
+    srl a5, s9, t3
+    sll a7, a5, a4
+    srl a0, s8, t3
+    add a7, a7, a0
+    sll a7, a7, s5
+    srl a5, s9, s0
+    and a5, a5, a2
+    sll a5, a5, a3
+    srl a6, s8, s0
+    and a6, a6, a2
+    add a5, a5, a6
+    slli a5, a5, 2
+    add a7, a7, a5
+    add a7, a7, a1
+    lw a0, 0(a7)
+    srli a5, a0, 24
+    beqz a5, 86f
+    sw a0, 0(t0)
+    sw s2, 0(t1)
+86:
+    add s2, s2, s3
+    add s8, s8, t5
+    add s9, s9, t6
+    addi t0, t0, 4
+    addi t1, t1, 4
+    addi t2, t2, -1
+    bnez t2, 85b
+83:
+    # the block's end: the pixels counted as read from tiles, the
+    # spilled register back, the interval over and the brightness
+    # entering the next block marked stale, so a lit block after samples
+    # its own start
+    la a5, stats
+    ld a6, STAT_TILED_PIXELS(a5)
+    add a6, a6, s11
+    sd a6, STAT_TILED_PIXELS(a5)
+    ld s5, 40(sp)
+    sd zero, 152(sp)
+    li a5, -1
+    sd a5, 160(sp)
+    j 60f
 40:
     # textured: the depth test, then the texel and the stores
     lwu a7, 0(t1)
@@ -1333,7 +1676,7 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 192
+    addi sp, sp, 232
     ret
 
 # Whether any of the polygon in hand shows against what is drawn, sampled

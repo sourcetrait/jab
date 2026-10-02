@@ -52,3 +52,16 @@ scales and offsets the record carried before are gone.
 The interval constants size the cadence: a lit span samples at the ends of
 one, two, or four blocks, INTERVAL_SHIFT_MAX being four blocks' shift, by
 the texel step a pixel against the lumel's 2^k texels.
+
+The tile record and the polygon's six tile fields carry what the span's
+block judgement and its tile loop need beyond the map's word: the atlas,
+the column shift, the cells across and down that a block's box must lie
+within, and the two bit maps, built and wanted, which the span reads and
+marks per block (tile.S). The arena's size, the largest atlas, the
+frame's build budget, and the near step are one constant each, the
+budget in texels so a carpet's 128-texel cell counts four of a brick's,
+the step in 16.16 texels a pixel at two, where a block's pixels start to
+lie a texel apart and the texture's cache line serves them better than a
+tile's. The budget's first reading on the whole-surface cut, 48 cells of
+64 texels, cost about three milliseconds on the spawn's first frame,
+26.7 against 23 ms.

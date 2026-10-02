@@ -41,7 +41,8 @@ def main [map: string, poses: path, out: path, --kernel: path, --image: path, --
         let sends = ([{ at: 2000ms, bytes: (pose-frame $p) }]
             | append (if (($p.report? | default 0) | into int) > 0 { [{ at: ((($p.report | into int)) * 1ms), bytes: (pose-frame $p) }] } else { [] })
             | append (if ($p.trace? | default false) { [{ at: 2500ms, bytes: (command-frame "T") }] } else { [] })
-            | append (($p.sends? | default []) | each {|s| { at: (($s.at | into int) * 1ms), bytes: (command-frame $s.kind) } }))
+            | append (($p.sends? | default []) | each {|s| { at: (($s.at | into int) * 1ms), bytes: (command-frame $s.kind) } })
+            | sort-by at)
         let capture = ((($p.capture? | default 3000) | into int) * 1ms)
         let seconds = (($p.seconds? | default 5) | into int)
         let pad = ($p.pad? | default "")

@@ -29,7 +29,7 @@ use ./pose.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}"
 const PIXELS = (1920 * 1080)
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
@@ -119,8 +119,8 @@ const CROSSHAIR = [960, 540]
 # the functions whose loops run a pixel or a sample, each within one
 # page of code (render.inc's CODE_PAGE) and trapping only where the
 # mixer's two calls a frame are
-const HOT_FUNCTIONS = [span_fill poly_shows span_light mixer_update]
-const HOT_ECALLS = { span_fill: 0, poly_shows: 0, span_light: 0, mixer_update: 2 }
+const HOT_FUNCTIONS = [span_fill poly_shows span_light tile_build mixer_update]
+const HOT_ECALLS = { span_fill: 0, poly_shows: 0, span_light: 0, tile_build: 0, mixer_update: 2 }
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -561,19 +561,21 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 
     # the light's view independence: six floor points of the bay read
     # from the spawn's eye at two yaws on a copy of the factory with its
-    # androids dropped, so no sprite crosses a point, and on a copy with
-    # its lights dropped too, both compiled here; the lit reading over
-    # the unlit at a point, the light alone, holds within a few levels
-    # across the yaws at every point in view at both
+    # androids dropped, so no sprite crosses a point, once as lit and
+    # once with every lumel set full bright by the console's L frame,
+    # both runs rebuilding their tiles from nothing under no budget at
+    # the pose so the texture is sampled the same way in both; the lit
+    # reading over the bright at a point, the light alone, holds within
+    # a few levels across the yaws at every point in view at both
     let view_still = (variant-tree $factory_source "factory_still" [android] ($out | path join "still") $game)
-    let view_dark = (variant-tree $factory_source "factory_dark" [android light] ($out | path join "dark") $game)
     mut view_readings = []
     for yaw in $VIEW_YAWS {
         let view_pose = { name: $"view($yaw)", x: $VIEW_EYE.x, y: $VIEW_EYE.y, z: $VIEW_EYE.z, yaw: $yaw, pitch: 0 }
-        let view_sends = [{ at: 1500ms, bytes: (pose pose-frame $view_pose) }]
         mut captures = {}
-        for v in [{ name: "still", tree: $view_still }, { name: "dark", tree: $view_dark }] {
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $v.tree ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
+        for v in [{ name: "still", bright: 0 }, { name: "bright", bright: 1 }] {
+            let level = ([("L" | into binary), 0x[00 00 00], ($v.bright | into binary | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect)
+            let view_sends = [{ at: 1400ms, bytes: $level }, { at: 1500ms, bytes: (pose pose-frame $view_pose) }]
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $view_still ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the ($v.name) view at yaw ($yaw)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
             assert equal ($frames | length) 2 $"the first frame and the pose's reported on the ($v.name) view at yaw ($yaw): ($run.serial)"
@@ -582,15 +584,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert ($run.screen != "") $"a screen was taken on the ($v.name) view at yaw ($yaw)"
             $captures = ($captures | insert $v.name { bytes: (open --raw $run.screen | into binary), frame: $frame })
         }
-        assert equal $captures.dark.frame.lit_pixels 0 $"the dark copy draws unlit: ($captures.dark.frame)"
-        assert ($captures.still.frame.samples > 0) $"the lit copy reads its maps: ($captures.still.frame)"
+        assert ($captures.bright.frame.tiled > 0) $"the bright copy reads its tiles: ($captures.bright.frame)"
+        assert ($captures.still.frame.tiled > 0) $"the lit copy reads its tiles: ($captures.still.frame)"
         for p in $VIEW_POINTS {
             let at = (project $VIEW_EYE $yaw [$p.0, $p.1, 0.0])
             if $at == null { continue }
             let lit = (block-sum $captures.still.bytes $at)
-            let dark = (block-sum $captures.dark.bytes $at)
-            assert ($dark > 0) $"the floor at ($p) reads on the dark copy at ($at)"
-            $view_readings = ($view_readings | append { yaw: $yaw, point: ($p | str join ","), at: $at, lit: $lit, dark: $dark, light: (256 * $lit / $dark) })
+            let bright = (block-sum $captures.bright.bytes $at)
+            assert ($bright > 0) $"the floor at ($p) reads on the bright copy at ($at)"
+            $view_readings = ($view_readings | append { yaw: $yaw, point: ($p | str join ","), at: $at, lit: $lit, bright: $bright, light: (256 * $lit / $bright) })
         }
     }
     let view_seen = ($view_readings | group-by point)

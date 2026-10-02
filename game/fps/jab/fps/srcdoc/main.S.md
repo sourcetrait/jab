@@ -26,7 +26,12 @@ overdraw, the light's microseconds, the sprites' evaluations now that the
 surfaces read baked maps, say what the frame still evaluates, and the
 samples against the pixels' blocks of sixteen say how often the lit spans
 read their maps. The load line carries the maps baked, and the bake's own
-line their lumels and time.
+line their lumels and time. The tiles built that frame and the pixels read
+from tiles close the line: the first is the build's share of the frame,
+zero once the view has settled, and the second against the lit pixels is
+the near blocks' share, the far and edge ones staying on the lit loop
+(tile.S). The tile arena is reset after the bake, since a map's maps are
+the tiles' frame.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,
