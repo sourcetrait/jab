@@ -22,10 +22,11 @@
 # factory and a lightless one, the light alone the same from both; the
 # alpha policy rendered, a texture of the test's own on the proof map's
 # grate wall read from poses at three levels, each patch present in its
-# exact colour where the oracle's scaled means pass and absent where
-# they do not, the lit loop's picture from the same build agreeing at
-# level 0; a map whose magic is wrong, which exits 6, and one cut short,
-# which exits 7, each saying so on the UART.
+# exact colour where the oracle's scaled means pass, the weighted mean
+# of the shrink among those colours, and the solid backdrop behind
+# where they do not, the lit loop's picture from the same build
+# agreeing at level 0; a map whose magic is wrong, which exits 6, and
+# one cut short, which exits 7, each saying so on the UART.
 use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
@@ -123,29 +124,38 @@ const ALPHA_PASS = 128
 const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
 # The alpha policy rendered: the proof map's grate wall given a texture
 # of the test's own, 256 square at two repeats a metre so a lumel cell
-# is one repeat, in patches of 64 texels of one kind each: opaque, at
-# the pass less one, at the pass, transparent, and two of a constant
-# colour under a 2 by 2 of varied alphas, the alphas of a kind indexed
-# by a texel's parity on each axis; the grid of kinds over the 4 by 4
-# patches counted so the search moves the threshold to 127 at level 1,
-# where the varied patches' means of 127 and 100 against level 0's
-# halves leave 128 short, and keeps 128 after; the samples the centre
-# texel of every patch in two repeats over the wall; the poses head-on
-# at distances where the wall's blocks read level 0, 1, and 2 by the
-# block's rule over 512 texels a metre, the first two run again with
-# the tiles held off for the lit loop's picture; the far wall's
-# rectangle behind the opening compared inset from its edges
+# is one repeat, in patches of 64 texels of one kind each, a kind a 2
+# by 2 of alphas and colours indexed by a texel's parity on each axis:
+# opaque red; green at the pass less one; blue at the pass; yellow
+# under alpha 255 and black under 0, whose weighted mean is yellow
+# where a plain mean is not; transparent black; cyan at 255 and 145
+# over black, whose mean of 100 stays under the pass; and red at 255
+# with blue at 128 twice over black, whose weighted mean the shrink's
+# rule gives as (127, 0, 128) where a plain mean gives (63, 0, 127) and
+# an equal weighting of the opaque texels (85, 0, 170); the grid of
+# kinds over the 4 by 4 patches counted so the search moves the
+# threshold to 127 at level 1, where the means of 127 against level 0's
+# halves and three quarters leave 128 short, and keeps 128 after; the
+# alcove behind the wall a solid backdrop of one colour on every
+# surface, so an absent patch reads it exactly; the samples the centre
+# texel of every patch in two repeats over the wall, none under the
+# crosshair; the poses head-on at distances where the wall's blocks
+# read level 0, 1, and 2 by the block's rule over 512 texels a metre,
+# the first two run again with the tiles held off for the lit loop's
+# picture; the opening compared inset from its edges
 const FIXTURE_MAP = "proof_alpha"
 const ALPHA_FIXTURE = { name: "texture/alphafix", w: 256, h: 256, patch: 64, scale: 2.0 }
+const FIXTURE_BACKDROP = { name: "texture/alphaback", size: 16, colour: 0x[30 30 30] }
 const FIXTURE_KINDS = {
-    A: { colour: 0x[ff 00 00], alphas: [255, 255, 255, 255] },
-    B: { colour: 0x[00 ff 00], alphas: [127, 127, 127, 127] },
-    C: { colour: 0x[00 00 ff], alphas: [128, 128, 128, 128] },
-    D: { colour: 0x[ff ff 00], alphas: [255, 255, 0, 0] },
-    E: { colour: 0x[00 00 00], alphas: [0, 0, 0, 0] },
-    F: { colour: 0x[00 ff ff], alphas: [255, 145, 0, 0] },
+    A: { colours: [0x[ff 00 00], 0x[ff 00 00], 0x[ff 00 00], 0x[ff 00 00]], alphas: [255, 255, 255, 255] },
+    B: { colours: [0x[00 ff 00], 0x[00 ff 00], 0x[00 ff 00], 0x[00 ff 00]], alphas: [127, 127, 127, 127] },
+    C: { colours: [0x[00 00 ff], 0x[00 00 ff], 0x[00 00 ff], 0x[00 00 ff]], alphas: [128, 128, 128, 128] },
+    D: { colours: [0x[ff ff 00], 0x[ff ff 00], 0x[00 00 00], 0x[00 00 00]], alphas: [255, 255, 0, 0] },
+    E: { colours: [0x[00 00 00], 0x[00 00 00], 0x[00 00 00], 0x[00 00 00]], alphas: [0, 0, 0, 0] },
+    F: { colours: [0x[00 ff ff], 0x[00 ff ff], 0x[00 00 00], 0x[00 00 00]], alphas: [255, 145, 0, 0] },
+    G: { colours: [0x[ff 00 00], 0x[00 00 ff], 0x[00 00 ff], 0x[00 00 00]], alphas: [255, 128, 128, 0] },
 }
-const FIXTURE_GRID = [[A, B, A, D], [C, A, E, D], [A, F, A, E], [D, E, C, F]]
+const FIXTURE_GRID = [[A, B, A, D], [C, A, E, D], [A, F, A, G], [D, E, C, F]]
 const FIXTURE_REPEATS = [[1, 1], [2, 2]]
 const FIXTURE_POSES = [
     { name: "near", distance: 2.0, level: 0, lit: true },
@@ -153,6 +163,9 @@ const FIXTURE_POSES = [
     { name: "far", distance: 10.0, level: 2, lit: false },
 ]
 const FIXTURE_INSET = 8
+# The radius a sample must lie outside of about the screen's centre,
+# the crosshair's five and a pixel of rounding
+const FIXTURE_CROSSHAIR = 6
 # The light: the bottom block's mean brightness over the top's, at
 # least; the top block is a metre and a half further from the bulb and
 # at a lower cosine, while the hall's other bulbs light both
@@ -690,19 +703,20 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
 
     # the alpha policy rendered: a copy of the proof map with its grate
-    # wall given the fixture texture, every lumel full bright and the
-    # tiles rebuilt whole by the console's L frame at each pose, so a
-    # pixel reads a tile's texel as the shrink made it from the texture;
-    # each patch's centre projected onto a pixel and read: its exact
-    # colour where the oracle's plane for the pose's level passes, the
-    # alcove behind where it does not, so at level 0 the 128 patches
-    # show and the 127 ones do not, and at the coarser levels the scale
-    # the search chose lifts the 127 patches and the varied ones over
-    # the pass with their constant colour surviving the weighted mean;
-    # the first two poses run again with the tiles held off draw the lit
-    # loop's picture, identical over the opening at level 0 and, at
-    # level 1, differing from the tiled one on a uniform patch exactly
-    # where the level's pass differs from level 0's
+    # wall given the fixture texture and its alcove the solid backdrop,
+    # every lumel full bright and the tiles rebuilt whole by the
+    # console's L frame at each pose, so a pixel reads a tile's texel as
+    # the shrink made it from the texture; each patch's centre projected
+    # onto a pixel and read: its exact colour where the oracle's plane
+    # for the pose's level passes, the backdrop exactly where it does
+    # not, so at level 0 the 128 patches show and the 127 ones do not,
+    # and at the coarser levels the scale the search chose lifts the 127
+    # patches and the varied ones over the pass, the yellow surviving
+    # the weighted mean over black and the red and blue mixing as the
+    # shrink's rule says; the first two poses run again with the tiles
+    # held off draw the lit loop's picture, identical over the opening
+    # at level 0 and, at level 1, differing from the tiled one on a
+    # uniform patch exactly where the level's pass differs from level 0's
     let fixture_alphas = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).alphas } | flatten)
     let fixture_levels = (alpha-levels $fixture_alphas $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h)
     assert $fixture_levels.line "the fixture is under full coverage, so the engine names a line for it"
@@ -717,7 +731,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let wall_len = ((($wall_b.x - $wall_a.x) ** 2 + ($wall_b.y - $wall_a.y) ** 2) | math sqrt)
     let wall_e = [(($wall_b.x - $wall_a.x) / $wall_len), (($wall_b.y - $wall_a.y) / $wall_len)]
     let fixture_samples = (fixture-samples $fixture_wall $wall_a $wall_e $fixture_levels)
-    let fixture_colours = ($FIXTURE_KINDS | values | get colour)
     let fixture_disk = (romfs $fixture_tree ($out | path join "alpha.romfs"))
     let fixture_texels = ($fixture_wall.surface.u_scale * $ALPHA_FIXTURE.w)
     mut fixture_runs = {}
@@ -762,20 +775,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
                 if $r.shows {
                     assert equal $r.pixel $r.colour $"the ($r.kind) patch at ($r.at) shows its colour at level ($read_level) on ($label): ($r.pixel | encode hex)"
                 } else {
-                    assert ($r.pixel not-in $fixture_colours) $"the ($r.kind) patch at ($r.at) is absent at level ($read_level) on ($label): ($r.pixel | encode hex)"
+                    assert equal $r.pixel $FIXTURE_BACKDROP.colour $"the ($r.kind) patch at ($r.at) is absent at level ($read_level) on ($label), the backdrop behind it: ($r.pixel | encode hex)"
                 }
             }
             $fixture_runs = ($fixture_runs | insert $"($fp.name)_($mode)" { bytes: $bytes, eye: $eye, frame: $frame, read: $read, level: $read_level })
         }
     }
-    # the lit loop's picture against the tiled one, over the far wall's
-    # rectangle behind the opening, where the fixture and the wall
-    # behind it both read level 0 in both runs; the alcove's side walls
-    # seen obliquely reach two texels a pixel at their far end and read
-    # level 1 from the tiles, so the opening's edges are left out
-    let backdrop = (fixture-backdrop $fixture_read $fixture_wall $fixture_runs.near_tiled.eye)
-    let differing = (rows-differ $fixture_runs.near_tiled.bytes $fixture_runs.near_lit.bytes $backdrop)
-    assert ($differing | is-empty) $"the tiled and the lit pictures agree over the far wall's rectangle ($backdrop) at level 0: rows ($differing | first 5) differ, ($differing | length) in all"
+    # the lit loop's picture against the tiled one over the whole
+    # opening: the fixture reads level 0 in both runs, and the solid
+    # alcove behind it reads one colour at any level, its side walls
+    # seen obliquely reaching level 1 at their far end
+    let opening = (fixture-opening $fixture_read $fixture_wall $fixture_runs.near_tiled.eye)
+    let differing = (rows-differ $fixture_runs.near_tiled.bytes $fixture_runs.near_lit.bytes $opening)
+    assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level 0: rows ($differing | first 5) differ, ($differing | length) in all"
     let mid_pairs = ($fixture_runs.mid_tiled.read | zip $fixture_runs.mid_lit.read | where {|p| $p.0.uniform })
     for pair in $mid_pairs {
         assert equal ($pair.0.pixel == $pair.1.pixel) ($pair.0.shows == $pair.1.shows) $"the ($pair.0.kind) patch at ($pair.0.at) differs between the tiles and the lit loop exactly where level 1's pass differs from level 0's: ($pair.0.pixel | encode hex) against ($pair.1.pixel | encode hex), shown ($pair.0.shows) against ($pair.1.shows)"
@@ -808,7 +820,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
     print $"fps: the light from the spawn at yaws ($VIEW_YAWS): ($view_spread | each {|s| $'($s.point) ($s.light | each {|l| $l | math round --precision 1 } | str join ' and ') of 256, ($s.spread | math round --precision 1) apart' } | str join '; ')"
-    print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the far wall's rectangle ($backdrop) identical between the tiles and the lit loop"
+    print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the opening ($opening) identical between the tiles and the lit loop"
     print $"fps: the wrong magic out with ($bad_run.status), the short file with ($short_run.status)"
     print "fps: ok"
 }
@@ -1053,8 +1065,8 @@ export def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<l
 }
 
 # A row of the alpha fixture: its pixels as the PNG carries them, each
-# texel the colour of its patch's kind and the alpha the kind's 2 by 2
-# gives its parity on each axis, and the row's alphas alone.
+# texel the colour and the alpha its patch's kind gives its parity on
+# each axis in the kind's 2 by 2, and the row's alphas alone.
 export def fixture-row [y: int]: nothing -> record<bytes: binary, alphas: list<int>> {
     let kinds = ($FIXTURE_GRID | get ($y // $ALPHA_FIXTURE.patch))
     let parity = (($y mod 2) * 2)
@@ -1063,51 +1075,83 @@ export def fixture-row [y: int]: nothing -> record<bytes: binary, alphas: list<i
         let k = ($FIXTURE_KINDS | get $kind)
         let even = ($k.alphas | get $parity)
         let odd = ($k.alphas | get ($parity + 1))
-        let pair = ([$k.colour, ($even | into binary | bytes at 0..<1), $k.colour, ($odd | into binary | bytes at 0..<1)] | bytes collect)
+        let pair = ([($k.colours | get $parity), ($even | into binary | bytes at 0..<1), ($k.colours | get ($parity + 1)), ($odd | into binary | bytes at 0..<1)] | bytes collect)
         { bytes: (0..<$half | each {|i| $pair } | bytes collect), alphas: (0..<$half | each {|i| [$even, $odd] } | flatten) }
     })
     { bytes: ($cells | get bytes | bytes collect), alphas: ($cells | get alphas | flatten) }
 }
 
 # A copy of the proof map compiled with its grate wall given the alpha
-# fixture's material at the fixture's scale, its android dropped, and
-# the fixture's texture laid in the tree after the compile, which names
-# it unresolved; the tree's path.
+# fixture's material at the fixture's scale, the alcove's floor,
+# ceiling, and walls given the backdrop's, its android dropped, and the
+# two textures laid in the tree after the compile, which names them
+# unresolved; the tree's path.
 def alpha-tree [source: record, game: path, out: path]: nothing -> string {
     let north = ($source.sectors | enumerate | where {|s| $s.item.name == "north" } | get 0.index)
     let sector = ($source.sectors | get $north)
     let grate = ($sector.walls | enumerate | where {|w| $w.item.material == "grate" } | get 0.index)
     let stem = ($ALPHA_FIXTURE.name | path basename)
     let walls = ($sector.walls | update $grate {|w| $w | update material $stem | update scale [$ALPHA_FIXTURE.scale, $ALPHA_FIXTURE.scale] | update offset [0.0, 0.0] })
-    let fixed = ($source | update sectors ($source.sectors | update $north ($sector | update walls $walls)))
+    let alcove = ($source.sectors | enumerate | where {|s| $s.item.name == "alcove" } | get 0.index)
+    let back = ($FIXTURE_BACKDROP.name | path basename)
+    let solid = ($source.sectors | get $alcove | update floor.material $back | update ceiling.material $back | update wall.material $back)
+    let fixed = ($source | update sectors ($source.sectors | update $north ($sector | update walls $walls) | update $alcove $solid))
     let tree = (variant-tree $fixed $FIXTURE_MAP [android] $out $game)
     let file = ($tree | path join (map tile-path $ALPHA_FIXTURE.name | str substring 1..))
     mkdir ($file | path dirname)
     let pixels = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).bytes } | bytes collect)
     png write-rgba $file $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h $pixels
+    let backdrop = ($tree | path join (map tile-path $FIXTURE_BACKDROP.name | str substring 1..))
+    let texel = ([$FIXTURE_BACKDROP.colour, 0x[ff]] | bytes collect)
+    png write-rgba $backdrop $FIXTURE_BACKDROP.size $FIXTURE_BACKDROP.size (0..<($FIXTURE_BACKDROP.size * $FIXTURE_BACKDROP.size) | each {|i| $texel } | bytes collect)
     $tree
+}
+
+# The colour the tile shrink gives a coarser texel from the four under
+# it, as the engine computes it: alike alphas take the plain mean of
+# each channel; otherwise each channel's sum weighted by the alphas,
+# times the truncated reciprocal of their sum in 8.24, a half added and
+# the product shifted down, so a transparent texel's colour counts for
+# nothing and an exact mean survives.
+export def shrink-colour [texels: list<record<colour: binary, alpha: int>>]: nothing -> binary {
+    let alphas = ($texels | get alpha)
+    let channels = (0..<3 | each {|c| $texels | each {|t| $t.colour | bytes at $c..<($c + 1) | into int } })
+    let means = (if ($alphas | uniq | length) == 1 {
+        $channels | each {|vs| ($vs | math sum) // 4 }
+    } else {
+        let recip = (16777216 // ($alphas | math sum))
+        $channels | each {|vs|
+            let weighted = ($vs | zip $alphas | each {|p| $p.0 * $p.1 } | math sum)
+            (($weighted * $recip) + 8388608) // 16777216
+        }
+    })
+    $means | each {|v| $v | into binary | bytes at 0..<1 } | bytes collect
 }
 
 # The fixture's samples: the centre texel of every patch in each repeat
 # of the texture over the wall, the world point it maps to along the
 # wall from its first vertex and down from its anchor by the surface's
-# scales and offsets, and whether its patch passes at each level by the
+# scales and offsets, its colour by level, the texel's own at level 0
+# and the shrink's at every coarser one, which the alike path then
+# carries unchanged, and whether its patch passes at each level by the
 # oracle's plane for the level; a kind is uniform when its 2 by 2 holds
-# one alpha, so its level 0 reading does not hang on which texel a pixel
-# lands on.
-def fixture-samples [wall: record, a: record, e: list<float>, levels: record]: nothing -> table<kind: string, colour: binary, uniform: bool, point: list<float>, pass: list<bool>> {
+# one alpha and one colour, so its level 0 reading does not hang on
+# which texel a pixel lands on.
+def fixture-samples [wall: record, a: record, e: list<float>, levels: record]: nothing -> table<kind: string, colours: list<binary>, uniform: bool, point: list<float>, pass: list<bool>> {
     let patch = $ALPHA_FIXTURE.patch
     $FIXTURE_REPEATS | each {|rep|
         0..<($ALPHA_FIXTURE.h // $patch) | each {|j|
             0..<($ALPHA_FIXTURE.w // $patch) | each {|i|
                 let kind = ($FIXTURE_GRID | get $j | get $i)
                 let k = ($FIXTURE_KINDS | get $kind)
+                let coarse = (shrink-colour (0..<4 | each {|t| { colour: ($k.colours | get $t), alpha: ($k.alphas | get $t) } }))
                 let u = (($i * $patch) + ($patch // 2))
                 let v = (($j * $patch) + ($patch // 2))
                 let along = ((((($rep.0 * $ALPHA_FIXTURE.w) + $u) + 0.5) / $ALPHA_FIXTURE.w - $wall.surface.u_offset) / $wall.surface.u_scale)
                 let down = ((((($rep.1 * $ALPHA_FIXTURE.h) + $v) + 0.5) / $ALPHA_FIXTURE.h - $wall.surface.v_offset) / $wall.surface.v_scale)
                 {
-                    kind: $kind, colour: $k.colour, uniform: (($k.alphas | uniq | length) == 1),
+                    kind: $kind, colours: [($k.colours | get 0), $coarse, $coarse, $coarse],
+                    uniform: ((($k.alphas | uniq | length) == 1) and (($k.colours | each {|c| $c | encode hex } | uniq | length) == 1)),
                     point: [($a.x + $e.0 * $along), ($a.y + $e.1 * $along), ($wall.anchor - $down)],
                     pass: (0..3 | each {|l| ($levels.planes | get $l | get ((($v bit-shr $l) * ($ALPHA_FIXTURE.w bit-shr $l)) + ($u bit-shr $l))) >= $ALPHA_PASS }),
                 }
@@ -1117,30 +1161,25 @@ def fixture-samples [wall: record, a: record, e: list<float>, levels: record]: n
 }
 
 # The fixture's samples read from a capture: each one's pixel from the
-# eye at yaw 0 and whether its patch shows at the level.
-def fixture-read [bytes: binary, eye: record, samples: table<kind: string, colour: binary, uniform: bool, point: list<float>, pass: list<bool>>, level: int]: nothing -> table<kind: string, colour: binary, uniform: bool, at: list<int>, pixel: binary, shows: bool> {
+# eye at yaw 0, clear of the crosshair, its colour at the level, and
+# whether its patch shows there.
+def fixture-read [bytes: binary, eye: record, samples: table<kind: string, colours: list<binary>, uniform: bool, point: list<float>, pass: list<bool>>, level: int]: nothing -> table<kind: string, colour: binary, uniform: bool, at: list<int>, pixel: binary, shows: bool> {
     let head = (ppm-head $bytes)
     $samples | each {|s|
         let at = (project $eye 0 $s.point)
         assert ($at != null) $"the ($s.kind) patch at ($s.point) is on screen from ($eye)"
-        { kind: $s.kind, colour: $s.colour, uniform: $s.uniform, at: $at, pixel: (pixel-at $bytes $head $at), shows: ($s.pass | get $level) }
+        assert (((($at.0 - 960) ** 2) + (($at.1 - 540) ** 2)) > ($FIXTURE_CROSSHAIR * $FIXTURE_CROSSHAIR)) $"the ($s.kind) patch at ($at) lies clear of the crosshair's disc"
+        { kind: $s.kind, colour: ($s.colours | get $level), uniform: $s.uniform, at: $at, pixel: (pixel-at $bytes $head $at), shows: ($s.pass | get $level) }
     }
 }
 
-# The screen rectangle of the wall facing the fixture wall across its
-# portal, the wall of the sector across whose midpoint lies farthest
-# from an eye facing it at yaw 0: [x0, y0, x1, y1] with the pixel past
-# the last, inset by FIXTURE_INSET and clamped to the screen, its two
-# vertices at the sector's ceiling and floor projected.
-def fixture-backdrop [m: record, wall: record, eye: record]: nothing -> list<int> {
-    let across_index = ($m.portals | get $wall.first_portal | get sector)
-    let across = ($m.sectors | get $across_index)
-    let far = ($m.walls | where {|w| $w.sector == $across_index } | each {|w|
-        let a = ($m.vertices | get $w.a)
-        let b = ($m.vertices | get $w.b)
-        { a: $a, b: $b, off: (((($a.x + $b.x) / 2) - $eye.x) ** 2 + ((($a.y + $b.y) / 2) - $eye.y) ** 2) }
-    } | sort-by off | last)
-    let corners = ([$far.a, $far.b] | each {|p|
+# The screen rectangle of the fixture wall's opening from an eye facing
+# it at yaw 0, [x0, y0, x1, y1] with the pixel past the last, inset by
+# FIXTURE_INSET and clamped to the screen: the wall's two vertices at
+# the ceiling and the floor of the sector across its portal, projected.
+def fixture-opening [m: record, wall: record, eye: record]: nothing -> list<int> {
+    let across = ($m.sectors | get ($m.portals | get $wall.first_portal | get sector))
+    let corners = ([($m.vertices | get $wall.a), ($m.vertices | get $wall.b)] | each {|p|
         [(map plane-z $across.ceiling $p.x $p.y), (map plane-z $across.floor $p.x $p.y)] | each {|z|
             let depth = ($p.x - $eye.x)
             { x: (960 + (($eye.y - $p.y) / $depth) * 960), y: (540 - (($z - $eye.z) / $depth) * 960) }
