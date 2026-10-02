@@ -19,9 +19,13 @@
 # console and one from the trigger, fallen, its magazine taken on a
 # walk, the shots heard; the light's view independence, floor points
 # of the bay read from the spawn at two yaws on a still copy of the
-# factory and a lightless one, the light alone the same from both; a
-# map whose magic is wrong, which exits 6, and one cut short, which
-# exits 7, each saying so on the UART.
+# factory and a lightless one, the light alone the same from both; the
+# alpha policy rendered, a texture of the test's own on the proof map's
+# grate wall read from poses at three levels, each patch present in its
+# exact colour where the oracle's scaled means pass and absent where
+# they do not, the lit loop's picture from the same build agreeing at
+# level 0; a map whose magic is wrong, which exits 6, and one cut short,
+# which exits 7, each saying so on the UART.
 use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
@@ -117,6 +121,38 @@ const ALPHA_CASES = [
 const ALPHA_LINE = "fps: alpha {name}: coverage {c0} {c1} {c2} {c3} of 10000, scale {s1} {s2} {s3} of 65536"
 const ALPHA_PASS = 128
 const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
+# The alpha policy rendered: the proof map's grate wall given a texture
+# of the test's own, 256 square at two repeats a metre so a lumel cell
+# is one repeat, in patches of 64 texels of one kind each: opaque, at
+# the pass less one, at the pass, transparent, and two of a constant
+# colour under a 2 by 2 of varied alphas, the alphas of a kind indexed
+# by a texel's parity on each axis; the grid of kinds over the 4 by 4
+# patches counted so the search moves the threshold to 127 at level 1,
+# where the varied patches' means of 127 and 100 against level 0's
+# halves leave 128 short, and keeps 128 after; the samples the centre
+# texel of every patch in two repeats over the wall; the poses head-on
+# at distances where the wall's blocks read level 0, 1, and 2 by the
+# block's rule over 512 texels a metre, the first two run again with
+# the tiles held off for the lit loop's picture; the far wall's
+# rectangle behind the opening compared inset from its edges
+const FIXTURE_MAP = "proof_alpha"
+const ALPHA_FIXTURE = { name: "texture/alphafix", w: 256, h: 256, patch: 64, scale: 2.0 }
+const FIXTURE_KINDS = {
+    A: { colour: 0x[ff 00 00], alphas: [255, 255, 255, 255] },
+    B: { colour: 0x[00 ff 00], alphas: [127, 127, 127, 127] },
+    C: { colour: 0x[00 00 ff], alphas: [128, 128, 128, 128] },
+    D: { colour: 0x[ff ff 00], alphas: [255, 255, 0, 0] },
+    E: { colour: 0x[00 00 00], alphas: [0, 0, 0, 0] },
+    F: { colour: 0x[00 ff ff], alphas: [255, 145, 0, 0] },
+}
+const FIXTURE_GRID = [[A, B, A, D], [C, A, E, D], [A, F, A, E], [D, E, C, F]]
+const FIXTURE_REPEATS = [[1, 1], [2, 2]]
+const FIXTURE_POSES = [
+    { name: "near", distance: 2.0, level: 0, lit: true },
+    { name: "mid", distance: 5.5, level: 1, lit: true },
+    { name: "far", distance: 10.0, level: 2, lit: false },
+]
+const FIXTURE_INSET = 8
 # The light: the bottom block's mean brightness over the top's, at
 # least; the top block is a metre and a half further from the bulb and
 # at a lower cosine, while the hall's other bulbs light both
@@ -653,6 +689,99 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
 
+    # the alpha policy rendered: a copy of the proof map with its grate
+    # wall given the fixture texture, every lumel full bright and the
+    # tiles rebuilt whole by the console's L frame at each pose, so a
+    # pixel reads a tile's texel as the shrink made it from the texture;
+    # each patch's centre projected onto a pixel and read: its exact
+    # colour where the oracle's plane for the pose's level passes, the
+    # alcove behind where it does not, so at level 0 the 128 patches
+    # show and the 127 ones do not, and at the coarser levels the scale
+    # the search chose lifts the 127 patches and the varied ones over
+    # the pass with their constant colour surviving the weighted mean;
+    # the first two poses run again with the tiles held off draw the lit
+    # loop's picture, identical over the opening at level 0 and, at
+    # level 1, differing from the tiled one on a uniform patch exactly
+    # where the level's pass differs from level 0's
+    let fixture_alphas = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).alphas } | flatten)
+    let fixture_levels = (alpha-levels $fixture_alphas $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h)
+    assert $fixture_levels.line "the fixture is under full coverage, so the engine names a line for it"
+    assert equal ($fixture_levels.scale | get 0) ((8388608 + 126) // 127) $"the fixture's search moves to 127 at level 1, so the scale lifts the pass less one over it: ($fixture_levels.scale)"
+    let fixture_tree = (alpha-tree $proof_source $game ($out | path join "alpha"))
+    let fixture_read = (map read ($fixture_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
+    let fixture_expected = (open ($fixture_tree | path join "map.nuon"))
+    let fixture_material = ($fixture_read.materials | enumerate | where {|m| $m.item.name == $ALPHA_FIXTURE.name } | get 0.index)
+    let fixture_wall = ($fixture_read.walls | where {|w| $w.surface.material == $fixture_material } | get 0)
+    let wall_a = ($fixture_read.vertices | get $fixture_wall.a)
+    let wall_b = ($fixture_read.vertices | get $fixture_wall.b)
+    let wall_len = ((($wall_b.x - $wall_a.x) ** 2 + ($wall_b.y - $wall_a.y) ** 2) | math sqrt)
+    let wall_e = [(($wall_b.x - $wall_a.x) / $wall_len), (($wall_b.y - $wall_a.y) / $wall_len)]
+    let fixture_samples = (fixture-samples $fixture_wall $wall_a $wall_e $fixture_levels)
+    let fixture_colours = ($FIXTURE_KINDS | values | get colour)
+    let fixture_disk = (romfs $fixture_tree ($out | path join "alpha.romfs"))
+    let fixture_texels = ($fixture_wall.surface.u_scale * $ALPHA_FIXTURE.w)
+    mut fixture_runs = {}
+    for fp in $FIXTURE_POSES {
+        let step = ($fixture_texels * $fp.distance / 960)
+        let level = (if $step < 2 { 0 } else if $step < 4 { 1 } else if $step < 8 { 2 } else { 3 })
+        assert equal $level $fp.level $"the ($fp.name) pose reads level ($fp.level) by the block's rule at ($step) texels a pixel"
+        let eye = { x: ($wall_a.x - $fp.distance), y: (($wall_a.y + $wall_b.y) / 2), z: $EYE_HEIGHT }
+        let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
+        for mode in (if $fp.lit { [tiled, lit] } else { [tiled] }) {
+            let frame = ([("L" | into binary), 0x[00 00 00 01], (if $mode == "lit" { 0x[01] } else { 0x[00] }), (0..<58 | each {|i| 0x[00] } | bytes collect)] | bytes collect)
+            let sends = [{ at: 1400ms, bytes: $frame }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let label = $"the ($fp.name) pose with the tiles ($mode)"
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+            let lines = ($run.serial | lines)
+            let loads = ($lines | where {|l| $l starts-with $"fps: ($FIXTURE_MAP) loaded" })
+            assert equal ($loads | length) 1 $"the fixture loaded once on ($label): ($run.serial)"
+            let load = ($loads | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
+            assert equal $load.missing 0 $"every material of the fixture in its tree on ($label): ($loads | get 0)"
+            assert equal $load.textures $fixture_expected.materials $"the fixture's materials all textures on ($label): ($loads | get 0)"
+            let alpha_line = ($lines | where {|l| $l starts-with $"fps: alpha ($ALPHA_FIXTURE.name): " })
+            assert equal ($alpha_line | length) 1 $"one alpha line for the fixture on ($label): ($lines | where {|l| $l starts-with 'fps: alpha' })"
+            let got = ($alpha_line | get 0 | parse $ALPHA_LINE | get 0)
+            assert equal ([$got.c0 $got.c1 $got.c2 $got.c3] | each {|v| $v | into int }) $fixture_levels.coverage $"the fixture's coverage by level as the rule gives it: ($alpha_line | get 0)"
+            assert equal ([$got.s1 $got.s2 $got.s3] | each {|v| $v | into int }) $fixture_levels.scale $"the fixture's scales by level as the rule gives them: ($alpha_line | get 0)"
+            let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
+            assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+            let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+            assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
+            assert equal $frame.resets 0 $"the arena holds on ($label): ($frame)"
+            if $mode == "tiled" {
+                assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+            } else {
+                assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
+            }
+            assert ($run.screen != "") $"a screen was taken on ($label)"
+            let bytes = (open --raw $run.screen | into binary)
+            let read_level = (if $mode == "tiled" { $level } else { 0 })
+            let read = (fixture-read $bytes $eye $fixture_samples $read_level)
+            for r in ($read | where {|r| $r.uniform or $read_level > 0 }) {
+                if $r.shows {
+                    assert equal $r.pixel $r.colour $"the ($r.kind) patch at ($r.at) shows its colour at level ($read_level) on ($label): ($r.pixel | encode hex)"
+                } else {
+                    assert ($r.pixel not-in $fixture_colours) $"the ($r.kind) patch at ($r.at) is absent at level ($read_level) on ($label): ($r.pixel | encode hex)"
+                }
+            }
+            $fixture_runs = ($fixture_runs | insert $"($fp.name)_($mode)" { bytes: $bytes, eye: $eye, frame: $frame, read: $read, level: $read_level })
+        }
+    }
+    # the lit loop's picture against the tiled one, over the far wall's
+    # rectangle behind the opening, where the fixture and the wall
+    # behind it both read level 0 in both runs; the alcove's side walls
+    # seen obliquely reach two texels a pixel at their far end and read
+    # level 1 from the tiles, so the opening's edges are left out
+    let backdrop = (fixture-backdrop $fixture_read $fixture_wall $fixture_runs.near_tiled.eye)
+    let differing = (rows-differ $fixture_runs.near_tiled.bytes $fixture_runs.near_lit.bytes $backdrop)
+    assert ($differing | is-empty) $"the tiled and the lit pictures agree over the far wall's rectangle ($backdrop) at level 0: rows ($differing | first 5) differ, ($differing | length) in all"
+    let mid_pairs = ($fixture_runs.mid_tiled.read | zip $fixture_runs.mid_lit.read | where {|p| $p.0.uniform })
+    for pair in $mid_pairs {
+        assert equal ($pair.0.pixel == $pair.1.pixel) ($pair.0.shows == $pair.1.shows) $"the ($pair.0.kind) patch at ($pair.0.at) differs between the tiles and the lit loop exactly where level 1's pass differs from level 0's: ($pair.0.pixel | encode hex) against ($pair.1.pixel | encode hex), shown ($pair.0.shows) against ($pair.1.shows)"
+    }
+    assert (($mid_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
+
     # a map whose magic is wrong
     let bad = (broken ($out | path join "bad_tree") "bad" ([("XXXX" | into binary), (0..<60 | each {|i| 0x[00] } | bytes collect)] | bytes collect))
     let bad_run = (jab launch --kernel $kernel --image $image --out ($out | path join "bad") --set $set --sound --disk (romfs $bad ($out | path join "bad.romfs")) --serial "fps" --seconds 8)
@@ -679,6 +808,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
     print $"fps: the light from the spawn at yaws ($VIEW_YAWS): ($view_spread | each {|s| $'($s.point) ($s.light | each {|l| $l | math round --precision 1 } | str join ' and ') of 256, ($s.spread | math round --precision 1) apart' } | str join '; ')"
+    print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the far wall's rectangle ($backdrop) identical between the tiles and the lit loop"
     print $"fps: the wrong magic out with ($bad_run.status), the short file with ($short_run.status)"
     print "fps: ok"
 }
@@ -869,22 +999,20 @@ def alpha-held [lines: list<string>, name: string]: nothing -> nothing {
 # error, a tie to the lower share, equal shares to the threshold nearest
 # the pass), the level's scale ceil(2^23 / T), and the level scaled by it
 # and capped at 255 for the level after; whether the engine names a line
-# for the texture, which it does under full coverage at level 0.
-def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bool, coverage: list<int>, scale: list<int>> {
+# for the texture, which it does under full coverage at level 0; and the
+# planes by level, level 0 the alphas given and each coarser level's
+# scaled alphas in row order at half the width, which the tiles hold.
+export def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bool, coverage: list<int>, scale: list<int>, planes: list<list<int>>> {
     let n0 = ($w * $h)
     let c0 = ($alphas | where {|a| $a >= $ALPHA_PASS } | length)
-    if $c0 == $n0 { return { line: false, coverage: [], scale: [] } }
+    if $c0 == $n0 { return { line: false, coverage: [], scale: [], planes: [] } }
     mut coverage = [(($c0 * 10000) // $n0)]
     mut scale = []
+    mut planes = [$alphas]
     mut plane = $alphas
     mut pw = $w
     mut ph = $h
     for level in 1..3 {
-        if $c0 == 0 {
-            $coverage = ($coverage | append 0)
-            $scale = ($scale | append 65536)
-            continue
-        }
         let sw = $pw
         let lw = ($pw // 2)
         let lh = ($ph // 2)
@@ -894,6 +1022,15 @@ def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bo
             (($src | get $i) + ($src | get ($i + 1)) + ($src | get ($i + $sw)) + ($src | get ($i + $sw + 1))) // 4
         } } | flatten)
         let nl = ($lw * $lh)
+        if $c0 == 0 {
+            $coverage = ($coverage | append 0)
+            $scale = ($scale | append 65536)
+            $plane = $means
+            $planes = ($planes | append [$means])
+            $pw = $lw
+            $ph = $lh
+            continue
+        }
         let hist = ($means | reduce --fold (0..255 | each {|i| 0 }) {|v, acc| $acc | update $v {|n| $n + 1 } })
         mut best: any = null
         mut cov = 0
@@ -906,12 +1043,130 @@ def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bo
         }
         let s = ((8388608 + $best.t - 1) // $best.t)
         $plane = ($means | each {|v| [(($v * $s) bit-shr 16), 255] | math min })
+        $planes = ($planes | append [$plane])
         $pw = $lw
         $ph = $lh
         $coverage = ($coverage | append (($best.cov * 10000) // $nl))
         $scale = ($scale | append $s)
     }
-    { line: true, coverage: $coverage, scale: $scale }
+    { line: true, coverage: $coverage, scale: $scale, planes: $planes }
+}
+
+# A row of the alpha fixture: its pixels as the PNG carries them, each
+# texel the colour of its patch's kind and the alpha the kind's 2 by 2
+# gives its parity on each axis, and the row's alphas alone.
+export def fixture-row [y: int]: nothing -> record<bytes: binary, alphas: list<int>> {
+    let kinds = ($FIXTURE_GRID | get ($y // $ALPHA_FIXTURE.patch))
+    let parity = (($y mod 2) * 2)
+    let half = ($ALPHA_FIXTURE.patch // 2)
+    let cells = ($kinds | each {|kind|
+        let k = ($FIXTURE_KINDS | get $kind)
+        let even = ($k.alphas | get $parity)
+        let odd = ($k.alphas | get ($parity + 1))
+        let pair = ([$k.colour, ($even | into binary | bytes at 0..<1), $k.colour, ($odd | into binary | bytes at 0..<1)] | bytes collect)
+        { bytes: (0..<$half | each {|i| $pair } | bytes collect), alphas: (0..<$half | each {|i| [$even, $odd] } | flatten) }
+    })
+    { bytes: ($cells | get bytes | bytes collect), alphas: ($cells | get alphas | flatten) }
+}
+
+# A copy of the proof map compiled with its grate wall given the alpha
+# fixture's material at the fixture's scale, its android dropped, and
+# the fixture's texture laid in the tree after the compile, which names
+# it unresolved; the tree's path.
+def alpha-tree [source: record, game: path, out: path]: nothing -> string {
+    let north = ($source.sectors | enumerate | where {|s| $s.item.name == "north" } | get 0.index)
+    let sector = ($source.sectors | get $north)
+    let grate = ($sector.walls | enumerate | where {|w| $w.item.material == "grate" } | get 0.index)
+    let stem = ($ALPHA_FIXTURE.name | path basename)
+    let walls = ($sector.walls | update $grate {|w| $w | update material $stem | update scale [$ALPHA_FIXTURE.scale, $ALPHA_FIXTURE.scale] | update offset [0.0, 0.0] })
+    let fixed = ($source | update sectors ($source.sectors | update $north ($sector | update walls $walls)))
+    let tree = (variant-tree $fixed $FIXTURE_MAP [android] $out $game)
+    let file = ($tree | path join (map tile-path $ALPHA_FIXTURE.name | str substring 1..))
+    mkdir ($file | path dirname)
+    let pixels = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).bytes } | bytes collect)
+    png write-rgba $file $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h $pixels
+    $tree
+}
+
+# The fixture's samples: the centre texel of every patch in each repeat
+# of the texture over the wall, the world point it maps to along the
+# wall from its first vertex and down from its anchor by the surface's
+# scales and offsets, and whether its patch passes at each level by the
+# oracle's plane for the level; a kind is uniform when its 2 by 2 holds
+# one alpha, so its level 0 reading does not hang on which texel a pixel
+# lands on.
+def fixture-samples [wall: record, a: record, e: list<float>, levels: record]: nothing -> table<kind: string, colour: binary, uniform: bool, point: list<float>, pass: list<bool>> {
+    let patch = $ALPHA_FIXTURE.patch
+    $FIXTURE_REPEATS | each {|rep|
+        0..<($ALPHA_FIXTURE.h // $patch) | each {|j|
+            0..<($ALPHA_FIXTURE.w // $patch) | each {|i|
+                let kind = ($FIXTURE_GRID | get $j | get $i)
+                let k = ($FIXTURE_KINDS | get $kind)
+                let u = (($i * $patch) + ($patch // 2))
+                let v = (($j * $patch) + ($patch // 2))
+                let along = ((((($rep.0 * $ALPHA_FIXTURE.w) + $u) + 0.5) / $ALPHA_FIXTURE.w - $wall.surface.u_offset) / $wall.surface.u_scale)
+                let down = ((((($rep.1 * $ALPHA_FIXTURE.h) + $v) + 0.5) / $ALPHA_FIXTURE.h - $wall.surface.v_offset) / $wall.surface.v_scale)
+                {
+                    kind: $kind, colour: $k.colour, uniform: (($k.alphas | uniq | length) == 1),
+                    point: [($a.x + $e.0 * $along), ($a.y + $e.1 * $along), ($wall.anchor - $down)],
+                    pass: (0..3 | each {|l| ($levels.planes | get $l | get ((($v bit-shr $l) * ($ALPHA_FIXTURE.w bit-shr $l)) + ($u bit-shr $l))) >= $ALPHA_PASS }),
+                }
+            }
+        } | flatten
+    } | flatten
+}
+
+# The fixture's samples read from a capture: each one's pixel from the
+# eye at yaw 0 and whether its patch shows at the level.
+def fixture-read [bytes: binary, eye: record, samples: table<kind: string, colour: binary, uniform: bool, point: list<float>, pass: list<bool>>, level: int]: nothing -> table<kind: string, colour: binary, uniform: bool, at: list<int>, pixel: binary, shows: bool> {
+    let head = (ppm-head $bytes)
+    $samples | each {|s|
+        let at = (project $eye 0 $s.point)
+        assert ($at != null) $"the ($s.kind) patch at ($s.point) is on screen from ($eye)"
+        { kind: $s.kind, colour: $s.colour, uniform: $s.uniform, at: $at, pixel: (pixel-at $bytes $head $at), shows: ($s.pass | get $level) }
+    }
+}
+
+# The screen rectangle of the wall facing the fixture wall across its
+# portal, the wall of the sector across whose midpoint lies farthest
+# from an eye facing it at yaw 0: [x0, y0, x1, y1] with the pixel past
+# the last, inset by FIXTURE_INSET and clamped to the screen, its two
+# vertices at the sector's ceiling and floor projected.
+def fixture-backdrop [m: record, wall: record, eye: record]: nothing -> list<int> {
+    let across_index = ($m.portals | get $wall.first_portal | get sector)
+    let across = ($m.sectors | get $across_index)
+    let far = ($m.walls | where {|w| $w.sector == $across_index } | each {|w|
+        let a = ($m.vertices | get $w.a)
+        let b = ($m.vertices | get $w.b)
+        { a: $a, b: $b, off: (((($a.x + $b.x) / 2) - $eye.x) ** 2 + ((($a.y + $b.y) / 2) - $eye.y) ** 2) }
+    } | sort-by off | last)
+    let corners = ([$far.a, $far.b] | each {|p|
+        [(map plane-z $across.ceiling $p.x $p.y), (map plane-z $across.floor $p.x $p.y)] | each {|z|
+            let depth = ($p.x - $eye.x)
+            { x: (960 + (($eye.y - $p.y) / $depth) * 960), y: (540 - (($z - $eye.z) / $depth) * 960) }
+        }
+    } | flatten)
+    let x0 = ((($corners | get x | math min) | math ceil | into int) + $FIXTURE_INSET)
+    let x1 = ((($corners | get x | math max) | math floor | into int) - $FIXTURE_INSET)
+    let top = ((($corners | get y | math min) | math ceil | into int) + $FIXTURE_INSET)
+    let bottom = ((($corners | get y | math max) | math floor | into int) - $FIXTURE_INSET)
+    let y0 = ([$top, 0] | math max)
+    let y1 = ([$bottom, 1080] | math min)
+    [$x0, $y0, $x1, $y1]
+}
+
+# The rows of a rectangle over which two captures differ, each row's
+# bytes within the rectangle compared whole.
+def rows-differ [p: binary, q: binary, rect: list<int>]: nothing -> list<int> {
+    let hp = (ppm-head $p)
+    let hq = (ppm-head $q)
+    let y0 = $rect.1
+    let y1 = $rect.3
+    $y0..<$y1 | each {|y|
+        let from = ((($y * 1920) + $rect.0) * 3)
+        let to = ((($y * 1920) + $rect.2) * 3)
+        if ($p | bytes at ($hp + $from)..<($hp + $to)) == ($q | bytes at ($hq + $from)..<($hq + $to)) { null } else { $y }
+    } | compact
 }
 
 # The level of a run's recording between two seconds: the peak and the
@@ -945,9 +1200,19 @@ def mean-brightness [ppm: path, block: list<int>]: nothing -> float {
 # A pixel of a capture as its three bytes.
 def pixel [ppm: path, at: list<int>]: nothing -> binary {
     let bytes = (open --raw $ppm | into binary)
+    pixel-at $bytes (ppm-head $bytes) $at
+}
+
+# The bytes of a capture's header, the three lines before its pixels.
+def ppm-head [bytes: binary]: nothing -> int {
     let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
-    let head_len = ($newlines.2 + 1)
-    $bytes | bytes at ($head_len + ($at.1 * 1920 + $at.0) * 3)..<($head_len + ($at.1 * 1920 + $at.0) * 3 + 3)
+    $newlines.2 + 1
+}
+
+# A pixel of a capture held whole, as its three bytes.
+def pixel-at [bytes: binary, head: int, at: list<int>]: nothing -> binary {
+    let o = ($head + (($at.1 * 1920) + $at.0) * 3)
+    $bytes | bytes at $o..<($o + 3)
 }
 
 # The plan views of a compiled tree held to the source: an SVG a
