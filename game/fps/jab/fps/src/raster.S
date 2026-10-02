@@ -667,6 +667,10 @@ poly_fill:
     sd ra, 40(sp)
     sd s0, 32(sp)
     sd s1, 24(sp)
+    la t0, poly_serial
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # the polygon's serial in the frame
     la t0, edge_count
     ld t0, 0(t0)
     beqz t0, 9f
@@ -738,9 +742,10 @@ poly_fill:
     addi sp, sp, 48
     ret
 
-# The span recorded before it is drawn: its row, its pixels, and the
-# surface in hand, into the frame's table while it has room; the count
-# runs on past the table, so a reader takes the lesser
+# The span recorded before it is drawn: its row, its pixels, the mode,
+# the surface, and the polygon's serial, into the frame's table while it
+# has room; the count runs on past the table, which a reader takes as
+# the frame's records being incomplete
 # a0 int The first pixel
 # a1 int The pixel past the last
 # a2 int The row
@@ -755,12 +760,17 @@ span_record:
     la t2, span_records
     slli t1, t1, 4
     add t2, t2, t1
-    sw a2, SPAN_ROW(t2)
-    sw a0, SPAN_X0(t2)
-    sw a1, SPAN_X1(t2)
+    sh a2, SPAN_ROW(t2)
+    sh a0, SPAN_X0(t2)
+    sh a1, SPAN_X1(t2)
     la t3, poly
-    ld t3, POLY_SURFACE(t3)
-    sw t3, SPAN_SURFACE(t2)
+    ld t1, POLY_MODE(t3)
+    sh t1, SPAN_MODE(t2)
+    ld t1, POLY_SURFACE(t3)
+    sw t1, SPAN_SURFACE(t2)
+    la t3, poly_serial
+    ld t3, 0(t3)
+    sw t3, SPAN_POLY(t2)
 9:
     ret
 
@@ -1769,11 +1779,14 @@ edges:
     .skip (MAX_EDGES * EDGE_SIZE)
 crossings:
     .skip (MAX_EDGES * 4)
-# The frame's spans as the fill emitted them, and their count
+# The frame's spans as the fill emitted them, their count, and the
+# polygons submitted so far, the serial a record carries
 .balign 16
 span_records:
     .skip (SPAN_RECORDS * SPAN_RECORD_SIZE)
 span_count:
+    .skip 8
+poly_serial:
     .skip 8
 .balign 16
 zbuf:

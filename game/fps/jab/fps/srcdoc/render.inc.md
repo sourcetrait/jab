@@ -61,8 +61,10 @@ The screen rectangle is four words with its ends past the last, as the
 fill bounds its rows and spans; the flow's ring is twice the sectors long
 so its read and write never meet while sectors wait, the most that can
 wait being every sector once; the span record is the fill's output before
-drawing, sized for the frames measured and counted past its end rather
-than stopped, so a reader knows an overflow. The owner_pixel macro is a
+drawing, its row and ends in sixteen bits with the mode beside them and
+the surface and the polygon's serial in a word each, sized for the
+frames measured and counted past its end rather than stopped, the count
+past the table meaning a reader falls back for that frame. The owner_pixel macro is a
 load from span_fill's slot under OWNER and nothing otherwise, so the
 pixel loops carry the instrument at no cost to a normal build.
 

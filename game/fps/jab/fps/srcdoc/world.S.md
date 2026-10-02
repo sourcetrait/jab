@@ -37,6 +37,19 @@ rectangle within one of its units for the same reason, a constant of its
 scale and not ours. The flow's cost is the portals' phase on the frame
 line, and the openings it flowed are the line's openings.
 
+The flow's facing test carries a slack of a millimetre in the eye's
+distance from the wall's line: the cross product it reads is the wall's
+run times that signed distance, so a fixed threshold on the product would
+mean a different distance for every wall length, and the test passes a
+wall whose product is positive or whose product squared lies within the
+slack squared times the run squared, with no square root. The eye
+exactly on a portal's line, which a strict test rejected before the near
+case could take the wall, and which the renderer before this one
+rejected the same way, now flows the wall and the near case hands the
+neighbour the sector's rectangle; the proof map's line pose holds it.
+The draw's own facing test stays strict, since a wall edge-on draws
+nothing.
+
 The draw order is the flow's first-reach order, breadth-first from the
 camera's sector, which puts the near sectors first for the depth test;
 a sector reached twice is drawn once. Sprites and actors are drawn within

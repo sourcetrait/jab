@@ -14,6 +14,11 @@ k_zero_d:
 # wall lies further off loses nothing on screen to the near plane
 k_flow_near_sq_d:
     .double 0.00905
+.balign 4
+# The flow's facing slack: a millimetre squared, the eye on a wall's
+# line within it still flowing the wall
+k_facing_slack_sq:
+    .float 0.000001
 
 .section .text
 
@@ -86,6 +91,8 @@ world_draw:
     sd t1, 0(t0)
     call sky_setup
     la t0, span_count
+    sd zero, 0(t0)
+    la t0, poly_serial
     sd zero, 0(t0)
     # the view flowed through the portals, timed as the portals' phase
     rdtime s2
@@ -381,8 +388,22 @@ sector_flow:
     fsub.s ft5, ft5, ft3            # by - ay
     fmul.s ft6, ft4, ft1
     fmul.s ft7, ft5, ft0
-    flt.s t1, ft7, ft6              # (bx - ax)(py - ay) > (by - ay)(px - ax): in front
-    beqz t1, 7f
+    fsub.s ft6, ft6, ft7            # (bx - ax)(py - ay) - (by - ay)(px - ax): the run times the eye's distance from the line, signed
+    la t0, k_zero
+    flw ft7, 0(t0)
+    flt.s t1, ft7, ft6
+    bnez t1, 25f                    # ahead of the line
+    # on the line within a millimetre, which the near case takes: the
+    # product's square against the slack's square times the run's square
+    fmul.s ft6, ft6, ft6
+    fmul.s ft7, ft4, ft4
+    fmadd.s ft7, ft5, ft5, ft7      # the run squared
+    la t0, k_facing_slack_sq
+    flw ft0, 0(t0)
+    fmul.s ft7, ft7, ft0
+    flt.s t1, ft7, ft6
+    bnez t1, 7f                     # behind
+25:
     # the sector's planes at both ends, for the opening's clamp
     mv a0, s2
     li a1, 1

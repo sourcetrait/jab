@@ -25,8 +25,12 @@
 # exact colour where the oracle's scaled means pass, the weighted mean
 # of the shrink among those colours, and the solid backdrop behind
 # where they do not, the lit loop's picture from the same build
-# agreeing at level 0; a map whose magic is wrong, which exits 6, and
-# one cut short, which exits 7, each saying so on the UART.
+# agreeing at level 0; the flow's three fixtures, a sprite straddling a
+# doorway drawn whole beside it, the eye on the line two sectors share
+# reaching the sector behind it, and a map where a hall's rectangle
+# grows through a later path before the room beyond it can be reached;
+# a map whose magic is wrong, which exits 6, and one cut short, which
+# exits 7, each saying so on the UART.
 use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
@@ -71,7 +75,13 @@ const TRACE_PIECE = 2
 # units north of its first sprite in the room south of the start; that
 # sprite's entity index, for the sprite launch; the blocks of cage2's
 # bulb pose read for the light, [x, y, w, h], the floor under the bulb
-# at the bottom of the screen and the far wall at the top
+# at the bottom of the screen and the far wall at the top; the
+# straddling sprite, a fixed two-sided quad of the opaque alpha case's
+# texture with its feet in the quarter-metre door sector north of the
+# sprite room and its quad along y through both of that sector's
+# portal walls, the pose in the room seeing it obliquely so the quad's
+# near end lies over the solid wall beside the doorway, outside the
+# sector's rectangle, and a point on that near end
 const CONTENT = {
     start_sector: { cage2: 1, doortest: 2 },
     poses: {
@@ -88,6 +98,11 @@ const CONTENT = {
     },
     sprite: { entity: 1 },
     lit: { near: [860, 980, 200, 100], far: [860, 0, 200, 100] },
+    straddle: {
+        entity: { x: -1.7, y: -4.9, z: -2.0, yaw: 0.0, width: 1.5, height: 1.0, sector: 17 },
+        pose: { name: "straddle", x: 1.5, y: -6.5, z: -0.4, yaw: 165, pitch: 0 },
+        point: [-1.7, -5.5, -1.5],
+    },
 }
 # The sprite launch: doortest's tree with its first sprite given a
 # material of the test's own, a texture whose left half is transparent
@@ -99,6 +114,11 @@ const SPRITE_FLAGS = 5              # facing the camera, two-sided
 const RED = 0x[ff 00 00]
 const SPRITE_LEFT = [760, 540]
 const SPRITE_RIGHT = [1160, 540]
+# The straddling sprite's texture, the uniform alpha case over the pass,
+# its colour as the unlit map draws it, and its flags: fixed, two-sided
+const STRADDLE_MATERIAL = "test/opaque"
+const STRADDLE_COLOUR = 0x[40 80 c0]
+const STRADDLE_FLAGS = 4
 # The alpha cases, textures of the test's own laid in the sprite tree as
 # materials beside the sprite's: the sprite's halves; a uniform alpha
 # over the pass, which the engine leaves at one and names no line for;
@@ -166,6 +186,18 @@ const FIXTURE_INSET = 8
 # The radius a sample must lie outside of about the screen's centre,
 # the crosshair's five and a pixel of rounding
 const FIXTURE_CROSSHAIR = 6
+# The flow's growth: a map of the test's own (grow-source) where the
+# hall S is reached from the camera's room C first through a narrow
+# high window, two hops, and again through a side room T and its wide
+# door, three hops, after S has been flowed once; a far room D opens
+# off S in the line of sight through T's doors and outside the window's
+# rectangle on screen, so D is reached only when S is flowed again with
+# its grown rectangle; D's surfaces are the backdrop, read exactly on a
+# point of its far wall through its doorway, the map unlit
+const GROW_MAP = "rectgrow"
+const GROW_POSE = { name: "grow", x: 3.7, y: 0.4, z: 1.6, yaw: 72, pitch: 0 }
+const GROW_POINT = [8.1, 13.0, 1.6]
+const GROW_FAR = "D"
 # The light: the bottom block's mean brightness over the top's, at
 # least; the top block is a metre and a half further from the bulb and
 # at a lower cosine, while the hall's other bulbs light both
@@ -367,6 +399,22 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert ($line | is-empty) $"no alpha line for ($c.name), full at the pass: ($line)"
         }
     }
+    # the straddling sprite, seen obliquely from the room: its quad's
+    # near end over the solid wall beside the doorway reads the texture,
+    # the quad drawn over the whole screen as one not proven within its
+    # sector, where a clip to the sector's rectangle would cut it off
+    let straddle_pose = $CONTENT.straddle.pose
+    let straddle_run = (jab launch --kernel $kernel --image $image --out ($out | path join "straddle") --set $set --sound --api --disk ($out | path join "sprite.romfs") --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $straddle_pose) }] --capture 2500ms --seconds 5)
+    assert equal (open --raw $straddle_run.qemu_log) "" "QEMU has no complaint about the guest on the straddle run"
+    let straddle_frames = ($straddle_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+    assert equal ($straddle_frames | length) 2 $"the first frame and the straddle pose's reported: ($straddle_run.serial)"
+    let straddle_frame = ($straddle_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+    assert ($straddle_frame.sprites >= 1) $"the straddling sprite drawn: ($straddle_frame)"
+    assert ($straddle_frame.uncovered < $CRACKS) $"the straddle view has no pixel uncovered: ($straddle_frame)"
+    assert ($straddle_run.screen != "") "a screen was taken on the straddle run"
+    let straddle_at = (project { x: $straddle_pose.x, y: $straddle_pose.y, z: $straddle_pose.z } $straddle_pose.yaw $CONTENT.straddle.point)
+    assert ($straddle_at != null) $"the straddling quad's near end is on screen from ($straddle_pose)"
+    assert equal (pixel $straddle_run.screen $straddle_at) $STRADDLE_COLOUR $"the straddling quad's near end at ($straddle_at), beside the doorway, reads its texture: ($straddle_run.screen)"
 
     # the walk: the left stick held forward from doortest's spawn, the
     # body south through the doorway and the hall into the room beyond
@@ -400,9 +448,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let proof_expected = (open ($proof_tree | path join "map.nuon"))
     let proof_read = (map read ($proof_tree | path join "map" "proof.jabfps.map"))
     let proof_index = {|name: string| $proof_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
+    # the line pose stands with the eye on the line the hall and the
+    # door sectors share, looking into the hall, which the flow reaches
+    # only by its facing slack, the eye's distance from the wall's line
+    # being zero there
     let proof_poses = [
         { name: "window", sector: (do $proof_index "upper_room"), x: 5.0, y: 4.0, z: 4.85, yaw: 0, pitch: -20, sees: (do $proof_index "step1") },
         { name: "grate", sector: (do $proof_index "north"), x: 9.0, y: 11.0, z: 1.6, yaw: 0, pitch: 0, sees: (do $proof_index "alcove") },
+        { name: "line", sector: (do $proof_index "door"), x: 4.0, y: 8.0, z: 1.6, yaw: 270, pitch: 0, sees: (do $proof_index "hall") },
         { name: "door", sector: (do $proof_index "hall"), x: 4.0, y: 5.0, z: 1.6, yaw: 90, pitch: 0, sees: (do $proof_index "north") },
     ]
     # the rendered assets the tree carries: the hum a Standard MIDI File
@@ -794,6 +847,30 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     assert (($mid_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
 
+    # the flow's growth on the growth map: the far room is reached only
+    # once the hall's rectangle has grown through the side room's path
+    # after the hall was flowed off the window's, and its far wall reads
+    # the backdrop through its doorway
+    let grow_tree = (grow-tree $game ($out | path join "grow"))
+    let grow_far = ((grow-source).sectors | enumerate | where {|s| $s.item.name == $GROW_FAR } | get 0.index)
+    let grow_run = (jab launch --kernel $kernel --image $image --out ($out | path join "grow_run") --set $set --sound --api --disk (romfs $grow_tree ($out | path join "grow.romfs")) --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $GROW_POSE) }] --capture 2500ms --seconds 5)
+    assert equal (open --raw $grow_run.qemu_log) "" "QEMU has no complaint about the guest on the growth run"
+    let grow_lines = ($grow_run.serial | lines)
+    let grow_loads = ($grow_lines | where {|l| $l starts-with $"fps: ($GROW_MAP) loaded" })
+    assert equal ($grow_loads | length) 1 $"the growth map loaded once: ($grow_run.serial)"
+    let grow_load = ($grow_loads | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
+    assert equal $grow_load.missing 0 $"every material of the growth map in its tree: ($grow_loads | get 0)"
+    let grow_frames = ($grow_lines | where {|l| $l starts-with "fps: frame in" } | each {|f| $f | parse $FRAME | get 0 | update cells {|c| $c | into int } })
+    assert equal ($grow_frames | length) 2 $"the first frame and the growth pose's reported: ($grow_run.serial)"
+    let grow_frame = ($grow_frames | last)
+    assert ($grow_frame.uncovered < $CRACKS) $"no pixel uncovered on the growth view: ($grow_frame)"
+    let grow_sectors = ($grow_lines | where {|l| $l starts-with "fps: sectors " } | last | str substring 13.. | str trim | split row " " | each {|s| $s | into int })
+    assert ($grow_far in $grow_sectors) $"the far room reached through the hall's grown rectangle: ($grow_sectors)"
+    assert ($grow_run.screen != "") "a screen was taken on the growth run"
+    let grow_at = (project { x: $GROW_POSE.x, y: $GROW_POSE.y, z: $GROW_POSE.z } $GROW_POSE.yaw $GROW_POINT)
+    assert ($grow_at != null) "the far wall's point is on screen"
+    assert equal (pixel $grow_run.screen $grow_at) $FIXTURE_BACKDROP.colour $"the far room's wall at ($grow_at), seen only through the grown rectangle, reads the backdrop: ($grow_run.screen)"
+
     # a map whose magic is wrong
     let bad = (broken ($out | path join "bad_tree") "bad" ([("XXXX" | into binary), (0..<60 | each {|i| 0x[00] } | bytes collect)] | bytes collect))
     let bad_run = (jab launch --kernel $kernel --image $image --out ($out | path join "bad") --set $set --sound --disk (romfs $bad ($out | path join "bad.romfs")) --serial "fps" --seconds 8)
@@ -810,7 +887,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     for r in $runs {
         print $"fps: ($r.map) loaded in ($r.load_ms) ms; the first frame in ($r.frame.us) us over ($r.frame.sectors) sectors, ($r.frame.walls) walls, ($r.frame.pieces) pieces, ($r.frame.planes) planes, ($r.frame.openings) openings, ($r.frame.sprites) sprites, ($r.frame.uncovered) uncovered \(clear ($r.frame.clear), planes ($r.frame.plane_us), walls ($r.frame.wall_us), portals ($r.frame.portal_us), sprites ($r.frame.sprite_us) us\); the poses' frames in ($r.poses | each {|p| $p.us } | str join ', ') us with ($r.poses | each {|p| $p.uncovered } | str join ', ') uncovered; ($r.states) frames; QEMU ($r.cpu) CPU seconds"
     }
-    print $"fps: the sprite drawn in ($sprite_frame.us) us, ($sprite_frame.sprites) sprites in ($sprite_frame.sprite_us) us, ($sprite_frame.uncovered) uncovered, red at ($SPRITE_RIGHT) and the wall at ($SPRITE_LEFT)"
+    print $"fps: the sprite drawn in ($sprite_frame.us) us, ($sprite_frame.sprites) sprites in ($sprite_frame.sprite_us) us, ($sprite_frame.uncovered) uncovered, red at ($SPRITE_RIGHT) and the wall at ($SPRITE_LEFT); the straddling sprite's near end at ($straddle_at) its texture, ($straddle_frame.sprites) sprites in ($straddle_frame.us) us"
+    print $"fps: the growth map drew ($grow_sectors) in ($grow_frame.us) us with ($grow_frame.uncovered) uncovered, the far wall at ($grow_at) the backdrop"
     print $"fps: the walk from ($walk_first.x), ($walk_first.y), ($walk_first.z) in ($walk_first.sector) to ($walk_last.x), ($walk_last.y), ($walk_last.z) in ($walk_last.sector) through ($walk_sectors) over ($walk_states | length) frames, the eye ($walk_last.z) over the floor at ($floor)"
     print $"fps: proof loaded in ($proof_load.ms) ms; the spawn view in ($proof_frames | get 0 | get us) us with ($proof_frames | get 0 | get sprites) sprites, the poses in ($proof_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($proof_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($proof_sectors | slice 1.. | each {|s| $s | length } | str join ' and ') sectors"
     print $"fps: the stair from ($stair_first.x), ($stair_first.y), ($stair_first.z) in ($stair_first.sector) to ($stair_last.x), ($stair_last.y), ($stair_last.z) in ($stair_last.sector) through ($stair_sectors) over ($stair_states | length) frames"
@@ -959,9 +1037,12 @@ def sprite-tree [tree: path, out: path]: nothing -> string {
     let entity = ($m.entities | get $CONTENT.sprite.entity)
     assert equal $entity.class 2 $"the fixture names a sprite entity: ($entity)"
     assert equal ($ALPHA_CASES | get 0.name) $SPRITE_MATERIAL "the sprite's texture is the first alpha case"
+    let opaque = ($ALPHA_CASES | enumerate | where {|c| $c.item.name == $STRADDLE_MATERIAL } | get 0.index)
+    let s = $CONTENT.straddle.entity
+    let straddler = { class: 2, x: $s.x, y: $s.y, z: $s.z, yaw: $s.yaw, pitch: 0.0, width: $s.width, height: $s.height, material: ($index + $opaque), r: 1.0, g: 1.0, b: 1.0, radius: 0.0, spread: 0.0, flags: $STRADDLE_FLAGS, tag: 0, target: -1, sector: $s.sector }
     let patched = ($m
         | update materials ($m.materials | append ($ALPHA_CASES | each {|c| { name: $c.name, flags: 0 } }))
-        | update entities ($m.entities | update $CONTENT.sprite.entity {|e| $e | update material $index | update flags $SPRITE_FLAGS }))
+        | update entities ($m.entities | update $CONTENT.sprite.entity {|e| $e | update material $index | update flags $SPRITE_FLAGS } | append $straddler))
     map write $patched | save --raw -f $map_path
     for c in $ALPHA_CASES {
         let file = ($out | path join (map tile-path $c.name | str substring 1..))
@@ -1102,6 +1183,52 @@ def alpha-tree [source: record, game: path, out: path]: nothing -> string {
     let pixels = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).bytes } | bytes collect)
     png write-rgba $file $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h $pixels
     let backdrop = ($tree | path join (map tile-path $FIXTURE_BACKDROP.name | str substring 1..))
+    let texel = ([$FIXTURE_BACKDROP.colour, 0x[ff]] | bytes collect)
+    png write-rgba $backdrop $FIXTURE_BACKDROP.size $FIXTURE_BACKDROP.size (0..<($FIXTURE_BACKDROP.size * $FIXTURE_BACKDROP.size) | each {|i| $texel } | bytes collect)
+    $tree
+}
+
+# The growth map's source: eight rectangular sectors, the camera's room
+# C with a narrow high window W into the hall S and a door E into the
+# side room T, T's wide door G into S, and S's door H into the far room
+# D, every surface the panel but D's, which are the backdrop; a spawn in
+# C and no lights, so every texel reads exactly.
+def grow-source []: nothing -> record {
+    let room = {|name: string, loop: list<list<float>>, floor: float, ceiling: float, material: string|
+        {
+            name: $name, storey: "lower", tag: 0, ambient: "",
+            floor: { height: $floor, slope: [0.0, 0.0], material: $material, scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            ceiling: { height: $ceiling, slope: [0.0, 0.0], material: $material, scale: [0.5, 0.5], offset: [0.0, 0.0], sky: false },
+            wall: { material: $material, scale: [0.5, 0.5], offset: [0.0, 0.0], anchor: "top", solid: false, masked: false, sky: false, tag: 0 },
+            loops: [$loop], walls: [],
+        }
+    }
+    let back = ($FIXTURE_BACKDROP.name | path basename)
+    {
+        name: $GROW_MAP,
+        sectors: [
+            (do $room "C" [[0.0, 0.0], [4.0, 0.0], [4.0, 1.0], [4.0, 3.0], [4.0, 4.0], [2.5, 4.0], [1.5, 4.0], [0.0, 4.0]] 0.0 3.0 "panel"),
+            (do $room "W" [[1.5, 4.0], [2.5, 4.0], [2.5, 4.5], [1.5, 4.5]] 1.2 2.2 "panel"),
+            (do $room "E" [[4.0, 1.0], [4.5, 1.0], [4.5, 3.0], [4.0, 3.0]] 0.0 2.5 "panel"),
+            (do $room "T" [[4.5, 0.0], [8.5, 0.0], [8.5, 4.0], [8.0, 4.0], [4.75, 4.0], [4.5, 4.0], [4.5, 3.0], [4.5, 1.0]] 0.0 3.0 "panel"),
+            (do $room "G" [[4.75, 4.0], [8.0, 4.0], [8.0, 4.5], [4.75, 4.5]] 0.0 2.5 "panel"),
+            (do $room "S" [[0.0, 4.5], [1.5, 4.5], [2.5, 4.5], [4.75, 4.5], [8.0, 4.5], [8.0, 8.5], [7.5, 8.5], [5.5, 8.5], [0.0, 8.5]] 0.0 3.0 "panel"),
+            (do $room "H" [[5.5, 8.5], [7.5, 8.5], [7.5, 9.0], [5.5, 9.0]] 0.0 2.5 "panel"),
+            (do $room $GROW_FAR [[5.0, 9.0], [5.5, 9.0], [7.5, 9.0], [9.0, 9.0], [9.0, 13.0], [5.0, 13.0]] 0.0 3.0 $back),
+        ],
+        entities: [
+            { name: "spawn", class: "spawn", at: [2.0, 2.0, 0.0], yaw: 0.0, pitch: 0.0, size: [0.0, 0.0], material: "", colour: [0.0, 0.0, 0.0], radius: 0.0, spread: 0.0, facing: "fixed", two_sided: false, solid: false, tag: 0, target: "" },
+        ],
+    }
+}
+
+# The growth map compiled under out with the game's content and the
+# backdrop texture laid in after the compile, which names it
+# unresolved; the tree's path.
+def grow-tree [game: path, out: path]: nothing -> string {
+    let tree = (variant-tree (grow-source) $GROW_MAP [] $out $game)
+    let backdrop = ($tree | path join (map tile-path $FIXTURE_BACKDROP.name | str substring 1..))
+    mkdir ($backdrop | path dirname)
     let texel = ([$FIXTURE_BACKDROP.colour, 0x[ff]] | bytes collect)
     png write-rgba $backdrop $FIXTURE_BACKDROP.size $FIXTURE_BACKDROP.size (0..<($FIXTURE_BACKDROP.size * $FIXTURE_BACKDROP.size) | each {|i| $texel } | bytes collect)
     $tree

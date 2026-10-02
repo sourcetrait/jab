@@ -33,10 +33,25 @@ only per-frame evaluation left.
 The level length of the camera's right is jab.f64.vec2.len over camera_d's
 right, the doubles the basis already wrote.
 
-The quad is clipped to its sector's rectangle from the flow (world.S), as
-the sector's own surfaces are: a sprite is seen only through the openings
-its sector is, and a quad that pokes through a wall, an android walking
-along one, no longer shows its sliver in the sector beyond. The surface
-index the caller names in sprite_surface, a map sprite's by its entity and
-an actor's by its index, goes into the polygon for the span record and the
-owner build.
+The quad is clipped to its sector's rectangle from the flow (world.S)
+only when it is proven within the sector, by sprite_within: the pulled
+centre inside the sector by the even-odd rule; the level segment between
+the pulled half widths crossing no wall of the sector's loops, a touch or
+a collinear overlap counting as a crossing, the parallel case read as the
+segment's start within a millimetre of the wall's line and the rest as
+the crossing's shares along the segment and the wall within the unit
+range widened by a thousandth; and the quad's bottom and top within the
+floor and the ceiling at both ends of the segment, a millimetre's slack.
+A flat quad, or one unproven, draws over the whole screen, depth-tested
+as before. The rectangle bounds what is seen through the sector's
+openings, so it bounds a quad only while the quad lies in the sector: a
+quad straddling a doorway has visible parts on the camera's side of the
+portal plane, outside the rectangle, which the first form clipped away. A
+flat quad can enclose an inner loop with no edge crossing, and the pull
+toward the eye moves the centre and the extents, which is why the test
+runs on the pulled quad and flat quads stay unclipped. A quad that pokes
+through a solid wall is unproven and draws its sliver in the sector
+beyond, as before this clip; a sprite in a sector the flow did not reach
+is not drawn, as before. The surface index the caller names in
+sprite_surface, a map sprite's by its entity and an actor's by its index,
+goes into the polygon for the span record and the owner build.

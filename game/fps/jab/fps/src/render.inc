@@ -162,14 +162,19 @@
 # its read and its write never meet while sectors wait
 .set FLOW_RING, (MAX_SECTORS * 2)
 .set FLOW_RING_MASK, (FLOW_RING - 1)
-# A span the fill emits before drawing it: the row, the first pixel, the
-# pixel past the last, and the surface; SPAN_RECORDS of them a frame, the
-# count running on past the table when a frame has more, so a reader
-# takes the lesser
+# A span the fill emits before drawing it: the row, the first pixel, and
+# the pixel past the last, 16 bits each; the polygon's mode, 16 bits; the
+# surface, the stable index; and the polygon's serial in the frame, which
+# tells a masked opening's fill from its wall's pieces. SPAN_RECORDS of
+# them a frame; the count runs on past the table when a frame has more,
+# and a reader of a frame whose count passed the table falls back, since
+# the prefix it holds is not the frame
 .set SPAN_ROW, 0
-.set SPAN_X0, 4
-.set SPAN_X1, 8
-.set SPAN_SURFACE, 12
+.set SPAN_X0, 2
+.set SPAN_X1, 4
+.set SPAN_MODE, 6
+.set SPAN_SURFACE, 8
+.set SPAN_POLY, 12
 .set SPAN_RECORD_SIZE, 16
 .set SPAN_RECORDS, (1 << 16)
 # The frame a map is baked over, in texels: the world point at texel

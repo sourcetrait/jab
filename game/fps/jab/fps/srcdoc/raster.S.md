@@ -271,10 +271,17 @@ rectangles reject nothing either, the depth buffer resolving every pixel.
 The span record, sixteen bytes a span in a table of SPAN_RECORDS, is the
 interface the tile pool and a sorted span renderer share: the pool will
 read the frame's records to learn which cells its spans touch, and a
-span sorter produces the same records from its own machinery. The count
-runs past the table on a frame with more spans, so a reader takes the
-lesser and knows the overflow; the gauge's views run to twenty thousand
-spans against the table's sixty-five thousand.
+span sorter produces the same records from its own machinery. A record
+carries the row and the span's two ends in sixteen bits each, the
+polygon's mode, the surface index, and the polygon's serial in the
+frame: the surface is the stable identity the owner build shares, and
+the serial tells a masked opening's fill from its wall's solid pieces,
+which carry the same surface, so a consumer that orders primitives has
+each submission apart. The count runs past the table on a frame with
+more spans, and the contract is that a reader of such a frame falls back
+rather than reading the prefix as the frame, since the prefix is not the
+frame; the gauge's views run to twenty thousand spans against the
+table's sixty-five thousand.
 
 ## The owner build
 
