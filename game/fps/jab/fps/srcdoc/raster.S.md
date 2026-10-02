@@ -264,8 +264,11 @@ two bytes short of the boundary at 0x80a03000 and cost the up flight 1.2 ms
 a frame, read on two batteries against the build before and confirmed by
 an interleaved probe; the family on its own page returned the wall phase to
 24.2 ms from 25.5, where poly_fill aligned alone, its helpers still across
-the boundary, returned half of that. The family is 572 bytes, so the page
-holds it with room; the test guards each member as it guards span_fill.
+the boundary, returned half of that. The family is 554 bytes from the
+directive, so the page holds it with room; the test guards each member as
+it guards span_fill and the five together on one page, since five members
+each within a page of its own would pass the first guard with the calls
+crossing again.
 
 ## poly_fill
 

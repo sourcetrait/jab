@@ -407,9 +407,9 @@ sprite_draw:
 # Whether a standing sprite's quad is proven within a sector: its pulled
 # centre inside the sector in the plan, its level segment crossing no
 # wall of the sector's loops, a touch or a collinear overlap counting as
-# a crossing, and its bottom and top within the floor and the ceiling at
-# both ends of the segment, a millimetre's slack throughout; anything
-# short of that is not proven
+# a crossing, and its bottom and top a millimetre or more inside the
+# floor and the ceiling at both ends of the segment; every slack points
+# toward unproven, so anything short of that is not proven
 # a0 int The sector
 # fs0 f64 The pulled centre's x; fs1 y; fs2 z
 # fs3 f64 The pulled half width's x; fs4 y, level
@@ -530,7 +530,8 @@ sprite_within:
     addi s5, s5, 1
     j 1b
 5:
-    # the quad's bottom and top within the planes at both ends
+    # the quad's bottom and top a millimetre or more inside the planes at
+    # both ends, the margin pointing toward unproven
     fabs.d ft11, fs8
     fsub.d fs11, fs2, ft11          # the bottom
     fadd.d fs10, fs2, ft11          # the top
@@ -541,9 +542,9 @@ sprite_within:
     call plane_height               # the floor at a
     la t0, k_thousandth_d
     fld ft0, 0(t0)
-    fsub.d fa0, fa0, ft0
+    fadd.d fa0, fa0, ft0
     flt.d t1, fs11, fa0
-    bnez t1, 8f                     # the bottom under the floor
+    bnez t1, 8f                     # the bottom under the floor's margin
     mv a0, s4
     li a1, 1
     fld fa0, 0(sp)
@@ -551,9 +552,9 @@ sprite_within:
     call plane_height               # the ceiling at a
     la t0, k_thousandth_d
     fld ft0, 0(t0)
-    fadd.d fa0, fa0, ft0
+    fsub.d fa0, fa0, ft0
     flt.d t1, fa0, fs10
-    bnez t1, 8f                     # the top over the ceiling
+    bnez t1, 8f                     # the top over the ceiling's margin
     mv a0, s4
     li a1, 0
     fld fa0, 16(sp)
@@ -561,7 +562,7 @@ sprite_within:
     call plane_height               # the floor at b
     la t0, k_thousandth_d
     fld ft0, 0(t0)
-    fsub.d fa0, fa0, ft0
+    fadd.d fa0, fa0, ft0
     flt.d t1, fs11, fa0
     bnez t1, 8f
     mv a0, s4
@@ -571,7 +572,7 @@ sprite_within:
     call plane_height               # the ceiling at b
     la t0, k_thousandth_d
     fld ft0, 0(t0)
-    fadd.d fa0, fa0, ft0
+    fsub.d fa0, fa0, ft0
     flt.d t1, fa0, fs10
     bnez t1, 8f
     li a0, 1

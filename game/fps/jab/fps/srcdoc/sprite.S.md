@@ -40,9 +40,14 @@ the pulled half widths crossing no wall of the sector's loops, a touch or
 a collinear overlap counting as a crossing, the parallel case read as the
 segment's start within a millimetre of the wall's line and the rest as
 the crossing's shares along the segment and the wall within the unit
-range widened by a thousandth; and the quad's bottom and top within the
-floor and the ceiling at both ends of the segment, a millimetre's slack.
-A flat quad, or one unproven, draws over the whole screen, depth-tested
+range widened by a thousandth; and the quad's bottom and top a millimetre
+or more inside the floor and the ceiling at both ends of the segment.
+Every slack points toward unproven: the margin inside the volume is
+conservative, where a band outside it accepted a sliver that can stand in
+the sector above or below through a stacking gap under a millimetre, which
+the compiler allows, and half a millimetre at 0.125 m depth is nearly four
+pixels. A flat quad, or one unproven, draws over the whole screen,
+depth-tested
 as before. The rectangle bounds what is seen through the sector's
 openings, so it bounds a quad only while the quad lies in the sector: a
 quad straddling a doorway has visible parts on the camera's side of the

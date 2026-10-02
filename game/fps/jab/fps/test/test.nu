@@ -231,6 +231,11 @@ const HOT_ECALLS = {
     span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2,
     row_crossings: 0, span_bound: 0, row_range: 0, poly_fill: 0, span_record: 0,
 }
+# the span loop's family, together on one page: poly_fill's loop runs
+# once a span and calls span_bound twice a span, so a member on another
+# page costs every span a lookup, which each member within a page of its
+# own does not catch
+const HOT_FAMILY = [row_crossings span_bound row_range poly_fill span_record]
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -952,16 +957,24 @@ def block-sum [bytes: binary, at: list<int>]: nothing -> int {
 }
 
 # Each hot function within one page of code and trapping no more than
-# its table says, through the SDK's `jab hot` over the ELF beside the
-# image: QEMU's translator ends a block at a page boundary and chains
-# blocks within a page only, so a loop straddling one runs seven times
-# slower, and a trap in a per-pixel loop would cost more.
+# its table says, and the span loop's family together on one page,
+# through the SDK's `jab hot` over the ELF beside the image: QEMU's
+# translator ends a block at a page boundary and chains blocks within a
+# page only, so a loop straddling one runs seven times slower, a call
+# across one costs a lookup, and a trap in a per-pixel loop would cost
+# more. `jab hot` gives an end exclusive, so a page is an end less one's.
 def hot-functions [image: path]: nothing -> nothing {
     let elf = ($image | path dirname | path join "fps.elf")
-    for h in (jab hot $elf $HOT_FUNCTIONS) {
+    let hot = (jab hot $elf $HOT_FUNCTIONS)
+    for h in $hot {
         assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
         assert equal $h.ecalls ($HOT_ECALLS | get $h.name) $"($h.name) traps inside its page"
     }
+    let family = ($hot | where {|h| $h.name in $HOT_FAMILY })
+    assert equal ($family | length) ($HOT_FAMILY | length) "every member of the span loop's family among the hot functions"
+    let lowest = ($family | get start | math min)
+    let highest = (($family | get end | math max) - 1)
+    assert equal ($lowest // 4096) ($highest // 4096) $"the span loop's family within one page of code together: ($lowest) to ($highest)"
 }
 
 # A release build carries none of the program's debug text, every
