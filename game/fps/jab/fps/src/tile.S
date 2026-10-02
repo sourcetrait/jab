@@ -489,130 +489,7 @@ tile_shrink:
     add a6, a6, s5
     lwu t2, 0(a6)
     lwu t3, 4(a6)
-    srli t4, a0, 24                 # the four alphas
-    srli t5, a7, 24
-    srli t6, t2, 24
-    srli a3, t3, 24
-    add a1, t4, t5
-    add a1, a1, t6
-    add a1, a1, a3                  # their sum
-    bne t4, t5, 5f
-    bne t4, t6, 5f
-    bne t4, a3, 5f
-    # alike: the plain mean a channel, the alpha theirs
-    andi a2, a0, 0xff
-    andi a4, a7, 0xff
-    add a2, a2, a4
-    andi a4, t2, 0xff
-    add a2, a2, a4
-    andi a4, t3, 0xff
-    add a2, a2, a4
-    srli a2, a2, 2                  # blue
-    srli a4, a0, 8
-    andi a4, a4, 0xff
-    srli t0, a7, 8
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli t0, t2, 8
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli t0, t3, 8
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli a4, a4, 2
-    slli a4, a4, 8
-    or a2, a2, a4                   # green
-    srli a4, a0, 16
-    andi a4, a4, 0xff
-    srli t0, a7, 16
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli t0, t2, 16
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli t0, t3, 16
-    andi t0, t0, 0xff
-    add a4, a4, t0
-    srli a4, a4, 2
-    slli a4, a4, 16
-    or a2, a2, a4                   # red
-    mv a5, t4                       # the alpha
-    j 6f
-5:
-    # unalike: each channel's mean weighted by the alphas, so a
-    # transparent texel's colour counts for nothing, by one reciprocal
-    # of their sum, each product rounded to the nearest so an exact
-    # mean survives; the alpha their mean
-    li t0, (1 << 24)
-    divu t0, t0, a1                 # the reciprocal of the sum, 8.24
-    andi a2, a0, 0xff
-    mul a2, a2, t4
-    andi a4, a7, 0xff
-    mul a4, a4, t5
-    add a2, a2, a4
-    andi a4, t2, 0xff
-    mul a4, a4, t6
-    add a2, a2, a4
-    andi a4, t3, 0xff
-    mul a4, a4, a3
-    add a2, a2, a4
-    mul a2, a2, t0
-    li a4, (1 << 23)
-    add a2, a2, a4
-    srli a2, a2, 24                 # blue
-    srli a4, a0, 8
-    andi a4, a4, 0xff
-    mul a4, a4, t4
-    srli a5, a7, 8
-    andi a5, a5, 0xff
-    mul a5, a5, t5
-    add a4, a4, a5
-    srli a5, t2, 8
-    andi a5, a5, 0xff
-    mul a5, a5, t6
-    add a4, a4, a5
-    srli a5, t3, 8
-    andi a5, a5, 0xff
-    mul a5, a5, a3
-    add a4, a4, a5
-    mul a4, a4, t0
-    li a5, (1 << 23)
-    add a4, a4, a5
-    srli a4, a4, 24
-    slli a4, a4, 8
-    or a2, a2, a4                   # green
-    srli a4, a0, 16
-    andi a4, a4, 0xff
-    mul a4, a4, t4
-    srli a5, a7, 16
-    andi a5, a5, 0xff
-    mul a5, a5, t5
-    add a4, a4, a5
-    srli a5, t2, 16
-    andi a5, a5, 0xff
-    mul a5, a5, t6
-    add a4, a4, a5
-    srli a5, t3, 16
-    andi a5, a5, 0xff
-    mul a5, a5, a3
-    add a4, a4, a5
-    mul a4, a4, t0
-    li a5, (1 << 23)
-    add a4, a4, a5
-    srli a4, a4, 24
-    slli a4, a4, 16
-    or a2, a2, a4                   # red
-    srli a5, a1, 2                  # the alpha, the mean
-6:
-    # the alpha scaled by the level's factor, capped
-    mul a5, a5, s6
-    srli a5, a5, ALPHA_SCALE_BITS
-    li a4, 255
-    bleu a5, a4, 7f
-    mv a5, a4
-7:
-    slli a5, a5, 24
-    or a2, a2, a5
+    texel_shrink
     slli a6, s8, 2
     add a6, a6, s2
     sw a2, 0(a6)
@@ -637,8 +514,9 @@ tile_shrink:
     addi sp, sp, 80
     ret
 
-# Every map material's alpha coverage by tile level and the scale that
-# holds it, into material_alpha: level 0's share of texels at or above
+# Every material's alpha coverage by level of its chain, the map's and
+# the engine's images', and the scale that holds it, into
+# material_alpha: level 0's share of texels at or above
 # the pass is the target; each coarser level's alphas are the means of
 # the level before, as tile_shrink makes them, and the threshold T whose
 # share at or above it lies nearest the target becomes the level's scale,
@@ -671,7 +549,9 @@ alphas_measure:
     sw t2, 0(t0)
     addi t0, t0, ALPHA_LEVEL_SIZE
     bltu t0, t1, 1b
-    section_count KIND_MATERIALS, s2
+    la t0, frame_base
+    lwu s2, 0(t0)
+    addi s2, s2, FRAME_COUNT        # every record: the map's materials and the engine's images
     li s3, 0                        # the material
 2:
     bgeu s3, s2, 90f
@@ -689,6 +569,11 @@ alphas_measure:
     li t0, 8
     bltu s6, t0, 8f
     bltu s7, t0, 8f
+    mv a0, s6
+    mv a1, s7
+    call mip_levels
+    la t0, alpha_chain_levels
+    sd a0, 0(t0)                    # the chain's levels, the scales to find
     mul s8, s6, s7                  # the texels
     srli t0, s8, 2
     li t1, ALPHA_PLANE_BYTES
@@ -730,7 +615,8 @@ alphas_measure:
     sd t0, 16(sp)                   # the level
 4:
     ld t0, 16(sp)
-    li t1, TILE_LEVEL_COUNT
+    la t1, alpha_chain_levels
+    ld t1, 0(t1)
     bgeu t0, t1, 7f
     ld a0, 0(sp)
     srli a0, a0, 1
@@ -796,6 +682,9 @@ alphas_measure:
     la a1, msg_alpha
     call append_str
     sd a0, 32(sp)
+    # the map material's name, or the engine's image by its frame
+    section_count KIND_MATERIALS, t0
+    bgeu s3, t0, 71f
     mv a0, s3
     call material_at
     lwu a0, MATERIAL_NAME(a0)
@@ -803,6 +692,16 @@ alphas_measure:
     mv a1, a0
     ld a0, 32(sp)
     call append_str
+    j 72f
+71:
+    ld a0, 32(sp)
+    la a1, word_frame_name
+    call append_str
+    la t0, frame_base
+    lwu a1, 0(t0)
+    sub a1, s3, a1
+    call append_dec
+72:
     la a1, word_coverage
     call append_str
     la t0, alpha_cover
@@ -1035,6 +934,8 @@ lumels_bright:
 .ifdef DEBUG
 msg_alpha:
     .asciz "fps: alpha "
+word_frame_name:
+    .asciz "frame "
 word_coverage:
     .asciz ": coverage "
 word_of_share:
@@ -1064,7 +965,10 @@ material_alpha:
 alpha_hist:
     .skip (256 * 8)
 alpha_cover:
-    .skip (TILE_LEVEL_COUNT * 8)
+    .skip (MIP_LEVELS * 8)
+# The chain's levels of the material in hand, the scales to find
+alpha_chain_levels:
+    .skip 8
 alpha_plane_a:
     .skip ALPHA_PLANE_BYTES
 alpha_plane_b:

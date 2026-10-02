@@ -789,6 +789,17 @@ material_bind:
     add t0, t0, t2
     ld t0, 0(t0)
     beqz t0, 8f
+    # its chain's table and levels, for a block's read at its level
+    la t4, material_mips
+    li t2, MIP_ENTRY
+    mul t2, a0, t2
+    add t4, t4, t2
+    sd t4, POLY_MIPS(t1)
+    la t4, material_mip_count
+    slli t2, a0, 3
+    add t4, t4, t2
+    ld t4, 0(t4)
+    sd t4, POLY_MIP_COUNT(t1)
     lwu t2, JAB_SPRITE_WIDTH(t0)
     lwu t3, JAB_SPRITE_HEIGHT(t0)
     addi t4, t0, JAB_SPRITE_PIXELS

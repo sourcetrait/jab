@@ -73,6 +73,14 @@ past the table meaning a reader falls back for that frame. The owner_pixel macro
 load from span_fill's slot under OWNER and nothing otherwise, so the
 pixel loops carry the instrument at no cost to a normal build.
 
+The mip constants: MIP_LEVELS is the chain's depth at most, ten taking a
+512-texel side to one; the entry is a level's texels eight bytes a level;
+the arena is 32 MiB in bss, free until touched, where the factory's
+chains take about six, a chain being a third of its texture. POLY_MIPS
+and POLY_MIP_COUNT carry the material's table and its levels for the
+block's bind (raster.S). ALPHA_MATERIAL_SIZE grew to a scale a chain
+level, since the chain is built under the same scales as the tiles.
+
 The tile record and the polygon's six tile fields carry what the span's
 block judgement and its tile loop need beyond the map's word: the atlas,
 the column shift, the cells across and down that a block's box must lie

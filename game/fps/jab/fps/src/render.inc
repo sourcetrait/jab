@@ -116,7 +116,11 @@
 # SURFACE_SPRITES plus its entity, an actor at SURFACE_ACTORS plus its
 # index
 .set POLY_SURFACE, 280
-.set POLY_SIZE, 288
+# The material's chain, its table of a level's texels eight bytes a level
+# (mip.S), and the levels it has, which a block's level is held under
+.set POLY_MIPS, 288
+.set POLY_MIP_COUNT, 296
+.set POLY_SIZE, 304
 .set LUMEL_OFFSET_BITS, 24
 .set LUMEL_ROWBYTES_SHIFT, 24
 .set LUMEL_ROWS_SHIFT, 40
@@ -243,21 +247,33 @@
 .set TILE_ATLAS_MAX, (64 * 1024 * 1024)
 .set TILE_BUDGET, (24 * 64 * 64)
 .set TILE_BUDGET_UNBOUND, (1 << 40)
+# A material's mip chain: the texels of each level from 1, level 0 the
+# record's own, each level half a side of the one before, built at load
+# by the tile shrink's rule under the level's alpha scale (mip.S), so a
+# lit or unlit span reads the level a block's footprint asks for and the
+# lit loop and a tile at one level hold the same texel; MIP_LEVELS deep
+# at most, a level while both sides stay two texels or more and the
+# arena holds it; a material's table holds a level's texels eight bytes
+# a level
+.set MIP_LEVELS, 10
+.set MIP_ENTRY, (MIP_LEVELS * 8)
+.set MIP_ARENA_BYTES, (32 * 1024 * 1024)
 # A masked texel passes at an alpha at or above ALPHA_PASS, at every
 # level. A material's alpha scale a level, 16.16, by which a coarser
-# level's mean alpha is scaled at its tile's build so the level's share
-# of texels passing stays near the texture's: ceil(2^23 / T) for the
-# threshold T the load's search chose, which lands a mean at or above T
-# at or above the pass and nothing under T there; one, ALPHA_SCALE_ONE,
-# where the levels pass as the texture does. ALPHA_PLANE_BYTES bounds
-# the scratch a level's alphas take at the search, a texture past it
-# left at one; ALPHA_SHARE is the unit the debug line reports a share in
+# level's mean alpha is scaled at a tile's or a chain level's build so
+# the level's share of texels passing stays near the texture's:
+# ceil(2^23 / T) for the threshold T the load's search chose, which
+# lands a mean at or above T at or above the pass and nothing under T
+# there; one, ALPHA_SCALE_ONE, where the levels pass as the texture
+# does; a scale a level of the chain. ALPHA_PLANE_BYTES bounds the
+# scratch a level's alphas take at the search, a texture past it left
+# at one; ALPHA_SHARE is the unit the debug line reports a share in
 .set ALPHA_PASS, 128
 .set ALPHA_SCALE_BITS, 16
 .set ALPHA_SCALE_ONE, (1 << ALPHA_SCALE_BITS)
 .set ALPHA_SCALE_TOP, (ALPHA_PASS << ALPHA_SCALE_BITS)
 .set ALPHA_LEVEL_SIZE, 4
-.set ALPHA_MATERIAL_SIZE, (TILE_LEVEL_COUNT * ALPHA_LEVEL_SIZE)
+.set ALPHA_MATERIAL_SIZE, (MIP_LEVELS * ALPHA_LEVEL_SIZE)
 .set ALPHA_PLANE_BYTES, (256 * 1024)
 .set ALPHA_SHARE, 10000
 # A light as the engine holds it, floats: the position, the colour, the

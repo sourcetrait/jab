@@ -2,7 +2,9 @@
 
 The load order is the dependency order: the map's records are checked before
 anything indexes them, the materials load before the engine's images, whose
-records follow the map's, the lights before the lumel maps, which bake over
+records follow the map's, the alpha coverage and the mip chains after both,
+since the images' chains want the policy as the map's do, the lights before
+the lumel maps, which bake over
 the sector lists, the maps before the actors, whose placement reads the
 sector floors, and the camera last, since its basis writes camera_d for the
 surface mathematics. The frame loop runs the game's phases before the
@@ -15,8 +17,9 @@ after each console placement, so a test reads the frame it posed, with the
 walk's order after it; a release build carries neither the report routines
 nor their text and says nothing but an exit, jab's rule for a program, which
 the test holds by scanning a release image it builds for every `fps: `
-string. The load line, the bake's, the frames', the sounds', the soundfont's,
-and the ambient's lines are under the same conditional at their sites, with
+string. The load line, the bake's, the chains', the frames', the sounds',
+the soundfont's, and the ambient's lines are under the same conditional at
+their sites, with
 their text beside it, while a load that fails keeps its exit line in every
 build, as a fault line stays on the UART. The line's tail, the spans and the
 pixels they entered, the lit ones among them,

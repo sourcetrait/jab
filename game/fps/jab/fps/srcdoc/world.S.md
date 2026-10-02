@@ -103,6 +103,10 @@ the per-polygon list had no reader on the baked path, and the box and the
 cull ran for nothing; a sprite still culls for its one evaluation
 (sprite.S), and the bake culls once a map (light.S).
 
+material_bind names the material's mip chain in the polygon beside its
+texture, the table of levels and the levels it has (mip.S), which the
+span's blocks read at their footprint's level (raster.S).
+
 Every plane and wall piece, and a masked opening's fill, binds its tiles
 right before its fill (tiles_bind, tile.S): after the mode and the map's
 bind, since the tiled flag rides the lit one, and after the loops'

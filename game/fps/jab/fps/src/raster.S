@@ -908,9 +908,41 @@ poly_rect:
     add a5, a0, t4
 .endm
 
+# The texture's level for the block in hand bound for the loops: the
+# block's level held under the chain's levels, the level's texels and
+# its masks and row shift into the texture's registers, and u, v, and
+# their steps a pixel shifted to the level's resolution, the lumel map
+# having been sampled at level 0 before; the block's end reloads level
+# 0's exact coordinates for the next
+# returns Clobbers a5 to a7; a1 to a4, s8, s9, t5, t6 rebound
+.macro mip_bind
+    ld a5, 192(sp)                  # the block's level
+    la a6, poly
+    ld a7, POLY_MIP_COUNT(a6)
+    addi a7, a7, -1
+    ble a5, a7, .Lmip_held\@
+    mv a5, a7                       # held under the chain's levels
+.Lmip_held\@:
+    ld a1, POLY_MIPS(a6)
+    slli a7, a5, 3
+    add a1, a1, a7
+    ld a1, 0(a1)                    # the level's texels
+    ld a2, POLY_VMASK(a6)
+    srl a2, a2, a5
+    ld a3, POLY_UMASK(a6)
+    srl a3, a3, a5
+    ld a4, POLY_WSHIFT(a6)
+    sub a4, a4, a5
+    sra s8, s8, a5
+    sra s9, s9, a5
+    sra t5, t5, a5
+    sra t6, t6, a5
+.endm
+
 # The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
 # masked, sky, or lit, from its lumel map at the lumel's own cadence or flat
-# by one brightness; no float in the loop
+# by one brightness, the texture read from its chain at each block's level;
+# no float in the loop
 # a0 int The first pixel
 # a1 int The pixel past the last
 # a2 int The row
@@ -1013,18 +1045,13 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
-    # a tiled surface's span judged once for its tiles: the end's texel
+    # every span's footprint, for its blocks' levels: the end's texel
     # coordinates at one divide, the step down a row at each end at a
-    # divide each, and the levels the surface has whole, which bound
-    # every block's level; a span past the map's edge keeps the lit
-    # loop, which clamps. The bound and the row step's start and change
-    # a pixel ride the frame for the blocks. The texture's four
-    # registers serve as scratch and are reloaded after
+    # divide each, and the row step's change a pixel, which ride the
+    # frame for the blocks. The texture's four registers serve as
+    # scratch and are reloaded after
     li t3, -1
     sd t3, 200(sp)                  # no tiles for the span
-    ld t3, 16(sp)
-    andi t3, t3, POLY_TILED
-    beqz t3, 29f
     la a0, poly
     mul t3, s10, s3
     add t3, s2, t3                  # 1/z at the end
@@ -1045,24 +1072,6 @@ span_fill:
     mul a6, a6, t4
     srai a6, a6, 16                 # v at the end
     sd a6, 184(sp)
-    # the span's ends inside the map, else the lit loop
-    ld a7, POLY_LUMEL(a0)
-    srli a7, a7, LUMEL_K_SHIFT
-    addi a7, a7, 16                 # k + 16: a coordinate to its cell
-    sra a1, s8, a7
-    bltz a1, 29f
-    sra a2, a5, a7
-    bltz a2, 29f
-    ld t4, POLY_TILE_COLS(a0)
-    bge a1, t4, 29f
-    bge a2, t4, 29f
-    sra a1, s9, a7
-    bltz a1, 29f
-    sra a2, a6, a7
-    bltz a2, 29f
-    ld t4, POLY_TILE_ROWS(a0)
-    bge a1, t4, 29f
-    bge a2, t4, 29f
     # the step down a row at the start
     ld a6, POLY_IZB(a0)
     add a6, a6, s2
@@ -1132,7 +1141,31 @@ span_fill:
     sub t3, a6, a7
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
-    # the level a block may reach, the levels the surface has whole
+    # a tiled surface's span judged once for its tiles: its ends inside
+    # the map, else the lit loop, which clamps; the levels the surface
+    # has whole bound every block's level
+    ld t3, 16(sp)
+    andi t3, t3, POLY_TILED
+    beqz t3, 29f
+    ld a7, POLY_LUMEL(a0)
+    srli a7, a7, LUMEL_K_SHIFT
+    addi a7, a7, 16                 # k + 16: a coordinate to its cell
+    sra a1, s8, a7
+    bltz a1, 29f
+    ld a5, 168(sp)
+    sra a2, a5, a7
+    bltz a2, 29f
+    ld t4, POLY_TILE_COLS(a0)
+    bge a1, t4, 29f
+    bge a2, t4, 29f
+    sra a1, s9, a7
+    bltz a1, 29f
+    ld a6, 184(sp)
+    sra a2, a6, a7
+    bltz a2, 29f
+    ld t4, POLY_TILE_ROWS(a0)
+    bge a1, t4, 29f
+    bge a2, t4, 29f
     ld t3, POLY_TILE_READY(a0)
     addi t3, t3, -1
     sd t3, 200(sp)
@@ -1194,22 +1227,11 @@ span_fill:
     sd t5, 8(sp)
     mv t5, t4
     mv t2, s11
-    li t4, 0                        # the pixels past the depth test this block
-    ld t3, 16(sp)
-    andi a5, t3, POLY_LIT
-    bnez a5, 44f
-    li a5, POLY_MASKED
-    beq t3, a5, 50f
-    j 40f
-44:
-    # lit: a span judged for its tiles (the prologue) takes them block
-    # by block at the block's own level, the largest of its texel steps
+    # the block's level by its footprint: the largest of its texel steps
     # along the span and down a row, the row's interpolated along the
-    # span, held under the levels the surface has whole; a block read
-    # from tiles pays no sample, no interval, and no brightness carry. A
-    # span with no tiles takes the lit loop whole
-    ld a5, 200(sp)
-    bltz a5, 4300f
+    # span; level m where the step is under 2^(m + 1) texels, the chain's
+    # last at most, which the tiles and the loops each hold under what
+    # they have
     srai a6, t5, 63
     xor a7, t5, a6
     sub a7, a7, a6                  # |du|
@@ -1230,19 +1252,35 @@ span_fill:
     sd a6, 208(sp)                  # and at the next block
     srli a7, a7, 17
     li a6, 0
-    beqz a7, 434f
-    li a6, 1
-    srli a7, a7, 1
-    beqz a7, 434f
-    li a6, 2
-    srli a7, a7, 1
-    beqz a7, 434f
-    li a6, 3
 434:
+    beqz a7, 435f
+    li a0, (MIP_LEVELS - 1)
+    bge a6, a0, 435f
+    addi a6, a6, 1
+    srli a7, a7, 1
+    j 434b
+435:
+    sd a6, 192(sp)                  # the block's level
+    li t4, 0                        # the pixels past the depth test this block
+    ld t3, 16(sp)
+    andi a5, t3, POLY_LIT
+    bnez a5, 44f
+    li a5, POLY_MASKED
+    beq t3, a5, 500f
+    j 400f
+44:
+    # lit: a span judged for its tiles (the prologue) takes them block
+    # by block at the block's level held under the levels the surface
+    # has whole; a block read from tiles pays no sample, no interval, and
+    # no brightness carry. A span with no tiles takes the lit loop at the
+    # chain's level
+    ld a5, 200(sp)
+    bltz a5, 4300f
+    ld a6, 192(sp)
     ble a6, a5, 436f
     mv a6, a5                       # held under the levels whole
 436:
-    sd a6, 192(sp)                  # the block's level
+    sd a6, 192(sp)
     j 80f
 4300:
     ld t3, 160(sp)
@@ -1372,6 +1410,7 @@ span_fill:
 49:
     sub a5, a5, s11
     sd a5, 152(sp)                  # the interval's pixels left after this block
+    mip_bind
     li t4, 0
     ld a5, 16(sp)
     andi a5, a5, POLY_MASKED
@@ -1595,6 +1634,8 @@ span_fill:
     li a5, -1
     sd a5, 160(sp)
     j 60f
+400:
+    mip_bind
 40:
     # textured: the depth test, then the texel and the stores
     lwu a7, 0(t1)
@@ -1621,6 +1662,8 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 40b
     j 60f
+500:
+    mip_bind
 50:
     # masked: the depth test, then the texel, whose alpha under the pass
     # leaves the pixel

@@ -25,7 +25,7 @@
 # exact colour where the oracle's scaled means pass, the weighted mean
 # of the shrink among those colours, and the solid backdrop behind
 # where they do not, the lit loop's picture from the same build
-# agreeing at level 0; the flow's three fixtures, a sprite straddling a
+# agreeing at every level; the flow's three fixtures, a sprite straddling a
 # doorway drawn whole beside it, the eye on the line two sectors share
 # reaching the sector behind it, and a map where a hall's rectangle
 # grows through a later path before the room beyond it can be reached;
@@ -140,6 +140,7 @@ const ALPHA_CASES = [
     { name: "test/small", w: 8, h: 8, kind: "block", alpha: 255 },
 ]
 const ALPHA_LINE = "fps: alpha {name}: coverage {c0} {c1} {c2} {c3} of 10000, scale {s1} {s2} {s3} of 65536"
+const MIPS_LINE = "fps: mips {chains} chains, {levels} levels, {texels} texels in {ms} ms"
 const ALPHA_PASS = 128
 const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
 # The alpha policy rendered: the proof map's grate wall given a texture
@@ -161,8 +162,8 @@ const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
 # texel of every patch in two repeats over the wall, none under the
 # crosshair; the poses head-on at distances where the wall's blocks
 # read level 0, 1, and 2 by the block's rule over 512 texels a metre,
-# the first two run again with the tiles held off for the lit loop's
-# picture; the opening compared inset from its edges
+# each run again with the tiles held off for the lit loop's picture,
+# identical at every level; the opening compared inset from its edges
 const FIXTURE_MAP = "proof_alpha"
 const ALPHA_FIXTURE = { name: "texture/alphafix", w: 256, h: 256, patch: 64, scale: 2.0 }
 const FIXTURE_BACKDROP = { name: "texture/alphaback", size: 16, colour: 0x[30 30 30] }
@@ -180,7 +181,7 @@ const FIXTURE_REPEATS = [[1, 1], [2, 2]]
 const FIXTURE_POSES = [
     { name: "near", distance: 2.0, level: 0, lit: true },
     { name: "mid", distance: 5.5, level: 1, lit: true },
-    { name: "far", distance: 10.0, level: 2, lit: false },
+    { name: "far", distance: 10.0, level: 2, lit: true },
 ]
 const FIXTURE_INSET = 8
 # The radius a sample must lie outside of about the screen's centre,
@@ -252,6 +253,7 @@ const DEBUG_TEXT = [
     "fps: sound "
     "fps: sounds "
     "fps: alpha "
+    "fps: mips "
 ]
 const EXIT_TEXT = [
     "fps: "
@@ -540,6 +542,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert equal ($proof_read.sectors | get (do $proof_index "door") | get tag) 1 "the door sector carries its tag"
     # the grate as authored: its coarser levels' share within the slack
     alpha-held $proof_lines "texture/grate"
+    let proof_mips = (mips-built $proof_lines)
     plan-views $proof_tree $proof_source $proof_read
 
     # the stair: from the proof map's spawn the left stick held forward
@@ -649,6 +652,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the fence as authored: each coarser level's share at or above the
     # pass within the slack of the texture's
     alpha-held $factory_lines "texture/fence"
+    let factory_mips = (mips-built $factory_lines)
     plan-views $factory_tree $factory_source $factory_read
 
     # the factory walked, one launch of three placed starts with the
@@ -777,10 +781,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # and at the coarser levels the scale the search chose lifts the 127
     # patches and the varied ones over the pass, the yellow surviving
     # the weighted mean over black and the red and blue mixing as the
-    # shrink's rule says; the first two poses run again with the tiles
-    # held off draw the lit loop's picture, identical over the opening
-    # at level 0 and, at level 1, differing from the tiled one on a
-    # uniform patch exactly where the level's pass differs from level 0's
+    # shrink's rule says; each pose run again with the tiles held off
+    # draws the lit loop's picture from the texture's chain at the same
+    # level, read the same way and identical over the opening
     let fixture_alphas = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).alphas } | flatten)
     let fixture_levels = (alpha-levels $fixture_alphas $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h)
     assert $fixture_levels.line "the fixture is under full coverage, so the engine names a line for it"
@@ -833,7 +836,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             }
             assert ($run.screen != "") $"a screen was taken on ($label)"
             let bytes = (open --raw $run.screen | into binary)
-            let read_level = (if $mode == "tiled" { $level } else { 0 })
+            let read_level = $level
             let read = (fixture-read $bytes $eye $fixture_samples $read_level)
             for r in ($read | where {|r| $r.uniform or $read_level > 0 }) {
                 if $r.shows {
@@ -846,17 +849,23 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         }
     }
     # the lit loop's picture against the tiled one over the whole
-    # opening: the fixture reads level 0 in both runs, and the solid
-    # alcove behind it reads one colour at any level, its side walls
-    # seen obliquely reaching level 1 at their far end
-    let opening = (fixture-opening $fixture_read $fixture_wall $fixture_runs.near_tiled.eye)
-    let differing = (rows-differ $fixture_runs.near_tiled.bytes $fixture_runs.near_lit.bytes $opening)
-    assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level 0: rows ($differing | first 5) differ, ($differing | length) in all"
-    let mid_pairs = ($fixture_runs.mid_tiled.read | zip $fixture_runs.mid_lit.read | where {|p| $p.0.uniform })
-    for pair in $mid_pairs {
-        assert equal ($pair.0.pixel == $pair.1.pixel) ($pair.0.shows == $pair.1.shows) $"the ($pair.0.kind) patch at ($pair.0.at) differs between the tiles and the lit loop exactly where level 1's pass differs from level 0's: ($pair.0.pixel | encode hex) against ($pair.1.pixel | encode hex), shown ($pair.0.shows) against ($pair.1.shows)"
+    # opening at every level: the tiles are built from the texture by
+    # the shrink's rule a level at a time and the loop reads the
+    # texture's chain, built by the same rule, each at the level the
+    # block's footprint asks for, so under the bright frame the two
+    # agree texel for texel; the solid alcove behind reads one colour at
+    # any level
+    mut openings = []
+    for fp in $FIXTURE_POSES {
+        let tiled = ($fixture_runs | get $"($fp.name)_tiled")
+        let lit = ($fixture_runs | get $"($fp.name)_lit")
+        let opening = (fixture-opening $fixture_read $fixture_wall $tiled.eye)
+        let differing = (rows-differ $tiled.bytes $lit.bytes $opening)
+        assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level ($fp.level): rows ($differing | first 5) differ, ($differing | length) in all"
+        $openings = ($openings | append [$opening])
     }
-    assert (($mid_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
+    let level_pairs = ($fixture_runs.near_tiled.read | zip $fixture_runs.mid_tiled.read | where {|p| $p.0.uniform })
+    assert (($level_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
 
     # the flow's growth on the growth map: the far room is reached only
     # once the hall's rectangle has grown through the side room's path
@@ -901,15 +910,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     print $"fps: the sprite drawn in ($sprite_frame.us) us, ($sprite_frame.sprites) sprites in ($sprite_frame.sprite_us) us, ($sprite_frame.uncovered) uncovered, red at ($SPRITE_RIGHT) and the wall at ($SPRITE_LEFT); the straddling sprite's near end at ($straddle_at) its texture, ($straddle_frame.sprites) sprites in ($straddle_frame.us) us"
     print $"fps: the growth map drew ($grow_sectors) in ($grow_frame.us) us with ($grow_frame.uncovered) uncovered, the far wall at ($grow_at) the backdrop"
     print $"fps: the walk from ($walk_first.x), ($walk_first.y), ($walk_first.z) in ($walk_first.sector) to ($walk_last.x), ($walk_last.y), ($walk_last.z) in ($walk_last.sector) through ($walk_sectors) over ($walk_states | length) frames, the eye ($walk_last.z) over the floor at ($floor)"
-    print $"fps: proof loaded in ($proof_load.ms) ms; the spawn view in ($proof_frames | get 0 | get us) us with ($proof_frames | get 0 | get sprites) sprites, the poses in ($proof_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($proof_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($proof_sectors | slice 1.. | each {|s| $s | length } | str join ' and ') sectors"
+    print $"fps: proof loaded in ($proof_load.ms) ms; the spawn view in ($proof_frames | get 0 | get us) us with ($proof_frames | get 0 | get sprites) sprites, the poses in ($proof_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($proof_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($proof_sectors | slice 1.. | each {|s| $s | length } | str join ' and ') sectors; ($proof_mips.chains) chains of ($proof_mips.levels) levels, ($proof_mips.texels) texels in ($proof_mips.ms) ms"
     print $"fps: the stair from ($stair_first.x), ($stair_first.y), ($stair_first.z) in ($stair_first.sector) to ($stair_last.x), ($stair_last.y), ($stair_last.z) in ($stair_last.sector) through ($stair_sectors) over ($stair_states | length) frames"
-    print $"fps: factory loaded in ($factory_load.ms) ms; the spawn view in ($factory_start.us) us over ($factory_start.sectors) sectors, ($factory_start.walls) walls, ($factory_start.pieces) pieces, ($factory_start.planes) planes \(clear ($factory_start.clear), planes ($factory_start.plane_us), walls ($factory_start.wall_us), portals ($factory_start.portal_us) us\); the poses in ($factory_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($factory_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($factory_sectors | slice 1.. | each {|s| $s | length } | str join ', ') sectors"
+    print $"fps: factory loaded in ($factory_load.ms) ms; the spawn view in ($factory_start.us) us over ($factory_start.sectors) sectors, ($factory_start.walls) walls, ($factory_start.pieces) pieces, ($factory_start.planes) planes \(clear ($factory_start.clear), planes ($factory_start.plane_us), walls ($factory_start.wall_us), portals ($factory_start.portal_us) us\); the poses in ($factory_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($factory_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($factory_sectors | slice 1.. | each {|s| $s | length } | str join ', ') sectors; ($factory_mips.chains) chains of ($factory_mips.levels) levels, ($factory_mips.texels) texels in ($factory_mips.ms) ms"
     for w in $factory_walks {
         print $"fps: the ($w.name) walk from ($w.first.x), ($w.first.y), ($w.first.z) in ($w.first.sector) to ($w.last.x), ($w.last.y), ($w.last.z) in ($w.last.sector) through ($w.crossed) over ($w.frames) frames"
     }
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
     print $"fps: the light from the spawn at yaws ($VIEW_YAWS): ($view_spread | each {|s| $'($s.point) ($s.light | each {|l| $l | math round --precision 1 } | str join ' and ') of 256, ($s.spread | math round --precision 1) apart' } | str join '; ')"
-    print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the opening ($opening) identical between the tiles and the lit loop"
+    print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the openings ($openings) identical between the tiles and the lit loop at levels 0, 1, and 2"
     print $"fps: the wrong magic out with ($bad_run.status), the short file with ($short_run.status)"
     print "fps: ok"
 }
@@ -1101,6 +1110,19 @@ def alpha-held [lines: list<string>, name: string]: nothing -> nothing {
     for c in [$got.c1 $got.c2 $got.c3] {
         assert ((($c - $got.c0) | math abs) <= $slack) $"($name)'s coverage holds by level within ($slack) of 10000: ($line | get 0)"
     }
+}
+
+# The chains' line among a run's: the materials with a level past 0, the
+# levels built, the texels, and the time; a tree with textures builds
+# chains, at least a level a chain.
+def mips-built [lines: list<string>]: nothing -> record<chains: int, levels: int, texels: int, ms: int> {
+    let line = ($lines | where {|l| $l starts-with "fps: mips " })
+    assert equal ($line | length) 1 $"one mips line: ($line)"
+    let got = ($line | get 0 | parse $MIPS_LINE | get 0 | update cells {|v| $v | into int })
+    assert ($got.chains >= 1) $"chains built: ($line | get 0)"
+    assert ($got.levels >= $got.chains) $"a level a chain at least: ($line | get 0)"
+    assert ($got.texels > 0) $"texels built: ($line | get 0)"
+    $got
 }
 
 # The alpha policy as the engine applies it at load, over a texture's

@@ -127,7 +127,10 @@ under a page, since its inner loop runs a texel, which the test holds.
 The level below's tile of the same cell is four times the texels, so
 each coarser texel is the mean of a two-by-two square under it. The
 finer tile is TILE_BASE a level back in the record, the level fields
-eight bytes apart.
+eight bytes apart. The texel's rule is texel_shrink (mip.S), one macro
+the tile and the texture's chain both expand, so the two cannot drift: a
+tile at a level and the chain's level agree under one brightness, which
+the alpha fixture holds identical over the opening at every level.
 
 The seventh cut averaged the colour channels plainly and kept the
 upper-left texel's alpha, so a square with one opaque texel was either
@@ -211,8 +214,13 @@ the seventh cut thinned it.
 
 The two scratch planes bound a level at a quarter of a megabyte, a
 1024-texel-square texture's level 1; a texture past that or under eight
-a side keeps one. The analysis runs once at load over the map's
-materials, the engine's images never tiling.
+a side keeps one. The analysis runs once at load over every record, the
+map's materials and the engine's images, after the images load, for the
+chain's levels of each (mip_levels): the sprites' chains need the policy
+at their silhouettes as the fence does, where before the images never
+tiled and were left out. The line prints the first four levels, the
+deeper scales following the same search unprinted; an image's line
+names it by its frame.
 
 ## lumels_bright
 

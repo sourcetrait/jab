@@ -102,8 +102,9 @@ _start:
     call map_parse
     call map_check
     call materials_load
-    call alphas_measure
     call frames_load
+    call alphas_measure
+    call mips_build
     call ambients_load
     call sounds_load
     call soundfont_load
@@ -1000,6 +1001,7 @@ k_dt_max:
 .include "src/world.S"
 .include "src/sprite.S"
 .include "src/light.S"
+.include "src/mip.S"
 .include "src/tile.S"
 .include "src/body.S"
 .include "src/console.S"

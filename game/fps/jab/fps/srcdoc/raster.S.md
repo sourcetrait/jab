@@ -141,22 +141,45 @@ within the gauge's noise. A lit block ends by carrying its brightness into
 the slot only while its interval continues; where the interval ended the
 slot already holds the exact end sample.
 
+## The chain's level
+
+Every span but the sky's computes its footprint in the prologue: the
+end's texel coordinates at one divide, the step down a row at each end
+at a divide each from the coordinates a row below by the polygon's
+gradients, and the row step's change a pixel, four divides a span where
+the tiled spans alone paid them before. Every block then takes its level
+from its own step along the span and the row step interpolated along the
+span, the step's octave, under two texels level 0, under four 1, under
+eight 2, and so on to the chain's last, about twenty-five ops a block; a
+tiled span holds it under the levels the surface has whole and reads the
+tile, any other span holds it under the material's chain and reads the
+texture's level through mip_bind: the level's texels from the table the
+bind named, the masks and the row shift shifted by the level, and u, v,
+and their steps a pixel shifted to the level's resolution, so the pixel
+loops are unchanged and the block's end reloads level 0's exact
+coordinates for the next. The bind comes after the lumel sample, which
+reads level 0 coordinates, and before the loop. So a block reads about a
+texel a pixel at any distance, a far floor stops touching a cache line a
+pixel, and the lit loop and a tile at one level hold the same texel under
+one brightness, which the alpha fixture holds identical over the opening
+at levels 0, 1, and 2 and which TilePool's handoff between the loop and
+the cache rests on. The unlit loops pay the prologue's divides and the
+level for the same picture; the sky reads its texture at level 0 by
+screen position, under a texel a pixel.
+
 ## The tiled modes
 
-A tiled surface's span is judged once, in the prologue after its start
-coordinates (tile.S): the end's coordinates at one divide, the step
-down a row at each end at a divide each from the coordinates a row
-below by the polygon's gradients, and the bound on every block's level,
-the levels the surface has whole; a span whose ends lie past the map
-takes the lit loop, which clamps. Nothing else is checked, since a
+A tiled surface's span is judged once in the prologue, after every
+span's footprint (the chain's level, above): its ends inside the map,
+and the bound on every block's level, the levels the surface has whole;
+a span whose ends lie past the map takes the lit loop at the chain's
+level, which clamps. Nothing else is checked, since a
 surface is built whole a level at a time (tile.S): the second to sixth
 cuts checked cells, per block or per span, and the measured cost of
 that judgement was 3 to 6 ms a view, more than the lighting's whole,
 with the per-span box of a diagonal line quadratic at a coarse level. A
-block then takes its level from its own step along the span and the
-row step interpolated along the span, the step's octave, under two
-texels level 0, under four 1, under eight 2, else 3, held under the
-levels whole, about twenty-five ops, and its level's atlas, shifts, and
+block then takes the footprint's level held under the levels whole,
+and its level's atlas, shifts, and
 mask ride the texture's four registers, the brightness's two, and one
 spilled saved register, since a hit needs no brightness: the cell shift
 k + 16 and the texel shift m + 16 from a 16.16 coordinate. The seventh
