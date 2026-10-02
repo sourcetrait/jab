@@ -340,12 +340,14 @@ sector_draw:
     addi sp, sp, 80
     ret
 
-# A material's texture into the surface in hand: pixels, size, and wraps
+# A material's texture into the surface in hand: pixels, size, wraps, and
+# the material's index for the tile builder
 # a0 int The material
 # returns Clobbers t0 to t4, a1
 #   a0 1, or 0 with the sizes 1 when the material is none or has no texture
 material_bind:
     la t1, poly
+    sw a0, POLY_MATERIAL(t1)
     bltz a0, 8f
     la t0, material_record
     slli t2, a0, 3

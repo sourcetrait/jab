@@ -102,6 +102,7 @@ _start:
     call map_parse
     call map_check
     call materials_load
+    call alphas_measure
     call frames_load
     call ambients_load
     call sounds_load

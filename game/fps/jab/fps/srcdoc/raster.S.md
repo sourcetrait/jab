@@ -145,22 +145,27 @@ slot already holds the exact end sample.
 
 A tiled surface's span is judged once, in the prologue after its start
 coordinates (tile.S): the end's coordinates at one divide, the step
-along the span from the two ends, the step down a row at each end at a
-divide each from the coordinates a row below by the polygon's gradients,
-and the span's two levels from the larger of the step along and the
-step down at each end, each the step's octave, under two texels level 0,
-under four 1, under eight 2, else 3, held under the levels the surface
-has whole; a span whose ends lie past the map takes the lit loop, which
-clamps. Nothing else is checked, since a surface is built whole a level
-at a time (tile.S): the second to sixth cuts checked cells, per block
-or per span, and the measured cost of that judgement was 3 to 6 ms a
-view, more than the lighting's whole, with the per-span box of a
-diagonal line quadratic at a coarse level. A block then takes its
-level from its own step along the span and the row step interpolated
-along the span, about twenty-five ops, and its level's atlas, shifts,
-and mask ride the texture's four registers, the brightness's two, and
-one spilled saved register, since a hit needs no brightness: the cell
-shift k + 16 and the texel shift m + 16 from a 16.16 coordinate.
+down a row at each end at a divide each from the coordinates a row
+below by the polygon's gradients, and the bound on every block's level,
+the levels the surface has whole; a span whose ends lie past the map
+takes the lit loop, which clamps. Nothing else is checked, since a
+surface is built whole a level at a time (tile.S): the second to sixth
+cuts checked cells, per block or per span, and the measured cost of
+that judgement was 3 to 6 ms a view, more than the lighting's whole,
+with the per-span box of a diagonal line quadratic at a coarse level. A
+block then takes its level from its own step along the span and the
+row step interpolated along the span, the step's octave, under two
+texels level 0, under four 1, under eight 2, else 3, held under the
+levels whole, about twenty-five ops, and its level's atlas, shifts, and
+mask ride the texture's four registers, the brightness's two, and one
+spilled saved register, since a hit needs no brightness: the cell shift
+k + 16 and the texel shift m + 16 from a 16.16 coordinate. The seventh
+cut held the block's level between two levels taken at the span's ends
+as well, each the larger of the row step there and the step along the
+span averaged over the whole span, which cost two divides a span and
+clamped every block of a receding wall to the average's level wherever
+the row steps sat under it (tile.S); the stack slots those bounds rode,
+32 and 224, are free.
 
 A hit pays nothing of the lighting: no sample, no interval, no brightness
 carry. The tile loop ends by marking the interval over and the brightness
@@ -188,7 +193,14 @@ in the texture, 64 KiB and cache-resident, where the same pixels' tiles
 lie a tile apart in an atlas of megabytes and miss: the whole-surface
 first cut read every block from tiles and measured the settled planes
 phase near twice the lit loop's. The masked tiled loop is the same with
-the alpha test, the tile keeping the texel's alpha.
+the alpha test, the tile keeping the texel's alpha. Every masked loop,
+lit, unlit, and tiled, passes a texel whose alpha is at or above 128,
+read as the loaded word's top bit, where before any nonzero alpha drew:
+the coarser tile levels scale their alphas to hold the texture's share
+at that pass (tile.S), and a pass taken at the texture's level too keeps
+the levels consistent with it; an antialiased edge thins by up to half
+a texel. A sign-extended load puts copies of that bit above it, which a
+logical shift by 31 leaves nonzero either way.
 
 A plane's tiles are in blocks of four by four texels (tile.S), and its
 block takes the swizzled pair of loops by the mode's flag: the tile as

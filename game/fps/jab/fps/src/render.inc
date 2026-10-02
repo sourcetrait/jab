@@ -107,7 +107,10 @@
 .set POLY_TILE_COLS_SHIFT, 248
 .set POLY_TILE_COLS, 256
 .set POLY_TILE_ROWS, 264
-.set POLY_SIZE, 272
+# The material bound, its index, for the level's alpha scale at a tile's
+# build
+.set POLY_MATERIAL, 272
+.set POLY_SIZE, 280
 .set LUMEL_OFFSET_BITS, 24
 .set LUMEL_ROWBYTES_SHIFT, 24
 .set LUMEL_ROWS_SHIFT, 40
@@ -171,28 +174,27 @@
 # nodes the greatest, so a texel coordinate the span can reach has a
 # cell. The atlas holds the cells row-major with the columns padded to a
 # power of two, TILE_COLS_SHIFT, the rows as they are, reserved whole on
-# first sight, which costs no memory until a cell is written. Two bit
-# maps by tile index beside it: the cells built, and the cells a span's
-# near block wanted and found unbuilt, which the surface's next bind
-# builds under the frame's budget, in texels, never past it. The
-# record's base is 0 before the atlas is reserved and -1 for a surface
-# whose atlas is larger than TILE_ATLAS_MAX, which stays on the lit
-# loop. The arena is reset whole, every surface forgotten, when an atlas
-# does not fit. The tiles come in levels, a surface's atlases one a
-# level: level 0 a cell at the texture's resolution, each level after it
-# half a side, built from the level before by averaging two by two,
-# TILE_LEVEL_COUNT levels or k + 1 if fewer. A surface is built whole, a
-# level at a time from the finest, under the frame's budget in texels
-# read, and a span reads tiles only from the levels built whole, so no
-# cell is ever checked; until level 0 is whole the surface draws on the
-# lit loop. A span is judged once: the levels its blocks take from its
-# texel steps at its two ends, the largest of the steps along the span
-# and down a row on each axis, 16.16, level m where the step is under
-# 2^(m + 1) texels, the last level for any step beyond, held under the
-# levels whole, so a block reads about a texel a pixel and the spans a
-# row apart read the same lines; a span whose ends lie past the map's
-# edge keeps the lit loop, which clamps. The records' and the polygon's
-# level fields sit eight bytes apart
+# first sight, which costs no memory until a cell is written; the
+# padding columns are never built, the build's cursor stepping over them
+# to the next row. The record's base is 0 before the atlas is reserved
+# and -1 for a surface whose atlas is larger than TILE_ATLAS_MAX, which
+# stays on the lit loop. The arena is reset whole, every surface
+# forgotten, when an atlas does not fit. The tiles come in levels, a
+# surface's atlases one a level: level 0 a cell at the texture's
+# resolution, each level after it half a side, built from the level
+# before by averaging two by two, the colour weighted by alpha and the
+# alpha scaled for its coverage (alphas_measure), TILE_LEVEL_COUNT
+# levels or k + 1 if fewer. A surface is built whole, a level at a time
+# from the finest, under the frame's budget in texels read, and a span
+# reads tiles only from the levels built whole, so no cell is ever
+# checked; until level 0 is whole the surface draws on the lit loop. A
+# block takes its own level from its texel step a pixel, the largest of
+# the steps along the span and down a row on each axis, 16.16, level m
+# where the step is under 2^(m + 1) texels, the last level for any step
+# beyond, held under the levels whole alone, so a block reads about a
+# texel a pixel and the spans a row apart read the same lines; a span
+# whose ends lie past the map's edge keeps the lit loop, which clamps.
+# The records' and the polygon's level fields sit eight bytes apart
 .set TILE_LEVEL_COUNT, 4
 .set TILE_BASE, 0
 .set TILE_READY, 32
@@ -207,6 +209,23 @@
 .set TILE_ATLAS_MAX, (64 * 1024 * 1024)
 .set TILE_BUDGET, (24 * 64 * 64)
 .set TILE_BUDGET_UNBOUND, (1 << 40)
+# A masked texel passes at an alpha at or above ALPHA_PASS, at every
+# level. A material's alpha scale a level, 16.16, by which a coarser
+# level's mean alpha is scaled at its tile's build so the level's share
+# of texels passing stays near the texture's: ceil(2^23 / T) for the
+# threshold T the load's search chose, which lands a mean at or above T
+# at or above the pass and nothing under T there; one, ALPHA_SCALE_ONE,
+# where the levels pass as the texture does. ALPHA_PLANE_BYTES bounds
+# the scratch a level's alphas take at the search, a texture past it
+# left at one; ALPHA_SHARE is the unit the debug line reports a share in
+.set ALPHA_PASS, 128
+.set ALPHA_SCALE_BITS, 16
+.set ALPHA_SCALE_ONE, (1 << ALPHA_SCALE_BITS)
+.set ALPHA_SCALE_TOP, (ALPHA_PASS << ALPHA_SCALE_BITS)
+.set ALPHA_LEVEL_SIZE, 4
+.set ALPHA_MATERIAL_SIZE, (TILE_LEVEL_COUNT * ALPHA_LEVEL_SIZE)
+.set ALPHA_PLANE_BYTES, (256 * 1024)
+.set ALPHA_SHARE, 10000
 # A light as the engine holds it, floats: the position, the colour, the
 # radius squared and one over the radius, the spotlight's unit axis and
 # the cosine of its spread (under -1 for a point light)

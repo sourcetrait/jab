@@ -94,6 +94,29 @@ const SPRITE_FLAGS = 5              # facing the camera, two-sided
 const RED = 0x[ff 00 00]
 const SPRITE_LEFT = [760, 540]
 const SPRITE_RIGHT = [1160, 540]
+# The alpha cases, textures of the test's own laid in the sprite tree as
+# materials beside the sprite's: the sprite's halves; a uniform alpha
+# over the pass, which the engine leaves at one and names no line for;
+# a uniform alpha under it; a checkerboard of opaque and transparent
+# texels, whose coarser levels go uniform; and an 8 by 8 texture with
+# one opaque 2 by 2 block, whose coarsest level is one texel. The
+# engine's line for a material under full coverage, its share of texels
+# at or above the pass a level in 10000ths and its scales in 65536ths;
+# the slack each coarser level of the fence and the grate as authored
+# may sit from level 0, stated from the measured lines: the fence's
+# levels read 606, 947, and 922 against 733, and the grate's 6093,
+# 6093, and 5000 against 6093, its coarsest level a step the search
+# cannot reach nearer
+const ALPHA_CASES = [
+    { name: "sprite/test", w: 64, h: 64, kind: "halves", alpha: 255 },
+    { name: "test/opaque", w: 64, h: 64, kind: "uniform", alpha: 200 },
+    { name: "test/faint", w: 64, h: 64, kind: "uniform", alpha: 100 },
+    { name: "test/checker", w: 64, h: 64, kind: "checker", alpha: 255 },
+    { name: "test/small", w: 8, h: 8, kind: "block", alpha: 255 },
+]
+const ALPHA_LINE = "fps: alpha {name}: coverage {c0} {c1} {c2} {c3} of 10000, scale {s1} {s2} {s3} of 65536"
+const ALPHA_PASS = 128
+const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
 # The light: the bottom block's mean brightness over the top's, at
 # least; the top block is a metre and a half further from the bulb and
 # at a lower cosine, while the hall's other bulbs light both
@@ -136,6 +159,7 @@ const DEBUG_TEXT = [
     "fps: lumel maps "
     "fps: sound "
     "fps: sounds "
+    "fps: alpha "
 ]
 const EXIT_TEXT = [
     "fps: "
@@ -276,6 +300,24 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($sprite_run.screen != "") "a screen was taken on the sprite run"
     assert equal (pixel $sprite_run.screen $SPRITE_RIGHT) $RED $"the sprite's right half is the texture's red: ($sprite_run.screen)"
     assert equal (pixel $sprite_run.screen $SPRITE_LEFT) (pixel $plain $SPRITE_LEFT) $"the sprite's transparent left half shows the wall behind, as the plain run drew it"
+    # the alpha policy at load over the test's own textures, against the
+    # same rule on the host: each level's share of texels at or above
+    # the pass and the scale that holds it, a line a material under full
+    # coverage and none for one at it
+    let alpha_lines = ($sprite_lines | where {|l| $l starts-with "fps: alpha " })
+    for c in $ALPHA_CASES {
+        let alphas = (0..<$c.h | each {|y| 0..<$c.w | each {|x| (case-texel $c $x $y).alpha } } | flatten)
+        let want = (alpha-levels $alphas $c.w $c.h)
+        let line = ($alpha_lines | where {|l| $l starts-with $"fps: alpha ($c.name): " })
+        if $want.line {
+            assert equal ($line | length) 1 $"one alpha line for ($c.name): ($alpha_lines)"
+            let got = ($line | get 0 | parse $ALPHA_LINE | get 0)
+            assert equal ([$got.c0 $got.c1 $got.c2 $got.c3] | each {|v| $v | into int }) $want.coverage $"($c.name)'s coverage by level as the rule gives it: ($line | get 0)"
+            assert equal ([$got.s1 $got.s2 $got.s3] | each {|v| $v | into int }) $want.scale $"($c.name)'s scales by level as the rule gives them: ($line | get 0)"
+        } else {
+            assert ($line | is-empty) $"no alpha line for ($c.name), full at the pass: ($line)"
+        }
+    }
 
     # the walk: the left stick held forward from doortest's spawn, the
     # body south through the doorway and the hall into the room beyond
@@ -383,6 +425,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on proof: ($landed.sector)"
     }
     assert equal ($proof_read.sectors | get (do $proof_index "door") | get tag) 1 "the door sector carries its tag"
+    # the grate as authored: its coarser levels' share within the slack
+    alpha-held $proof_lines "texture/grate"
     plan-views $proof_tree $proof_source $proof_read
 
     # the stair: from the proof map's spawn the left stick held forward
@@ -489,6 +533,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     for tag in [1 2 3 4 5] {
         assert equal ($factory_read.sectors | where tag == $tag | length) 1 $"one door sector carries tag ($tag)"
     }
+    # the fence as authored: each coarser level's share at or above the
+    # pass within the slack of the texture's
+    alpha-held $factory_lines "texture/fence"
     plan-views $factory_tree $factory_source $factory_read
 
     # the factory walked, one launch of three placed starts with the
@@ -758,9 +805,9 @@ def romfs [tree: path, image: path]: nothing -> string {
 
 # A copy of a doortest tree with its first sprite given the test
 # texture, a material of the test's own, and made to face the camera,
-# two-sided; the map read, changed, and written back through the
-# reader and writer, and the texture written, 64 by 64, its left half
-# transparent and its right half red; the copy's path.
+# two-sided, and the alpha cases' textures laid in as materials beside
+# it; the map read, changed, and written back through the reader and
+# writer, and each texture written from its case; the copy's path.
 def sprite-tree [tree: path, out: path]: nothing -> string {
     if ($out | path exists) { rm -r $out }
     cp -r $tree $out
@@ -769,15 +816,102 @@ def sprite-tree [tree: path, out: path]: nothing -> string {
     let index = ($m.materials | length)
     let entity = ($m.entities | get $CONTENT.sprite.entity)
     assert equal $entity.class 2 $"the fixture names a sprite entity: ($entity)"
+    assert equal ($ALPHA_CASES | get 0.name) $SPRITE_MATERIAL "the sprite's texture is the first alpha case"
     let patched = ($m
-        | update materials ($m.materials | append { name: $SPRITE_MATERIAL, flags: 0 })
+        | update materials ($m.materials | append ($ALPHA_CASES | each {|c| { name: $c.name, flags: 0 } }))
         | update entities ($m.entities | update $CONTENT.sprite.entity {|e| $e | update material $index | update flags $SPRITE_FLAGS }))
     map write $patched | save --raw -f $map_path
-    let file = ($out | path join (map tile-path $SPRITE_MATERIAL | str substring 1..))
-    mkdir ($file | path dirname)
-    let row = ([(0..<32 | each {|i| 0x[00 00 00 00] } | bytes collect), (0..<32 | each {|i| 0x[ff 00 00 ff] } | bytes collect)] | bytes collect)
-    png write-rgba $file 64 64 (0..<64 | each {|r| $row } | bytes collect)
+    for c in $ALPHA_CASES {
+        let file = ($out | path join (map tile-path $c.name | str substring 1..))
+        mkdir ($file | path dirname)
+        let pixels = (0..<$c.h | each {|y| 0..<$c.w | each {|x| (case-texel $c $x $y).bytes } | bytes collect } | bytes collect)
+        png write-rgba $file $c.w $c.h $pixels
+    }
     $out
+}
+
+# A texel of an alpha case: its four bytes as the PNG carries them, red,
+# green, blue, alpha, and its alpha. The halves: the left transparent, the
+# right opaque red. Uniform: one colour at the case's alpha. The checker:
+# opaque red and transparent texels alternating on both axes. The block:
+# transparent but for an opaque white 2 by 2 at the top left.
+def case-texel [c: record, x: int, y: int]: nothing -> record<bytes: binary, alpha: int> {
+    let clear = { bytes: 0x[00 00 00 00], alpha: 0 }
+    let red = { bytes: 0x[ff 00 00 ff], alpha: 255 }
+    let white = { bytes: 0x[ff ff ff ff], alpha: 255 }
+    match $c.kind {
+        "halves" => (if $x < ($c.w // 2) { $clear } else { $red }),
+        "uniform" => ({ bytes: ([0x[40 80 c0], ($c.alpha | into binary | bytes at 0..<1)] | bytes collect), alpha: $c.alpha }),
+        "checker" => (if (($x + $y) mod 2) == 0 { $red } else { $clear }),
+        "block" => (if $x < 2 and $y < 2 { $white } else { $clear }),
+        _ => (error make { msg: $"no alpha case of kind ($c.kind)" }),
+    }
+}
+
+# A material's alpha line among a run's, its coarser levels' shares of
+# texels at or above the pass each within the material's slack of level
+# 0's.
+def alpha-held [lines: list<string>, name: string]: nothing -> nothing {
+    let line = ($lines | where {|l| $l starts-with $"fps: alpha ($name): " })
+    assert equal ($line | length) 1 $"one alpha line for ($name): ($lines | where {|l| $l starts-with 'fps: alpha' })"
+    let got = ($line | get 0 | parse $ALPHA_LINE | get 0 | update cells --columns [c0 c1 c2 c3 s1 s2 s3] {|v| $v | into int })
+    let slack = ($ALPHA_SLACKS | get $name)
+    for c in [$got.c1 $got.c2 $got.c3] {
+        assert ((($c - $got.c0) | math abs) <= $slack) $"($name)'s coverage holds by level within ($slack) of 10000: ($line | get 0)"
+    }
+}
+
+# The alpha policy as the engine applies it at load, over a texture's
+# alphas in row order: the share of texels at or above the pass at level
+# 0 in 10000ths, the target; then each coarser level's alphas as the
+# integer means of the two by two under them in the level before, the
+# threshold whose share at or above it lies nearest the target (the least
+# error, a tie to the lower share, equal shares to the threshold nearest
+# the pass), the level's scale ceil(2^23 / T), and the level scaled by it
+# and capped at 255 for the level after; whether the engine names a line
+# for the texture, which it does under full coverage at level 0.
+def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bool, coverage: list<int>, scale: list<int>> {
+    let n0 = ($w * $h)
+    let c0 = ($alphas | where {|a| $a >= $ALPHA_PASS } | length)
+    if $c0 == $n0 { return { line: false, coverage: [], scale: [] } }
+    mut coverage = [(($c0 * 10000) // $n0)]
+    mut scale = []
+    mut plane = $alphas
+    mut pw = $w
+    mut ph = $h
+    for level in 1..3 {
+        if $c0 == 0 {
+            $coverage = ($coverage | append 0)
+            $scale = ($scale | append 65536)
+            continue
+        }
+        let sw = $pw
+        let lw = ($pw // 2)
+        let lh = ($ph // 2)
+        let src = $plane
+        let means = (0..<$lh | each {|y| 0..<$lw | each {|x|
+            let i = (2 * $y * $sw + 2 * $x)
+            (($src | get $i) + ($src | get ($i + 1)) + ($src | get ($i + $sw)) + ($src | get ($i + $sw + 1))) // 4
+        } } | flatten)
+        let nl = ($lw * $lh)
+        let hist = ($means | reduce --fold (0..255 | each {|i| 0 }) {|v, acc| $acc | update $v {|n| $n + 1 } })
+        mut best: any = null
+        mut cov = 0
+        for t in 256..1 {
+            if $t <= 255 { $cov = ($cov + ($hist | get $t)) }
+            let err = ((($cov * $n0) - ($c0 * $nl)) | math abs)
+            let dist = (($t - $ALPHA_PASS) | math abs)
+            let take = (if $best == null { true } else if $err < $best.err { true } else if $err == $best.err and $cov == $best.cov and $dist < $best.dist { true } else { false })
+            if $take { $best = { err: $err, t: $t, cov: $cov, dist: $dist } }
+        }
+        let s = ((8388608 + $best.t - 1) // $best.t)
+        $plane = ($means | each {|v| [(($v * $s) bit-shr 16), 255] | math min })
+        $pw = $lw
+        $ph = $lh
+        $coverage = ($coverage | append (($best.cov * 10000) // $nl))
+        $scale = ($scale | append $s)
+    }
+    { line: true, coverage: $coverage, scale: $scale }
 }
 
 # The level of a run's recording between two seconds: the peak and the

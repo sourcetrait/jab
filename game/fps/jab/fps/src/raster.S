@@ -894,14 +894,12 @@ span_fill:
     mul s9, s5, t4
     srai s9, s9, 16                 # v
     # a tiled surface's span judged once for its tiles: the end's texel
-    # coordinates at one divide, the step along the span from the two
-    # ends, the step down a row at each end at a divide each, and the
-    # levels the span's blocks will take from the steps at its ends,
-    # held under the levels the surface has whole; a span past the
-    # map's edge keeps the lit loop, which clamps. The levels' bounds
-    # and the row step's start and change a pixel ride the frame for
-    # the blocks. The texture's four registers serve as scratch and are
-    # reloaded after
+    # coordinates at one divide, the step down a row at each end at a
+    # divide each, and the levels the surface has whole, which bound
+    # every block's level; a span past the map's edge keeps the lit
+    # loop, which clamps. The bound and the row step's start and change
+    # a pixel ride the frame for the blocks. The texture's four
+    # registers serve as scratch and are reloaded after
     li t3, -1
     sd t3, 200(sp)                  # no tiles for the span
     ld t3, 16(sp)
@@ -945,21 +943,6 @@ span_fill:
     ld t4, POLY_TILE_ROWS(a0)
     bge a1, t4, 29f
     bge a2, t4, 29f
-    # the step along the span: the end less the start over the pixels
-    sub a5, a5, s8
-    div a5, a5, s10
-    srai a7, a5, 63
-    xor a5, a5, a7
-    sub a5, a5, a7                  # |du| along
-    sub a6, a6, s9
-    div a6, a6, s10
-    srai a7, a6, 63
-    xor a6, a6, a7
-    sub a6, a6, a7                  # |dv| along
-    bge a5, a6, 22f
-    mv a5, a6
-22:
-    sd a5, 32(sp)                   # the step along
     # the step down a row at the start
     ld a6, POLY_IZB(a0)
     add a6, a6, s2
@@ -1029,53 +1012,10 @@ span_fill:
     sub t3, a6, a7
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
-    # the levels at the two ends, each the larger of the step along and
-    # the step down as an octave under two, four, eight texels, held
-    # under the levels whole; the lesser to 200, the greater to 224
-    ld t3, 32(sp)
-    bge a7, t3, 27f
-    mv a7, t3
-27:
-    bge a6, t3, 28f
-    mv a6, t3
-28:
-    srli t3, a7, 17
-    li t5, 0
-    beqz t3, 281f
-    li t5, 1
-    srli t3, t3, 1
-    beqz t3, 281f
-    li t5, 2
-    srli t3, t3, 1
-    beqz t3, 281f
-    li t5, 3
-281:
-    srli t3, a6, 17
-    li t6, 0
-    beqz t3, 282f
-    li t6, 1
-    srli t3, t3, 1
-    beqz t3, 282f
-    li t6, 2
-    srli t3, t3, 1
-    beqz t3, 282f
-    li t6, 3
-282:
+    # the level a block may reach, the levels the surface has whole
     ld t3, POLY_TILE_READY(a0)
     addi t3, t3, -1
-    ble t5, t3, 283f
-    mv t5, t3
-283:
-    ble t6, t3, 284f
-    mv t6, t3
-284:
-    bge t6, t5, 285f
-    mv t3, t5
-    mv t5, t6
-    mv t6, t3
-285:
-    sd t5, 200(sp)
-    sd t6, 224(sp)
+    sd t3, 200(sp)
 29:
     la a0, poly
     ld a1, POLY_TEX(a0)
@@ -1143,11 +1083,11 @@ span_fill:
     j 40f
 44:
     # lit: a span judged for its tiles (the prologue) takes them block
-    # by block at the block's level, the largest of its texel steps
+    # by block at the block's own level, the largest of its texel steps
     # along the span and down a row, the row's interpolated along the
-    # span, held within the span's levels; a block read from tiles pays
-    # no sample, no interval, and no brightness carry. A span with no
-    # tiles takes the lit loop whole
+    # span, held under the levels the surface has whole; a block read
+    # from tiles pays no sample, no interval, and no brightness carry. A
+    # span with no tiles takes the lit loop whole
     ld a5, 200(sp)
     bltz a5, 4300f
     srai a6, t5, 63
@@ -1179,12 +1119,8 @@ span_fill:
     beqz a7, 434f
     li a6, 3
 434:
-    bge a6, a5, 435f
-    mv a6, a5
-435:
-    ld a5, 224(sp)
     ble a6, a5, 436f
-    mv a6, a5
+    mv a6, a5                       # held under the levels whole
 436:
     sd a6, 192(sp)                  # the block's level
     j 80f
@@ -1373,7 +1309,7 @@ span_fill:
     bnez t2, 45b
     j 61f
 55:
-    # masked, lit: the depth, the texel, its alpha
+    # masked, lit: the depth, the texel, its alpha at or above the pass
     lwu a7, 0(t1)
     bgeu a7, s2, 56f
     addi t4, t4, 1
@@ -1386,7 +1322,7 @@ span_fill:
     add a5, a5, a6
     add a5, a5, a1
     lw a0, 0(a5)
-    srli a6, a0, 24
+    srli a6, a0, 31
     beqz a6, 56f
     slli a5, t3, (64 - 3 * CHANNEL_BITS)
     srli a5, a5, (64 - CHANNEL_BITS + 8)
@@ -1489,8 +1425,8 @@ span_fill:
     bnez t2, 81b
     j 83f
 85:
-    # masked, on its tiles: the tile's texel, whose empty alpha leaves
-    # the pixel
+    # masked, on its tiles: the tile's texel, whose alpha under the pass
+    # leaves the pixel
     lwu a7, 0(t1)
     bgeu a7, s2, 86f
     addi t4, t4, 1
@@ -1509,7 +1445,7 @@ span_fill:
     add a7, a7, a5
     add a7, a7, a1
     lw a0, 0(a7)
-    srli a5, a0, 24
+    srli a5, a0, 31
     beqz a5, 86f
     sw a0, 0(t0)
     sw s2, 0(t1)
@@ -1561,8 +1497,8 @@ span_fill:
     bnez t2, 40b
     j 60f
 50:
-    # masked: the depth test, then the texel, whose empty alpha leaves
-    # the pixel
+    # masked: the depth test, then the texel, whose alpha under the pass
+    # leaves the pixel
     lwu a7, 0(t1)
     bgeu a7, s2, 51f
     addi t4, t4, 1
@@ -1575,7 +1511,7 @@ span_fill:
     add a5, a5, a6
     add a5, a5, a1
     lw a0, 0(a5)
-    srli a6, a0, 24
+    srli a6, a0, 31
     beqz a6, 51f
     sw a0, 0(t0)
     sw s2, 0(t1)
