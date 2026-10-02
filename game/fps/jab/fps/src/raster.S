@@ -579,6 +579,7 @@ lumap_bind:
 # fa0 f32 The row's centre
 # returns Clobbers t0 to t5, ft0 to ft6
 #   a0 The count
+.balign CODE_PAGE
 row_crossings:
     li a0, 0
     la t0, edges

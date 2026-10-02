@@ -220,11 +220,17 @@ const FACTORY_START_BOUND = 100000
 const SKY_PIXEL = [960, 100]
 const SKY_TOP = 0x[3a 6f b0]
 const CROSSHAIR = [960, 540]
-# the functions whose loops run a pixel or a sample, each within one
-# page of code (render.inc's CODE_PAGE) and trapping only where the
-# mixer's two calls a frame are
-const HOT_FUNCTIONS = [span_fill span_light tile_build mixer_update]
-const HOT_ECALLS = { span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2 }
+# the functions whose loops run a pixel or a sample, and the span loop
+# with the helpers it calls, each within one page of code (render.inc's
+# CODE_PAGE) and trapping only where the mixer's two calls a frame are
+const HOT_FUNCTIONS = [
+    span_fill span_light tile_build mixer_update
+    row_crossings span_bound row_range poly_fill span_record
+]
+const HOT_ECALLS = {
+    span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2,
+    row_crossings: 0, span_bound: 0, row_range: 0, poly_fill: 0, span_record: 0,
+}
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit

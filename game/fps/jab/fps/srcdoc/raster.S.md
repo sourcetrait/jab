@@ -254,6 +254,19 @@ block at a page boundary and chains blocks within a page only, so a loop
 straddling one leaves the translated code every iteration, measured seven
 times slower. The test holds the alignment through the SDK's `jab hot`.
 
+The span loop's family, row_crossings through span_record, shares one page
+for the same reason at a smaller scale: poly_fill's inner loop runs once a
+span, sixteen thousand times a frame on the up flight, and calls span_bound
+twice a span, so a page boundary inside the loop or between it and its
+helpers costs a block lookup each way per span. The eighteen bytes of the
+polygon serial's increment at poly_fill's entry moved the loop's head to
+two bytes short of the boundary at 0x80a03000 and cost the up flight 1.2 ms
+a frame, read on two batteries against the build before and confirmed by
+an interleaved probe; the family on its own page returned the wall phase to
+24.2 ms from 25.5, where poly_fill aligned alone, its helpers still across
+the boundary, returned half of that. The family is 572 bytes, so the page
+holds it with room; the test guards each member as it guards span_fill.
+
 ## poly_fill
 
 The rows and every span are held within the rectangle in hand, the
