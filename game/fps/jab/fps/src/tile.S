@@ -541,7 +541,8 @@ tile_shrink:
 5:
     # unalike: each channel's mean weighted by the alphas, so a
     # transparent texel's colour counts for nothing, by one reciprocal
-    # of their sum; the alpha their mean
+    # of their sum, each product rounded to the nearest so an exact
+    # mean survives; the alpha their mean
     li t0, (1 << 24)
     divu t0, t0, a1                 # the reciprocal of the sum, 8.24
     andi a2, a0, 0xff
@@ -556,6 +557,8 @@ tile_shrink:
     mul a4, a4, a3
     add a2, a2, a4
     mul a2, a2, t0
+    li a4, (1 << 23)
+    add a2, a2, a4
     srli a2, a2, 24                 # blue
     srli a4, a0, 8
     andi a4, a4, 0xff
@@ -573,6 +576,8 @@ tile_shrink:
     mul a5, a5, a3
     add a4, a4, a5
     mul a4, a4, t0
+    li a5, (1 << 23)
+    add a4, a4, a5
     srli a4, a4, 24
     slli a4, a4, 8
     or a2, a2, a4                   # green
@@ -592,6 +597,8 @@ tile_shrink:
     mul a5, a5, a3
     add a4, a4, a5
     mul a4, a4, t0
+    li a5, (1 << 23)
+    add a4, a4, a5
     srli a4, a4, 24
     slli a4, a4, 16
     or a2, a2, a4                   # red

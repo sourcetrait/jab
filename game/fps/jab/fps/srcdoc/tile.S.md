@@ -138,9 +138,15 @@ four alphas, so a transparent texel's colour, black in the content's
 PNGs, counts for nothing, and the alpha is the mean of the four, scaled
 by the material's factor for the level (alphas_measure) and capped at
 255. The weighting divides once a texel by one reciprocal of the alpha
-sum in 8.24, three multiplies in place of three divides, the error
-under a sixtieth of a level; the four texels are loaded unsigned, since
-a sign-extended word's top byte is not its alpha. The alike case, four
+sum in 8.24, three multiplies in place of three divides, each product
+rounded to the nearest before its shift: the reciprocal's truncation
+puts a product under the true mean by at most a sixtieth of a level,
+so with the half added an exact mean, a constant colour under any
+alphas among them, comes back exact, where a plain shift returned 254
+for one opaque white texel among three transparent ones (Astra's
+review), and a half-way case may fall by one. The four texels are
+loaded unsigned, since a sign-extended word's top byte is not its
+alpha. The alike case, four
 equal alphas, which is every texel of an opaque texture and most of a
 masked one, takes the plain mean and the alpha as it is, with no divide,
 so an opaque texture's shrink costs what it did.
