@@ -1035,6 +1035,23 @@ def tool-prefix [toolchain: oneof<string, nothing>] {
     error make {msg: $"no riscv64 binutils on PATH: looked for ($looked); set RISCV_TOOLCHAIN or link extern/riscv to a toolchain"}
 }
 
+# Whether the assembler takes the RVA23 profile `march` names, tried on an
+# empty source in `dir` before a build assembles anything; one that does
+# not, binutils before 2.45, is refused with its version, since no other
+# ISA will do. Untyped because it can end in an error.
+def march-check [asm: string, march: string, dir: path] {
+    let source = ($dir | path join "march.S")
+    let object = ($dir | path join "march.o")
+    "" | save -f $source
+    let tried = (^$asm $march $source -o $object | complete)
+    rm -f $source $object
+    if $tried.exit_code != 0 {
+        let version = (^$asm --version | complete | get stdout | lines | get -o 0 | default "an assembler")
+        let found = (which $asm | get -o 0.path | default $asm)
+        error make {msg: $"($version) at ($found) has no RVA23 profile, ($march), which every Jab build assembles for\nlink extern/riscv, in the workspace or beside the kernel or program, to a toolchain with binutils 2.45 or later, or name one with RISCV_TOOLCHAIN"}
+    }
+}
+
 # Every file under the directories, for the staleness check.
 def files-under [dirs: list<string>]: nothing -> list<string> {
     $dirs | each {|d| glob ($d | path join "**" "*") } | flatten | where {|p| ($p | path type) == "file" }
@@ -1183,6 +1200,7 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objdump = ($c.prefix + "objdump")
+    march-check $asm $march_kernel $c.out
     # only the objects of the sources there are go into the link, so an
     # object left by a source since deleted or renamed never rides along
     let objects = (glob src/*.S | sort | each {|f|
@@ -1213,6 +1231,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objcopy = ($c.prefix + "objcopy")
+    march-check $asm $march_program $c.out
     let obj = ($c.out | path join $"($m.name).o")
     let elf = ($c.out | path join $"($m.name).elf")
     ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
