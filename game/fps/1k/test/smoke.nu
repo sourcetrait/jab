@@ -9,7 +9,7 @@
 # runs it. Every seed is one launch of a debug build with the factory's
 # tree; the table it played is kept beside the run as pad.nuon, so a
 # seed that faults is replayed by its number.
-use ../../../../../sdk/nu/jab.nu
+use ../../../../sdk/nu/jab.nu
 use std/assert
 
 const RECORD = 64
@@ -31,7 +31,7 @@ const STATES_A_SECOND = 10
 const WALKED = 5.0
 
 def main [--kernel: path, --image: path, --out: path, --seeds: list<int> = [1], --seconds: int = 60, --set: string = "DEBUG"] {
-    let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
+    let game = ($env.FILE_PWD | path join ".." | path expand)
     let tree = ($game | path join ".target" "asset" "factory")
     let elf = ($image | path dirname | path join "fps.elf")
     mkdir $out

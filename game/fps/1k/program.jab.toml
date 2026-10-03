@@ -1,0 +1,6 @@
+name = 'fps'
+sdk = '../../../sdk'
+workspace = '../../..'
+includes = ['../../../sdk/src']
+link = '../../../sdk/src/program.ld'
+assets = '.target/asset/factory'

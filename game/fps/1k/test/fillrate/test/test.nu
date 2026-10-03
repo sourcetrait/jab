@@ -7,7 +7,7 @@
 # priced: their rates against perspective's say what a float depth
 # test, an integer one, a span with no float at all, and the brightness
 # multiply cost a pixel.
-use ../../../../../sdk/nu/jab.nu
+use ../../../../../../sdk/nu/jab.nu
 use std/assert
 
 # Three seconds a mode, eight modes and a ninth with --set vector,
@@ -16,7 +16,7 @@ const MODE_SECONDS = 3
 const SETTLE = 1.5sec
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let hz = (open --raw ($env.FILE_PWD | path join ".." ".." ".." ".." ".." "sdk" "src" "jab.inc") | decode | parse --regex '\.set JAB_TIME_HZ, (?P<hz>\d+)' | get 0.hz | into int)
+    let hz = (open --raw ($env.FILE_PWD | path join ".." ".." ".." ".." ".." ".." "sdk" "src" "jab.inc") | decode | parse --regex '\.set JAB_TIME_HZ, (?P<hz>\d+)' | get 0.hz | into int)
     let vector = (($set | split row "," | each {|s| $s | str trim | str uppercase }) | any {|s| $s == "VECTOR" })
     let wanted = (["fill" "texture" "perspective" "polygon" "fixed" "integer" "lit"] ++ (if $vector { ["vector"] } else { [] }) ++ ["textureflip"])
     let capture = ((($wanted | length) * $MODE_SECONDS * 1sec) + $SETTLE)

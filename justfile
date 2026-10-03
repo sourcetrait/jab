@@ -34,9 +34,12 @@ test category="" name="" *args:
 # --set debug`, which writes the kernel's debug channel to a file; `just
 # run example wasd --api` with the API's port on the machine; the host's
 # gamepad attached when one is found, or `--no-pad`; the keyboard and
-# the tablet off with `--no-kbm`, which a pad run with a port needs
-run category name *args:
-    ^nu "{{jab}}" workspace run "{{here}}" "{{category}}" "{{name}}" {{args}}
+# the tablet off with `--no-kbm`, which a pad run with a port needs. A
+# program the workspace does not list runs by its path through its own
+# directory's justfile, which builds it against the workspace: `just run
+# game fps 1k`
+run +args:
+    let words = ("{{args}}" | split row " " | where {|w| $w != "" }); let path = ($words | take while {|w| not ($w | str starts-with "-") }); let flags = ($words | skip ($path | length)); let relative = ($path | str join "/"); let dir = ("{{here}}" | path join ...$path); if ($path | is-empty) { error make { msg: "just run <path to a program> [flags]: `just run example helloworld`, `just run game fps 1k`" } } else if $relative in (open "{{here}}/workspace.jab.toml" | get programs) { ^nu "{{jab}}" workspace run "{{here}}" ...$path ...$flags } else if ($dir | path join "justfile" | path exists) { ^just --justfile ($dir | path join "justfile") run ...$flags } else { error make { msg: $"no program at ($relative): the workspace lists none there and it has no justfile" } }
 
 # Build, then probe one program under a window and print one NUON
 # record on how its flips reached it: `just probe sdl example walk`,

@@ -31,9 +31,9 @@
 # grows through a later path before the room beyond it can be reached;
 # a map whose magic is wrong, which exits 6, and one cut short, which
 # exits 7, each saying so on the UART.
-use ../../../../../sdk/nu/jab.nu
-use ../../../nu/map.nu
-use ../../../nu/png.nu
+use ../../../../sdk/nu/jab.nu
+use ../nu/map.nu
+use ../nu/png.nu
 use ./pose.nu
 use ./gauge.nu
 use std/assert
@@ -308,7 +308,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     release-strings $image
     gauge-rules ($out | path join "gauge_rules")
     print "fps: the gauge's rules hold on synthetic captures"
-    let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
+    let game = ($env.FILE_PWD | path join ".." | path expand)
     let trees = ($game | path join ".target" "asset")
     mut runs = []
     for map in [doortest cage2] {
@@ -1029,7 +1029,7 @@ def hot-functions [image: path]: nothing -> nothing {
 # the tool, since the test's build is a debug one.
 def release-strings [image: path]: nothing -> nothing {
     let here = ($env.FILE_PWD | path join ".." | path expand)
-    let tool = ($here | path join ".." ".." ".." ".." "sdk" "nu" "jab.nu" | path expand)
+    let tool = ($here | path join ".." ".." ".." "sdk" "nu" "jab.nu" | path expand)
     let built = (^nu $tool build $here | complete)
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
     let release = ($here | path join ".target" "release" "fps" "fps.jab")

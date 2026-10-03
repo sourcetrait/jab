@@ -22,8 +22,8 @@
 # and is read from its state records alone, the drawing's and the game's
 # microseconds. `just gauge`, `just gauge-play`, `just gauge-read`, and
 # `just gauge-compare` run it.
-use ../../../../../sdk/nu/jab.nu
-use ../../../nu/map.nu
+use ../../../../sdk/nu/jab.nu
+use ../nu/map.nu
 use ./pose.nu
 
 const RECORD = 64
@@ -199,8 +199,8 @@ def "main read" [
 def places [tree: string, kernel: string, image: string, out: string]: nothing -> record<game: string, workspace: string, tree: string, kernel: string, image: string, out: string> {
     if $tree not-in [release debug] { error make { msg: $"--tree is release or debug, not ($tree)" } }
     let program = ($env.FILE_PWD | path join ".." | path expand)
-    let game = ($program | path join ".." ".." | path expand)
-    let workspace = ($game | path join ".." ".." | path expand)
+    let game = $program
+    let workspace = ($game | path join ".." ".." ".." | path expand)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let target = (if $out == "" { $program | path join ".target" $tree "fps" "gauge" $stamp } else { $out | path expand })
     mkdir $target

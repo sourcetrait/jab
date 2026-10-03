@@ -19,8 +19,8 @@
 # reports over the API, a round, an android's, the frame struck, a
 # pickup, or a trace, is printed with its fields. `just pose` builds
 # and runs it.
-use ../../../../../sdk/nu/jab.nu
-use ../../../nu/map.nu
+use ../../../../sdk/nu/jab.nu
+use ../nu/map.nu
 
 const RECORD = 64
 const TRACE_KINDS = [nothing plane piece android player]
@@ -29,7 +29,7 @@ const MET = [nothing geometry android]
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
 def main [map: string, poses: path, out: path, --kernel: path, --image: path, --set: string = "DEBUG"] {
-    let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
+    let game = ($env.FILE_PWD | path join ".." | path expand)
     let tree = ($game | path join ".target" "asset" $map)
     let shot = ($game | path join "nu" "shot.nu")
     let disk = ($out | path join $"($map).romfs")

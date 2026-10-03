@@ -49,7 +49,7 @@ or program, else the workspace's `extern/riscv`, else the tools on
 `extern/qemu`, its `qemu-system-riscv64` under `bin/` or at its top,
 `.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
 a test alike; an `extern/qemu` with no binary in it is an error, never a
-fall to `PATH`. A program the workspace does not list, `game/fps` the first,
+fall to `PATH`. A program the workspace does not list, `game/fps/1k` the first,
 builds against it: its kernel is built here with the same symbols, and
 the generic disk, the toolchain link, the shims, and discovery are this
 workspace's, while its own output lands in a `.target/` beside it; one
