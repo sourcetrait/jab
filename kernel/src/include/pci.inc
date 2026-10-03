@@ -1,11 +1,3 @@
-# pci.inc: PCI configuration space as the kernel reads it through ECAM,
-# and virtio over PCI, the modern transport (virtio 1.3, section 4.1):
-# a device's capability list names where its common configuration,
-# notification, ISR, and device configuration regions sit inside its
-# BARs, and the common configuration is the mmio register set in
-# another layout, accessed a byte, a half, or a word at a time.
-
-# The configuration header, type 0
 .set PCI_CFG_VENDOR, 0x00
 .set PCI_CFG_DEVICE, 0x02
 .set PCI_CFG_COMMAND, 0x04
@@ -29,16 +21,11 @@
 .set PCI_VENDOR_NONE, 0xffff
 .set PCI_CAP_VENDOR, 0x09
 
-# virtio's vendor, and its device ids: a modern device is
-# PCI_VIRTIO_DEVICE_MODERN plus the virtio device id, a transitional
-# one PCI_VIRTIO_DEVICE_TRANSITIONAL on with the virtio id in the
-# subsystem device id
 .set PCI_VIRTIO_VENDOR, 0x1af4
 .set PCI_VIRTIO_DEVICE_MODERN, 0x1040
 .set PCI_VIRTIO_DEVICE_TRANSITIONAL, 0x1000
 .set PCI_VIRTIO_DEVICE_TRANSITIONAL_LAST, 0x103f
 
-# A virtio capability in configuration space
 .set VIRTIO_PCI_CAP_NEXT, 1
 .set VIRTIO_PCI_CAP_TYPE, 3
 .set VIRTIO_PCI_CAP_BAR, 4
@@ -50,7 +37,6 @@
 .set VIRTIO_PCI_CAP_ISR_CFG, 3
 .set VIRTIO_PCI_CAP_DEVICE_CFG, 4
 
-# The common configuration, the transport's registers
 .set VIRTIO_PCI_COMMON_DEVICE_FEATURE_SELECT, 0
 .set VIRTIO_PCI_COMMON_DEVICE_FEATURE, 4
 .set VIRTIO_PCI_COMMON_DRIVER_FEATURE_SELECT, 8
@@ -72,10 +58,6 @@
 .set VIRTIO_PCI_COMMON_QUEUE_DEVICE_HIGH, 52
 .set VIRTIO_PCI_ISR_QUEUE, 0x1
 
-# The kernel's record of a PCI device it has brought up: its ids, its
-# slot, pin, and PLIC line, its virtio device id, where its virtio
-# regions sit, the address a notify for the queue last set up goes to,
-# and each BAR's base
 .set PCI_DEV_VENDOR, 0
 .set PCI_DEV_DEVICE, 2
 .set PCI_DEV_SLOT, 4

@@ -3,21 +3,8 @@
 .include "virtio.inc"
 .include "pci.inc"
 
-# virtio over PCI, the modern transport, for the devices on the PCI
-# Express root (pci.S): the same bring-up, queue setup, notify, and
-# status as virtio.S drives over mmio, through the common
-# configuration region a device's capabilities named, a byte, a half,
-# or a word at a time, the queue addresses as halves. Every routine
-# takes the device's record in a0 and clobbers t registers, plus a0
-# for what it returns.
-
 .section .text
 
-# vpci_init: reset the device whose record is at a0, acknowledge it,
-# claim it, offer VIRTIO_F_VERSION_1 and nothing else, and confirm the
-# features. Returns 0, or 1 when the device refuses them.
-# vpci_init_with offers the device's own feature bits in a1 as well,
-# the low word of its features.
 .global vpci_init
 .global vpci_init_with
 vpci_init:
@@ -49,10 +36,6 @@ vpci_init_with:
     li a0, 1
     ret
 
-# vpci_queue_setup: give queue a1 of the device whose record is at a0
-# the rings of the virtqueue record at a2, VIRTQ_SIZE entries, enabled;
-# the address a notify for it goes to is kept in the record. Returns
-# 0, or 1 when the device offers fewer entries than that.
 .global vpci_queue_setup
 vpci_queue_setup:
     ld t0, PCI_DEV_COMMON(a0)
@@ -87,7 +70,6 @@ vpci_queue_setup:
     li a0, 1
     ret
 
-# vpci_driver_ok: the device whose record is at a0 may now be driven.
 .global vpci_driver_ok
 vpci_driver_ok:
     ld t0, PCI_DEV_COMMON(a0)
@@ -95,8 +77,6 @@ vpci_driver_ok:
     sb t1, VIRTIO_PCI_COMMON_STATUS(t0)
     ret
 
-# vpci_notify: tell the device whose record is at a0 that queue a1, the
-# one set up last, has new buffers.
 .global vpci_notify
 vpci_notify:
     ld t0, PCI_DEV_QUEUE_NOTIFY(a0)

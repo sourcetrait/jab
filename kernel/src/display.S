@@ -3,34 +3,11 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# The display: QEMU's virtio-gpu in 2D over mmio. One resource, the
-# framebuffer at JAB_DISPLAY_BASE, is the program's to draw into; the
-# kernel attaches it as the resource's backing, sets it as scanout 0,
-# and on a flip transfers the whole of it, or the rectangles the
-# program names, to the host and flushes them. The screen console draws
-# text into the same framebuffer with the font in font.S and transfers
-# only the rows it touched. Commands go through the control queue in
-# batches, a chain of two descriptors each, one notify and one wait for
-# the whole batch with the hart halted until the device has answered
-# every one, since each wait costs a halt and a wake of every hart and
-# a rectangle list is dozens of commands; a single command is a batch of
-# one. The queue is the wide one of virtio.inc, so a batch holds up to
-# GPUQ_CHAINS commands. Each response's type says whether the device
-# took the command. A rectangle list is transferred rectangle by
-# rectangle, only the changed pixels crossing, and flushed once as the
-# one rectangle holding them all, so the host's window draws one
-# upload a tick whatever the list: a flush costs the host's window a
-# fixed price and a wait each, and a window drawn on a timer draws
-# late by as long as the flushes take.
 .set DISPLAY_RESOURCE, 1
 .set GPU_CMD_BYTES, 64
 .set GPU_RESP_BYTES, 24
-# a transfer is one command, and the last batch carries the flush
 .set GPU_TRANSFERS_PER_BATCH, (GPUQ_CHAINS - 1)
 
-# The console: cells of FONT_WIDTH by FONT_HEIGHT, each glyph a 16-bit
-# row per pixel row with the glyph in the high FONT_WIDTH bits, white
-# on black. A newline ends the line; the bottom scrolls.
 .set FONT_WIDTH, 12
 .set FONT_HEIGHT, 24
 .set FONT_ROW_BYTES, 2
@@ -45,25 +22,18 @@
 
 .section .text
 
-# sys_display_open (jab.sys.display.open): a0 becomes display_open's code.
 .global sys_display_open
 sys_display_open:
     call display_open
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_ready (jab.sys.display.ready): a0 becomes 1 when a flip would
-# go through now, else 0.
 .global sys_display_ready
 sys_display_ready:
     call frame_ready
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip (jab.sys.display.flip): show the framebuffer. a0 becomes
-# 0; 1 when the frame is early, which the cap refuses without a
-# transfer; 2 when the display is not open; 3 when the device refused a
-# command.
 .global sys_display_flip
 sys_display_flip:
     la t0, display_state
@@ -91,11 +61,6 @@ sys_display_flip:
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip_rect (jab.sys.display.flip.rect): show the rectangle at
-# a0, a1 of a2 by a3 pixels. a0 becomes 0; 1 when the frame is early,
-# nothing transferred; 2 when the display is not open; 3 when the
-# device refused a command; 4 when the rectangle is empty or reaches
-# outside the screen.
 .global sys_display_flip_rect
 sys_display_flip_rect:
     la t0, display_state
@@ -138,14 +103,6 @@ sys_display_flip_rect:
     sd a0, 80(sp)
     j trap_return
 
-# sys_display_flip_rects (jab.sys.display.flip.rects): show the a1
-# rectangles at a0, JAB_RECT_SIZE bytes each, as one flip. Every
-# rectangle is checked before any is shown. a0 becomes 0; 1 when the
-# frame is early, nothing transferred; 2 when the display is not open;
-# 3 when the device refused a command; 4 when the count is 0 or more
-# than the window could hold, or a rectangle is empty or reaches
-# outside the screen. The count is bounded before it is scaled, so the
-# byte size the bounds see never wraps.
 .global sys_display_flip_rects
 sys_display_flip_rects:
     la t0, display_state
@@ -200,11 +157,6 @@ sys_display_flip_rects:
     sd a0, 80(sp)
     j trap_return
 
-# display_present_rects: transfer the a1 rectangles at a0, JAB_RECT_SIZE
-# bytes each, to the host, in batches of GPU_TRANSFERS_PER_BATCH with
-# one wait each, and flush the one rectangle holding them all once,
-# riding the last batch, so a list up to GPU_TRANSFERS_PER_BATCH is one
-# wait. Returns 0, or 1 when a command fails.
 .global display_present_rects
 display_present_rects:
     addi sp, sp, -80
@@ -220,7 +172,6 @@ display_present_rects:
     mv s0, a0                   # the next rectangle
     mv s1, a1                   # how many are left
     beqz s1, 8f
-    # the rectangle holding them all, from the list
     li s4, JAB_DISPLAY_WIDTH    # its left
     li s5, JAB_DISPLAY_HEIGHT   # its top
     li s6, 0                    # its right
@@ -250,7 +201,6 @@ display_present_rects:
     addi t0, t0, JAB_RECT_SIZE
     addi t1, t1, -1
     j 1b
-    # then the transfers, the last batch carrying the flush
 2:
     li s2, GPU_TRANSFERS_PER_BATCH
     bgeu s1, s2, 3f
@@ -303,8 +253,6 @@ display_present_rects:
     addi sp, sp, 80
     ret
 
-# gpu_transfer_command: add the transfer to the host of the rectangle
-# at a0, a1 of a2 by a3 to the pending batch, one chain.
 gpu_transfer_command:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -335,8 +283,6 @@ gpu_transfer_command:
     addi sp, sp, 48
     ret
 
-# gpu_flush_command: add the flush of the rectangle at a0, a1 of a2 by
-# a3 to the pending batch, one chain.
 gpu_flush_command:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -362,8 +308,6 @@ gpu_flush_command:
     addi sp, sp, 48
     ret
 
-# gpu_batch_command: a0 becomes the pending chain's command buffer,
-# zeroed, with its type set to a0 as given.
 gpu_batch_command:
     la t0, gpu_queue
     ld t1, GPUQ_PENDING(t0)
@@ -383,9 +327,6 @@ gpu_batch_command:
     mv a0, t0
     ret
 
-# gpu_batch_add: the pending chain's command, a1 bytes of it, and its
-# response buffer become descriptors 2p and 2p + 1, offered in the
-# available ring's next slot; the chain is then pending.
 gpu_batch_add:
     la t0, gpu_queue
     ld t1, GPUQ_PENDING(t0)
@@ -413,7 +354,6 @@ gpu_batch_add:
     li t4, VIRTQ_DESC_F_WRITE
     sh t4, (GPUQ_DESC + VIRTQ_DESC_FLAGS)(t3)
     sh zero, (GPUQ_DESC + VIRTQ_DESC_NEXT)(t3)
-    # the available ring's slot for it: the index plus the pending count
     lhu t3, (GPUQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     add t3, t3, t1
     andi t3, t3, GPUQ_SIZE - 1
@@ -424,9 +364,6 @@ gpu_batch_add:
     sd t1, GPUQ_PENDING(t0)
     ret
 
-# gpu_batch_run: publish the pending chains, notify the device, halt
-# until it has used every one, and read their responses. a0 becomes 0
-# when each answered VIRTIO_GPU_RESP_OK_NODATA, else 1.
 gpu_batch_run:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -450,7 +387,6 @@ gpu_batch_run:
     and t2, t2, t3
     sd t2, GPUQ_LAST_USED(t0)
     sd zero, GPUQ_PENDING(t0)
-    # every response
     la t2, gpu_batch_resps
     li t3, VIRTIO_GPU_RESP_OK_NODATA
 1:
@@ -470,11 +406,6 @@ gpu_batch_run:
     addi sp, sp, 16
     ret
 
-# gpu_wait_batch: halt until the GPU queue's used index has moved past
-# what the kernel last saw by the pending count, waking on the
-# transport's line, which is serviced before returning. The external
-# enable is cleared after unless the sound stream is live, whose line
-# must keep reaching the vector while the program runs (sound.S).
 gpu_wait_batch:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -505,9 +436,6 @@ gpu_wait_batch:
     addi sp, sp, 16
     ret
 
-# gpu_queue_setup: give the device's control queue the wide record's
-# rings, GPUQ_SIZE entries. Returns 0, or 1 when the device offers
-# fewer.
 gpu_queue_setup:
     la t2, gpu_base
     ld a0, 0(t2)
@@ -537,9 +465,6 @@ gpu_queue_setup:
     li a0, 1
     ret
 
-# sys_display_print (jab.sys.display.print): write the string at a0 to the
-# screen console, opening the display if the program has not. a0 becomes
-# 0, or display_open's code.
 .global sys_display_print
 sys_display_print:
     call message_bounds
@@ -559,8 +484,6 @@ sys_display_print:
     sd a0, 80(sp)
     j trap_return
 
-# sys_print (jab.sys.print): the screen console once the display is open,
-# else the UART.
 .global sys_print
 sys_print:
     la t0, display_state
@@ -568,14 +491,6 @@ sys_print:
     bnez t0, sys_display_print
     j sys_uart_print
 
-# sys_display_text (jab.sys.display.text): draw the string at a0 into the
-# framebuffer with the console's font, its top left at a1, a2, signed,
-# in the colour a3, only the glyphs' own pixels, so what is under the
-# text stays; a4 is the style, JAB_TEXT_BOLD striking each glyph twice
-# a pixel apart; a5 the scale in 256ths, a cell being the font's size
-# times it, the nearest source pixel taken as a sprite's is. What
-# falls off the screen is clipped. Nothing is presented; the program
-# flips. a0 becomes the width drawn in pixels and a1 the height.
 .global sys_display_text
 sys_display_text:
     call message_bounds
@@ -628,10 +543,6 @@ sys_display_text:
     sd s9, 88(sp)
     j trap_return
 
-# text_glyph: draw the glyph of a0 with its top left at a1, a2, in the
-# colour a3 with the style a4, in a cell a5 wide and a6 high, the set
-# pixels only, each clipped to the screen; a drawn pixel samples the
-# nearest source pixel.
 text_glyph:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -691,8 +602,6 @@ text_glyph:
     addi sp, sp, 48
     ret
 
-# text_pixel: the colour a3 at column a5, row a6, when that is on the
-# screen. Clobbers t1 and a7 only.
 text_pixel:
     bltz a5, 1f
     bltz a6, 1f
@@ -710,10 +619,6 @@ text_pixel:
 1:
     ret
 
-# display_open: bring the GPU up and show the framebuffer. Returns 0; 1
-# when no virtio-gpu is on the machine; 2 when the device refuses the
-# features or has no control queue of VIRTQ_SIZE; 3 when a command
-# fails. Open already, it returns 0 at once.
 .global display_open
 display_open:
     la t0, display_state
@@ -754,8 +659,6 @@ msg_gpu_at:
     la t0, gpu_base
     ld a0, 0(t0)
     call virtio_irq_enable
-    # what the display is, then the resource, its backing, the scanout,
-    # and the first frame
     call gpu_get_display_info
     bnez a0, 7f
     call gpu_create_resource
@@ -788,9 +691,6 @@ msg_gpu_at:
     addi sp, sp, 16
     ret
 
-# display_present_rect: transfer the rectangle at a0, a1 of a2 by a3
-# pixels of the framebuffer to the host and flush it to the screen.
-# Returns 0, or 1 when a command fails.
 .global display_present_rect
 display_present_rect:
     addi sp, sp, -48
@@ -810,7 +710,6 @@ display_present_rect:
     sw t2, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_Y)(t0)
     sw t3, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_WIDTH)(t0)
     sw t4, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_HEIGHT)(t0)
-    # the byte offset of the rectangle's top left in the framebuffer
     li t5, JAB_DISPLAY_PITCH
     mul t5, t5, t2
     slli t6, t1, 2
@@ -843,8 +742,6 @@ display_present_rect:
     addi sp, sp, 48
     ret
 
-# gpu_get_display_info: ask what the display is; with DEBUG the first
-# mode is reported.
 gpu_get_display_info:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -885,8 +782,6 @@ msg_enabled:
     addi sp, sp, 16
     ret
 
-# gpu_create_resource: the one 2D resource, the framebuffer's size and
-# format.
 gpu_create_resource:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -908,8 +803,6 @@ gpu_create_resource:
     addi sp, sp, 16
     ret
 
-# gpu_attach_backing: the framebuffer, one contiguous entry, backs the
-# resource.
 gpu_attach_backing:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -931,7 +824,6 @@ gpu_attach_backing:
     addi sp, sp, 16
     ret
 
-# gpu_set_scanout: scanout 0 shows the whole resource.
 gpu_set_scanout:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -951,7 +843,6 @@ gpu_set_scanout:
     addi sp, sp, 16
     ret
 
-# gpu_command: zero the request buffer and set its type to a0.
 gpu_command:
     la t0, gpu_cmd
     sd zero, 0(t0)
@@ -965,10 +856,6 @@ gpu_command:
     sw a0, VIRTIO_GPU_HDR_TYPE(t0)
     ret
 
-# gpu_submit: run the request of a0 bytes in gpu_cmd and expect a
-# response of type a1 in gpu_resp: a batch of one chain, descriptors 0
-# and 1. Returns 0 when the device answered with it, else 1. With DEBUG
-# every command and its answer is reported on the debug channel.
 gpu_submit:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1043,10 +930,6 @@ msg_gpu_resp:
     addi sp, sp, 32
     ret
 
-# console_write: draw the bytes from a0 up to the terminator or a1 at
-# the cursor, then show the rows touched. A newline moves to the next
-# line; a line past the last scrolls the screen up; other control bytes
-# are skipped, and bytes past ASCII draw as a space.
 .global console_write
 console_write:
     addi sp, sp, -48
@@ -1103,7 +986,6 @@ console_write:
     li s2, 0
     li s3, JAB_DISPLAY_HEIGHT
 5:
-    # the dirty band takes in this line's pixel rows
     la t0, console_row
     ld a2, 0(t0)
     li t2, FONT_HEIGHT
@@ -1139,7 +1021,6 @@ console_write:
     addi sp, sp, 48
     ret
 
-# console_glyph: draw the glyph of a0 in the cell at column a1, row a2.
 console_glyph:
     addi t0, a0, -FONT_FIRST
     li t1, FONT_GLYPH_BYTES
@@ -1180,7 +1061,6 @@ console_glyph:
     bnez t2, 1b
     ret
 
-# console_scroll: move every line up by one and clear the last.
 console_scroll:
     li t0, JAB_DISPLAY_BASE
     li t1, JAB_DISPLAY_BASE + CONSOLE_LINE_BYTES

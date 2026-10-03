@@ -1,39 +1,8 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# Sprites: frames of native pixels the program owns, blended onto the
-# framebuffer (jab.inc for the record). A draw walks the drawn
-# rectangle, clipped to the screen, and for each of its pixels samples
-# the nearest source pixel of the frame at the scale asked, so scaling
-# up repeats pixels and scaling down skips them; a step from one drawn
-# pixel to the next source one is fixed per draw in 16.16 fixed point,
-# and at JAB_SPRITE_SCALE_ONE it is exactly one, so an unscaled draw is
-# a plain copy of the frame. A spanned record, one the kernel decoded,
-# carries each row's first and last opaque column, and the unturned
-# draw walks only the drawn columns those map to, so a thin figure in
-# a wide frame costs its own pixels rather than the frame's. The pose
-# mirrors and turns: a flip reads the frame's columns or rows from the
-# far end, and an angle turns the scaled frame about its centre, the
-# draw then walking the turned rectangle's bounding box and mapping
-# each pixel of it back through the inverse turn, in 16.16 with a sine
-# table, to the source pixel under it or to nothing. Per pixel the
-# alpha decides: 0 is skipped, 255 copied, and anything between
-# blended, each channel becoming (s * a + d * (255 - a)) / 255,
-# rounded; the tint multiplies each of the sprite's channels by its
-# own, over 255, first, and a white pixel takes the tint outright,
-# which is the same number. Division by 255 is the exact shift form
-# (x + 128 + ((x + 128) >> 8)) >> 8. A solid draw writes the tint over
-# every pixel the frame covers, a row's span or the whole row, reading
-# no source pixel at all, which is how a program clears the shape it
-# drew a frame ago. The record and its pixels are read a byte at a
-# time, so a sprite may sit anywhere.
-
-# A record's width, height, and frame count each stop here, the PNG
-# decoder's own limit (png.S), so their products fit 64 bits
 .set SPRITE_SIDE_MAX, 65535
 
-# sprite_round255 reg, tmp: reg, a product of two bytes, becomes that
-# product divided by 255 and rounded.
 .macro sprite_round255 reg, tmp
     addi \reg, \reg, 128
     srli \tmp, \reg, 8
@@ -43,13 +12,6 @@
 
 .section .text
 
-# sys_sprite_draw (jab.sys.sprite.draw): a0 is the sprite record, a1 the
-# frame, a2 x, a3 y (signed), a4 the tint, a5 the scale, a6 the pose.
-# a0 becomes 0; 1 when the frame is not in the sprite; 2 when the scale
-# is past JAB_SPRITE_SCALE_MAX. A record whose width, height, or frame
-# count is past SPRITE_SIDE_MAX is no sprite the kernel handed out and
-# ends the run as a bad address would, which keeps every size product
-# below inside 64 bits before the bounds see it.
 .global sys_sprite_draw
 sys_sprite_draw:
     ld a0, 80(sp)
@@ -84,8 +46,6 @@ sys_sprite_draw:
     mul t1, t0, s4
     addi s5, s0, JAB_SPRITE_PIXELS
     add s5, s5, t1              # the frame's first pixel
-    # the span table, after every frame's pixels, and this frame's rows
-    # of it
     la t1, sprite_flags
     ld t1, 0(t1)
     andi t1, t1, JAB_SPRITE_SPANNED
@@ -107,7 +67,6 @@ sys_sprite_draw:
     li a0, 2
     li t0, JAB_SPRITE_SCALE_MAX
     bgtu s6, t0, 9f
-    # the drawn size, and the step from a drawn pixel to its source
     mul s7, s1, s6
     srli s7, s7, 8              # the drawn width
     mul s8, s2, s6
@@ -121,15 +80,12 @@ sys_sprite_draw:
     divu s10, t0, s8            # a drawn row to a source one
     la t0, sprite_stepabs
     sd s9, 0(t0)
-    # what a flip reads from: the frame's last column and row
     addi t0, s1, -1
     la t1, sprite_last_col
     sd t0, 0(t1)
     addi t0, s2, -1
     la t1, sprite_last_row
     sd t0, 0(t1)
-    # the pose: the flips, whether the draw is solid, and the angle
-    # brought into a turn
     ld t0, 128(sp)
     srli t1, t0, 16
     andi t2, t1, 3
@@ -144,8 +100,6 @@ sys_sprite_draw:
     remu t0, t0, t1
     la t2, sprite_angle
     sd t0, 0(t2)
-    # the tint's channels, or a mark that there is no tinting; the tint
-    # whole is what a solid draw writes
     ld s11, 112(sp)
     li t0, 0xffffff
     and t1, s11, t0
@@ -171,7 +125,6 @@ sys_sprite_draw:
     la t0, sprite_angle
     ld t0, 0(t0)
     bnez t0, sprite_turned
-    # unturned: the drawn rectangle, clipped to the screen
     ld s0, 96(sp)               # x
     ld s1, 104(sp)              # y
     la t0, sprite_x
@@ -196,10 +149,6 @@ sys_sprite_draw:
     mv s6, t0
 6:
     bge s7, s6, 9f
-    # The source position runs along with the drawn one as a 16.16
-    # accumulator, a step a pixel; a flip runs it backwards from the
-    # frame's far edge, since (last + 1) * 65536 - 1 - n * step, shifted
-    # down, is last - (n * step shifted down) for every n.
     sub t0, s2, s0
     mul s0, t0, s9              # the first drawn column's source column
     la t0, sprite_flips
@@ -235,10 +184,6 @@ sys_sprite_draw:
     li t1, JAB_DISPLAY_BASE
     mv s7, s2                   # the first drawn column
     add s2, t0, t1              # the row's first screen pixel
-    # the rows: s6 left, s2 the screen row, s1 the source row's
-    # position, s11 the source row, s7 the first drawn column and s3
-    # how many; the pixels: s8 left, a2 the screen pixel, a3 the source
-    # column's position, a1 the source pixel
 7:
     call sound_tick
     srli t0, s1, 16
@@ -248,10 +193,6 @@ sys_sprite_draw:
     ld t1, 0(t1)
     andi t1, t1, JAB_SPRITE_SPANNED
     beqz t1, 75f
-    # the row's span: its first and last opaque columns, mirrored for a
-    # flip, then the drawn columns whose source columns fall inside it,
-    # the first at or past the span's first and the end past its last,
-    # clipped to what is on the screen
     la t1, sprite_spans_row
     ld t1, 0(t1)
     slli t2, t0, 2
@@ -327,8 +268,6 @@ sys_sprite_draw:
     bnez s8, 761b
     j 8f
 78:
-    # solid: the tint over every pixel of the row's stretch, no source
-    # read at all
     la t0, sprite_solid_word
     ld t0, 0(t0)
 79:
@@ -347,15 +286,9 @@ sys_sprite_draw:
     sd a0, 80(sp)
     j trap_return
 
-# a record that is no sprite ends the run (trap.S)
 sprite_bad:
     j bad_address
 
-# The turned draw: the scaled frame's centre in 16.16, the sine and
-# cosine of the angle, the half sizes and the size of the drawn
-# rectangle, then its bounding box on the screen; each pixel of the box
-# is taken back through the inverse turn to where it sits on the
-# unturned frame, and sampled when that is inside it.
 sprite_turned:
     ld s0, 96(sp)               # x
     ld s1, 104(sp)              # y
@@ -384,7 +317,6 @@ sprite_turned:
     sd a0, 0(t0)
     la t0, sprite_cos
     sd a1, 0(t0)
-    # how far the turned corners reach from the centre
     la t0, sprite_hw
     ld t0, 0(t0)
     la t1, sprite_hh
@@ -411,7 +343,6 @@ sprite_turned:
 4:
     srai t4, t4, 16
     add t3, t3, t4              # the reach in y
-    # the bounding box, clipped to the screen
     sub s2, s0, t2
     srai s2, s2, 16
     add s3, s0, t2
@@ -439,8 +370,6 @@ sprite_turned:
     mv s6, t0
 8:
     bge s7, s6, 19f
-    # the rows: s7 the drawn row, s6 its end, s2 and s3 the columns; s0
-    # and s1 the centre; s11 the row's offset from the centre, 16.16
 9:
     call sound_tick
     slli s11, s7, 16
@@ -479,7 +408,6 @@ sprite_turned:
     la t0, sprite_dh16
     ld t0, 0(t0)
     bge t4, t0, 18f
-    # the source pixel under it
     mul t3, t3, s9
     srli t3, t3, 32
     la t0, sprite_last_col
@@ -530,9 +458,6 @@ sprite_turned:
     sd a0, 80(sp)
     j trap_return
 
-# sprite_blend: a1 is a source pixel with its alpha already in a7, and
-# a2 the screen word under it. The alpha decides, the tint multiplies,
-# the blend rounds; a leaf that keeps the s registers, a1, a2, and a3.
 sprite_blend:
     beqz a7, 9f
     lbu a4, 0(a1)               # blue
@@ -541,9 +466,6 @@ sprite_blend:
     la t1, sprite_tinted
     ld t1, 0(t1)
     beqz t1, 1f
-    # a white pixel under a tint is the tint, exactly what the
-    # multiplies would give, and the recolour rule makes every pixel of
-    # such a sprite white, so the multiplies are skipped for it
     and t2, a4, a5
     and t2, t2, a6
     li t3, 255
@@ -571,7 +493,6 @@ sprite_blend:
 1:
     li t1, 255
     beq a7, t1, 2f
-    # blended over what is there
     sub t1, t1, a7              # what the screen keeps
     lwu t2, 0(a2)
     andi t3, t2, 0xff           # its blue
@@ -600,11 +521,6 @@ sprite_blend:
 9:
     ret
 
-# sprite_spans: a0 is a sprite record whose header and pixels are in
-# place. Writes the span table after the pixels, two 16-bit columns per
-# row of every frame, the first and the last with any alpha, the first
-# past the last for a row with none, and sets JAB_SPRITE_SPANNED in
-# the flags. What png.S calls once a decode is done.
 .global sprite_spans
 sprite_spans:
     addi sp, sp, -48
@@ -669,8 +585,6 @@ sprite_spans:
     addi sp, sp, 48
     ret
 
-# sprite_trig: a0 is an angle, 0 to 359 degrees; a0 becomes its sine
-# and a1 its cosine, signed 16.16, from the quarter-wave table.
 sprite_trig:
     li t0, 90
     divu t1, a0, t0             # the quadrant
@@ -688,7 +602,6 @@ sprite_trig:
     beq t1, t0, 2f
     li t0, 2
     beq t1, t0, 3f
-    # the fourth quadrant
     neg a0, t3
     mv a1, t2
     ret
@@ -705,8 +618,6 @@ sprite_trig:
     neg a1, t3
     ret
 
-# sprite_le32: a0 is an address; a0 becomes the little-endian longword
-# there, read a byte at a time.
 sprite_le32:
     lbu t0, 0(a0)
     lbu t1, 1(a0)
@@ -722,7 +633,6 @@ sprite_le32:
 
 .section .rodata
 .balign 4
-# The sine of 0 to 90 degrees in 16.16 fixed point, rounded.
 sprite_sine:
     .word 0, 1144, 2287, 3430, 4572, 5712, 6850
     .word 7987, 9121, 10252, 11380, 12505, 13626, 14742

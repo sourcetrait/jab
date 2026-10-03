@@ -1,44 +1,14 @@
 .include "jab.inc"
 .include "synth.inc"
 
-# The synthesizer: chip-tune voices behind a MIDI-shaped surface,
-# TheUser's ruling that the synth lives in the kernel and chip-tune is
-# the default. Sixteen channels each hold a program, a bank, a volume,
-# a pan, an expression, a pedal, and a bend, MIDI's own numbers; a note
-# on takes one of JAB_MIDI_VOICES voices and gives it the channel's
-# instrument: a wave (a square with a duty, a triangle, a sawtooth, a
-# sine, or noise), an envelope in milliseconds (attack to the top,
-# decay to the sustain, release from wherever it was), and a vibrato.
-# The percussion channel's notes are drums from a table of their own.
-# The instruments come from a table of General MIDI defaults, each
-# replaceable by jab.sys.midi.instrument. With a SoundFont loaded
-# (soundfont.S) a note on goes to its sampled voices instead, through
-# the same channels; the calls below reach both kinds. The voices are
-# rendered a period at a time into the mixer's accumulator (sound.S)
-# on the device's clock, so an event takes effect within a period. A
-# pitch is a phase step, 2^32 a cycle, per frame at JAB_SOUND_RATE,
-# from a table of the top octave shifted down; a bend and a vibrato
-# move the step in proportion, a straight line through two semitones,
-# near enough. A voice remembers whose note it plays, the calls' or
-# the file's (smf.S), so a note off, a channel's notes off, and the
-# piece's stop each reach their own notes and no other's; the
-# channel's program and controllers stay shared between the two, by
-# MIDI's own rule.
 .set VOICES, JAB_MIDI_VOICES
 .set CHANNELS, JAB_MIDI_CHANNELS
 .set PERCUSSION, JAB_MIDI_PERCUSSION
-# The envelope's level runs 0 to TOP in 16.16, the amplitude in the
-# high half, so a step a frame can be a fraction of an amplitude unit
-# and a duration of many seconds still counts out; frames a millisecond
 .set TOP, (65535 << 16)
 .set FRAMES_PER_MS, (JAB_SOUND_RATE / 1000)
-# The LFO's step for one hertz, 2^32 / JAB_SOUND_RATE
 .set LFO_HZ, 89478
-# A bend of the full 8192 moves the step by 2^(2/12) - 1 of itself:
-# step * bend * BEND_SCALE >> 29
 .set BEND_SCALE, 8028
 
-# A voice
 .set VOICE_STAGE, 0             # 0 free, 1 attack, 2 decay, 3 sustain, 4 release
 .set VOICE_CHANNEL, 1
 .set VOICE_NOTE, 2              # the MIDI note, for identity; a drum sounds elsewhere
@@ -65,8 +35,6 @@
 .set STAGE_SUSTAIN, 3
 .set STAGE_RELEASE, 4
 
-# A drum is an instrument spec with its own note in the spare byte;
-# the map covers General MIDI's kit and the rest fall to one drum
 .set DRUM_NOTE, 11
 .set DRUM_FIRST, 35
 .set DRUM_LAST, 81
@@ -74,9 +42,6 @@
 
 .section .text
 
-# synth_init: every voice free, every channel at program 0 in bank 0
-# with its controllers at their defaults, the instruments the General
-# MIDI table, no SoundFont loaded. Clobbers t registers.
 .global synth_init
 synth_init:
     addi sp, sp, -16
@@ -117,15 +82,12 @@ synth_init:
     addi sp, sp, 16
     ret
 
-# synth_live: the notes from here on are the calls' own. Clobbers t0.
 .global synth_live
 synth_live:
     la t0, synth_source
     sb zero, 0(t0)
     ret
 
-# synth_from_file: the notes from here on are the file's (smf.S).
-# Clobbers t0 and t1.
 .global synth_from_file
 synth_from_file:
     la t0, synth_source
@@ -133,8 +95,6 @@ synth_from_file:
     sb t1, 0(t0)
     ret
 
-# synth_sounding: a0 becomes 1 while any voice sounds, the chip's or
-# the font's, else 0. Clobbers t0 to t2.
 .global synth_sounding
 synth_sounding:
     la t0, synth_voices
@@ -150,8 +110,6 @@ synth_sounding:
 2:
     ret
 
-# synth_reset_channel: the channel record at a0 back to its default
-# controllers, the program kept. Clobbers t0 only.
 synth_reset_channel:
     li t0, 100
     sb t0, CHANNEL_VOLUME(a0)
@@ -163,20 +121,12 @@ synth_reset_channel:
     sh zero, CHANNEL_BEND(a0)
     ret
 
-# synth_channel: a0, a channel number, becomes its record.
 synth_channel:
     slli a0, a0, CHANNEL_SHIFT
     la t0, synth_channels
     add a0, a0, t0
     ret
 
-# Every MIDI call brings the sound device up first and answers with
-# its code when it cannot; the arguments are read from the frame after
-# that, masked to their ranges rather than checked; and the notes a
-# call touches are the calls' own (synth_live).
-
-# sys_midi_program (jab.sys.midi.program): a0 is the channel, a1 the
-# program. a0 becomes 0.
 .global sys_midi_program
 sys_midi_program:
     call sound_open
@@ -194,10 +144,6 @@ midi_refused:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_note (jab.sys.midi.note): a0 is the channel, a1 the note, a2
-# the velocity, a3 whether it starts: with a3 set and a velocity the
-# note starts on a voice, otherwise every voice sounding it on the
-# channel from the calls is released. a0 becomes 0.
 .global sys_midi_note
 sys_midi_note:
     call sound_open
@@ -220,8 +166,6 @@ sys_midi_note:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_control (jab.sys.midi.control): a0 is the channel, a1 the
-# controller, a2 its value, to synth_control. a0 becomes 0.
 .global sys_midi_control
 sys_midi_control:
     call sound_open
@@ -234,13 +178,6 @@ sys_midi_control:
     sd zero, 80(sp)
     j trap_return
 
-# synth_control: channel a0's controller a1 takes the value a2, each
-# masked to its range. The bank select, the volume, pan, expression,
-# and pedal are kept; the pedal lifting releases what it held; 120
-# frees the channel's voices of the current source at once, 121
-# releases what the pedal held and resets the controllers, 123
-# releases the channel's notes of the current source; any other
-# controller is taken and ignored. Keeps the s registers.
 .global synth_control
 synth_control:
     addi sp, sp, -16
@@ -291,8 +228,6 @@ synth_control:
 5:
     li t0, JAB_MIDI_CC_RESET
     bne a1, t0, 6f
-    # what the pedal holds goes first, as a lift would release it,
-    # since the reset takes the pedal away
     mv a0, a3
     call synth_pedal_up
     mv a0, a3
@@ -310,8 +245,6 @@ synth_control:
     addi sp, sp, 16
     ret
 
-# synth_program: channel a0's program becomes a1, each masked.
-# Clobbers t0 and a0.
 .global synth_program
 synth_program:
     andi a0, a0, CHANNELS - 1
@@ -322,8 +255,6 @@ synth_program:
     sb a1, CHANNEL_PROGRAM(a0)
     ret
 
-# synth_bend: channel a0's bend becomes a1, 14 bits with
-# JAB_MIDI_BEND_CENTER for none, each masked. Clobbers t0, a0, a1.
 .global synth_bend
 synth_bend:
     andi a0, a0, CHANNELS - 1
@@ -337,8 +268,6 @@ synth_bend:
     sh a1, CHANNEL_BEND(a0)
     ret
 
-# sys_midi_bend (jab.sys.midi.bend): a0 is the channel, a1 the bend, to
-# synth_bend. a0 becomes 0.
 .global sys_midi_bend
 sys_midi_bend:
     call sound_open
@@ -349,10 +278,6 @@ sys_midi_bend:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_instrument (jab.sys.midi.instrument): a0 is a program, a1 a
-# spec of JAB_MIDI_INSTRUMENT_ENTRY bytes inside the program's window,
-# which becomes that program's instrument for the notes after. a0
-# becomes 0.
 .global sys_midi_instrument
 sys_midi_instrument:
     call sound_open
@@ -372,9 +297,6 @@ sys_midi_instrument:
     sd zero, 80(sp)
     j trap_return
 
-# sys_midi_silence (jab.sys.midi.silence): the piece stopped (smf.S),
-# every voice free at once, whoever's, and every channel's controllers
-# back to their defaults, the programs kept. a0 becomes 0.
 .global sys_midi_silence
 sys_midi_silence:
     call sound_open
@@ -394,9 +316,6 @@ sys_midi_silence:
     sd zero, 80(sp)
     j trap_return
 
-# synth_all_off: every voice of source a1, or every voice with
-# SOURCE_ANY, freed at once when a0 is set, else released, the chip's
-# and the font's. Keeps the s registers.
 .global synth_all_off
 synth_all_off:
     addi sp, sp, -16
@@ -429,12 +348,6 @@ synth_all_off:
     addi sp, sp, 16
     ret
 
-# synth_note_on: the note a1 at velocity a2 starts on channel a0. With
-# a SoundFont loaded it starts there (soundfont.S). Else the
-# instrument is the channel's program's, or the note's drum on the
-# percussion channel, which then also sets the pitch, the voice keeping
-# the MIDI note as its identity; a voice is taken and filled from it,
-# tagged with the current source. Keeps the s registers.
 .global synth_note_on
 synth_note_on:
     la t0, soundfont_loaded
@@ -489,14 +402,11 @@ synth_note_on:
     call synth_pitch
     sw a0, VOICE_STEP(t6)
     mv a0, t6
-    # the sustain, the byte scaled to the top
     lbu t0, JAB_MIDI_SUSTAIN(s3)
     li t1, 257
     mul t0, t0, t1
     slli t0, t0, 16
     sw t0, VOICE_SUSTAIN(a0)
-    # the decay, from the top to the sustain over its time, at least
-    # a step a frame
     lhu t1, JAB_MIDI_DECAY(s3)
     li t2, FRAMES_PER_MS
     mul t1, t1, t2
@@ -511,8 +421,6 @@ synth_note_on:
     sw t2, VOICE_DECAY(a0)
     lhu t1, JAB_MIDI_RELEASE(s3)
     sw t1, VOICE_RELEASE_MS(a0)
-    # the attack, from silence to the top over its time, or the top
-    # at once and decaying
     lhu t1, JAB_MIDI_ATTACK(s3)
     li t2, FRAMES_PER_MS
     mul t1, t1, t2
@@ -534,7 +442,6 @@ synth_note_on:
     li t2, STAGE_DECAY
     sb t2, VOICE_STAGE(a0)
 6:
-    # the vibrato's LFO from its rate, the age, and the noise's seed
     sw zero, VOICE_LFO_PHASE(a0)
     lbu t1, JAB_MIDI_VIBRATO_RATE(s3)
     li t2, LFO_HZ
@@ -558,8 +465,6 @@ synth_note_on:
     addi sp, sp, 48
     ret
 
-# synth_take: a0 becomes the voice for a new note: a free one, else
-# the oldest releasing one, else the oldest of all.
 synth_take:
     la t0, synth_voices
     li t1, VOICES
@@ -588,9 +493,6 @@ synth_take:
     mv a0, t0
     ret
 
-# synth_pitch: a0, a note, becomes its phase step a frame: the top
-# octave's table entry shifted down by the octaves below it. Clobbers
-# t0 to t2.
 synth_pitch:
     li t0, 12
     divu t1, a0, t0
@@ -604,8 +506,6 @@ synth_pitch:
     srl a0, a0, t2
     ret
 
-# synth_drum: a1, a note on the percussion channel, picks a drum: a0
-# becomes its spec and a1 the note the drum sounds at.
 synth_drum:
     li a0, DRUM_DEFAULT
     li t0, DRUM_FIRST
@@ -624,10 +524,6 @@ synth_drum:
     lbu a1, DRUM_NOTE(a0)
     ret
 
-# synth_note_off: every voice of the current source still sounding
-# note a1 on channel a0 is released, or marked held while the
-# channel's pedal is down, the chip's and the font's alike. Keeps the
-# s registers.
 .global synth_note_off
 synth_note_off:
     addi sp, sp, -32
@@ -673,9 +569,6 @@ synth_note_off:
     addi sp, sp, 32
     ret
 
-# synth_release: the voice at a0 goes to its release, falling from
-# its level to silence over its release time, or gone next frame with
-# none. Clobbers t0 to t2.
 synth_release:
     li t0, STAGE_RELEASE
     sb t0, VOICE_STAGE(a0)
@@ -696,8 +589,6 @@ synth_release:
     sd t0, VOICE_DELTA(a0)
     ret
 
-# synth_pedal_up: every voice of channel a0 held under the pedal is
-# released, the chip's and the font's.
 synth_pedal_up:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -725,9 +616,6 @@ synth_pedal_up:
     addi sp, sp, 16
     ret
 
-# synth_channel_off: every voice of channel a0 from the current source
-# is freed at once when a1 is set, else released, the chip's and the
-# font's.
 synth_channel_off:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -762,15 +650,6 @@ synth_channel_off:
     addi sp, sp, 16
     ret
 
-# synth_render: every sounding voice added into the accumulator at
-# a0, a1 frames of two 32-bit samples, left then right, the font's
-# voices after the chip's (soundfont.S). Per voice and period: the
-# step bent by its channel and its vibrato, the gains from its
-# velocity and the channel's volume, expression, and pan; then per
-# frame: the wave's sample at the phase, scaled by the envelope's
-# level and the gains into both channels, the phase on by the step,
-# and the envelope on by its delta, the stage turning where it reaches
-# the top, the sustain, or silence. Keeps the s registers.
 .global synth_render
 synth_render:
     addi sp, sp, -112
@@ -798,8 +677,6 @@ voice:
     slli a0, a0, CHANNEL_SHIFT
     la t0, synth_channels
     add a0, a0, t0
-    # the step: the note's, bent by the channel, then by the vibrato,
-    # whose LFO moves a period at a time
     lwu s4, VOICE_STEP(s2)
     lh t0, CHANNEL_BEND(a0)
     beqz t0, 1f
@@ -826,8 +703,6 @@ voice:
     srai t1, t1, 27
     add s4, s4, t1
 2:
-    # the gains: velocity, volume, and expression to 0..127, then the
-    # pan's share for each side
     lbu t0, VOICE_VELOCITY(s2)
     lbu t1, CHANNEL_VOLUME(a0)
     mul t0, t0, t1
@@ -860,7 +735,6 @@ voice:
     mv a6, s0
     mv a7, s1
 frame:
-    # the wave's sample at the phase, into t2
     li t0, JAB_WAVE_SQUARE
     bne s7, t0, 10f
     srliw t0, s9, 24
@@ -898,8 +772,6 @@ frame:
     lh t2, 0(t1)
     j 20f
 14:
-    # noise: the shift register's low bit, clocked as the phase
-    # crosses each thirty-second of a cycle
     andi t2, a4, 1
     li t0, 32767
     bnez t2, 15f
@@ -922,8 +794,6 @@ frame:
     or a4, a4, t0
 20:
     addw s9, s9, s4
-    # the sample at the envelope's level, the amplitude in the level's
-    # high half, into both sides
     mul t2, t2, s10
     srai t2, t2, 32
     lw t0, 0(a6)
@@ -937,7 +807,6 @@ frame:
     add t0, t0, t1
     sw t0, 4(a6)
     addi a6, a6, 8
-    # the envelope on
     beqz s11, 30f
     add s10, s10, s11
     li t0, STAGE_ATTACK
@@ -997,77 +866,59 @@ next_voice:
 
 .section .rodata
 
-# The top octave's steps, notes 120 to 131 at JAB_SOUND_RATE, 2^32 a
-# cycle; a lower octave is one shift down each
 .balign 4
 synth_octave:
     .4byte 749115498, 793660223, 840853716, 890853480
     .4byte 943826385, 999949222, 1059409297, 1122405052
     .4byte 1189146729, 1259857073, 1334772074, 1414141751
 
-# One cycle of a sine, 256 signed 16-bit samples
 .balign 2
 .include "sine.inc"
 
-# An instrument spec: wave, duty, attack, decay, release, sustain,
-# vibrato depth and rate, JAB_MIDI_INSTRUMENT_ENTRY bytes
 .macro instrument wave, duty, attack, decay, release, sustain, depth=0, rate=0
     .byte \wave, \duty
     .2byte \attack, \decay, \release
     .byte \sustain, \depth, \rate, 0
 .endm
 
-# The General MIDI defaults, a chip-tune reading of each family
 .balign 2
 synth_defaults:
-    # 0-7 piano: a narrow square that dies away
     .rept 8
     instrument JAB_WAVE_SQUARE, 64, 0, 900, 120, 0
     .endr
-    # 8-15 chromatic percussion: a sine that dies away
     .rept 8
     instrument JAB_WAVE_SINE, 128, 0, 700, 150, 0
     .endr
-    # 16-23 organ: a square held
     .rept 8
     instrument JAB_WAVE_SQUARE, 128, 10, 0, 40, 255, 20, 6
     .endr
-    # 24-27 guitar, plucked: a triangle; 28-31 driven: a sawtooth
     .rept 4
     instrument JAB_WAVE_TRIANGLE, 128, 0, 700, 100, 0
     .endr
     .rept 4
     instrument JAB_WAVE_SAW, 128, 0, 500, 100, 60
     .endr
-    # 32-37 bass: a triangle; 38-39 synth bass: a square
     .rept 6
     instrument JAB_WAVE_TRIANGLE, 128, 0, 400, 80, 180
     .endr
     .rept 2
     instrument JAB_WAVE_SQUARE, 128, 0, 300, 60, 200
     .endr
-    # 40-47 strings: a sawtooth swelling in, with vibrato
     .rept 8
     instrument JAB_WAVE_SAW, 128, 120, 200, 300, 200, 40, 5
     .endr
-    # 48-55 ensemble: slower still
     .rept 8
     instrument JAB_WAVE_SAW, 128, 250, 300, 400, 210, 30, 5
     .endr
-    # 56-63 brass: a third-duty square
     .rept 8
     instrument JAB_WAVE_SQUARE, 96, 40, 150, 80, 200, 20, 5
     .endr
-    # 64-71 reed: a square
     .rept 8
     instrument JAB_WAVE_SQUARE, 128, 30, 100, 80, 210, 30, 5
     .endr
-    # 72-79 pipe: a sine
     .rept 8
     instrument JAB_WAVE_SINE, 128, 60, 100, 100, 210, 30, 5
     .endr
-    # 80-87 synth lead: square, sawtooth, calliope, chiff, charang,
-    # voice, fifths, bass and lead
     instrument JAB_WAVE_SQUARE, 128, 5, 100, 60, 220
     instrument JAB_WAVE_SAW, 128, 5, 100, 60, 220
     instrument JAB_WAVE_SINE, 128, 20, 100, 80, 220, 20, 5
@@ -1076,38 +927,29 @@ synth_defaults:
     instrument JAB_WAVE_SINE, 128, 60, 150, 150, 220, 30, 5
     instrument JAB_WAVE_SAW, 128, 5, 100, 60, 220
     instrument JAB_WAVE_SQUARE, 128, 5, 100, 60, 220
-    # 88-95 synth pad: a slow sawtooth
     .rept 8
     instrument JAB_WAVE_SAW, 128, 400, 300, 600, 200, 20, 4
     .endr
-    # 96-103 synth effects: a slow, wide triangle
     .rept 8
     instrument JAB_WAVE_TRIANGLE, 128, 200, 400, 500, 150, 60, 3
     .endr
-    # 104-111 ethnic: a plucked triangle
     .rept 8
     instrument JAB_WAVE_TRIANGLE, 128, 0, 500, 100, 0
     .endr
-    # 112-118 percussive: a short triangle; 119 reverse cymbal: noise
-    # swelling in
     .rept 7
     instrument JAB_WAVE_TRIANGLE, 128, 0, 250, 60, 0
     .endr
     instrument JAB_WAVE_NOISE, 0, 800, 100, 100, 0
-    # 120-127 sound effects: noise
     .rept 8
     instrument JAB_WAVE_NOISE, 0, 0, 400, 200, 0
     .endr
 
-# A drum: an instrument that dies away, sounding at its own note
 .macro drum wave, duty, decay, release, note
     .byte \wave, \duty
     .2byte 0, \decay, \release
     .byte 0, 0, 0, \note
 .endm
 
-# The kit: kick, snare, closed hat, open hat, low, mid, and high
-# toms, crash, ride, clap, click
 .balign 2
 synth_drums:
     drum JAB_WAVE_TRIANGLE, 128, 180, 40, 33
@@ -1122,7 +964,6 @@ synth_drums:
     drum JAB_WAVE_NOISE, 0, 120, 30, 95
     drum JAB_WAVE_SQUARE, 128, 40, 10, 84
 
-# General MIDI's kit, notes DRUM_FIRST to DRUM_LAST, each to a drum
 synth_drum_map:
     .byte 0, 0, 10, 1, 9, 1, 4, 2        # 35-42
     .byte 4, 2, 5, 3, 5, 6, 7, 6         # 43-50
@@ -1142,7 +983,6 @@ synth_voices:
     .skip VOICES * VOICE_SIZE
 synth_instruments:
     .skip 128 * JAB_MIDI_INSTRUMENT_ENTRY
-# Whose notes the next note on, note off, and channel off are
 .global synth_source
 synth_source:
     .skip 1

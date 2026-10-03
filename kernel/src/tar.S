@@ -2,20 +2,6 @@
 .include "qemu_virt.inc"
 .include "jab.inc"
 
-# Tar, read where the program already holds it. Unlike romfs, which
-# lives on a disk, a tar archive is bytes in the program's own memory -
-# usually a .tar.gz read out of romfs and inflated - so every offset
-# here is into that block and nothing is read from a device. An entry's
-# data needs no call of its own: it sits 512 bytes after its header, and
-# the record says where.
-#
-# The format is ustar: a 512-byte header of a 100-byte name, the mode,
-# owner and group, the size as octal text, the time, a checksum, a type
-# byte, a link name, the magic `ustar`, and a 155-byte prefix that goes
-# before the name with a separator when it is used. Data follows padded
-# to 512, and two zeroed blocks end the archive. A header whose name is
-# empty, or whose checksum does not answer for it, is the end.
-
 .set TAR_NAME, 0
 .set TAR_NAME_BYTES, 100
 .set TAR_SIZE, 124
@@ -30,10 +16,6 @@
 
 .section .text
 
-# sys_tar_list (jab.sys.tar.list): a0 is the buffer, a1 the archive, a2 its
-# length, a3 the offset of the header this page starts at, a4 how many
-# records the buffer holds. a0 becomes the records written and a1 the
-# offset to start the next page at, 0 once the archive has ended.
 .global sys_tar_list
 sys_tar_list:
     ld a0, 88(sp)
@@ -64,8 +46,6 @@ sys_tar_list:
     addi s4, s4, 1
     j 1b
 2:
-    # a page that filled the buffer still has to say whether anything
-    # follows, so the next header is looked at without being written
     bltu s4, s3, 3f
     mv a0, s0
     mv a1, s1
@@ -84,11 +64,6 @@ sys_tar_list:
     sd a1, 88(sp)
     j trap_return
 
-# sys_tar_find (jab.sys.tar.find): a0 is a one-record buffer, a1 the
-# archive, a2 its length, a3 a path inside the program's window, read
-# no further than the window's end. a0 becomes 0 with the record
-# written, or 1 when the archive holds no such name; a1 becomes the
-# entry's own offset.
 .global sys_tar_find
 sys_tar_find:
     ld a0, 88(sp)
@@ -135,11 +110,6 @@ sys_tar_find:
     sd a1, 88(sp)
     j trap_return
 
-# tar_entry: a0 is the archive, a1 its length, a2 the offset of a
-# header, a3 where the record goes or 0 for none. Returns the offset of
-# the header after it, or 0 when the archive ends here - which an empty
-# name or a checksum that does not answer for the header both mean, as
-# every tar reader takes them.
 tar_entry:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -147,7 +117,6 @@ tar_entry:
     sd a1, 8(sp)
     sd a2, 16(sp)
     sd a3, 24(sp)
-    # the whole header has to be inside the archive
     li t0, JAB_TAR_BLOCK
     add t1, a2, t0
     bltu t1, a2, 8f
@@ -159,7 +128,6 @@ tar_entry:
     mv a0, t2
     call tar_checksum
     beqz a0, 8f
-    # the size, and where the data sits
     ld t2, 32(sp)
     addi a0, t2, TAR_SIZE
     li a1, TAR_SIZE_BYTES
@@ -169,7 +137,6 @@ tar_entry:
     li t1, JAB_TAR_BLOCK
     add t2, t0, t1              # the data follows the header
     sd t2, 48(sp)
-    # the next header is that far on again, the data padded to a block
     ld t3, 40(sp)
     add t3, t3, t1
     addi t3, t3, -1
@@ -177,13 +144,11 @@ tar_entry:
     divu t3, t3, t4
     mul t3, t3, t4
     add t3, t2, t3
-    # it has to be inside the archive too, or this was the last entry
     ld t5, 8(sp)
     bgtu t3, t5, 8f
     sd t3, 16(sp)
     ld a3, 24(sp)
     beqz a3, 9f
-    # the record
     ld t0, 32(sp)
     ld t1, 24(sp)
     ld t2, 48(sp)
@@ -197,9 +162,6 @@ tar_entry:
     li t6, JAB_TAR_REGULAR      # an old archive leaves it zero
 1:
     sb t6, JAB_TAR_TYPE(t1)
-    # the name, over a cleared field: a ustar prefix goes before it with
-    # a separator, which is how a path longer than a hundred characters
-    # is written
     ld a0, 24(sp)
     addi a0, a0, JAB_TAR_NAME
     li a1, JAB_TAR_NAME_BYTES
@@ -246,9 +208,6 @@ tar_entry:
     addi sp, sp, 64
     ret
 
-# tar_copy_field: a0 is where it goes, a1 a field of a2 bytes which ends
-# at a terminator or at the field's end. a0 becomes how many were
-# copied.
 tar_copy_field:
     li t0, 0
 1:
@@ -264,8 +223,6 @@ tar_copy_field:
     mv a0, t0
     ret
 
-# tar_octal: a0 is octal text of a1 bytes, which ends at a space or a
-# terminator. a0 becomes its value.
 tar_octal:
     li t0, 0
     li t1, 0
@@ -286,8 +243,6 @@ tar_octal:
     mv a0, t0
     ret
 
-# tar_checksum: a0 is a header. a0 becomes 1 when the stored checksum
-# answers for it, the field itself counted as spaces, as tar defines it.
 tar_checksum:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -322,11 +277,6 @@ tar_checksum:
     addi sp, sp, 16
     ret
 
-# tar_name_equal: a0 is a name in a record and a1 a NUL-terminated path
-# in the program's window, which ends at a2: a path that reaches the
-# end with no terminator matches nothing. a0 becomes 1 when they are
-# the same, with a trailing separator on the record's name ignored,
-# since tar writes a directory's name with one.
 tar_name_equal:
     li t0, 0
 1:

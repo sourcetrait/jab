@@ -3,22 +3,11 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# The keyboard: QEMU's virtio-keyboard-device, a virtio-input device
-# told from the tablet, the other one, by carrying the letter keys in
-# its EV_KEY bits. Its event queue holds VIRTQ_SIZE eight-byte events
-# the device fills; the kernel drains them into its own ring of
-# KEYBOARD_RING key events, refilling the queue, when the program asks
-# for a key or awaits one. Only EV_KEY events are kept: the code and
-# the value, 0 released, 1 pressed, 2 held, as Linux defines them.
 .set KEYBOARD_RING, 64
 .set KEYBOARD_ENTRY_SIZE, 8
 
 .section .text
 
-# sys_keyboard_input (jab.sys.keyboard.input): a0 becomes the next key
-# event's code, or 0 when none is waiting; a1 its value. The keyboard
-# comes up on the first call; with no keyboard on the machine there is
-# never an event.
 .global sys_keyboard_input
 sys_keyboard_input:
     call keyboard_open
@@ -33,9 +22,6 @@ sys_keyboard_input:
     sd zero, 88(sp)
     j trap_return
 
-# keyboard_open: find the keyboard and bring it up, its queue stocked
-# and its line let through. Returns 0, or 1 with no keyboard on the
-# machine, 2 when the device refuses the kernel. Open already: 0.
 .global keyboard_open
 keyboard_open:
     la t0, keyboard_state
@@ -73,8 +59,6 @@ msg_keyboard_at:
     la a2, keyboard_queue
     call virtio_queue_setup
     bnez a0, 6f
-    # every descriptor an event buffer the device may write, all
-    # offered at once
     la t0, keyboard_queue
     la t1, keyboard_events
     li t2, 0
@@ -127,8 +111,6 @@ msg_no_keyboard:
     addi sp, sp, 16
     ret
 
-# keyboard_find: the base of the first virtio-input transport whose
-# EV_KEY bits include JAB_KEY_A, or 0.
 keyboard_find:
     li t0, QEMU_VIRT_VIRTIO0
     li t1, QEMU_VIRT_VIRTIO_COUNT
@@ -143,7 +125,6 @@ keyboard_find:
     bne t4, t3, 2f
     lwu t4, VIRTIO_MMIO_DEVICE_ID(t0)
     bne t4, t6, 2f
-    # ask for the EV_KEY bitmap and look for the letter
     li t4, VIRTIO_INPUT_CFG_EV_BITS
     sb t4, (VIRTIO_MMIO_CONFIG + VIRTIO_INPUT_CFG_SELECT)(t0)
     li t4, EV_KEY
@@ -165,8 +146,6 @@ keyboard_find:
     mv a0, t0
     ret
 
-# keyboard_drain: move every event the device has delivered into the
-# ring, keeping EV_KEY events only, and hand the buffers back.
 .global keyboard_drain
 keyboard_drain:
     la t0, keyboard_queue
@@ -176,7 +155,6 @@ keyboard_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
-    # the used element, its descriptor id, that descriptor's event
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -187,7 +165,6 @@ keyboard_drain:
     lhu t5, VIRTIO_INPUT_EVENT_TYPE(t4)
     li t2, EV_KEY
     bne t5, t2, 3f
-    # a key event: into the ring unless it is full
     la t2, key_head
     ld t2, 0(t2)
     la t5, key_tail
@@ -207,7 +184,6 @@ keyboard_drain:
     la t5, key_head
     sd t2, 0(t5)
 3:
-    # the buffer back to the device
     lhu t2, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     andi t4, t2, VIRTQ_SIZE - 1
     slli t4, t4, 1
@@ -231,8 +207,6 @@ keyboard_drain:
 7:
     ret
 
-# keyboard_pending: a0 becomes 1 when a key event is waiting in the
-# ring or with the device, else 0.
 .global keyboard_pending
 keyboard_pending:
     la t0, key_head
@@ -251,8 +225,6 @@ keyboard_pending:
     li a0, 1
     ret
 
-# keyboard_take: a0 becomes the oldest key event's code and a1 its
-# value, or both 0 when the ring is empty.
 keyboard_take:
     la t0, key_head
     ld t0, 0(t0)

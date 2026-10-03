@@ -3,43 +3,12 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# The ports: QEMU's virtio-serial-device over the same mmio transport as
-# every other Jab device, one port per channel. Port SERIAL_API_PORT is
-# the API, bytes both ways between the program and the host through
-# jab.sys.api.write, jab.sys.api.read, and the JAB_AWAIT_API bit; it is there on
-# a run that put it on the machine (`--api`) and absent otherwise, which
-# the calls report rather than fault on, so one build runs either way.
-# Port SERIAL_PAD_PORT is the pad's, the host's bytes alone, which
-# pad.S drives. Under DEBUG port SERIAL_DEBUG_PORT is the kernel's debug channel,
-# where its own lines go instead of the console UART; a fault line
-# stays on the UART in every build, since it has to work when a port
-# has not come up, and the debug channel's code and text exist only in
-# a DEBUG build.
-#
-# The device is driven with its multiport feature (virtio.inc): the
-# kernel stocks the control receive queue, tells the device it is ready,
-# the device names each port it carries, the kernel notes and answers
-# for each one it knows, opens those, and a port then carries bytes: one
-# descriptor per write, the hart halted until the device has taken it,
-# as every other request here. A port whose host side is a file or a
-# pipe is open from the start.
 .set SERIAL_API_PORT, 2
 .set SERIAL_API_RX_QUEUE, (2 * SERIAL_API_PORT + 2)
 .set SERIAL_API_TX_QUEUE, (2 * SERIAL_API_PORT + 3)
-# What the host sends lands in these buffers, offered to the device in
-# advance, and moves into a ring the program reads from; the ring holds
-# as much as the buffers do, and what arrives beyond it waits with the
-# device.
 .set API_BUFFER_BYTES, 256
 .set API_RING_BYTES, (VIRTQ_SIZE * API_BUFFER_BYTES)
-# A control message the device sends fits in one of these, a port's name
-# included.
 .set SERIAL_CONTROL_BYTES, 64
-# Port SERIAL_PAD_PORT is the pad's, jab.pad (doc/padport.md): a host
-# process writes a pad's header and its events into it, and pad.S
-# takes it as the pad when the machine carries no virtio-input pad.
-# Its bytes land in these buffers, offered in advance, and pad.S reads
-# them out as a stream through serial_pad_read.
 .set SERIAL_PAD_PORT, 3
 .set SERIAL_PAD_RX_QUEUE, (2 * SERIAL_PAD_PORT + 2)
 .set SERIAL_PAD_TX_QUEUE, (2 * SERIAL_PAD_PORT + 3)
@@ -47,20 +16,11 @@
 .ifdef DEBUG
 .set SERIAL_DEBUG_PORT, 1
 .set SERIAL_DEBUG_TX_QUEUE, (2 * SERIAL_DEBUG_PORT + 3)
-# A debug line gathers here and goes out whole at its newline, so a line
-# lands in the log in one piece.
 .set DEBUG_LINE_BYTES, 256
 .endif
 
 .section .text
 
-# serial_open: find the virtio-serial device and bring it up: the
-# control queues and the ports' queues, the receive queues stocked, the
-# device told the kernel is ready, each known port the device names
-# noted and answered for, then opened. Returns 0; 1 with no
-# virtio-serial device on the machine; 2 when the device refuses the
-# kernel. Asked again it answers as before at once. Which ports came is
-# a separate question, api_up's.
 .global serial_open
 serial_open:
     la t0, serial_state
@@ -131,8 +91,6 @@ serial_open:
     la a1, serial_pad_buffers
     li a2, PAD_PORT_BUFFER_BYTES
     call serial_stock
-    # every descriptor of the control receive queue a buffer the device
-    # may write, all offered at once
     la a0, serial_control_rx_queue
     la a1, serial_control_buffers
     li a2, SERIAL_CONTROL_BYTES
@@ -155,14 +113,11 @@ serial_open:
     ld t0, 0(t0)
     li t1, SERIAL_PAD_RX_QUEUE
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
-    # the kernel is ready; the device then names its ports, and each
-    # known one is noted and answered for as it is named
     li a0, VIRTIO_CONSOLE_DEVICE_READY
     li a1, 0
     li a2, 1
     call serial_control_send
     call serial_control_drain
-    # then each port that came is opened
 .ifdef DEBUG
     la t0, serial_ports
     ld t0, 0(t0)
@@ -219,10 +174,6 @@ serial_open:
     addi sp, sp, 16
     ret
 
-# serial_stock: make every descriptor of the receive queue whose record
-# is at a0 a buffer the device may write, the buffers a2 bytes each
-# from a1, all offered at once; the caller notifies once the device is
-# driven.
 serial_stock:
     li t2, 0
 1:
@@ -245,8 +196,6 @@ serial_stock:
     fence rw, rw
     ret
 
-# serial_control_send: send the device a control message: event a0 for
-# port a1 with value a2. Returns once the device has taken it.
 serial_control_send:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -263,13 +212,6 @@ serial_control_send:
     addi sp, sp, 16
     ret
 
-# serial_control_drain: take every control message the device has
-# delivered, hand its buffer back, and for a known port the device
-# names as added, note it in serial_ports and answer with PORT_READY,
-# which makes the device say more, taken in the same pass. What else
-# the device says, a port's name or that its host side is open, changes
-# nothing here, since the ports are fixed by number; a port the kernel
-# does not know is left unanswered.
 serial_control_drain:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -279,7 +221,6 @@ serial_control_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 9f
-    # the used element, its descriptor id, that descriptor's buffer
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -292,7 +233,6 @@ serial_control_drain:
     lhu t6, VIRTIO_CONSOLE_CONTROL_EVENT(t4)
     sd t5, 0(sp)                # the port the message is about
     sd t6, 8(sp)                # the event
-    # the buffer back to the device
     lhu t2, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     andi t4, t2, VIRTQ_SIZE - 1
     slli t4, t4, 1
@@ -310,8 +250,6 @@ serial_control_drain:
     ld t0, 0(t0)
     li t1, VIRTIO_CONSOLE_CONTROL_RX_QUEUE
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
-    # a port added: noted and answered for when it is one the kernel
-    # knows
     ld t6, 8(sp)
     li t0, VIRTIO_CONSOLE_PORT_ADD
     bne t6, t0, 1b
@@ -341,9 +279,6 @@ serial_control_drain:
     addi sp, sp, 32
     ret
 
-# serial_send: give the device a3 bytes at a2 through queue a1, whose
-# record is at a0: one descriptor the device reads, offered and
-# notified, the hart halted until the device has taken it.
 .global serial_send
 serial_send:
     addi sp, sp, -16
@@ -374,14 +309,6 @@ serial_send:
     addi sp, sp, 16
     ret
 
-# The API: the program's bytes to the host go straight from its buffer
-# through the port's transmit queue; the host's bytes to the program
-# arrive in the offered buffers and move into a ring, which jab.sys.api.read
-# empties and jab.sys.await watches. With no port on the machine the calls
-# say so.
-
-# api_up: a0 becomes 1 when the API's port came up with the device,
-# else 0.
 .global api_up
 api_up:
     la t0, serial_state
@@ -397,9 +324,6 @@ api_up:
     li a0, 0
     ret
 
-# sys_api_write (jab.sys.api.write): a0 is the buffer, a1 how many bytes.
-# a0 becomes 0 once the device has taken them, or 1 with no API port on
-# the machine.
 .global sys_api_write
 sys_api_write:
     call api_up
@@ -421,10 +345,6 @@ sys_api_write:
     sd a0, 80(sp)
     j trap_return
 
-# sys_api_read (jab.sys.api.read): a0 is the buffer, a1 how many bytes it
-# holds. a0 becomes the bytes written, the oldest first, and a1 how many
-# still wait after them, in the ring and with the device; both 0 with
-# no API port on the machine. Never waits.
 .global sys_api_read
 sys_api_read:
     ld a0, 80(sp)
@@ -433,7 +353,6 @@ sys_api_read:
     call api_up
     beqz a0, 9f
     call api_drain
-    # copy out of the ring, at most the capacity
     la t0, api_head
     ld t0, 0(t0)
     la t1, api_tail
@@ -469,9 +388,6 @@ sys_api_read:
     sd zero, 88(sp)
     j trap_return
 
-# api_drain: move every buffer the device has filled into the ring,
-# whole buffers only and only while the ring has room for one, and hand
-# each back to the device.
 api_drain:
     la t0, serial_api_rx_queue
     ld t1, VQ_LAST_USED(t0)
@@ -480,13 +396,11 @@ api_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
-    # the used element: its descriptor id and how many bytes it holds
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
     lwu t3, (VQ_USED + VIRTQ_USED_RING + VIRTQ_USED_ELEM_ID)(t2)
     lwu t4, (VQ_USED + VIRTQ_USED_RING + VIRTQ_USED_ELEM_LEN)(t2)
-    # room for the whole of it, or leave it with the device
     la t2, api_head
     ld t2, 0(t2)
     la t5, api_tail
@@ -514,7 +428,6 @@ api_drain:
 3:
     la a0, api_head
     sd t2, 0(a0)
-    # the buffer back to the device
     lhu t2, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     andi t4, t2, VIRTQ_SIZE - 1
     slli t4, t4, 1
@@ -539,9 +452,6 @@ api_drain:
 7:
     ret
 
-# api_waiting: a0 becomes how many bytes wait for the program: in the
-# ring, and in buffers the device has filled that the ring had no room
-# for.
 api_waiting:
     la t0, api_head
     ld a0, 0(t0)
@@ -566,8 +476,6 @@ api_waiting:
 2:
     ret
 
-# api_pending: a0 becomes 1 when bytes wait for the program, else 0;
-# what jab.sys.await tests for its JAB_AWAIT_API bit.
 .global api_pending
 api_pending:
     addi sp, sp, -16
@@ -594,11 +502,6 @@ api_pending:
     addi sp, sp, 16
     ret
 
-# The pad's port: bytes from the host alone, which pad.S reads out of
-# the offered buffers as a stream and parses itself (doc/padport.md).
-
-# pad_port_up: a0 becomes 1 when the pad's port came up with the
-# device, else 0. Keeps the s registers.
 .global pad_port_up
 pad_port_up:
     la t0, serial_state
@@ -614,11 +517,6 @@ pad_port_up:
     li a0, 0
     ret
 
-# serial_pad_read: copy what the host has delivered on the pad's port
-# into a0, at most a1 bytes, whole buffers only and in order, each
-# buffer handed back to the device as it is taken; a buffer that does
-# not fit stays with the device for the next read. a0 becomes the bytes
-# copied. Clobbers a0 to a5 and the t registers; keeps the s registers.
 .global serial_pad_read
 serial_pad_read:
     mv a2, a0                   # where the next byte goes
@@ -631,7 +529,6 @@ serial_pad_read:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
-    # the used element: its descriptor id and how many bytes it holds
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -653,7 +550,6 @@ serial_pad_read:
     addi t4, t4, -1
     j 2b
 3:
-    # the buffer back to the device
     lhu t2, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     andi t4, t2, VIRTQ_SIZE - 1
     slli t4, t4, 1
@@ -679,9 +575,6 @@ serial_pad_read:
     mv a0, a4
     ret
 
-# serial_pad_pending: a0 becomes 1 when the host has delivered bytes on
-# the pad's port that serial_pad_read has not taken, else 0. Keeps the
-# s registers.
 .global serial_pad_pending
 serial_pad_pending:
     la t0, serial_pad_rx_queue
@@ -693,11 +586,6 @@ serial_pad_pending:
     ret
 
 .ifdef DEBUG
-# The debug channel's output, the shape of the UART's: a byte, a string,
-# a value in hex, a value in decimal. Bytes gather into a line and the
-# line goes out whole at its newline, or when it is full.
-
-# debug_putc: a0 is the byte.
 .global debug_putc
 debug_putc:
     la t0, debug_length
@@ -713,10 +601,6 @@ debug_putc:
     beq t1, t2, debug_flush
     ret
 
-# debug_flush: send the line gathered so far to the debug port, or to
-# the UART when the machine carries no virtio-serial device or the
-# device came without that port, so a debug kernel on a bare line still
-# reports.
 .global debug_flush
 debug_flush:
     la t0, debug_length
@@ -763,7 +647,6 @@ debug_flush:
 9:
     ret
 
-# debug_puts: a0 is a NUL-terminated string.
 .global debug_puts
 debug_puts:
     addi sp, sp, -16
@@ -782,7 +665,6 @@ debug_puts:
     addi sp, sp, 16
     ret
 
-# debug_put_hex: a0 is a value, written as 0x and sixteen hex digits.
 .global debug_put_hex
 debug_put_hex:
     addi sp, sp, -32
@@ -816,7 +698,6 @@ debug_put_hex:
     addi sp, sp, 32
     ret
 
-# debug_put_dec: a0 is an unsigned value, written in decimal.
 .global debug_put_dec
 debug_put_dec:
     addi sp, sp, -48
@@ -895,6 +776,5 @@ serial_base:
     .skip 8
 serial_state:
     .skip 8
-# A bit per port the device named and the kernel answered for
 serial_ports:
     .skip 8

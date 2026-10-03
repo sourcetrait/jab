@@ -2,17 +2,8 @@
 .include "qemu_virt.inc"
 .include "virtio.inc"
 
-# virtio over mmio, the transport of every Jab device: finding a device
-# by id among QEMU virt's transports, bringing it up, giving it a split
-# virtqueue, letting its interrupt line through the PLIC, running one
-# request through a queue at a time, and waiting for the device with
-# the hart halted rather than spinning. Every routine takes the
-# transport's base in a0 and clobbers t registers, plus a0 for what it
-# returns, unless it says otherwise.
 .section .text
 
-# virtio_find: a0 is a device id. Returns the base of the first modern
-# transport carrying it, or 0.
 .global virtio_find
 virtio_find:
     li t0, QEMU_VIRT_VIRTIO0
@@ -37,10 +28,6 @@ virtio_find:
     mv a0, t0
     ret
 
-# virtio_init: reset the device at a0, acknowledge it, claim it, offer
-# VIRTIO_F_VERSION_1 and nothing else, and confirm the features. Returns
-# 0, or 1 when the device refuses them. virtio_init_with offers the
-# device's own feature bits in a1 as well, the low word of its features.
 .global virtio_init
 .global virtio_init_with
 virtio_init:
@@ -68,9 +55,6 @@ virtio_init_with:
     li a0, 1
     ret
 
-# virtio_queue_setup: give queue a1 of the device at a0 the rings of the
-# virtqueue record at a2, VIRTQ_SIZE entries, interrupts wanted.
-# Returns 0, or 1 when the device offers fewer entries than that.
 .global virtio_queue_setup
 virtio_queue_setup:
     sw a1, VIRTIO_MMIO_QUEUE_SEL(a0)
@@ -98,15 +82,12 @@ virtio_queue_setup:
     li a0, 1
     ret
 
-# virtio_driver_ok: the device at a0 may now be driven.
 .global virtio_driver_ok
 virtio_driver_ok:
     li t0, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK
     sw t0, VIRTIO_MMIO_STATUS(a0)
     ret
 
-# virtio_irq_enable: let the line of the transport at a0 through the
-# PLIC to hart 0's supervisor context.
 .global virtio_irq_enable
 virtio_irq_enable:
     li t0, QEMU_VIRT_VIRTIO0
@@ -116,9 +97,6 @@ virtio_irq_enable:
     addi a0, t1, QEMU_VIRT_VIRTIO_IRQ0
     j plic_enable
 
-# plic_enable: let PLIC line a0 through to hart 0's supervisor context:
-# priority 1, enabled in the context's word holding that line, 32 to a
-# word, threshold 0.
 .global plic_enable
 plic_enable:
     li t0, QEMU_VIRT_PLIC
@@ -140,11 +118,6 @@ plic_enable:
     sw zero, QEMU_VIRT_PLIC_THRESHOLD(t2)
     ret
 
-# plic_service: take every line the PLIC holds for hart 0's supervisor
-# context, acknowledge whatever raised it, and complete it, so the line
-# drops: an mmio transport's interrupt status acknowledged, or every
-# PCI device on a PCI line asked for its ISR (pci.S). Only virtio lines
-# are ever enabled.
 .global plic_service
 plic_service:
     addi sp, sp, -16
@@ -169,7 +142,6 @@ plic_service:
     add t2, t2, t3
     lwu t3, VIRTIO_MMIO_INTERRUPT_STATUS(t2)
     sw t3, VIRTIO_MMIO_INTERRUPT_ACK(t2)
-    # the sound device's line: its stream refilled on its clock
     la t3, sound_base
     ld t3, 0(t3)
     bne t2, t3, 3f
@@ -184,12 +156,6 @@ plic_service:
     addi sp, sp, 16
     ret
 
-# virtio_wait_used: halt until the used ring of the virtqueue record at
-# a0 has moved past what the kernel last saw, waking on the transport's
-# line; the line is serviced before returning. a0 is kept. External
-# interrupts are enabled for the wait and disabled after it unless the
-# sound stream is live, whose line must keep reaching the vector while
-# the program runs (sound.S).
 .global virtio_wait_used
 virtio_wait_used:
     addi sp, sp, -16
@@ -219,11 +185,6 @@ virtio_wait_used:
     addi sp, sp, 16
     ret
 
-# virtio_request: run one request through queue a1 of the device at a0
-# with the virtqueue record at a2: the device reads a3 bytes at a4 and
-# writes its response into a5, a6 bytes long. Descriptors 0 and 1 carry
-# every request; returns once the device has used them, the hart
-# halted meanwhile.
 .global virtio_request
 virtio_request:
     addi sp, sp, -16
@@ -239,7 +200,6 @@ virtio_request:
     li t0, VIRTQ_DESC_F_WRITE
     sh t0, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS)(a2)
     sh zero, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT)(a2)
-    # offer descriptor 0 in the next slot of the available ring
     lhu t0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a2)
     andi t1, t0, VIRTQ_SIZE - 1
     slli t1, t1, 1

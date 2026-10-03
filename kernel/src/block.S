@@ -4,28 +4,8 @@
 .include "pci.inc"
 .include "jab.inc"
 
-# The disks: QEMU's virtio-blk devices on the PCI Express root
-# (pci.S, virtio_pci.S), past the eight mmio slots every other Jab
-# device sits in, driven as sectors and nothing more. The first block
-# or romfs call scans the bus, brings up every device carrying virtio
-# id 2, and gives each an id in slot order, learning its capacity from
-# its device configuration, its serial from a GET_ID request, and what
-# is on it from its first sector. All of that is kept in the
-# program-facing record of jab.inc, so a listing is a copy rather than a
-# translation. A request is three descriptors - the header the device
-# reads, the data, and the status byte it writes - run one at a time per
-# disk with the hart halted until the device answers, as the display's
-# commands are. A disk that refuses the kernel is still counted, with
-# JAB_BLOCK_KIND_NONE and no capacity, so a program sees that the
-# machine carries a disk there and reads why from the code it gets back.
-# A format reads through this layer: romfs.S.
-
 .section .text
 
-# sys_block_list (jab.sys.block.list): a0 is the buffer, a1 the id of the
-# disk to start at (0 for the first), a2 how many records the buffer
-# holds. a0 becomes the records written, a1 the id to start the next
-# page at, or 0 once the last disk is in the buffer.
 .global sys_block_list
 sys_block_list:
     call block_probe
@@ -68,9 +48,6 @@ sys_block_list:
     sd a1, 88(sp)
     j trap_return
 
-# sys_block_find (jab.sys.block.find): a0 is a NUL-terminated serial inside
-# the program's window. a0 becomes the id of the first disk carrying it,
-# or 0 when none does.
 .global sys_block_find
 sys_block_find:
     call block_probe
@@ -97,8 +74,6 @@ sys_block_find:
     addi t1, t1, 1
     addi t2, t2, -1
     bnez t2, 2b
-    # twenty bytes matched, which is all virtio carries, so the serial
-    # matches only if the program's string ends here too
     bgeu t0, s1, 8f
     lbu t3, 0(t0)
     beqz t3, 7f
@@ -116,26 +91,18 @@ sys_block_find:
     sd a0, 80(sp)
     j trap_return
 
-# sys_block_read (jab.sys.block.read): a0 is the buffer, a1 the disk, a2 the
-# first sector, a3 how many sectors. The device writes the program's
-# buffer itself, so nothing is copied.
 .global sys_block_read
 sys_block_read:
     li s0, VIRTIO_BLK_T_IN
     li s1, VIRTQ_DESC_F_WRITE
     j block_transfer
 
-# sys_block_write (jab.sys.block.write): the same, the other way, so the
-# device reads the buffer.
 .global sys_block_write
 sys_block_write:
     li s0, VIRTIO_BLK_T_OUT
     li s1, 0
     j block_transfer
 
-# a0 becomes 0; 1 when no disk carries that id; 2 when the disk would
-# not come up; 3 when the device reported an error; 4 when those sectors
-# are not on that disk.
 block_transfer:
     call block_probe
     ld s2, 88(sp)               # the disk
@@ -165,8 +132,6 @@ block_transfer:
     ld a0, 80(sp)
     mv a1, s6
     call buffer_bounds
-    # the queue first: block_base leaves a1 alone, where block_queue
-    # would clobber any t register holding the transport
     addi s7, s2, -1
     mv a0, s7
     call block_queue
@@ -189,8 +154,6 @@ block_transfer:
     sd a0, 80(sp)
     j trap_return
 
-# block_base: a0 is a disk's index; a0 becomes its PCI device record,
-# what block_request takes as the disk.
 .global block_base
 block_base:
     slli t0, a0, 3
@@ -199,7 +162,6 @@ block_base:
     ld a0, 0(t1)
     ret
 
-# block_queue: a0 is a disk's index; a0 becomes its virtqueue record.
 .global block_queue
 block_queue:
     li t0, VQ_STRIDE
@@ -208,7 +170,6 @@ block_queue:
     add a0, t1, t0
     ret
 
-# block_record: a0 is a disk's index; a0 becomes its record.
 .global block_record
 block_record:
     li t0, JAB_BLOCK_ENTRY
@@ -217,17 +178,12 @@ block_record:
     add a0, t1, t0
     ret
 
-# block_count_of: a0 becomes how many disks the machine carries, once
-# they have been probed.
 .global block_count_of
 block_count_of:
     la t0, block_count
     ld a0, 0(t0)
     ret
 
-# block_probe: scan the PCI bus and bring up every virtio-blk disk on
-# it, once. The devices come in slot order, which is the order QEMU's
-# command line named them.
 .global block_probe
 block_probe:
     la t0, block_probed
@@ -254,8 +210,6 @@ block_probe:
     lwu t1, PCI_DEV_VIRTIO_ID(a0)
     li t2, VIRTIO_ID_BLOCK
     bne t1, t2, 7f
-    # a disk: its record carries its id from the start, so a device that
-    # refuses the kernel is still one a program can see and ask about
     ld a0, 16(sp)
     call block_record
     sd a0, 24(sp)
@@ -300,8 +254,6 @@ msg_disk_pci:
     beqz a0, 2f
     call plic_enable
 2:
-    # the capacity, two words of the device configuration since the
-    # region answers four bytes at a time
     ld t0, 8(sp)
     ld t0, PCI_DEV_DEVICE_CFG(t0)
     lwu t1, VIRTIO_BLK_CFG_CAPACITY_LOW(t0)
@@ -310,8 +262,6 @@ msg_disk_pci:
     or t1, t1, t2
     ld t3, 24(sp)
     sd t1, JAB_BLOCK_SECTORS(t3)
-    # the serial, straight into the record: QEMU writes the terminator
-    # only when it fits, so the field is cleared first
     addi t4, t3, JAB_BLOCK_SERIAL
     sd zero, 0(t4)
     sd zero, 8(t4)
@@ -325,8 +275,6 @@ msg_disk_pci:
     li a5, VIRTIO_BLK_ID_BYTES
     li a6, VIRTQ_DESC_F_WRITE
     call block_request
-    # what is on it, by asking each format we know about the first
-    # sector; anything unrecognised is raw sectors and nothing more
     ld a0, 8(sp)
     ld a1, 32(sp)
     li a2, VIRTIO_BLK_T_IN
@@ -363,11 +311,6 @@ msg_disk_pci:
 9:
     ret
 
-# block_request: run one request on the disk whose PCI record is at a0
-# with the virtqueue record at a1: type a2, sector a3, the data buffer
-# at a4 of a5 bytes, which the device writes when a6 carries
-# VIRTQ_DESC_F_WRITE and reads otherwise. Three descriptors, offered as
-# one chain; a0 becomes the device's status byte, 0 for OK.
 .global block_request
 block_request:
     addi sp, sp, -32
@@ -382,7 +325,6 @@ block_request:
     li t2, 0xff
     sb t2, 0(t1)                # so an unanswered request cannot read OK
     mv t3, a1
-    # the header the device reads
     sd t0, (VQ_DESC + 0 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR)(t3)
     li t4, VIRTIO_BLK_REQ_SIZE
     sw t4, (VQ_DESC + 0 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN)(t3)
@@ -390,21 +332,18 @@ block_request:
     sh t4, (VQ_DESC + 0 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS)(t3)
     li t4, 1
     sh t4, (VQ_DESC + 0 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT)(t3)
-    # the data
     sd a4, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR)(t3)
     sw a5, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN)(t3)
     ori t4, a6, VIRTQ_DESC_F_NEXT
     sh t4, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS)(t3)
     li t4, 2
     sh t4, (VQ_DESC + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT)(t3)
-    # the status byte the device writes
     sd t1, (VQ_DESC + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR)(t3)
     li t4, 1
     sw t4, (VQ_DESC + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN)(t3)
     li t4, VIRTQ_DESC_F_WRITE
     sh t4, (VQ_DESC + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS)(t3)
     sh zero, (VQ_DESC + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT)(t3)
-    # offer the chain's head in the next slot of the available ring
     lhu t4, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t3)
     andi t5, t4, VIRTQ_SIZE - 1
     slli t5, t5, 1

@@ -1,12 +1,5 @@
 .include "qemu_virt.inc"
 
-# The 16550 UART QEMU puts at QEMU_VIRT_UART0: output only, polled. Each
-# routine waits for the transmit register to empty before every byte.
-# None of them calls anything, so they clobber only t registers and a0.
-
-# Wait until the transmitter is empty; base holds the UART address. The
-# label carries the expansion counter so it never captures a caller's
-# numeric label.
 .macro uart_wait base
 uart_wait_\@:
     lbu t1, 5(\base)
@@ -16,7 +9,6 @@ uart_wait_\@:
 
 .section .text
 
-# uart_putc: a0 is the byte
 .global uart_putc
 uart_putc:
     li t0, QEMU_VIRT_UART0
@@ -24,7 +16,6 @@ uart_putc:
     sb a0, 0(t0)
     ret
 
-# uart_puts: a0 is a NUL-terminated string
 .global uart_puts
 uart_puts:
     mv t2, a0
@@ -39,7 +30,6 @@ uart_puts:
 2:
     ret
 
-# uart_put_hex: a0 is a value, written as 0x and sixteen hex digits
 .global uart_put_hex
 uart_put_hex:
     mv t3, a0
@@ -68,7 +58,6 @@ uart_put_hex:
     bgez t2, 1b
     ret
 
-# uart_put_dec: a0 is an unsigned value, written in decimal
 .global uart_put_dec
 uart_put_dec:
     addi sp, sp, -32

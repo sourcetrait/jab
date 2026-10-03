@@ -1,26 +1,6 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# XXH3-64, the default fast hash. TheUser's reason for choosing it over
-# the far smaller XXH64 is that it matches what the estate hashes with
-# everywhere else, and he took its cost knowingly.
-#
-# It is four algorithms behind one name, chosen by length, over a fixed
-# 192-byte secret: up to 16 bytes it is a keyed mix and an avalanche;
-# to 128 it is pairs of 16-byte mixes working inward from both ends; to
-# 240 it adds a second pass; and beyond that it runs eight accumulators
-# over 64-byte stripes, scrambling them every sixteen, then folds them
-# down. The seed is always zero here, which removes the seed arithmetic
-# from every branch: what the reference adds to or subtracts from a
-# secret word is simply that word.
-#
-# Every constant below, the secret included, is copied from the
-# reference at a pinned tag rather than written from memory, because one
-# wrong byte is a hash that is wrong everywhere and says nothing about
-# where. Reads are byte-wise little-endian so nothing depends on how the
-# program's buffer happens to sit, and everything that must outlive a
-# call is in bss or on the stack rather than in a t register.
-
 .set XX_STRIPE, 64
 .set XX_ACCS, 8
 .set XX_SECRET, 192
@@ -35,8 +15,6 @@
 
 .section .text
 
-# sys_hash (jab.sys.hash): a0 is an address in the program's window and a1
-# how many bytes. a0 becomes the hash, which is one register wide.
 .global sys_hash
 sys_hash:
     ld a0, 80(sp)
@@ -48,7 +26,6 @@ sys_hash:
     sd a0, 80(sp)
     j trap_return
 
-# xxh3_64: a0 is the bytes and a1 how many; a0 becomes the hash.
 .global xxh3_64
 xxh3_64:
     addi sp, sp, -16
@@ -74,7 +51,6 @@ xxh3_64:
     addi sp, sp, 16
     ret
 
-# xx_short: up to and including 16 bytes, in four cases of its own.
 xx_short:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -83,8 +59,6 @@ xx_short:
     beqz a1, 8f
     li t0, 4
     bgeu a1, t0, 4f
-    # one to three bytes: the first, the middle and the last, with the
-    # length itself, packed into a word
     ld t0, 0(sp)
     ld t1, 8(sp)
     lbu t2, 0(t0)               # c1
@@ -118,7 +92,6 @@ xx_short:
 4:
     li t0, 8
     bgtu a1, t0, 5f
-    # four to eight: the first word and the last, joined
     ld a0, 0(sp)
     call xx_le32
     sd a0, 16(sp)
@@ -146,7 +119,6 @@ xx_short:
     call xx_rrmxmx
     j 9f
 5:
-    # nine to sixteen: the first eight and the last eight
     la a0, xx_secret
     addi a0, a0, 24
     call xx_le64
@@ -203,7 +175,6 @@ xx_short:
     call xx_avalanche
     j 9f
 8:
-    # nothing at all
     la a0, xx_secret
     addi a0, a0, 56
     call xx_le64
@@ -219,8 +190,6 @@ xx_short:
     addi sp, sp, 48
     ret
 
-# xx_mid: seventeen to a hundred and twenty-eight bytes, as pairs of
-# mixes working inward from both ends.
 xx_mid:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -273,9 +242,6 @@ xx_mid:
     addi sp, sp, 48
     ret
 
-# xx_midlarge: a hundred and twenty-nine to two hundred and forty, as
-# eight mixes, then the rest against a shifted secret, the two halves
-# avalanched apart and added.
 xx_midlarge:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -307,7 +273,6 @@ xx_midlarge:
     sd t2, 32(sp)
     j 1b
 2:
-    # the last sixteen bytes, against the end of the smallest secret
     ld t0, 0(sp)
     ld t1, 8(sp)
     add a0, t0, t1
@@ -348,13 +313,11 @@ xx_midlarge:
     addi sp, sp, 64
     ret
 
-# xx_long: past two hundred and forty, over eight accumulators.
 xx_long:
     addi sp, sp, -64
     sd ra, 56(sp)
     sd a0, 0(sp)
     sd a1, 8(sp)
-    # the accumulators start at their primes
     la t0, xx_acc
     la t1, xx_init
     li t2, 0
@@ -369,7 +332,6 @@ xx_long:
     addi t2, t2, 1
     j 1b
 2:
-    # whole blocks of sixteen stripes, scrambled after each
     ld t1, 8(sp)
     addi t1, t1, -1
     li t2, XX_BLOCK
@@ -395,7 +357,6 @@ xx_long:
     sd t1, 24(sp)
     j 3b
 4:
-    # then the stripes left over, and the last stripe of all
     ld t1, 8(sp)
     addi t1, t1, -1
     ld t2, 24(sp)
@@ -416,7 +377,6 @@ xx_long:
     la a1, xx_secret
     addi a1, a1, XX_SECRET - XX_STRIPE - XX_LASTACC_START
     call xx_accumulate_512
-    # fold the accumulators down
     la t0, xx_prime64_1
     ld t0, 0(t0)
     ld t1, 8(sp)
@@ -426,7 +386,6 @@ xx_long:
     addi sp, sp, 64
     ret
 
-# xx_accumulate: a0 is the input, a1 the secret, a2 how many stripes.
 xx_accumulate:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -458,7 +417,6 @@ xx_accumulate:
     addi sp, sp, 32
     ret
 
-# xx_accumulate_512: one 64-byte stripe at a0 against the secret at a1.
 xx_accumulate_512:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -484,7 +442,6 @@ xx_accumulate_512:
     ld t1, 0(t2)
     xor t2, t1, a0              # data_key
     ld t0, 16(sp)
-    # the neighbouring lane takes the value as it is
     xori t3, t0, 1
     slli t3, t3, 3
     la t4, xx_acc
@@ -492,7 +449,6 @@ xx_accumulate_512:
     ld t5, 0(t3)
     add t5, t5, t1
     sd t5, 0(t3)
-    # and this one the product of the key's halves
     li t3, 0xffffffff
     and t4, t2, t3
     srli t5, t2, 32
@@ -511,7 +467,6 @@ xx_accumulate_512:
     addi sp, sp, 32
     ret
 
-# xx_scramble: the accumulators against the secret at a0.
 xx_scramble:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -545,7 +500,6 @@ xx_scramble:
     addi sp, sp, 32
     ret
 
-# xx_merge: a0 is where the fold starts; a0 becomes the hash.
 xx_merge:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -596,7 +550,6 @@ xx_merge:
     addi sp, sp, 32
     ret
 
-# xx_mix16: sixteen bytes at a0 against sixteen of the secret at a1.
 xx_mix16:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -630,14 +583,12 @@ xx_mix16:
     addi sp, sp, 32
     ret
 
-# xx_mul128_fold: the two halves of a0 times a1, folded together.
 xx_mul128_fold:
     mul t0, a0, a1
     mulhu t1, a0, a1
     xor a0, t0, t1
     ret
 
-# xx_avalanche and xx64_avalanche: the two finishers.
 xx_avalanche:
     srli t0, a0, 37
     xor a0, a0, t0
@@ -663,7 +614,6 @@ xx64_avalanche:
     xor a0, a0, t0
     ret
 
-# xx_rrmxmx: a0 is the value and a1 the length.
 xx_rrmxmx:
     slli t0, a0, 49
     srli t1, a0, 15
@@ -684,7 +634,6 @@ xx_rrmxmx:
     xor a0, a0, t0
     ret
 
-# xx_bswap64: a0 with its bytes the other way round.
 xx_bswap64:
     li t0, 0
     li t1, 0
@@ -701,8 +650,6 @@ xx_bswap64:
     mv a0, t0
     ret
 
-# xx_le64 and xx_le32: a little-endian value at a0, read a byte at a
-# time so nothing depends on how the buffer is aligned.
 xx_le64:
     li t0, 0
     li t1, 0
@@ -751,7 +698,6 @@ xx_prime_mx1:
     .quad 0x165667919e3779f9
 xx_prime_mx2:
     .quad 0x9fb21c651e98df25
-# what the eight accumulators start at
 xx_init:
     .quad 0xc2b2ae3d                # PRIME32_3
     .quad 0x9e3779b185ebca87        # PRIME64_1
@@ -762,7 +708,6 @@ xx_init:
     .quad 0x27d4eb2f165667c5        # PRIME64_5
     .quad 0x9e3779b1                # PRIME32_1
 .balign 8
-# the default secret, copied from the reference at its pinned tag
 xx_secret:
     .byte 0xb8, 0xfe, 0x6c, 0x39, 0x23, 0xa4, 0x4b, 0xbe
     .byte 0x7c, 0x01, 0x81, 0x2c, 0xf7, 0x21, 0xad, 0x1c

@@ -1,33 +1,6 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# PNG, decoded in the kernel into a sprite the program owns (jab.inc):
-# what GIMP 3 exports by default from any image mode, the five colour
-# types at 8 bits a sample, grey and indexed at 1, 2, and 4 as well,
-# never interlaced. A file is a signature and a run of chunks, each a
-# length, a type, its data, and a CRC-32 over the type and the data; the
-# IHDR says what the image is, PLTE and tRNS carry a palette and its
-# transparency, the IDATs carry one zlib stream between them, and IEND
-# closes the file. Everything else is skipped by rule.
-#
-# The file comes from one of two sources through png_fetch: bytes the
-# program holds (jab.sys.sprite.png) or a file on a romfs disk, read through
-# the kernel's own bounce (jab.sys.sprite.load), so a program need hold no
-# buffer for a file at all. Either way the bytes arrive in pieces: the
-# chunk headers and the small chunks into kernel buffers, each IDAT's
-# data as segments of PNG_SEGMENT bytes handed to deflate.S as the one
-# before runs out, with a CRC running over each chunk as it passes and
-# compared at its end. The stream is DEFLATE in a zlib jacket - two
-# header bytes and an Adler-32 over what comes out. The decode is in
-# place: the stream inflates into the destination as filtered rows, each
-# a filter byte and the row's samples; the filters are undone row by row
-# against the row above; then the rows become native pixels, four bytes
-# each, front to back where the source is wider (RGBA) and back to front
-# where it is narrower, so nothing is read after it is overwritten. The
-# buffer rule in jab.inc, four bytes a pixel and one a row, is what
-# makes both passes fit.
-
-# the signature and the chunk types as the big-endian words a read sees
 .set PNG_SIG_LOW, 0x89504e47
 .set PNG_SIG_HIGH, 0x0d0a1a0a
 .set PNG_IHDR, 0x49484452
@@ -35,30 +8,20 @@
 .set PNG_TRNS, 0x74524e53
 .set PNG_IDAT, 0x49444154
 .set PNG_IEND, 0x49454e44
-# the signature and the IHDR chunk, where the chunks after it begin
 .set PNG_HEADER_END, 33
 .set PNG_ADLER_MOD, 65521
-# bytes between reductions of the Adler sums: both stay inside 64 bits
 .set PNG_ADLER_RUN, 65536
-# past this a width or height cannot fit any buffer a program has
 .set PNG_SIDE_LIMIT, 65536
-# a deflate code of 1 to 7 becomes JAB_PNG_INPUT to JAB_PNG_DISTANCE
 .set PNG_DEFLATE_BASE, (JAB_PNG_INPUT - 1)
-# a piece of a chunk, as it is read and handed to the decoder
 .set PNG_SEGMENT, 2048
 .set PNG_PLTE_MAX, 768
 .set PNG_TRNS_MAX, 256
-# the sources
 .set PNG_FROM_MEMORY, 0
 .set PNG_FROM_DISK, 1
-# a frame's name, digits and .png
 .set PNG_NAME_BYTES, 32
 
 .section .text
 
-# sys_png_size (jab.sys.png.size): a0 is the PNG bytes and a1 how many. a0
-# becomes the width and a1 the height, with a2 JAB_PNG_OK; or both 0
-# with a2 the code.
 .global sys_png_size
 sys_png_size:
     ld a0, 80(sp)
@@ -83,10 +46,6 @@ sys_png_size:
     sd a0, 96(sp)
     j trap_return
 
-# sys_sprite_png (jab.sys.sprite.png): a0 is the sprite record, a1 the PNG
-# bytes, a2 how many, a3 how many bytes the record's buffer holds, a4
-# the frames the sheet is cut into, top to bottom. a0 becomes a
-# JAB_PNG_* code.
 .global sys_sprite_png
 sys_sprite_png:
     ld a0, 88(sp)
@@ -100,7 +59,6 @@ sys_sprite_png:
     call png_from_memory
     call png_header
     bnez a0, 9f
-    # the frames divide the height
     ld s0, 112(sp)
     li a0, JAB_PNG_FRAMES
     beqz s0, 9f
@@ -108,7 +66,6 @@ sys_sprite_png:
     ld t1, 0(t0)
     remu t2, t1, s0
     bnez t2, 9f
-    # the buffer: four bytes a pixel and a byte a row, after the header
     la t0, png_width
     ld a0, 0(t0)
     mv a1, t1
@@ -141,14 +98,6 @@ sys_sprite_png:
     sd a0, 80(sp)
     j trap_return
 
-# sys_sprite_load (jab.sys.sprite.load): a0 is the sprite record, a1 the
-# disk, a2 a path to a directory on it, a3 how many bytes the record's
-# buffer holds. The frames are the files 0.png, 1.png, and on in that
-# directory, in order until one is missing, each decoded straight off
-# the disk into its own block of the record; all must be one size. a0
-# becomes a JAB_PNG_* code: NOT_FOUND when the directory or 0.png is
-# not there, FRAMES when a frame's size differs from the first's, SIZE
-# when the buffer is short, else a frame's own code.
 .global sys_sprite_load
 sys_sprite_load:
     ld a0, 80(sp)
@@ -162,7 +111,6 @@ sys_sprite_load:
     ld a0, 88(sp)
     call romfs_disk
     mv s0, a0                   # the disk's index
-    # the directory
     mv a0, s0
     li a1, JAB_ROMFS_ROOT
     mv a2, s1
@@ -175,7 +123,6 @@ sys_sprite_load:
     andi t1, t1, JAB_ROMFS_TYPE
     li t2, JAB_ROMFS_DIRECTORY
     bne t1, t2, 7f
-    # the first frame says what size every frame is; then count them
     li a0, 0
     call png_frame_source
     bnez a0, 9f
@@ -195,13 +142,11 @@ sys_sprite_load:
 2:
     li t0, JAB_PNG_NOT_FOUND
     bne a0, t0, 9f              # a frame that is there but unreadable
-    # the room: every frame's block, and a row on the end
     mv a0, s4
     mul a1, s5, s6
     ld a2, 104(sp)
     call png_room
     bnez a0, 9f
-    # each frame into its own block
     mul s7, s4, s5
     slli s7, s7, 2              # a frame's bytes
     li s8, 0
@@ -250,14 +195,9 @@ sys_sprite_load:
     sd a0, 80(sp)
     j trap_return
 
-# png_frame_source: a0 is a frame's number; s0 the disk's index and s3
-# the directory, as sys_sprite_load holds them. Looks up <number>.png
-# there and, when it is a regular file, makes it the source. a0
-# becomes JAB_PNG_OK, or JAB_PNG_NOT_FOUND.
 png_frame_source:
     addi sp, sp, -16
     sd ra, 8(sp)
-    # the name: the digits, then .png
     la t1, png_name
     addi t1, t1, PNG_NAME_BYTES - 1
     sb zero, 0(t1)
@@ -296,7 +236,6 @@ png_frame_source:
     lwu t1, JAB_ROMFS_SIZE(t0)
     la t0, png_len
     sd t1, 0(t0)
-    # where the file's bytes begin: after the header and its name
     mv a0, s0
     la a2, romfs_scratch
     lwu a1, JAB_ROMFS_OFFSET(a2)
@@ -320,8 +259,6 @@ png_frame_source:
     addi sp, sp, 16
     ret
 
-# png_from_memory: a0 is the bytes the program holds and a1 how many;
-# they become the source.
 png_from_memory:
     la t0, png_src
     sd a0, 0(t0)
@@ -331,10 +268,6 @@ png_from_memory:
     sd zero, 0(t0)
     ret
 
-# png_fetch: a0 is an offset into the file, a1 how many bytes, a2 where
-# they go; the caller has kept the range inside the file. From memory
-# a copy; from a disk, through the romfs bounce, as many sectors as it
-# holds at a time.
 png_fetch:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -388,9 +321,6 @@ png_fetch:
     addi sp, sp, 48
     ret
 
-# png_be32_at: a0 is an address of four bytes in a kernel buffer; a0
-# becomes the big-endian longword there, which is how PNG writes every
-# number.
 png_be32:
     lbu t0, 0(a0)
     lbu t1, 1(a0)
@@ -404,8 +334,6 @@ png_be32:
     or a0, t0, t3
     ret
 
-# png_le32_store: a0 is a value and a1 an address; the low 32 bits are
-# stored there little-endian, a byte at a time, as a record field.
 png_le32_store:
     sb a0, 0(a1)
     srli t0, a0, 8
@@ -416,11 +344,6 @@ png_le32_store:
     sb t0, 3(a1)
     ret
 
-# png_room: a0 is a width, a1 a height (of the whole sheet), a2 how
-# many bytes the record's buffer holds. a0 becomes JAB_PNG_OK when the
-# buffer reaches the rule, four bytes a pixel and four bytes a row
-# after the header - the row's filter byte on the way in, its span on
-# the way out - or JAB_PNG_SIZE.
 png_room:
     li t2, PNG_SIDE_LIMIT
     bgeu a0, t2, 8f
@@ -436,9 +359,6 @@ png_room:
     li a0, JAB_PNG_SIZE
     ret
 
-# png_header: reads the source's signature and IHDR into the png_*
-# state and stands the chunk cursor after them. a0 becomes JAB_PNG_OK,
-# or NOT_PNG, TRUNCATED, CRC, UNSUPPORTED.
 png_header:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -468,7 +388,6 @@ png_header:
     la a2, png_head
     addi a2, a2, 8
     call png_fetch
-    # the first chunk is the IHDR, of thirteen bytes, and it checks
     la a0, png_head
     addi a0, a0, 8
     call png_be32
@@ -516,7 +435,6 @@ png_header:
     sd t2, 0(t0)
     la t0, png_type
     sd t3, 0(t0)
-    # the channels each type carries, and the depths it may have
     li t4, 1
     beqz t3, 1f
     li t0, 3
@@ -534,7 +452,6 @@ png_header:
     beq t3, t0, 2f
     j 5f
 1:
-    # grey and indexed: 1, 2, 4, or 8 bits
     li t0, 8
     beq t2, t0, 2f
     li t0, 4
@@ -546,8 +463,6 @@ png_header:
 2:
     la t0, png_channels
     sd t4, 0(t0)
-    # bytes a pixel for the filters, at least one; bytes a row; and the
-    # filtered size of the whole image
     mul t5, t4, t2
     srli t6, t5, 3
     bnez t6, 3f
@@ -589,9 +504,6 @@ png_header:
     addi sp, sp, 16
     ret
 
-# png_decode: a0 is where the pixels go, after png_header has read the
-# source. The chunk walk, the stream, the filters, the conversion. a0
-# becomes JAB_PNG_OK or the code.
 png_decode:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -610,7 +522,6 @@ png_decode:
     la t0, png_hook_code
     sd zero, 0(t0)
 1:
-    # the next chunk: its length and type
     la t0, png_pos
     ld t1, 0(t0)
     sd t1, 0(sp)                # the chunk
@@ -641,7 +552,6 @@ png_decode:
     ld t0, 16(sp)
     li t1, PNG_PLTE
     bne t0, t1, 2f
-    # the palette, into its buffer, and checked
     ld a1, 8(sp)
     li a0, JAB_PNG_UNSUPPORTED
     li t0, PNG_PLTE_MAX
@@ -690,8 +600,6 @@ png_decode:
     la t0, png_seen_idat
     li t1, 1
     sd t1, 0(t0)
-    # the cursor moved with the stream: the chunk it stands on is
-    # checked whole, since the stream may have ended inside it
     la t0, png_pos
     ld t1, 0(t0)
     sd t1, 0(sp)
@@ -712,7 +620,6 @@ png_decode:
     beqz a0, 8f
     j 7f
 6:
-    # every chunk answers for itself
     ld a0, 0(sp)
     ld a1, 8(sp)
     call png_chunk_ok
@@ -725,7 +632,6 @@ png_decode:
     sd t1, 0(t0)
     j 1b
 7:
-    # the rows, then the pixels
     call png_unfilter
     bnez a0, 9f
     call png_convert
@@ -737,9 +643,6 @@ png_decode:
     addi sp, sp, 48
     ret
 
-# png_chunk_ok: a0 is a chunk's offset and a1 its length. Runs the
-# CRC-32 over its type and data in pieces and compares it with the one
-# after the data. a0 becomes 1 when they agree.
 png_chunk_ok:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -805,10 +708,6 @@ png_chunk_ok:
     addi sp, sp, 48
     ret
 
-# png_stream: a0 is the first IDAT's offset and a1 its length. Inflates
-# the zlib stream through every IDAT into the pixel area and checks its
-# Adler-32; the hook checks each chunk's CRC as it is left behind. a0
-# becomes JAB_PNG_OK or the code.
 png_stream:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -827,8 +726,6 @@ png_stream:
     li a3, 0                    # no segment yet: the hook gives the first
     la a4, png_more
     call deflate_begin
-    # the zlib header: method 8 with a window, no preset dictionary, and
-    # the two bytes together a multiple of 31
     call deflate_byte
     bltz a0, 7f
     sd a0, 0(sp)
@@ -859,7 +756,6 @@ png_stream:
     ld t1, 8(sp)
     li a0, JAB_PNG_LENGTH
     bne t0, t1, 9f
-    # the Adler-32 after the stream, big-endian, then over what came out
     sd zero, 16(sp)
     li t1, 4
     sd t1, 0(sp)
@@ -890,7 +786,6 @@ png_stream:
     li a0, JAB_PNG_ZLIB
     j 9f
 7:
-    # the bytes ran out: the hook says why, or the file simply ended
     la t0, png_hook_code
     ld a0, 0(t0)
     bnez a0, 9f
@@ -900,8 +795,6 @@ png_stream:
     addi sp, sp, 32
     ret
 
-# png_chunk_begin: start the running CRC of the chunk the cursor stands
-# on, over its type.
 png_chunk_begin:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -925,13 +818,6 @@ png_chunk_begin:
     addi sp, sp, 16
     ret
 
-# png_more: the decoder's hook. The next piece of the IDAT the cursor
-# stands on becomes the decoder's segment, through png_seg with the
-# CRC running; when that chunk is spent its CRC is compared, and when
-# the next chunk is an IDAT the cursor moves to it and its first piece
-# follows. a0 becomes 1 with a segment in place, else 0 with the cursor
-# where it was, and png_hook_code says why when a chunk was there but
-# could not be taken.
 png_more:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -942,7 +828,6 @@ png_more:
     la t0, png_chunk_len
     ld t2, 0(t0)
     bgeu t1, t2, 3f
-    # a piece of this chunk
     sub t3, t2, t1
     li t4, PNG_SEGMENT
     bgeu t3, t4, 2f
@@ -974,7 +859,6 @@ png_more:
     li a0, 1
     j 9f
 3:
-    # this chunk is spent: its CRC must answer
     la t0, png_crc_state
     ld a0, 0(t0)
     call gz_crc_end
@@ -993,7 +877,6 @@ png_more:
     ld t0, 8(sp)
     li t5, JAB_PNG_CRC
     bne a0, t0, 7f
-    # the next chunk
     la t0, png_pos
     ld t1, 0(t0)
     la t0, png_chunk_len
@@ -1041,10 +924,6 @@ png_more:
     addi sp, sp, 32
     ret
 
-# png_adler: a0 is a buffer and a1 how many bytes; a0 becomes their
-# Adler-32. The two sums are reduced every PNG_ADLER_RUN bytes, which is
-# as often as 64-bit registers need, and the sound stream is looked at
-# as often.
 png_adler:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1076,9 +955,6 @@ png_adler:
     addi sp, sp, 16
     ret
 
-# png_unfilter: undo each row's filter against the row above, in place.
-# a0 becomes JAB_PNG_OK, or JAB_PNG_FILTER on a filter type that does
-# not exist. The sound stream is looked at once a row.
 png_unfilter:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1105,9 +981,6 @@ png_unfilter:
     beq t0, t1, 3f
     li t1, 3
     beq t0, t1, 4f
-    # Paeth: the nearest of the byte to the left, above, and above left
-    # to their sum less the corner, the left one winning a tie, then the
-    # one above
     li t1, 0
 41:
     bgeu t1, a2, 5f
@@ -1158,7 +1031,6 @@ png_unfilter:
     addi t1, t1, 1
     j 41b
 2:
-    # Sub: the byte a pixel to the left; the first pixel has none
     mv t1, a3
 21:
     bgeu t1, a2, 5f
@@ -1171,7 +1043,6 @@ png_unfilter:
     addi t1, t1, 1
     j 21b
 3:
-    # Up: the byte above; the first row has none
     beqz a4, 5f
     li t1, 0
 31:
@@ -1185,7 +1056,6 @@ png_unfilter:
     addi t1, t1, 1
     j 31b
 4:
-    # Average: half the sum of the two, rounded down
     li t1, 0
 32:
     bgeu t1, a2, 5f
@@ -1222,11 +1092,6 @@ png_unfilter:
     addi sp, sp, 16
     ret
 
-# png_convert: the unfiltered rows become native pixels, in place, each
-# stored as its four bytes so the record may sit anywhere. RGBA shrinks
-# by the filter bytes and runs front to back; everything narrower grows
-# and runs back to front. a0 becomes JAB_PNG_OK, or JAB_PNG_PALETTE for
-# an indexed image with no palette or an index past it.
 png_convert:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -1262,8 +1127,6 @@ png_convert:
     beq a4, t0, 20f
     li t0, 4
     beq a4, t0, 40f
-    # grey and indexed: one sample a pixel, at depth bits, high bits
-    # first; a grey sample scales to 255, an index reads the palette
     li s5, 1
     sll s5, s5, a5
     addi s5, s5, -1             # the sample mask
@@ -1273,7 +1136,6 @@ png_convert:
     beqz s1, 8f                 # indexed with no palette
     j 2f
 1:
-    # a grey key is two bytes; anything else is not one
     li t0, 2
     beq s4, t0, 2f
     li s3, 0
@@ -1309,7 +1171,6 @@ png_convert:
     and t6, t6, s5
 5:
     bnez a4, 6f
-    # grey
     mul t4, t6, s6
     li t5, 255
     beqz s3, 51f
@@ -1325,7 +1186,6 @@ png_convert:
     sb t5, 3(t0)
     j 4b
 6:
-    # indexed
     bgeu t6, s2, 8f
     li t4, 3
     mul t4, t4, t6
@@ -1344,7 +1204,6 @@ png_convert:
     sb t5, 3(t0)
     j 4b
 20:
-    # RGB, three bytes a pixel, back to front; a key is six bytes
     li t0, 6
     beq s4, t0, 21f
     li s3, 0
@@ -1394,7 +1253,6 @@ png_convert:
     sb a6, 3(t0)
     j 23b
 40:
-    # grey with alpha, two bytes a pixel, back to front
     mv t2, a2
 41:
     beqz t2, 9f
@@ -1423,8 +1281,6 @@ png_convert:
     sb t5, 3(t0)
     j 42b
 60:
-    # RGBA, four bytes a pixel, front to back, each row's filter byte
-    # stepped over
     mv t0, a0                   # the pixel
     addi t1, a0, 1              # the sample
     mv t2, a2

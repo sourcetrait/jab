@@ -1,21 +1,6 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# SHA3-256, which is Keccak with a rate of 136 bytes and a capacity of
-# 64. The state is 25 lanes of 64 bits, which RV64 holds one to a
-# register; a block is exclusive-ored into the first 17 of them and the
-# permutation is run; the last block carries the padding, 0x06 where the
-# message ends and 0x80 in the last byte, both of which land in the same
-# byte for a block that is one short. The digest is the first four lanes,
-# and since a lane is written out little-endian, those four lanes are
-# the digest exactly as anything else computes it - which is why the
-# call hands them back in a0 to a3 rather than into a buffer.
-#
-# The permutation itself is the five steps of the specification, kept as
-# loops over two small tables rather than unrolled: pi says where each
-# lane goes and rho how far it turns, and between them they are the only
-# part that is not arithmetic on neighbours.
-
 .set SHA3_LANES, 25
 .set SHA3_RATE, 136
 .set SHA3_ROUNDS, 24
@@ -24,9 +9,6 @@
 
 .section .text
 
-# sys_checksum (jab.sys.checksum): a0 is an address in the program's window
-# and a1 how many bytes. a0 to a3 become the digest, the four lanes in
-# the order a program would write them out.
 .global sys_checksum
 sys_checksum:
     ld a0, 80(sp)
@@ -46,15 +28,12 @@ sys_checksum:
     sd t1, 104(sp)
     j trap_return
 
-# sha3_256: a0 is the bytes and a1 how many. The digest is left in the
-# first four lanes of the state.
 .global sha3_256
 sha3_256:
     addi sp, sp, -32
     sd ra, 24(sp)
     sd a0, 0(sp)
     sd a1, 8(sp)
-    # a fresh state
     la t0, sha3_a
     li t1, 0
 1:
@@ -74,7 +53,6 @@ sha3_256:
     sub t2, t0, t1
     li t3, SHA3_RATE
     bltu t2, t3, 5f
-    # a whole block, straight out of the message
     ld t4, 0(sp)
     add a0, t4, t1
     call sha3_absorb
@@ -85,7 +63,6 @@ sha3_256:
     sd t1, 16(sp)
     j 3b
 5:
-    # the last block: what is left, then the padding
     la a0, sha3_block
     li a1, SHA3_RATE
     call zero_bytes
@@ -117,9 +94,6 @@ sha3_256:
     addi sp, sp, 32
     ret
 
-# sha3_absorb: a0 is SHA3_RATE bytes; they are exclusive-ored into the
-# first lanes of the state, each lane read little-endian a byte at a
-# time so nothing depends on how the message happens to be aligned.
 sha3_absorb:
     li t0, 0                    # the lane
 1:
@@ -151,14 +125,10 @@ sha3_absorb:
 9:
     ret
 
-# keccak_f: the permutation, SHA3_ROUNDS of theta, rho with pi, chi and
-# iota. Nothing here calls anything, so the t registers hold throughout.
 .global keccak_f
 keccak_f:
     li t6, 0                    # the round
 1:
-    # theta: each column folded to one lane, then every lane in a column
-    # turned by its neighbours
     la t0, sha3_a
     la t1, sha3_c
     li t2, 0
@@ -186,7 +156,6 @@ keccak_f:
 4:
     li t3, 5
     bgeu t2, t3, 6f
-    # d = c[x - 1] ^ rotl(c[x + 1], 1)
     la t3, sha3_prev
     add t3, t3, t2
     lbu t3, 0(t3)
@@ -221,7 +190,6 @@ keccak_f:
     addi t2, t2, 1
     j 4b
 6:
-    # rho and pi together: every lane turned and moved at once
     la t1, sha3_b
     li t2, 0
 7:
@@ -247,7 +215,6 @@ keccak_f:
     addi t2, t2, 1
     j 7b
 8:
-    # chi: each lane against the two after it in its row
     li t2, 0                    # the row
 81:
     li t3, 5
@@ -288,7 +255,6 @@ keccak_f:
     addi t2, t2, 1
     j 81b
 9:
-    # iota: this round's constant into the first lane
     la t1, sha3_rc
     slli t2, t6, 3
     add t1, t1, t2
@@ -303,7 +269,6 @@ keccak_f:
 
 .section .rodata
 .balign 8
-# where each lane goes, and how far it turns, on its way there
 sha3_pi:
     .byte 0, 10, 20, 5, 15, 16, 1, 11, 21, 6, 7, 17, 2, 12, 22
     .byte 23, 8, 18, 3, 13, 14, 24, 9, 19, 4

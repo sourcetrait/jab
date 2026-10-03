@@ -1,20 +1,6 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# gzip, the reading half: the thin jacket RFC 1952 puts around a DEFLATE
-# stream (deflate.S). Ten bytes of header, optional extra field, name
-# and comment, then the compressed bytes, then a CRC-32 of what comes
-# out and its length. Both ends of the jacket are checked, so a program
-# that gets JAB_GZ_OK back knows the bytes are the bytes that went in.
-#
-# The length in the trailer is what makes one-shot decompression the
-# right shape here: a program reads it with jab.sys.gz.size, sizes its
-# buffer, and inflates in one call. DEFLATE cannot be entered in the
-# middle, since a match may reach back 32 KiB and the Huffman state is
-# built as the stream is read, so a resumable cursor would mean the
-# kernel holding decoder state between calls - which is the one thing
-# every other call here avoids.
-
 .set GZ_MAGIC0, 0x1f
 .set GZ_MAGIC1, 0x8b
 .set GZ_DEFLATE, 8
@@ -24,14 +10,10 @@
 .set GZ_FCOMMENT, 16
 .set GZ_HEADER, 10
 .set GZ_TRAILER, 8
-# The CRC looks at the sound stream every this many bytes (sound.S)
 .set GZ_CRC_TICK, 65536
 
 .section .text
 
-# sys_gz_size (jab.sys.gz.size): a0 is the gzip bytes and a1 how many. a0
-# becomes the length the contents will be, which the trailer carries,
-# and a1 JAB_GZ_OK or JAB_GZ_NOT_GZIP.
 .global sys_gz_size
 sys_gz_size:
     ld a0, 80(sp)
@@ -64,9 +46,6 @@ sys_gz_size:
     sd t0, 88(sp)
     j trap_return
 
-# sys_gz_read (jab.sys.gz.read): a0 is the buffer, a1 the gzip bytes, a2 how
-# many, a3 how much the buffer holds. a0 becomes the bytes written and
-# a1 one of the JAB_GZ_* codes.
 .global sys_gz_read
 sys_gz_read:
     ld a0, 88(sp)
@@ -84,7 +63,6 @@ sys_gz_read:
     li t0, JAB_GZ_NOT_GZIP
     j 8f
 1:
-    # past the header, and whatever of it is optional
     mv a0, s0
     mv a1, s1
     call gz_body
@@ -103,12 +81,10 @@ sys_gz_read:
     addi t0, a1, 4              # a deflate code, in this call's range
     j 8f
 2:
-    # the trailer answers for what came out: first its length
     add t0, s0, s1
     addi t0, t0, -4
     call gz_le32
     bne a0, s4, 5f
-    # then its CRC
     ld a0, 80(sp)
     mv a1, s4
     call gz_crc32
@@ -137,8 +113,6 @@ sys_gz_read:
     sd t0, 88(sp)
     j trap_return
 
-# gz_check: a0 is the bytes and a1 how many. a0 becomes 0 when they open
-# as a gzip of deflated data and are long enough to carry a trailer.
 gz_check:
     li t0, GZ_HEADER + GZ_TRAILER
     bltu a1, t0, 8f
@@ -157,8 +131,6 @@ gz_check:
     li a0, 1
     ret
 
-# gz_body: a0 is the bytes and a1 how many. a0 becomes the offset the
-# compressed bytes start at, or -1 when the header runs off the end.
 gz_body:
     lbu t0, 3(a0)               # the flags
     li t1, GZ_HEADER
@@ -202,8 +174,6 @@ gz_body:
     li a0, -1
     ret
 
-# gz_le32: t0 is an address; a0 becomes the little-endian longword
-# there, which is how gzip writes both trailer fields.
 gz_le32:
     lbu t1, 0(t0)
     lbu t2, 1(t0)
@@ -217,10 +187,6 @@ gz_le32:
     or a0, t1, t2
     ret
 
-# gz_crc32: a0 is a buffer and a1 how many bytes; a0 becomes their
-# CRC-32, the reflected one gzip, zip, and PNG all use: begin, one
-# update, end. The three parts are separate so bytes arriving in
-# pieces, a PNG chunk streamed off a disk, sum the same.
 .global gz_crc32
 gz_crc32:
     addi sp, sp, -32
@@ -236,8 +202,6 @@ gz_crc32:
     addi sp, sp, 32
     ret
 
-# gz_crc_begin: a0 becomes the running state of a fresh CRC-32, all
-# ones, with the table built if it was not.
 .global gz_crc_begin
 gz_crc_begin:
     addi sp, sp, -16
@@ -248,9 +212,6 @@ gz_crc_begin:
     addi sp, sp, 16
     ret
 
-# gz_crc_update: a0 is the state, a1 a buffer, a2 how many bytes; a0
-# becomes the state with them taken in, the sound stream looked at
-# every GZ_CRC_TICK of them.
 .global gz_crc_update
 gz_crc_update:
     addi sp, sp, -16
@@ -280,7 +241,6 @@ gz_crc_update:
     addi sp, sp, 16
     ret
 
-# gz_crc_end: a0, the state, becomes the CRC-32.
 .global gz_crc_end
 gz_crc_end:
     li t1, 0xffffffff
@@ -288,8 +248,6 @@ gz_crc_end:
     and a0, a0, t1
     ret
 
-# gz_crc_table: the 256 entries of the reflected CRC-32, built on first
-# use so nothing sits in the image for a program that never asks.
 gz_crc_table:
     la t0, gz_crc_ready
     ld t1, 0(t0)

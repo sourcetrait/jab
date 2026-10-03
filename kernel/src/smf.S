@@ -1,22 +1,6 @@
 .include "jab.inc"
 .include "synth.inc"
 
-# The Standard MIDI File player: a sequencer over the synthesizer
-# (synth.S) stepped by the sound clock, one step a period as the
-# stream refills (sound.S), so a file's events land on the same
-# calls a program makes live and within a period of their time. The
-# file stays in the program's memory where jab.sys.midi.play found it,
-# read in place: the header's format, track count, and division, then
-# every MTrk chunk as a track with a cursor, its running status, and
-# the absolute tick of its next event. A step moves the position by
-# the period's ticks, 20000 times the division over the tempo in
-# microseconds a quarter note, kept in 32.32 fixed point, and fires
-# every track's events up to it: notes on and off, controllers,
-# program changes, and bends to the synthesizer, the tempo meta event
-# to the clock, the end-of-track meta event ending the track; every
-# other event is skipped by its length. The piece ends when every
-# track has. Every read is bounded by its track's chunk, so a
-# malformed file ends its track rather than reading past it.
 .set TRACKS, JAB_MIDI_TRACKS
 .set TRACK_AT, 0                # the next byte to read
 .set TRACK_END, 8               # the chunk's end
@@ -33,18 +17,10 @@
 .set META_TEMPO, 0x51
 .set META_END, 0x2f
 .set TEMPO_DEFAULT, 500000
-# One period, JAB_SOUND_PERIOD frames at JAB_SOUND_RATE, in microseconds
 .set PERIOD_MICROS, (JAB_SOUND_PERIOD * 1000000 / JAB_SOUND_RATE)
 
 .section .text
 
-# sys_midi_play (jab.sys.midi.play): a0 is a Standard MIDI File inside the
-# program's window, a1 its length. Whatever was playing stops, its
-# notes released; the file's tracks are read and the piece starts at
-# the next period. a0 becomes 0, or jab.sys.sound.open's code, or 3 when
-# the file is not one the player takes: no MThd header, a format past
-# 1, a SMPTE division, no track or more than JAB_MIDI_TRACKS, or a
-# chunk past the end.
 .global sys_midi_play
 sys_midi_play:
     call sound_open
@@ -60,8 +36,6 @@ sys_midi_play:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_stop (jab.sys.midi.stop): the piece stops where it is, its
-# notes released. a0 becomes 0, or jab.sys.sound.open's code.
 .global sys_midi_stop
 sys_midi_stop:
     call sound_open
@@ -72,8 +46,6 @@ sys_midi_stop:
     sd a0, 80(sp)
     j trap_return
 
-# sys_midi_playing (jab.sys.midi.playing): a0 becomes 1 while a piece
-# plays, else 0.
 .global sys_midi_playing
 sys_midi_playing:
     la t0, smf_playing
@@ -81,8 +53,6 @@ sys_midi_playing:
     sd a0, 80(sp)
     j trap_return
 
-# smf_stop: the sequencer stopped and the file's own voices released,
-# the calls' left sounding. Keeps the s registers.
 .global smf_stop
 smf_stop:
     addi sp, sp, -16
@@ -99,9 +69,6 @@ smf_stop:
     addi sp, sp, 16
     ret
 
-# smf_load: the file at a0 of a1 bytes read into the tracks and the
-# clock, and the piece started. a0 becomes 0, or 3 when the file is
-# refused.
 smf_load:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -114,8 +81,6 @@ smf_load:
     add s1, a0, a1              # its end
     li t0, HEADER_BYTES
     bltu a1, t0, 8f
-    # "MThd", a length of 6, a format of 0 or 1, 1 to TRACKS tracks, a
-    # division in ticks a quarter note
     lbu t0, 0(s0)
     li t1, 'M'
     bne t0, t1, 8f
@@ -150,8 +115,6 @@ smf_load:
     bnez t1, 8f
     la t0, smf_division
     sd a0, 0(t0)
-    # the tracks: each MTrk chunk in turn, a chunk of any other kind
-    # skipped by its length, the file's end ending the count early
     la t0, smf_track_count
     sd zero, 0(t0)
     addi s3, s0, HEADER_BYTES   # the next chunk
@@ -179,7 +142,6 @@ smf_load:
     lbu t0, 3(s3)
     li t2, 'k'
     bne t0, t2, 4f
-    # a track: its record, and its first delta
     la t0, smf_track_count
     ld t2, 0(t0)
     li t3, TRACK_SIZE
@@ -228,8 +190,6 @@ smf_load:
     addi sp, sp, 64
     ret
 
-# smf_clock: the position's step a period from the tempo and the
-# division, 32.32 ticks. Clobbers t registers.
 smf_clock:
     la t0, smf_division
     ld t0, 0(t0)
@@ -243,8 +203,6 @@ smf_clock:
     sd t0, 0(t1)
     ret
 
-# smf_be32, smf_be16: the big-endian value at a0, into a0. Clobbers t0
-# and t1.
 smf_be32:
     mv t1, a0
     lbu a0, 0(t1)
@@ -266,10 +224,6 @@ smf_be16:
     or a0, a0, t1
     ret
 
-# smf_step: one period of the piece: the position moved on by the
-# clock's step and every track's events up to it fired; the piece
-# ends once every track has. Called as the stream refills (sound.S),
-# so it keeps every register but the t registers and a0.
 .global smf_step
 smf_step:
     la t0, smf_playing
@@ -293,7 +247,6 @@ smf_step:
     ld t2, 0(t2)
     add t1, t1, t2
     sd t1, 0(t0)
-    # the events fired from here are the file's own notes
     call synth_from_file
     la s0, smf_tracks
     la t0, smf_track_count
@@ -322,14 +275,10 @@ smf_step:
     bnez s2, 5f
     la t0, smf_playing
     sd zero, 0(t0)
-    # a note the file left held, ending without its off, goes to its
-    # release with the piece
     li a0, 0
     li a1, SOURCE_FILE
     call synth_all_off
 5:
-    # and the calls' again, the file having taken its turn inside a
-    # call or the vector
     call synth_live
     ld ra, 88(sp)
     ld s0, 80(sp)
@@ -346,10 +295,6 @@ smf_step:
 9:
     ret
 
-# smf_event: the event at the cursor of the track record at a0 fired
-# and the cursor moved past it and its next delta; a read past the
-# chunk, a running status with none set, or the end-of-track event
-# ends the track. Keeps the s registers.
 smf_event:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -377,7 +322,6 @@ smf_event:
     beq s3, t0, 4f
     sb s3, TRACK_STATUS(s0)
 2:
-    # a channel message
     srli t0, s3, 4
     andi a0, s3, 15
     li t1, 0xc
@@ -386,7 +330,6 @@ smf_event:
     beq t0, t1, 21f
     li t1, 0xf
     beq t0, t1, 8f
-    # two data bytes
     addi t2, s1, 2
     bgtu t2, s2, 8f
     lbu a1, 0(s1)
@@ -417,19 +360,16 @@ smf_event:
     call synth_bend
     j 7f
 20:
-    # one data byte: the program
     bgeu s1, s2, 8f
     lbu a1, 0(s1)
     addi s1, s1, 1
     call synth_program
     j 7f
 21:
-    # one data byte: channel pressure, nothing
     bgeu s1, s2, 8f
     addi s1, s1, 1
     j 7f
 3:
-    # a meta event: its kind, its length, its bytes
     bgeu s1, s2, 8f
     lbu s3, 0(s1)
     addi s1, s1, 1
@@ -463,7 +403,6 @@ smf_event:
     ld s1, 0(sp)
     j 7f
 4:
-    # a system exclusive event: skipped by its length
     mv a0, s1
     mv a1, s2
     call smf_varint
@@ -472,7 +411,6 @@ smf_event:
     bltu s1, a1, 8f
     bgtu s1, s2, 8f
 7:
-    # the next delta
     sd s1, TRACK_AT(s0)
     mv a0, s0
     call smf_delta
@@ -489,9 +427,6 @@ smf_event:
     addi sp, sp, 48
     ret
 
-# smf_delta: the delta at the cursor of the track record at a0 added
-# to its tick and the cursor moved past it; a track with no delta left
-# is done. Clobbers t registers and a0 to a2.
 smf_delta:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -514,9 +449,6 @@ smf_delta:
     addi sp, sp, 16
     ret
 
-# smf_varint: the variable-length quantity at a0, read no further than
-# a1: a0 becomes its value, a1 the byte after it, a2 1, or a2 0 when
-# it runs past a1 or past four bytes. Clobbers t0 to t2.
 smf_varint:
     li t2, 0                    # the value
     li t1, 4                    # bytes left to take

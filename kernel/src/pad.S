@@ -3,37 +3,12 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# The pad: a gamepad the host passed through as QEMU's
-# virtio-input-host-device, a virtio-input device told from the
-# keyboard and the tablet by carrying BTN_SOUTH in its EV_KEY bits and
-# ABS_X in its EV_ABS bits; or, when the machine carries no such
-# device, the pad's port on the virtio-serial device (serial.S,
-# doc/padport.md), where a host process writes a header naming the
-# pad and its axes' ranges and then the events, the same eight-byte
-# shape, as a byte stream the kernel reassembles. A device's event
-# queue is the wide one, PADQ_SIZE eight-byte events the device fills,
-# since a pad sends several events a report at over a hundred reports
-# a second and the kernel drains only when the program asks or waits.
-# A drain keeps EV_KEY events, setting or clearing the key's bit in
-# the mask, and EV_ABS events, storing the axis's raw value, and pushes
-# both into a ring of PAD_RING events for jab.sys.pad.input; EV_SYN and
-# EV_MSC are dropped. Each axis's range comes from the device's config
-# space, or the port's header, when the pad comes up, and its raw value
-# starts at rest, the middle of its range or its minimum for the
-# one-sided ABS_GAS and ABS_BRAKE, so an axis that has not moved reads
-# 0 once normalised. jab.sys.pad.read normalises every axis into the
-# program's record at the call. A program never learns which way its
-# pad came.
 .set PAD_RING, 256
 .set PAD_ENTRY_SIZE, 8
 .set PAD_KEYS_BITS, 32
 .set BTN_SOUTH_BYTE, (JAB_BTN_SOUTH / 8)
 .set BTN_SOUTH_BIT, (JAB_BTN_SOUTH % 8)
 .set ABS_BITMAP_BYTES, (JAB_PAD_AXIS_COUNT / 8)
-# The port's header, as doc/padport.md lays it out: the magic `JPAD`,
-# a version, the name, the buttons, the axes, and every axis's absinfo;
-# then eight-byte events. The stream buffer holds a header and a
-# port buffer besides, and the tail of a split event between reads.
 .set PAD_PORT_MAGIC, 0x4441504a
 .set PAD_PORT_VERSION, 1
 .set PAD_PORT_HEADER_MAGIC, 0
@@ -45,16 +20,11 @@
 .set PAD_PORT_HEADER_BYTES, (PAD_PORT_HEADER_ABSINFO + JAB_PAD_AXIS_COUNT * JAB_PAD_AXIS_ENTRY)
 .set PAD_PORT_EVENT_BYTES, 8
 .set PAD_STREAM_BYTES, 2048
-# Where the pad came from, once open
 .set PAD_SOURCE_DEVICE, 0
 .set PAD_SOURCE_PORT, 1
 
 .section .text
 
-# sys_pad_read (jab.sys.pad.read): a0 is the record, JAB_PAD_ENTRY bytes
-# inside the program's window. a0 becomes 0 with the record written,
-# the keys held and every axis normalised, or 1 with no pad on the
-# machine.
 .global sys_pad_read
 sys_pad_read:
     ld a0, 80(sp)
@@ -63,8 +33,6 @@ sys_pad_read:
     call pad_open
     bnez a0, 9f
     call pad_drain
-    # the keys, a byte at a time, since the record sits where the
-    # program put it
     ld t0, 80(sp)
     la t1, pad_keys
     lwu t1, 0(t1)
@@ -75,7 +43,6 @@ sys_pad_read:
     sb t2, (JAB_PAD_KEYS + 2)(t0)
     srli t2, t1, 24
     sb t2, (JAB_PAD_KEYS + 3)(t0)
-    # every axis, normalised
     li s0, 0
 1:
     mv a0, s0
@@ -97,10 +64,6 @@ sys_pad_read:
     sd a0, 80(sp)
     j trap_return
 
-# sys_pad_input (jab.sys.pad.input): a0 becomes the oldest waiting event's
-# type, or 0 when none waits; a1 its code; a2 its value. The pad comes
-# up on the first call; with no pad on the machine there is never an
-# event.
 .global sys_pad_input
 sys_pad_input:
     call pad_open
@@ -117,10 +80,6 @@ sys_pad_input:
     sd zero, 96(sp)
     j trap_return
 
-# sys_pad_axis (jab.sys.pad.axis): a0 is a buffer of JAB_PAD_AXIS_ENTRY
-# bytes inside the program's window, a1 an axis code. a0 becomes 0
-# with the axis's absinfo written as virtio reported it; 1 with no pad;
-# 2 when the pad has no such axis.
 .global sys_pad_axis
 sys_pad_axis:
     ld a0, 80(sp)
@@ -152,9 +111,6 @@ sys_pad_axis:
     sd a0, 80(sp)
     j trap_return
 
-# sys_pad_name (jab.sys.pad.name): a0 is a buffer of JAB_PAD_NAME_BYTES
-# inside the program's window. a0 becomes 0 with the pad's name in it,
-# NUL-terminated, or 1 with no pad; a1 the name's length.
 .global sys_pad_name
 sys_pad_name:
     ld a0, 80(sp)
@@ -177,12 +133,6 @@ sys_pad_name:
     sd zero, 88(sp)
     j trap_return
 
-# pad_open: find the pad and bring it up: a virtio-input pad with its
-# queue stocked, its line let through, its axes' ranges read, and its
-# name; or, with none, the pad's port with its header taken. Returns
-# 0, or 1 with no pad on the machine, 2 when the device refuses the
-# kernel or the port's header is not one the kernel knows; asked again
-# it answers as before at once. Keeps the s registers.
 .global pad_open
 pad_open:
     la t0, pad_state
@@ -216,8 +166,6 @@ msg_pad_at:
     bnez a0, 6f
     call pad_queue_setup
     bnez a0, 6f
-    # every descriptor an event buffer the device may write, all
-    # offered at once
     la t0, pad_queue
     la t1, pad_events
     li t2, 0
@@ -258,7 +206,6 @@ msg_pad_at:
     li a0, 0
     j 8f
 4:
-    # no device: the port, when it came up with the serial device
     call pad_port_open
     beqz a0, 41f
     li t0, 1
@@ -294,13 +241,6 @@ msg_no_pad:
     addi sp, sp, 16
     ret
 
-# pad_port_open: the pad's port as the pad. With the port up, the
-# header is waited for, the hart halted on the serial device's line
-# until the whole of it has arrived, then taken: the name, the axes
-# the pad has, and every axis's absinfo, each raw value set to rest as
-# a device's are. Returns 0 with the pad open on the port, 1 with no
-# port on the machine, 2 with a header that is not the kernel's.
-# Keeps the s registers.
 pad_port_open:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -323,8 +263,6 @@ pad_port_open:
     lwu t1, PAD_PORT_HEADER_VERSION(t0)
     li t2, PAD_PORT_VERSION
     bne t1, t2, 8f
-    # the name, ended at the last byte whatever the header holds, and
-    # its length
     la a0, pad_name
     addi a1, t0, PAD_PORT_HEADER_NAME
     li a2, JAB_PAD_NAME_BYTES
@@ -341,7 +279,6 @@ pad_port_open:
 4:
     la t0, pad_name_length
     sd t1, 0(t0)
-    # the axes and their ranges
     la t0, pad_stream
     ld t1, PAD_PORT_HEADER_AXES(t0)
     la t2, pad_abs_bits
@@ -384,9 +321,6 @@ msg_pad_port_refused:
     addi sp, sp, 16
     ret
 
-# pad_port_fill: take what the port has delivered into the stream
-# buffer after what it holds, whole port buffers only. Keeps the s
-# registers.
 pad_port_fill:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -405,8 +339,6 @@ pad_port_fill:
     addi sp, sp, 16
     ret
 
-# pad_stream_consume: a0 bytes at the front of the stream buffer are
-# done with; what follows moves to the front.
 pad_stream_consume:
     la t0, pad_stream_length
     ld t1, 0(t0)
@@ -425,9 +357,6 @@ pad_stream_consume:
 2:
     ret
 
-# pad_port_drain: what the port has delivered into the stream, then
-# every whole event in it into the state and the ring; a split event's
-# head stays for the next read.
 pad_port_drain:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -457,9 +386,6 @@ pad_port_drain:
     addi sp, sp, 32
     ret
 
-# pad_queue_setup: give the pad's event queue, queue 0, the wide
-# record's rings, PADQ_SIZE entries. Returns 0, or 1 when the device
-# offers fewer.
 pad_queue_setup:
     la t2, pad_base
     ld a0, 0(t2)
@@ -489,8 +415,6 @@ pad_queue_setup:
     li a0, 1
     ret
 
-# pad_find: the base of the first virtio-input transport whose EV_KEY
-# bits include BTN_SOUTH and whose EV_ABS bits include ABS_X, or 0.
 pad_find:
     li t0, QEMU_VIRT_VIRTIO0
     li t1, QEMU_VIRT_VIRTIO_COUNT
@@ -505,7 +429,6 @@ pad_find:
     bne t4, t3, 2f
     lwu t4, VIRTIO_MMIO_DEVICE_ID(t0)
     bne t4, t6, 2f
-    # the key bitmap: BTN_SOUTH
     li t4, VIRTIO_INPUT_CFG_EV_BITS
     sb t4, (VIRTIO_MMIO_CONFIG + VIRTIO_INPUT_CFG_SELECT)(t0)
     li t4, EV_KEY
@@ -517,7 +440,6 @@ pad_find:
     srli t4, t4, BTN_SOUTH_BIT
     andi t4, t4, 1
     beqz t4, 2f
-    # the axis bitmap: ABS_X
     li t4, VIRTIO_INPUT_CFG_EV_BITS
     sb t4, (VIRTIO_MMIO_CONFIG + VIRTIO_INPUT_CFG_SELECT)(t0)
     li t4, EV_ABS
@@ -537,9 +459,6 @@ pad_find:
     mv a0, t0
     ret
 
-# pad_ranges: the axes the pad has, from its EV_ABS bitmap, and each
-# one's absinfo from the config space into the table; then each raw
-# value set to rest. Keeps the s registers.
 pad_ranges:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -606,9 +525,6 @@ pad_ranges:
     addi sp, sp, 32
     ret
 
-# pad_rest: every axis the pad has set to rest from its absinfo: the
-# middle of the range, or its minimum for the one-sided ABS_GAS and
-# ABS_BRAKE. Keeps the s registers.
 pad_rest:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -649,9 +565,6 @@ pad_rest:
     addi sp, sp, 32
     ret
 
-# pad_name_read: the device's name from the config space, ID_NAME,
-# into pad_name, NUL-terminated, at most JAB_PAD_NAME_BYTES less one;
-# its length kept. Keeps the s registers.
 pad_name_read:
     la t0, pad_base
     ld t0, 0(t0)
@@ -681,8 +594,6 @@ pad_name_read:
     sd t3, 0(t0)
     ret
 
-# pad_axis_present: a0 is an axis code; a0 becomes 1 when the pad has
-# that axis, else 0.
 pad_axis_present:
     srli t0, a0, 3
     la t1, pad_abs_bits
@@ -693,10 +604,6 @@ pad_axis_present:
     andi a0, t1, 1
     ret
 
-# pad_drain: move every event the pad has delivered, from the device
-# or the port, into the state and the ring, keeping EV_KEY and EV_ABS
-# events only. Clobbers a0 to a5 and the t registers; keeps the s
-# registers.
 .global pad_drain
 pad_drain:
     la t0, pad_source
@@ -704,8 +611,6 @@ pad_drain:
     bnez t0, pad_port_drain
     j pad_input_drain
 
-# pad_input_drain: the device's events out of its used buffers, each
-# buffer handed back once taken.
 pad_input_drain:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -716,7 +621,6 @@ pad_input_drain:
     fence rw, rw
     lhu t2, (PADQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
-    # the used element, its descriptor id, that descriptor's event
     andi t2, t1, PADQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -729,7 +633,6 @@ pad_input_drain:
     lhu a1, VIRTIO_INPUT_EVENT_CODE(t4)
     lw a2, VIRTIO_INPUT_EVENT_VALUE(t4)
     call pad_accept
-    # the buffer back to the device
     la t0, pad_queue
     ld t3, 0(sp)
     lhu t2, (PADQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
@@ -760,12 +663,6 @@ pad_input_drain:
     addi sp, sp, 32
     ret
 
-# pad_accept: one event, a0 its type, a1 its code, a2 its value, into
-# the state and the ring: a key sets or clears its bit in the mask
-# when it is one of the gamepad's, an axis stores its raw value when
-# its code is one the record indexes, and either goes into the ring
-# unless the ring is full; any other type is dropped. Clobbers the t
-# registers.
 pad_accept:
     li t0, EV_KEY
     beq a0, t0, 1f
@@ -816,9 +713,6 @@ pad_accept:
 9:
     ret
 
-# pad_pending: a0 becomes 1 when a pad event is waiting in the ring or
-# with the device, or bytes wait on the port, else 0. Keeps the s
-# registers.
 .global pad_pending
 pad_pending:
     la t0, pad_head
@@ -840,8 +734,6 @@ pad_pending:
     li a0, 1
     ret
 
-# pad_take: a0 becomes the oldest event's type, a1 its code, and a2
-# its value, or all 0 when the ring is empty.
 pad_take:
     la t0, pad_head
     ld t0, 0(t0)
@@ -864,13 +756,6 @@ pad_take:
     li a2, 0
     ret
 
-# pad_normalise: a0 is an axis code; a0 becomes its value normalised
-# to -JAB_PAD_FULL through JAB_PAD_FULL from its own range, or 0 for
-# an axis the pad lacks. A centred axis: the flat band about the
-# middle of the range reads 0, and either side of it rescales to full
-# scale at the range's end, so leaving the band is continuous. ABS_GAS
-# and ABS_BRAKE are one-sided: min plus flat reads 0 and max reads
-# full. A hat, -1 to 1 with no flat, lands on the three values.
 pad_normalise:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -893,7 +778,6 @@ pad_normalise:
     beq a0, t0, 5f
     li t0, JAB_ABS_BRAKE
     beq a0, t0, 5f
-    # centred
     add t6, t2, t3
     li t0, 2
     div t6, t6, t0              # the middle
@@ -921,7 +805,6 @@ pad_normalise:
     neg a0, a0
     j 6f
 5:
-    # one-sided
     add t0, t2, t4              # min plus flat
     ble t5, t0, 8f
     sub t1, t3, t0

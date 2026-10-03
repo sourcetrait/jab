@@ -1,37 +1,13 @@
 .include "riscv.inc"
 .include "jab.inc"
 
-# DEFLATE, the decompressor only: RFC 1951, the format inside every
-# gzip file and inside every PNG. A stream is a run of blocks, each with
-# a final bit and a type - stored, fixed Huffman, or dynamic Huffman.
-# Literals and lengths share one alphabet where 256 ends the block and
-# 257 upward are lengths with extra bits; distances have their own.
-# Every Huffman code is canonical, so a table is nothing more than how
-# many codes there are of each length and the symbols in order, which is
-# what makes decoding a walk down the lengths rather than a lookup tree.
-#
-# The decoder writes straight into the program's own buffer, and a
-# back-reference reads what it already wrote there, so the window is the
-# output itself and no separate 32 KiB buffer exists. Everything it
-# needs besides that lives in kernel bss, and every routine works in t
-# registers over those globals rather than holding state in callee-saved
-# ones, which keeps the whole file free of save-and-restore bookkeeping.
-#
-# The input is a segment of bytes, and a caller may give the decoder a
-# way to ask for the next one: a PNG carries its stream cut into IDAT
-# chunks, so png.S hands the decoder each chunk's data as the one before
-# runs out, and the stream is never copied together. A gzip is one
-# segment and gives no hook.
-
 .set DF_MAX_BITS, 15
 .set DF_LIT_SYMBOLS, 288
 .set DF_DIST_SYMBOLS, 30
 .set DF_CODE_SYMBOLS, 19
 .set DF_LENGTHS, (DF_LIT_SYMBOLS + DF_DIST_SYMBOLS)
-# The sound stream is looked at every this many output bytes (sound.S)
 .set DF_TICK_BYTES, 65536
 
-# what went wrong, as jab.sys.gz.read reports it
 .set DF_OK, 0
 .set DF_ERR_INPUT, 1            # the stream ended in the middle of something
 .set DF_ERR_OUTPUT, 2           # the buffer could not hold it
@@ -43,10 +19,6 @@
 
 .section .text
 
-# deflate_inflate: a0 is the output buffer, a1 how much it holds, a2 the
-# compressed bytes, a3 how many. a0 becomes the bytes written and a1 one
-# of the codes above. The whole stream in one segment: deflate_begin
-# with no hook, then deflate_run.
 .global deflate_inflate
 deflate_inflate:
     addi sp, sp, -16
@@ -58,12 +30,6 @@ deflate_inflate:
     addi sp, sp, 16
     ret
 
-# deflate_begin: a0 is the output buffer, a1 how much it holds, a2 the
-# first segment of compressed bytes, a3 how many, a4 a hook to call when
-# a segment runs out, or 0 with none. A hook gives the decoder its next
-# segment through deflate_segment and returns 1, or returns 0 when there
-# is no more; it may use any register the decoder does not keep, which
-# is all of them.
 .global deflate_begin
 deflate_begin:
     la t0, df_out
@@ -91,8 +57,6 @@ deflate_begin:
     sd t1, 0(t0)
     ret
 
-# deflate_segment: a0 is the next segment of compressed bytes and a1 how
-# many; what a hook calls before it returns 1.
 .global deflate_segment
 deflate_segment:
     la t0, df_in
@@ -103,11 +67,6 @@ deflate_segment:
     sd zero, 0(t0)
     ret
 
-# deflate_byte: the next whole byte of the input, asking the hook for
-# more when the segment has run out. a0 becomes the byte, or -1 when
-# there is none. The bit buffer is left alone, so this reads what
-# surrounds a stream - a zlib header before it, an Adler-32 after it -
-# from the same cursor the blocks use.
 .global deflate_byte
 deflate_byte:
     addi sp, sp, -16
@@ -134,10 +93,6 @@ deflate_byte:
     addi sp, sp, 16
     ret
 
-# deflate_run: the blocks, from where the input cursor stands to the one
-# marked final. a0 becomes the bytes written and a1 one of the codes
-# above. Fewer than eight bits are ever left in the bit buffer at the
-# end, so the next whole byte is the first after the stream.
 .global deflate_run
 deflate_run:
     addi sp, sp, -16
@@ -186,7 +141,6 @@ deflate_run:
     addi sp, sp, 16
     ret
 
-# df_fail: t0 is a code; the first failure is the one kept.
 df_fail:
     la t1, df_error
     ld t2, 0(t1)
@@ -195,9 +149,6 @@ df_fail:
 1:
     ret
 
-# df_refill: the segment has run out; ask the hook for another. a0
-# becomes 1 with a new segment in place, 0 with none. Keeps nothing, so
-# a caller saves what it holds in t registers first.
 df_refill:
     la t0, df_more
     ld t0, 0(t0)
@@ -207,9 +158,6 @@ df_refill:
     li a0, 0
     ret
 
-# df_bits: a0 is how many bits to take, at most 16, lowest first as
-# DEFLATE writes them. a0 becomes their value, or 0 with the input
-# error set once the stream has run out.
 df_bits:
     mv t6, a0
     la t0, df_bitcnt
@@ -218,7 +166,6 @@ df_bits:
     ld t3, 0(t2)
 1:
     bgeu t1, t6, 2f
-    # another byte into the buffer
     la t4, df_inpos
     ld t5, 0(t4)
     la a0, df_inlen
@@ -247,8 +194,6 @@ df_bits:
     sd t3, 0(t4)
     ret
 8:
-    # the segment has run out: keep the buffer, ask for another, and go
-    # on where it left off if one came
     la t4, df_bitcnt
     sd t1, 0(t4)
     la t4, df_bitbuf
@@ -278,8 +223,6 @@ df_bits:
     li a0, 0
     ret
 
-# df_put: a0 is a byte for the output, which the program owns; every
-# DF_TICK_BYTES of it the sound stream is looked at.
 df_put:
     la t0, df_outpos
     ld t1, 0(t0)
@@ -315,8 +258,6 @@ df_put:
     addi sp, sp, 16
     ret
 
-# df_stored: a block held as it is. The bits left in the buffer are
-# dropped, then a length and its complement, then the bytes.
 df_stored:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -368,8 +309,6 @@ df_stored:
     addi sp, sp, 16
     ret
 
-# df_fixed: the tables every fixed block uses, built each time rather
-# than kept, since building them is a few hundred stores.
 df_fixed:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -422,7 +361,6 @@ df_fixed:
     addi sp, sp, 16
     ret
 
-# df_dynamic: the tables this block carries, themselves Huffman coded.
 df_dynamic:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -447,7 +385,6 @@ df_dynamic:
     ld t0, 8(sp)
     li t1, DF_DIST_SYMBOLS
     bgtu t0, t1, 7f
-    # the code-length code lengths, in the order the format names them
     la t0, df_lengths
     li t1, 0
     li t2, DF_CODE_SYMBOLS
@@ -485,7 +422,6 @@ df_dynamic:
     la t0, df_error
     ld t0, 0(t0)
     bnez t0, 9f
-    # and with those, the lengths of the two real tables, run together
     li t1, 0
 5:
     ld t2, 0(sp)
@@ -504,7 +440,6 @@ df_dynamic:
     bnez t3, 9f
     li t2, 16
     bgeu a0, t2, 51f
-    # a length of its own
     la t3, df_lengths
     add t3, t3, t1
     sb a0, 0(t3)
@@ -513,7 +448,6 @@ df_dynamic:
 51:
     li t2, 16
     bne a0, t2, 52f
-    # the one before it, three to six times
     beqz t1, 7f
     la t3, df_lengths
     add t3, t3, t1
@@ -559,7 +493,6 @@ df_dynamic:
     addi t5, t5, -1
     j 56b
 6:
-    # the literal and length table, then the distance table after it
     la a0, df_lencnt
     la a1, df_lensym
     la a2, df_lengths
@@ -588,15 +521,9 @@ df_dynamic:
     addi sp, sp, 32
     ret
 
-# df_construct: a0 is a count array of DF_MAX_BITS + 1 halfwords, a1 a
-# symbol array of halfwords, a2 the lengths of a3 symbols. A canonical
-# Huffman code is only its counts per length and its symbols in order,
-# so that is all this builds. An incomplete code is refused, except the
-# one distance code a block with no matches may carry.
 df_construct:
     addi sp, sp, -16
     sd ra, 8(sp)
-    # the counts
     li t0, 0
 1:
     li t1, DF_MAX_BITS + 1
@@ -620,11 +547,8 @@ df_construct:
     addi t0, t0, 1
     j 3b
 4:
-    # every symbol unused is no code at all, which a distance table is
-    # allowed to be
     lhu t0, 0(a0)
     beq t0, a3, 9f
-    # a code has to be complete: each length doubles what is left
     li t0, 1                    # codes left over
     li t1, 1                    # the length
 5:
@@ -639,7 +563,6 @@ df_construct:
     addi t1, t1, 1
     j 5b
 6:
-    # where each length's symbols start
     la t4, df_offs
     sh zero, 0(t4)
     sh zero, 2(t4)
@@ -683,12 +606,6 @@ df_construct:
     addi sp, sp, 16
     ret
 
-# df_decode: a0 is a count array and a1 a symbol array. Walks the code
-# lengths, taking one bit at a time, which is what a canonical code
-# allows: at each length the codes of that length run consecutively, so
-# a code within the count is the symbol at that offset.
-# Every count here lives on the stack rather than in a t register,
-# because df_bits is a call and a call keeps none of them.
 df_decode:
     addi sp, sp, -64
     sd ra, 48(sp)
@@ -749,9 +666,6 @@ df_decode:
     addi sp, sp, 64
     ret
 
-# df_codes: the block's symbols, until the one that ends it. A literal
-# is a byte; anything above 256 is a length with a distance after it,
-# and the copy reads back what the output already holds.
 df_codes:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -786,7 +700,6 @@ df_codes:
     ld t1, 0(sp)
     add t1, t1, a0
     sd t1, 0(sp)
-    # the distance
     la a0, df_distcnt
     la a1, df_distsym
     call df_decode
@@ -810,7 +723,6 @@ df_codes:
     la t0, df_error
     ld t0, 0(t0)
     bnez t0, 9f
-    # the copy, from that far back in what is already written
     la t0, df_outpos
     ld t0, 0(t0)
     ld t1, 8(sp)
@@ -848,7 +760,6 @@ df_codes:
 
 .section .rodata
 .balign 2
-# the order a dynamic block writes its code-length lengths in
 df_clorder:
     .byte 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
 .balign 2

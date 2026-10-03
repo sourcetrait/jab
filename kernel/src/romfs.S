@@ -3,43 +3,16 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# RomFS on a disk, read through the block layer (block.S). The format is
-# Linux's romfs: a volume header of the magic, the accessible size, a
-# checksum and the volume's name, then a chain of file headers, each the
-# next header's offset with the mode in its low four bits, the spec
-# info, the size, a checksum, and the name; everything sits on a 16-byte
-# boundary and every longword is big-endian. Nothing is abstracted away:
-# a handle is a header's offset in the image, exactly as romfs itself
-# points, and the mode nibble reaches a program where the image keeps
-# it.
-#
-# Headers and the partial ends of a read go through one bounce buffer,
-# which remembers the sectors it holds, so a listing walking a chain
-# inside it costs one read rather than one per entry; the whole sectors
-# of a file's data go straight from the device into the program's own
-# buffer. What the image cannot support ends the run with a line on the
-# UART - a bad checksum, a handle that is not a header, a header whose
-# kind is wrong for the call - since every handle the kernel hands out
-# is none of those and a program that invents one has a bug.
-
-# "-rom" and "1fs-" as the little-endian words a load sees
 .set ROMFS_MAGIC_LOW, 0x6d6f722d
 .set ROMFS_MAGIC_HIGH, 0x2d736631
 .set ROMFS_HEADER, 16
 .set ROMFS_BOUNCE_SECTORS, 4
 .set ROMFS_BOUNCE_BYTES, (ROMFS_BOUNCE_SECTORS * JAB_BLOCK_SECTOR)
-# Past this a name is not long but corrupt: the bounce could not hold it
-# beside its own header.
 .set ROMFS_NAME_LIMIT, 1008
 .set ROMFS_LINK_LIMIT, 8
 
 .section .text
 
-# sys_romfs_list (jab.sys.romfs.list): a0 is the buffer, a1 the disk, a2 the
-# directory's header offset (JAB_ROMFS_ROOT for the volume's root), a3
-# the offset this page starts at (0 for the directory's first entry), a4
-# how many records the buffer holds. a0 becomes the records written and
-# a1 the offset to start the next page at, 0 once the chain has ended.
 .global sys_romfs_list
 sys_romfs_list:
     call block_probe
@@ -58,8 +31,6 @@ sys_romfs_list:
 2:
     beqz s3, 3f
     bgeu s5, s4, 3f
-    # each record is checked as it is written, so a capacity larger than
-    # the buffer costs the run only where it would write outside it
     li t0, JAB_ROMFS_ENTRY
     mul t0, s5, t0
     ld t1, 80(sp)
@@ -80,15 +51,6 @@ sys_romfs_list:
     sd s3, 88(sp)
     j trap_return
 
-# sys_romfs_find (jab.sys.romfs.find): a0 is a one-record buffer, a1 the
-# disk, a2 the directory to start from (JAB_ROMFS_ROOT for the root), a3
-# a path inside the program's window. Components are separated by /, a
-# leading / starts at the root, and an empty component is skipped; a
-# hard link is followed, so . and .. lead where romfs points them and
-# the record carries the header they point at. a0 becomes 0 with the
-# record written, 1 when nothing of that name is there, or 2 when a
-# component along the way is not a directory; a1 becomes the entry's own
-# offset.
 .global sys_romfs_find
 sys_romfs_find:
     call block_probe
@@ -117,13 +79,6 @@ sys_romfs_find:
     sd s2, 88(sp)
     j trap_return
 
-# romfs_lookup: a0 is a disk's index, a1 the directory to start from
-# (JAB_ROMFS_ROOT for the root), a2 a path and a3 where it ends. The
-# walk of jab.sys.romfs.find: a0 becomes 0 with the entry's record in
-# romfs_scratch, 1 when nothing of that name is there, or 2 when a
-# component along the way is not a directory; a1 the entry's own
-# offset, hard links followed. What png.S uses to find a sprite's
-# directory and each frame in it.
 .global romfs_lookup
 romfs_lookup:
     addi sp, sp, -80
@@ -151,7 +106,6 @@ romfs_lookup:
     call romfs_chain
     mv s3, a0
 2:
-    # the next component: separators first, then its length
     bgeu s1, s2, 7f
     lbu t0, 0(s1)
     beqz t0, 7f
@@ -192,12 +146,10 @@ romfs_lookup:
     li a1, 0
     j 0f
 8:
-    # found: a hard link stands for what it points at
     mv a0, s0
     mv a1, s6
     call romfs_resolve
     mv s6, a0
-    # is there another component after this one
     mv s7, s1
 9:
     bgeu s7, s2, 10f
@@ -236,11 +188,6 @@ romfs_lookup:
     addi sp, sp, 80
     ret
 
-# sys_romfs_read (jab.sys.romfs.read): a0 is the buffer, a1 the disk, a2 the
-# file's header offset, a3 the byte of it to start at, a4 how many bytes
-# at most. The whole sectors go from the device into the buffer and the
-# partial ends through the kernel's bounce. a0 becomes the bytes
-# written and a1 the offset to read from next, 0 at the file's end.
 .global sys_romfs_read
 sys_romfs_read:
     call block_probe
@@ -287,10 +234,6 @@ sys_romfs_read:
     bnez s11, 5f
     srli t0, s7, 9
     beqz t0, 5f
-    # on a sector boundary with whole sectors to go, so the device
-    # writes the program's buffer itself
-    # the queue first: block_base leaves a1 alone, where block_queue
-    # would clobber any t register holding the transport
     mv s11, t0
     mv a0, s0
     call block_queue
@@ -310,7 +253,6 @@ sys_romfs_read:
     sub s7, s7, t0
     j 3b
 5:
-    # a partial sector, through the kernel's own buffer
     mv a0, s0
     mv a1, s10
     call romfs_window
@@ -350,8 +292,6 @@ sys_romfs_read:
     mv a0, s2
     j romfs_fault_header
 
-# romfs_magic: a0 is a disk's first sector; a0 becomes 1 when it opens
-# with the volume magic. block.S asks this to name a disk's kind.
 .global romfs_magic
 romfs_magic:
     lwu t0, 0(a0)
@@ -365,9 +305,6 @@ romfs_magic:
 1:
     ret
 
-# romfs_disk: a0 is the id a program gave; a0 becomes that disk's index.
-# Ends the run when the machine has no such disk or it carries no romfs,
-# both of which a program can see for itself with jab.sys.block.list.
 .global romfs_disk
 romfs_disk:
     addi sp, sp, -16
@@ -396,9 +333,6 @@ romfs_disk:
     addi a0, a0, 1
     j romfs_fault_not_romfs
 
-# romfs_volume: a0 is a disk's index. a0 becomes the root header's
-# offset and a1 the volume's accessible size, both remembered after the
-# first call. Ends the run when the disk holds no sound volume.
 romfs_volume:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -427,7 +361,6 @@ romfs_volume:
     addi a0, a0, 8
     call romfs_be32
     sd a0, 16(sp)               # the accessible size
-    # the checksum covers the first sector, or a volume smaller than one
     mv a1, a0
     li t0, JAB_BLOCK_SECTOR
     bltu a1, t0, 2f
@@ -437,7 +370,6 @@ romfs_volume:
     ld a0, 8(sp)
     call romfs_checksum
     bnez a0, 8f
-    # the root header follows the volume's name
     ld a0, 8(sp)
     addi a0, a0, ROMFS_HEADER
     li a1, ROMFS_NAME_LIMIT
@@ -466,10 +398,6 @@ romfs_volume:
     addi sp, sp, 48
     ret
 
-# romfs_chain: a0 is a disk's index and a1 a directory's header offset,
-# JAB_ROMFS_ROOT for the root. a0 becomes the offset of its first entry.
-# A hard link is followed first, so the . and .. of any directory lead
-# where they point. Ends the run when it is not a directory.
 romfs_chain:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -494,10 +422,6 @@ romfs_chain:
     mv a0, t0
     j romfs_fault_kind
 
-# romfs_resolve: a0 is a disk's index and a1 a header's offset. Follows
-# hard links to what they stand for and leaves that header in the
-# scratch record; a0 becomes its offset. Ends the run on a chain of
-# links with no end.
 romfs_resolve:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -529,13 +453,6 @@ romfs_resolve:
     addi sp, sp, 32
     ret
 
-# romfs_entry: a0 is a disk's index, a1 a header's offset, a2 where the
-# record goes. Reads the header, holds it to its own checksum, and
-# writes the record of jab.inc. a0 becomes the metadata's length, so a
-# file's data begins that far after its header. A name longer than a
-# record holds is reported cut, which is what a Linux mount of the same
-# image reports, while the length used here is the real one, so the data
-# still begins where it truly does.
 .global romfs_entry
 romfs_entry:
     addi sp, sp, -64
@@ -577,8 +494,6 @@ romfs_entry:
     ld a1, 40(sp)
     call romfs_checksum
     bnez a0, 8f
-    # the record: the handle it was asked about, then the header as the
-    # image keeps it
     ld t0, 16(sp)
     ld t1, 8(sp)
     sw t1, JAB_ROMFS_OFFSET(t0)
@@ -596,8 +511,6 @@ romfs_entry:
     call romfs_be32
     ld t0, 16(sp)
     sw a0, JAB_ROMFS_SIZE(t0)
-    # the name, over a cleared field so a short one ends where it should
-    # and a long one is cut where the record ends
     ld a0, 16(sp)
     addi a0, a0, JAB_ROMFS_NAME
     li a1, JAB_ROMFS_NAME_BYTES
@@ -621,12 +534,6 @@ romfs_entry:
     ld a0, 8(sp)
     j romfs_fault_header
 
-# romfs_window: a0 is a disk's index and a1 an offset in its image.
-# Reads the sectors holding it into the bounce, as many as the bounce
-# and the disk allow, and returns that byte's address in a0 with the
-# bytes readable after it in a1. The bounce remembers what it holds, so
-# a chain walked inside it is read once. Ends the run on a disk error or
-# an offset past the disk.
 .global romfs_window
 romfs_window:
     addi sp, sp, -48
@@ -698,8 +605,6 @@ romfs_window:
 9:
     j romfs_fault_disk
 
-# romfs_be32: a0 is an address; a0 becomes the big-endian longword
-# there, which is how romfs writes every value.
 romfs_be32:
     lbu t0, 0(a0)
     lbu t1, 1(a0)
@@ -713,9 +618,6 @@ romfs_be32:
     or a0, t0, t3
     ret
 
-# romfs_checksum: a0 is an address and a1 a count of bytes, a multiple
-# of four. a0 becomes the sum of the longwords there taken as 32 bits,
-# which romfs makes zero over a sound volume or file header.
 romfs_checksum:
     li t5, 0
 1:
@@ -739,9 +641,6 @@ romfs_checksum:
     srli a0, a0, 32
     ret
 
-# romfs_strnlen: a0 is an address and a1 the most bytes to look at. a0
-# becomes the length of the string there, or -1 when no terminator is
-# within reach.
 romfs_strnlen:
     li t0, 0
 1:
@@ -758,8 +657,6 @@ romfs_strnlen:
     li a0, -1
     ret
 
-# romfs_name_equal: a0 is a name in the program's window and a1 its
-# length; a0 becomes 1 when the scratch record carries the same name.
 romfs_name_equal:
     la t0, romfs_scratch
     addi t0, t0, JAB_ROMFS_NAME

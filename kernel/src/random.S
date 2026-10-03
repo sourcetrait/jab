@@ -3,20 +3,8 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# Random bytes: QEMU's virtio-rng device, the entropy device, over the
-# mmio transport, id 4, on the line since the start and drawn from
-# here. One queue: the driver offers a buffer the device may write and
-# the device fills it with random bytes from the host's own source,
-# saying how many it wrote, which is the whole buffer from QEMU's
-# default backend but need not be by the specification. The device
-# comes up on the first call and the program's own buffer is what the
-# device writes, so nothing is copied.
-
 .section .text
 
-# sys_random (jab.sys.random): a0 is a buffer inside the program's window,
-# a1 how many bytes. a0 becomes 0 with the bytes written and a1 how
-# many the device gave, or 1 with no rng device on the machine.
 .global sys_random
 sys_random:
     ld a0, 80(sp)
@@ -26,7 +14,6 @@ sys_random:
     bnez a0, 7f
     ld a1, 88(sp)
     beqz a1, 6f
-    # one descriptor the device writes, offered in the next slot
     la t0, random_queue
     ld t1, 80(sp)
     sd t1, (VQ_DESC + VIRTQ_DESC_ADDR)(t0)
@@ -48,7 +35,6 @@ sys_random:
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     la a0, random_queue
     call virtio_wait_used
-    # the used element says how many bytes the device wrote
     ld t1, VQ_LAST_USED(a0)
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
@@ -71,10 +57,6 @@ sys_random:
     sd zero, 88(sp)
     j trap_return
 
-# random_open: find the rng device and bring it up, its queue set up
-# and its line let through. Returns 0, or 1 with no rng device on the
-# machine, 2 when the device refuses the kernel; asked again it
-# answers as before at once. Keeps the s registers.
 random_open:
     la t0, random_state
     ld t0, 0(t0)

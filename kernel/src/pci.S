@@ -3,22 +3,8 @@
 .include "virtio.inc"
 .include "pci.inc"
 
-# PCI: the machine's PCI Express root, walked once for virtio devices,
-# which are the only ones Jab puts there. Under -bios none no firmware
-# has run, so the kernel does what firmware would: each device's BARs
-# are sized by the write-ones probe and given a base out of the 1 GiB
-# MMIO window in order, memory decoding and bus mastering are turned
-# on, and the device's INTx pin is followed by the host bridge's
-# swizzle to its PLIC line. Then the virtio capabilities in its
-# configuration space are read for where its regions sit, and the
-# device is kept in a record for whoever drives it (block.S). A
-# device's interrupt is a level held until its ISR register is read,
-# which plic_service does for every device on a PCI line it takes.
-
 .section .text
 
-# pci_scan: walk bus 0 once for virtio devices and bring each up as
-# above. Keeps the s registers.
 .global pci_scan
 pci_scan:
     la t0, pci_scanned
@@ -62,9 +48,6 @@ pci_scan:
 9:
     ret
 
-# pci_config: a0 is a device and function on bus 0, the device in bits
-# 3 to 7 and the function in bits 0 to 2; a0 becomes the address of
-# its configuration space.
 .global pci_config
 pci_config:
     slli a0, a0, 12
@@ -72,9 +55,6 @@ pci_config:
     add a0, a0, t0
     ret
 
-# pci_bring_up: the device and function at a0 into the next record:
-# ids, slot, pin and line, BARs assigned, decoding on, the virtio
-# capabilities read. Keeps the s registers.
 pci_bring_up:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -90,7 +70,6 @@ pci_bring_up:
     sd t2, 16(sp)               # the record
     addi t1, t1, 1
     sd t1, 0(t0)
-    # the ids, the slot, the pin, and the line
     ld t0, 8(sp)
     ld t2, 16(sp)
     lhu t1, PCI_CFG_VENDOR(t0)
@@ -112,8 +91,6 @@ pci_bring_up:
     li t3, 0
 2:
     sb t3, PCI_DEV_LINE(t2)
-    # the virtio device id: past the modern base, or the subsystem id
-    # of a transitional device
     lhu t1, PCI_CFG_DEVICE(t0)
     li t3, PCI_VIRTIO_DEVICE_MODERN
     bltu t1, t3, 3f
@@ -123,7 +100,6 @@ pci_bring_up:
     lhu t1, PCI_CFG_SUBSYSTEM_DEVICE(t0)
 4:
     sw t1, PCI_DEV_VIRTIO_ID(t2)
-    # the BARs
     sd zero, 24(sp)             # the BAR being sized
 5:
     ld t0, 24(sp)
@@ -138,7 +114,6 @@ pci_bring_up:
     sd t0, 24(sp)
     j 5b
 6:
-    # decoding and mastering on, the INTx pin left enabled
     ld t0, 8(sp)
     lhu t1, PCI_CFG_COMMAND(t0)
     ori t1, t1, PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER
@@ -146,7 +121,6 @@ pci_bring_up:
     not t2, t2
     and t1, t1, t2
     sh t1, PCI_CFG_COMMAND(t0)
-    # the virtio capabilities
     ld a0, 8(sp)
     ld a1, 16(sp)
     call pci_capabilities
@@ -154,12 +128,6 @@ pci_bring_up:
     addi sp, sp, 48
     ret
 
-# pci_assign_bar: BAR a2 of the device whose configuration space is at
-# a0 and record at a1: sized by writing ones and reading the mask
-# back, given the next base in the window aligned to its size, the
-# base written and kept in the record. a0 becomes how many BAR slots
-# it took, two for a 64-bit BAR. An I/O BAR or an absent one is left
-# alone and takes one.
 pci_assign_bar:
     slli t0, a2, 2
     addi t0, t0, PCI_CFG_BAR0
@@ -180,8 +148,6 @@ pci_assign_bar:
     sw t1, 4(t0)
     lwu t6, 4(t0)
 1:
-    # the size: the low word's address bits and the high word together,
-    # inverted and one more; a 32-bit BAR's size stays within a word
     li t1, PCI_BAR_ADDRESS_MASK
     and t2, t2, t1
     slli t6, t6, 32
@@ -193,7 +159,6 @@ pci_assign_bar:
     li t1, 0xffffffff
     and t2, t2, t1
 3:
-    # the base: the window's next, aligned to the size
     la t1, pci_next_base
     ld t3, 0(t1)
     addi t4, t2, -1
@@ -217,10 +182,6 @@ pci_assign_bar:
     li a0, 1
     ret
 
-# pci_capabilities: walk the capability list of the device whose
-# configuration space is at a0 into the record at a1: each virtio
-# capability's region, its BAR's base plus its offset, by type, and
-# the notify multiplier.
 pci_capabilities:
     lhu t0, PCI_CFG_STATUS(a0)
     andi t0, t0, PCI_STATUS_CAPABILITIES
@@ -265,14 +226,12 @@ pci_capabilities:
 9:
     ret
 
-# pci_count_of: a0 becomes how many virtio devices the scan found.
 .global pci_count_of
 pci_count_of:
     la t0, pci_count
     ld a0, 0(t0)
     ret
 
-# pci_device: a0 is an index; a0 becomes that device's record.
 .global pci_device
 pci_device:
     li t0, PCI_DEV_SIZE
@@ -281,8 +240,6 @@ pci_device:
     add a0, t1, t0
     ret
 
-# pci_service_line: a0 is a PLIC line; every device on it has its ISR
-# read, which drops the level. Clobbers t registers only.
 .global pci_service_line
 pci_service_line:
     la t0, pci_count

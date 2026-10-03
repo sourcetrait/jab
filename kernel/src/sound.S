@@ -3,64 +3,24 @@
 .include "virtio.inc"
 .include "jab.inc"
 
-# The sound device: QEMU's virtio-sound over the mmio transport, id
-# 25, its playback stream driven in Jab's one format, 48 kHz stereo
-# signed 16-bit interleaved (jab.inc), TheUser's ruling. The control
-# queue carries the stream's set-up, SET_PARAMS, PREPARE, and START,
-# each a request the device answers with a status; the tx queue
-# carries the samples in periods of JAB_SOUND_PERIOD frames, each a
-# chain of two descriptors, the stream id and the samples the device
-# reads and a status it writes back, returned once the host's backend
-# has consumed it on its own timer. The stream runs on that clock:
-# JAB_SOUND_PERIODS periods are in flight, and each one returned
-# raises the device's line, which the kernel takes wherever it is,
-# in a wait or in the program through the trap vector (trap.S), and
-# fills and offers again from the mix of two sources: the frames a
-# program has queued with jab.sys.sound.write, a ring of JAB_SOUND_RING
-# of them played in order as they reach the front, and the
-# synthesizer's voices (synth.S). A dry ring and no voice is silence,
-# never a fault. Once the stream is live the external interrupt stays
-# enabled in sie for good, so the waits leave it set (timer.S,
-# virtio.S). Every period the device returns is looked at: its status
-# is counted, and the time of the last return is what tells a stalled
-# backend, one that has returned nothing for SOUND_STALL_TICKS while
-# periods were in flight, from a slow one; a stalled stream is declared
-# dead, with a line on the UART, rather than holding a wait forever. A
-# long call looks at the stream from inside its loops through
-# sound_tick, so the lead is never spent by the kernel's own work.
 .set SOUND_STREAM, 0
 .set PERIOD_BYTES, (JAB_SOUND_PERIOD * JAB_SOUND_FRAME_BYTES)
 .set PERIOD_STRIDE, (VIRTIO_SND_PCM_XFER_SIZE + PERIOD_BYTES)
 .set RING_MASK, (JAB_SOUND_RING - 1)
 .set ACCUM_BYTES, (JAB_SOUND_PERIOD * JAB_SOUND_CHANNELS * 4)
-# A backend that has returned nothing for this long, with periods in
-# flight, has stopped
 .set SOUND_STALL_TICKS, (QEMU_VIRT_TIMEBASE * 3)
-# How often a wait on the stream alone wakes to look for a stall
 .set SOUND_POLL_TICKS, (QEMU_VIRT_TIMEBASE / 2)
-# The exit keeps the stream running for this many periods of silence
-# past the last with content, so the host's own buffer behind the
-# device, 92 ms on ALSA, has played what it held before QEMU ends
 .set SOUND_DRAIN_PERIODS, 16
-# The exit waits this long at most for the ring and the voices to end
 .set SOUND_FLUSH_TICKS, (QEMU_VIRT_TIMEBASE * 3)
 
 .section .text
 
-# sys_sound_open (jab.sys.sound.open): a0 becomes 0, 1 with no sound
-# device on the machine, 2 when the device refuses the kernel or the
-# format.
 .global sys_sound_open
 sys_sound_open:
     call sound_open
     sd a0, 80(sp)
     j trap_return
 
-# sys_sound_write (jab.sys.sound.write): a0 is a buffer of frames inside
-# the program's window, a1 how many. a0 becomes 0 with a1 how many
-# were taken, as many as the ring has room for, or sound_open's code.
-# The count is capped to the room before it is multiplied, so a count
-# that would wrap the byte size is never the one the bounds see.
 .global sys_sound_write
 sys_sound_write:
     call sound_open
@@ -105,8 +65,6 @@ sys_sound_write:
     sd zero, 88(sp)
     j trap_return
 
-# sys_sound_ready (jab.sys.sound.ready): a0 becomes 0 with a1 how many
-# frames a write would take now, or sound_open's code.
 .global sys_sound_ready
 sys_sound_ready:
     call sound_open
@@ -120,7 +78,6 @@ sys_sound_ready:
     sd zero, 88(sp)
     j trap_return
 
-# sound_room: a0 becomes how many frames the ring has room for.
 sound_room:
     la t0, sound_head
     ld t0, 0(t0)
@@ -131,14 +88,6 @@ sound_room:
     sub a0, a0, t0
     ret
 
-# sound_open: find the sound device and bring it up: the control and
-# tx queues, its line let through, the stream's parameters set to the
-# one format with JAB_SOUND_PERIODS periods, prepared and started,
-# the period chains' descriptors laid out once, the synthesizer
-# reset, and every period mixed and offered, so the stream runs from
-# here on. Returns 0, or 1 with no sound device, 2 when the device
-# refuses the kernel or a request; asked again it answers as before
-# at once. Keeps the s registers.
 .global sound_open
 sound_open:
     la t0, sound_state
@@ -185,7 +134,6 @@ msg_sound_at:
     la t0, sound_base
     ld a0, 0(t0)
     call virtio_irq_enable
-    # the stream's parameters: the one format, the period, the lead
     la t0, sound_request
     li t1, VIRTIO_SND_R_PCM_SET_PARAMS
     sw t1, VIRTIO_SND_HDR_CODE(t0)
@@ -212,8 +160,6 @@ msg_sound_at:
     li a0, VIRTIO_SND_R_PCM_START
     call sound_control_simple
     bnez a0, 6f
-    # the period chains: descriptor 2i the stream id and the samples,
-    # 2i+1 the status, laid out once
     la t0, sound_queue
     la t1, sound_periods
     la t2, sound_status
@@ -256,8 +202,6 @@ msg_sound_at:
     la t0, sound_state
     li t1, 1
     sd t1, 0(t0)
-    # live: the line stays enabled from here on, and the stream is
-    # primed with every period
     la t0, sound_live
     sd t1, 0(t0)
     li t0, SIE_SEIE
@@ -297,8 +241,6 @@ msg_sound_refused:
     addi sp, sp, 32
     ret
 
-# sound_queue_setup: give the tx queue the wide record's rings,
-# SNDQ_SIZE entries. Returns 0, or 1 when the device offers fewer.
 sound_queue_setup:
     la t2, sound_base
     ld a0, 0(t2)
@@ -329,8 +271,6 @@ sound_queue_setup:
     li a0, 1
     ret
 
-# sound_control_simple: a0 is a request code that takes only the
-# stream; run it. a0 becomes 0 when the device said OK, else 1.
 sound_control_simple:
     la t0, sound_request
     sw a0, VIRTIO_SND_HDR_CODE(t0)
@@ -339,9 +279,6 @@ sound_control_simple:
     li a0, VIRTIO_SND_PCM_HDR_SIZE
     j sound_control
 
-# sound_control: run the request of a0 bytes in sound_request through
-# the control queue, the hart halted until the device answers. a0
-# becomes 0 when the device said OK, else 1.
 sound_control:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -367,12 +304,6 @@ sound_control:
     addi sp, sp, 16
     ret
 
-# sound_service: the stream kept running: every period the device
-# has returned is mixed afresh and offered again, the file player
-# stepped a period first (smf.S). Called wherever the device's line
-# is taken (virtio.S), in a wait or from the trap vector, so it keeps
-# every register but the t registers and a0; nothing happens until
-# the stream is live.
 .global sound_service
 sound_service:
     la t0, sound_live
@@ -421,12 +352,6 @@ sound_service:
 9:
     ret
 
-# sound_mix: fill a period's samples at a0: the ring's frames, as
-# many as it holds up to the period, scaled by four into the
-# accumulator and silence after them; the synthesizer's voices added
-# at full scale; the sum, back down by four, clipped to the sample
-# range. So a program's frames pass through unchanged and four voices
-# at full scale reach it. Keeps the s registers.
 sound_mix:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -496,8 +421,6 @@ sound_mix:
     addi sp, sp, 32
     ret
 
-# sound_submit: offer period a0, full, to the device: its chain's
-# head in the next slot of the available ring, and a notify; counted.
 sound_submit:
     la t0, sound_busy
     add t0, t0, a0
@@ -524,10 +447,6 @@ sound_submit:
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     ret
 
-# sound_drain: every period the device has returned is free again,
-# each one's status record read: a status other than OK is counted as
-# failed, every return is counted and stamps the time of the last.
-# Clobbers t registers only.
 sound_drain:
     la t0, sound_queue
     ld t1, SNDQ_LAST_USED(t0)
@@ -543,7 +462,6 @@ sound_drain:
     la t4, sound_busy
     add t4, t4, t3
     sb zero, 0(t4)
-    # its status, written by the device after the samples
     li t4, VIRTIO_SND_PCM_STATUS_SIZE
     mul t4, t4, t3
     la t5, sound_status
@@ -571,12 +489,6 @@ sound_drain:
 2:
     ret
 
-# sound_stalled: a0 becomes 1 when the live stream has stopped: a
-# period in flight and no return for SOUND_STALL_TICKS. The stream is
-# then dead: the refills stop, the calls answer 2 from here on, the
-# wait drops its bit, and "jab: sound stalled" goes to the UART, in
-# every build, since a program that hears nothing deserves the reason.
-# Else 0. Clobbers t registers and a0.
 .global sound_stalled
 sound_stalled:
     la t0, sound_live
@@ -616,11 +528,6 @@ sound_stalled:
     li a0, 0
     ret
 
-# sound_tick: a checkpoint for a long loop inside a call, which runs
-# with interrupts off: when the stream is live and the device has
-# returned a period since the kernel last looked, the PLIC is serviced
-# here, which refills the stream, so a call that outlasts the lead
-# cannot starve it. Keeps every register; cheap when nothing came.
 .global sound_tick
 sound_tick:
     addi sp, sp, -16
@@ -657,9 +564,6 @@ sound_tick:
     addi sp, sp, 16
     ret
 
-# sound_wait: halt until the device's line or the poll timer, then
-# service the PLIC; the timer is armed so a dead device cannot hold
-# the halt, and cleared after. Clobbers t registers and a0.
 sound_wait:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -679,16 +583,6 @@ sound_wait:
     addi sp, sp, 16
     ret
 
-# sound_flush: the stream played out, for a program's exit. Every voice
-# goes to its release first, so a note the program left held ends;
-# then three waits, each ended early by a stall: until the ring is
-# empty and no voice sounds, the refills going on, for at most
-# SOUND_FLUSH_TICKS; then SOUND_DRAIN_PERIODS more returns past the
-# periods then in flight, every refill silence by then, so the host's
-# own buffer has played the last content before QEMU ends; then, the
-# refills stopped, until every period has come back. Nothing happens
-# with no live stream. With DEBUG the counts go to the debug channel.
-# Clobbers t registers and a0.
 .global sound_flush
 sound_flush:
     la t0, sound_live
@@ -749,7 +643,6 @@ sound_flush:
     bltu t2, t1, 42b
     j 5f
 43:
-    # a stall here is the device keeping a period; the exit goes on
     rdtime t0
     la t1, sound_last_return
     ld t1, 0(t1)
@@ -794,8 +687,6 @@ msg_sound_failed:
 9:
     ret
 
-# sound_pending: a0 becomes 1 when the ring has room for a period,
-# so a write can take more, else 0. Keeps the s registers.
 .global sound_pending
 sound_pending:
     la t0, sound_head

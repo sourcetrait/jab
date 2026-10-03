@@ -1,46 +1,29 @@
-# riscv.inc: the RISC-V privileged bits the kernel touches.
-
-# mstatus
 .set MSTATUS_MPP_MASK, (3 << 11)
 .set MSTATUS_MPP_S, (1 << 11)
 
-# sstatus
 .set SSTATUS_SPIE, (1 << 5)
 .set SSTATUS_SPP, (1 << 8)
 .set SSTATUS_SUM, (1 << 18)
 
-# sstatus: the extension state fields, two bits each. A program may use
-# floating point and vectors, which RVA23 requires of the machine, so
-# the kernel leaves both Initial rather than Off; Off would make the
-# first such instruction an illegal instruction.
 .set SSTATUS_FS_INITIAL, (1 << 13)
 .set SSTATUS_VS_INITIAL, (1 << 9)
 
-# sie: the supervisor timer and external interrupts
 .set SIE_STIE, (1 << 5)
 .set SIE_SEIE, (1 << 9)
 
-# menvcfg: stimecmp (Sstc) usable in supervisor mode
 .set MENVCFG_STCE, (1 << 63)
 
-# mcounteren: cycle, time, and instret readable below machine mode;
-# scounteren: time readable in user mode
 .set MCOUNTEREN_CY_TM_IR, 0x7
 .set SCOUNTEREN_TM, 0x2
 
-# One PMP entry, NAPOT, read, write, execute
 .set PMP_NAPOT_RWX, 0x1f
 
-# Delegation: every exception; the three supervisor interrupts
 .set MEDELEG_ALL, 0xffff
 .set MIDELEG_S_ALL, 0x222
 
-# scause values
 .set SCAUSE_ECALL_U, 8
-# A supervisor external interrupt: the interrupt bit and code 9
 .set SCAUSE_S_EXTERNAL, ((1 << 63) | 9)
 
-# Sv39
 .set SATP_MODE_SV39, (8 << 60)
 .set PTE_V, 0x01
 .set PTE_R, 0x02

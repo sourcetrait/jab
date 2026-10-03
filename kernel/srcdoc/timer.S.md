@@ -13,15 +13,14 @@ answered it (frame_reported).
 
 ## .set SOUND_POLL
 
-A wait on the sound stream alone wakes this often to look for a stall
-(sound.S), since a device that stops returning raises no line.
+A device that stops returning raises no line (sound.S), so a wait on the
+sound stream alone wakes on this timer to look.
 
 ## frame_flipped
 
-The next tick is one period after the current one, or one period from now
-when a whole period has already gone by, so a punctual program keeps an
-exact cadence and a slow one is never refused. The tick the program was
-told of is answered by this flip, so the wait no longer owes it a move.
+A punctual program keeps an exact cadence and a slow one is never refused.
+The tick the program was told of is answered by this flip, so the wait no
+longer owes it a move.
 
 ## sys_await
 
@@ -53,7 +52,3 @@ The display's tick, once reported, is moved on by the next wait unless a
 flip answers it first. The external lines stay enabled while the sound
 stream is live, so its interrupt keeps reaching the vector as the program
 runs.
-
-## frame_reported
-
-1 once a wait has reported the tick, 0 once a flip has answered it.
