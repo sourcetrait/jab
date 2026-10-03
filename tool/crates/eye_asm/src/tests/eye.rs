@@ -9,7 +9,7 @@ call frame_flipped > tick frame_tick u64,told frame_reported u64 [26:37] :a flip
  told
 ecall sys_await mask u64 > events a0 u64
 macro jab.sys.exit status=0 imm > scratch a0,a7
-macro jab.rng.byte dst reg,state address > byte dst u8,word 0(state) u64,scratch t0-t1 [9:20]
+macro jab.rng.byte dst reg,state addr > byte dst u8,word 0(state) u64,scratch t0-t1 [9:20]
  byte :bits 24 to 31 of the new word
 bss local frame_tick u64 [221:222] :the time of the next tick
 ";

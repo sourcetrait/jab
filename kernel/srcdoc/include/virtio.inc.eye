@@ -50,7 +50,7 @@ set VIRTIO_CONSOLE_RESIZE u16 [53]
 set VIRTIO_CONSOLE_PORT_OPEN u16 [54]
 set VIRTIO_CONSOLE_PORT_NAME u16 [55]
 set VIRTQ_SIZE u64 [57] :the entries of a split virtqueue
-set VIRTQ_DESC_ADDR address [58] :a descriptor's buffer
+set VIRTQ_DESC_ADDR addr [58] :a descriptor's buffer
 set VIRTQ_DESC_LEN u32 [59]
 set VIRTQ_DESC_FLAGS u16 [60]
 set VIRTQ_DESC_NEXT u16 [61]
@@ -104,7 +104,7 @@ set VIRTIO_GPU_CREATE_2D_HEIGHT u32 [114]
 set VIRTIO_GPU_CREATE_2D_SIZE u64 [115] :bytes in the command
 set VIRTIO_GPU_ATTACH_RESOURCE_ID u32 [116]
 set VIRTIO_GPU_ATTACH_NR_ENTRIES u32 [117]
-set VIRTIO_GPU_ATTACH_ENTRY_ADDR address [118] :the one backing entry's memory
+set VIRTIO_GPU_ATTACH_ENTRY_ADDR addr [118] :the one backing entry's memory
 set VIRTIO_GPU_ATTACH_ENTRY_LENGTH u32 [119]
 set VIRTIO_GPU_ATTACH_SIZE u64 [120] :bytes in the command with one entry
 set VIRTIO_GPU_SCANOUT_RECT u64 [121] :the rectangle record

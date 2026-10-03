@@ -60,12 +60,12 @@ set PCI_DEV_SLOT u8 [63]
 set PCI_DEV_PIN u8 [64] :the INTx pin, 1 for INTA
 set PCI_DEV_LINE u8 [65] :the PLIC line the pin lands on
 set PCI_DEV_VIRTIO_ID u32 [66] :the virtio device id
-set PCI_DEV_COMMON address [67] :the common configuration
-set PCI_DEV_NOTIFY address [68] :the notification region
+set PCI_DEV_COMMON addr [67] :the common configuration
+set PCI_DEV_NOTIFY addr [68] :the notification region
 set PCI_DEV_NOTIFY_MULTIPLIER u64 [69] :the notify capability's offset multiplier
-set PCI_DEV_ISR address [70] :the ISR region
-set PCI_DEV_DEVICE_CFG address [71] :the device configuration
-set PCI_DEV_QUEUE_NOTIFY address [72] :where a notify for the queue last set up goes
-set PCI_DEV_BARS 6 address [73] :each BAR's base
+set PCI_DEV_ISR addr [70] :the ISR region
+set PCI_DEV_DEVICE_CFG addr [71] :the device configuration
+set PCI_DEV_QUEUE_NOTIFY addr [72] :where a notify for the queue last set up goes
+set PCI_DEV_BARS 6 addr [73] :each BAR's base
 set PCI_DEV_SIZE u64 [74] :bytes in a record
 set PCI_DEV_MAX u64 [75] :the records the kernel keeps

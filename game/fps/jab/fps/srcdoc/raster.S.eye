@@ -23,7 +23,7 @@ call local surface_setup > wide plane_d 14 f64,coefficients POLY_IZA(poly) 9 i64
  coefficients :1/z, u/z, and v/z
  normal :for the light
  flat :0, lit at its angle until the caller says otherwise
-call local surface_axis gradient address,field u64,first u64,size fa1 f32,hz fs4 f64,hx fs5 f64,hy fs6 f64,a fs8 f64,b fs9 f64,c fs10 f64 > coefficients first(poly) 3 i64,clobber fs11 [417:462] :one texture coordinate's affine coefficients into the polygon in hand
+call local surface_axis gradient addr,field u64,first u64,size fa1 f32,hz fs4 f64,hx fs5 f64,hy fs6 f64,a fs8 f64,b fs9 f64,c fs10 f64 > coefficients first(poly) 3 i64,clobber fs11 [417:462] :one texture coordinate's affine coefficients into the polygon in hand
  gradient :the coordinate's gradient, three doubles in plane_d
  field :the coordinate's offset's field in plane_d
  first :the first of the three polygon fields written
@@ -47,7 +47,7 @@ macro lumel_sample u a5 i64,v a6 i64 > bright a5 u64,scratch a0,a6-a7,t3-t4 [751
  u :16.16 texels from the map's origin
  v :16.16 texels from the map's origin
  bright :the three channels in 16.16 packed CHANNEL_BITS apart
-macro mip_bind level 192(sp) u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64 > texels a1 address,vmask a2 u64,umask a3 u64,wshift a4 u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64,scratch a5-a7 [816:838] :the texture's level for the block in hand bound for the loops, held under the chain's levels, its texels, masks, and row shift into the texture's registers and u, v, and their steps a pixel shifted to its resolution
+macro mip_bind level 192(sp) u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64,scratch a5-a7 [816:838] :the texture's level for the block in hand bound for the loops, held under the chain's levels, its texels, masks, and row shift into the texture's registers and u, v, and their steps a pixel shifted to its resolution
  level :the block's level in span_fill's frame
 call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 21 u64,clobber a0-a7 [841:1613] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, the texture read from its chain at each block's level; no float in the loop
  end :the pixel past the last

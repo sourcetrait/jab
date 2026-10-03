@@ -28,13 +28,13 @@ set DIGITS_BYTES [29] :append_dec's scratch
 j _start [33:74] :the program, the display opened and each mode run in turn, the last mode's last frame left up
 j local idle [75:77] :the last frame kept up, awaiting the display's tick forever
 j local no_display [79:81] :exits 1, the machine having no display
-call local mode_run routine address,name address,flip bool > count frames u64,elapsed elapsed u64,line line LINE_BYTES u8,clobber a0-a7,fa0-fa1 [83:146] :frames rendered by a routine for DURATION of the clock, the whole screen flipped after each when asked, then the mode's line on the UART
+call local mode_run routine addr,name addr,flip bool > count frames u64,elapsed elapsed u64,line line LINE_BYTES u8,clobber a0-a7,fa0-fa1 [83:146] :frames rendered by a routine for DURATION of the clock, the whole screen flipped after each when asked, then the mode's line on the UART
  routine :the frame routine
  name :the line's name, NUL-terminated
  count :the frames rendered so far, which the routines read
-call local append_str cursor address,string address > cursor a0 address,text 0(cursor) u8,clobber a1 [148:157] :the string copied to the cursor, which moves past it
+call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [148:157] :the string copied to the cursor, which moves past it
  string :NUL-terminated
-call local append_dec cursor address,value u64 > cursor a0 address,digits 0(cursor) u8,clobber a1 [159:178] :the value written in decimal at the cursor, which moves past the digits
+call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [159:178] :the value written in decimal at the cursor, which moves past the digits
 call local make_texture > texture texture TEX_SIDE*TEX_SIDE u32 [180:203] :a checker of eight-pixel squares in two colours with a gradient across each row, so a scrolled texture shows motion
 call local frame_fill count frames u64 > screen JAB_DISPLAY_BASE u32 [205:227] :the whole framebuffer one colour, a shade of the frame count, two pixels a store, eight stores a turn
 call local frame_texture count frames u64 > screen JAB_DISPLAY_BASE u32,clobber a0,a2-a5 [229:259] :every row an affine span across the texture, u in 16.16 stepping TEX_STEP a pixel from an offset that scrolls a texel a frame, the row's texture row from the row and the frame; a texel read and a pixel stored each

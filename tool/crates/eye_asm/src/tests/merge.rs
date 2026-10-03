@@ -15,7 +15,7 @@ frame_tick:
 const OLD: &str = "\
 set TICK u64 :a frame period
 set GONE u64 :a constant no longer there
-macro jab.rng.byte dst reg,state address,seed u64 > byte dst u8,word 0(state) u64,scratch t0 :the next byte
+macro jab.rng.byte dst reg,state addr,seed u64 > byte dst u8,word 0(state) u64,scratch t0 :the next byte
  byte :bits 24 to 31 of the new word
  seed :the note of an operand the macro no longer takes
 bss local frame_tick u64 :the time of the next tick
@@ -34,7 +34,7 @@ fn what_the_eye_says_carries_over_and_the_code_settles_the_rest() {
         stub(SOURCE, OLD),
         "\
 set TICK u64 [1] :a frame period
-macro jab.rng.byte dst reg,state address > byte dst u8,word 0(state) u64,scratch t0-t1 [2:6] :the next byte
+macro jab.rng.byte dst reg,state addr > byte dst u8,word 0(state) u64,scratch t0-t1 [2:6] :the next byte
  byte :bits 24 to 31 of the new word
 bss local frame_tick u64 [8:9] :the time of the next tick
 "

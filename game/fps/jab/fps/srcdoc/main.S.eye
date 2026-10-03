@@ -30,43 +30,43 @@ j local no_map [194:199] :exits 5, the map not on the disk
 j local bad_magic [201:206] :exits 6, the file not a Jab FPS map
 j local short_file [208:218] :exits 7, the file ending before its structures do
 j local map_too_big [220:229] :exits 7, the map not fitting its buffer
-j local too_many word a1 address [231:241] :exits 8, the map holding more of a kind than this build does
+j local too_many word a1 addr [231:241] :exits 8, the map holding more of a kind than this build does
  word :the kind's word, NUL-terminated
 j local path_too_long material u32 [243:253] :exits 9, a material's name too long for a path
 j local load_failed material u32,code u64 [255:268] :exits 10, a material's texture failing to load
  code :a JAB_PNG_* or a LOAD_*
-j local check_failed word a1 address,index a2 u32,what a3 address [270:284] :exits 11, a record breaking a rule of the format
+j local check_failed word a1 addr,index a2 u32,what a3 addr [270:284] :exits 11, a record breaking a rule of the format
  word :the record's word, NUL-terminated
  what :what is wrong with it, NUL-terminated
-j local map_lacks lack a1 address [286:292] :exits 11, the map lacking something it must hold
+j local map_lacks lack a1 addr [286:292] :exits 11, the map lacking something it must hold
  lack :the lack, NUL-terminated
-j local bad_directory how a1 address [294:302] :exits 12, the section directory broken
+j local bad_directory how a1 addr [294:302] :exits 12, the section directory broken
  how :how it is broken, NUL-terminated
-call local line_map > cursor a0 address,text line u8,clobber a1 [304:312] :begins the UART line with the prefix and the map's path
-call local line_end cursor address > clobber a0,a7 [314:321] :ends the line at the cursor with a newline and prints it on the UART
+call local line_map > cursor a0 addr,text line u8,clobber a1 [304:312] :begins the UART line with the prefix and the map's path
+call local line_end cursor addr > clobber a0,a7 [314:321] :ends the line at the cursor with a newline and prints it on the UART
 call local load_report ms s5 u64 > clobber a0-a1,a7 [322:388] :a debug build's load line on the UART, the counts of what loaded
  ms :the load's milliseconds
 call local frame_report ticks s10 u64 > clobber a0-a1,a7 [390:526] :a debug build's frame line on the UART, the counts, the ticks by phase, the spans and pixels, the light, the rejected pixels, the samples, and the tiles
  ticks :the frame's drawing ticks
 call local sectors_report > clobber a0-a1,a7 [528:557] :a debug build's sectors line on the UART, the last frame's walk in order
-call local sector_at index u32 > record a0 address [559:564]
-call local loop_at index u32 > record a0 address [566:571]
-call local wall_at index u32 > record a0 address [573:578]
-call local vertex_at index u32 > record a0 address [580:585]
-call local portal_at index u32 > record a0 address [587:592]
-call local entity_at index u32 > record a0 address [594:599]
-call local material_at index u32 > record a0 address [601:606]
-call local name_at offset u32 > name a0 address [608:611] :a name in the names table
+call local sector_at index u32 > record a0 addr [559:564]
+call local loop_at index u32 > record a0 addr [566:571]
+call local wall_at index u32 > record a0 addr [573:578]
+call local vertex_at index u32 > record a0 addr [580:585]
+call local portal_at index u32 > record a0 addr [587:592]
+call local entity_at index u32 > record a0 addr [594:599]
+call local material_at index u32 > record a0 addr [601:606]
+call local name_at offset u32 > name a0 addr [608:611] :a name in the names table
 call local clear_screen > screen JAB_DISPLAY_BASE u32,clobber a0 [613:614] :the framebuffer black
 call local fill_screen colour u32 > screen JAB_DISPLAY_BASE u32 [615:626] :the framebuffer one colour
-call local read_file buffer address,capacity u64,disk u64,path address > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [628:680] :a file off a disk read whole, a page at a time, as much as the buffer holds
+call local read_file buffer addr,capacity u64,disk u64,path addr > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [628:680] :a file off a disk read whole, a page at a time, as much as the buffer holds
  path :the path from the root, NUL-terminated
  bytes :the bytes read, 0 when the file is not there
-call local str_len string address > length a1 u64 [682:691]
+call local str_len string addr > length a1 u64 [682:691]
  string :NUL-terminated, kept in a0
-call local append_str cursor address,string address > cursor a0 address,text 0(cursor) u8,clobber a1 [693:702] :appends a string at the cursor
+call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [693:702] :appends a string at the cursor
  string :NUL-terminated
-call local append_dec cursor address,value u64 > cursor a0 address,digits 0(cursor) u8,clobber a1 [704:723] :appends a number in decimal at the cursor
+call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [704:723] :appends a number in decimal at the cursor
 bss local rec JAB_ROMFS_ENTRY u8 [727:728] :the romfs record read_file finds the file into
 bss local digits DIGITS_BYTES u8 [729:730] :append_dec's scratch, the digits built backwards from its end
 bss local line LINE_BYTES u8 [731:732] :the UART line in hand
@@ -74,8 +74,8 @@ bss local name NAME_BYTES u8 [733:734] :the map's name, NUL-terminated
 bss local map_path PATH_BYTES u8 [735:736] :the map's path, /map/<name>.jabfps.map
 bss local tile_path PATH_BYTES u8 [737:739] :the path of the file the loaders read
 bss local map_bytes u64 [740:741] :the map's bytes read
-bss local pixel_cursor address [742:743] :the pixel arena's next free byte
-bss local ambient_cursor address [744:745] :the ambient arena's next free byte
+bss local pixel_cursor addr [742:743] :the pixel arena's next free byte
+bss local ambient_cursor addr [744:745] :the ambient arena's next free byte
 bss local sections KIND_COUNT*2 u64 [746:747] :the sections as the loader placed them, an entry a kind
 bss local spawn_index i32 [748:749] :the map's first spawn, -1 for none
 bss local sprite_count u32 [750:751] :the map's sprite entities
@@ -84,8 +84,8 @@ bss local missing_count u32 [754:755] :the materials whose texture is not on the
 bss local frame_us u32 [756:757] :the last frame's drawing in microseconds
 bss local game_us u32 [758:759] :the last frame's game in microseconds
 bss local frame_seconds f32 [760:762] :the seconds since the frame before, clamped
-bss local material_record MAX_MATERIALS address [763:764] :each material's texture record in the pixel arena, 0 for none
-bss local ambient_at MAX_AMBIENTS address [765:766] :each ambient piece's bytes in its arena, 0 for none
+bss local material_record MAX_MATERIALS addr [763:764] :each material's texture record in the pixel arena, 0 for none
+bss local ambient_at MAX_AMBIENTS addr [765:766] :each ambient piece's bytes in its arena, 0 for none
 bss local ambient_bytes MAX_AMBIENTS u64 [767:769] :each ambient piece's byte count
 bss local map MAP_BYTES u8 [770:772] :the map file
 bss local file FILE_BYTES u8 [773:775] :a texture's file

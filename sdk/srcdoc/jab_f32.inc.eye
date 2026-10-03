@@ -14,7 +14,7 @@ macro jab.f32.cos dst reg,src f32 > cosine dst f32,scratch t0-t1,ft0-ft4 [70:111
  src :radians, any size
 macro jab.f32.atan2 dst reg,y f32,x f32 > angle dst f32,scratch t0-t2,ft0-ft5 [113:170] :the angle of the point x, y from the x axis, counter-clockwise
  angle :radians within a half turn either way; 0 for both zero, and a zero y of either sign reads as zero
-macro jab.f32.vec3.dot dst reg,a address,b address > dot dst f32,scratch ft0-ft1 [172:182]
+macro jab.f32.vec3.dot dst reg,a addr,b addr > dot dst f32,scratch ft0-ft1 [172:182]
  a :three singles, as is b
 macro jab.f32.vec3.reg.dot dst reg,ax f32,ay f32,az f32,bx f32,by f32,bz f32 > dot dst f32 [184:188]
  dst :none of the operands

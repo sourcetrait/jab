@@ -341,18 +341,18 @@
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
 
-.macro owner_pixel reg
+.macro owner_pixel colour
 .ifdef OWNER
-    ld \reg, 32(sp)
+    ld \colour, 32(sp)
 .endif
 .endm
 
-.macro section_at kind, reg
-    la \reg, sections
-    ld \reg, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\reg)
+.macro section_at kind, dst
+    la \dst, sections
+    ld \dst, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\dst)
 .endm
 
-.macro section_count kind, reg
-    la \reg, sections
-    ld \reg, (SECTION_COUNT + SECTION_ENTRY * (\kind - 1))(\reg)
+.macro section_count kind, dst
+    la \dst, sections
+    ld \dst, (SECTION_COUNT + SECTION_ENTRY * (\kind - 1))(\dst)
 .endm

@@ -17,16 +17,16 @@ set PAD_PORT_EVENT_BYTES u64 [21] :bytes in a port event
 set PAD_STREAM_BYTES u64 [22] :the stream buffer, a header and a port buffer besides
 set PAD_SOURCE_DEVICE u64 [23] :a pad on a virtio-input device
 set PAD_SOURCE_PORT u64 [24] :a pad on the port
-ecall sys_pad_read record address > status a0 u64,record 0(record) [29:67] :writes the pad's state into a JAB_PAD_ENTRY record, the keys held and every axis normalised, bringing the pad up on the first call
+ecall sys_pad_read record addr > status a0 u64,record 0(record) [29:67] :writes the pad's state into a JAB_PAD_ENTRY record, the keys held and every axis normalised, bringing the pad up on the first call
  record :ends the run unless the whole of it lies inside the program's window
  status :0, or 1 with no pad
 ecall sys_pad_input > type a0 u16,code a1 u16,value a2 i32 [68:83] :the oldest waiting pad event in evdev's terms, bringing the pad up on the first call
  type :JAB_EV_KEY or JAB_EV_ABS, 0 with none waiting or no pad
  value :signed, raw as the pad sent it
-ecall sys_pad_axis buffer address,code u64 > status a0 u64 [84:114] :writes the pad's absinfo for the axis into a JAB_PAD_AXIS_ENTRY record, as virtio reported it
+ecall sys_pad_axis buffer addr,code u64 > status a0 u64 [84:114] :writes the pad's absinfo for the axis into a JAB_PAD_AXIS_ENTRY record, as virtio reported it
  buffer :ends the run unless the whole record lies inside the program's window
  status :0, 1 with no pad, 2 when the pad has no such axis
-ecall sys_pad_name buffer address > status a0 u64,length a1 u64 [115:136] :writes the pad's name, NUL-terminated, into a buffer of JAB_PAD_NAME_BYTES
+ecall sys_pad_name buffer addr > status a0 u64,length a1 u64 [115:136] :writes the pad's name, NUL-terminated, into a buffer of JAB_PAD_NAME_BYTES
  buffer :ends the run unless the whole of it lies inside the program's window
  status :0, or 1 with no pad
  length :0 with no pad
@@ -43,7 +43,7 @@ call local pad_stream_consume count u64 > length pad_stream_length u64 [342:358]
 j local pad_port_drain > clobber a0-a5 [360:387] :takes what the port delivered into the stream, then every whole event in it into the state and the ring
 call local pad_queue_setup > refused a0 bool,clobber a2 [389:416] :gives the pad's event queue, queue 0, the pad queue record's rings, PADQ_SIZE entries
  refused :1 when the device offers fewer
-call local pad_find > base a0 address [418:460]
+call local pad_find > base a0 addr [418:460]
  base :the first virtio-input transport whose EV_KEY bits include BTN_SOUTH and whose EV_ABS bits include ABS_X, 0 when none
 call local pad_ranges > bits pad_abs_bits u64,absinfo pad_absinfo,raw pad_raw,clobber a0 [462:526] :reads the axes the pad has from its EV_ABS bitmap and each one's absinfo from the config space, then sets each raw value to rest
 call local pad_rest > raw pad_raw,clobber a0 [528:566] :sets every axis the pad has to rest, the middle of its range or its minimum for ABS_GAS and ABS_BRAKE
@@ -63,7 +63,7 @@ bss local pad_events [843:844] :the device's event buffers, one per descriptor
 bss local pad_ring [845:846] :the events for sys_pad_input, PAD_RING entries
 bss local pad_head u64 [847:848] :the count of events put in the ring
 bss local pad_tail u64 [849:850] :the count taken from it
-bss local pad_base address [851:852] :the pad's transport
+bss local pad_base addr [851:852] :the pad's transport
 bss local pad_state u64 [853:854] :0 until opened, then pad_open's answer plus 1
 bss local pad_keys u32 [855:856] :the keys held, a bit each from JAB_BTN_GAMEPAD
 bss local pad_abs_bits u64 [857:858] :the axes the pad has, a bit per code

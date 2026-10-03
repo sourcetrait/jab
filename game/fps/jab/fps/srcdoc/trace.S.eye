@@ -3,7 +3,7 @@ rodata local k_trace_step_d f64 [5:6] :a millionth, how far past the distance wa
 rodata local k_trace_neg_d f64 [7:8] :a nanometre's slack before a wall's start
 rodata local k_trace_one_plus_d f64 [9:10] :a nanometre's slack past a wall's end
 rodata local k_trace_range_d f64 [11:12] :the console's trace's range
-call local trace_ray sector u32,skip address,flags u64,ox f64,oy f64,oz f64,dx f64,dy f64,dz f64,distance f64 > kind a0 u64,hit trace_hit TRACE_SIZE u8,clobber a1,fa0-fa2 [16:325] :the ray walked, the geometry, then the capsules; trace_hit filled
+call local trace_ray sector u32,skip addr,flags u64,ox f64,oy f64,oz f64,dx f64,dy f64,dz f64,distance f64 > kind a0 u64,hit trace_hit TRACE_SIZE u8,clobber a1,fa0-fa2 [16:325] :the ray walked, the geometry, then the capsules; trace_hit filled
  sector :the sector the origin is in
  skip :the actor left out, 0 for none
  flags :TRACE_TO_PLAYER to test the player's capsule too

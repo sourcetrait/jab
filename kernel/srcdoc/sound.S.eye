@@ -9,7 +9,7 @@ set SOUND_DRAIN_PERIODS u64 [13] :the periods of silence the exit plays past the
 set SOUND_FLUSH_TICKS u64 [14] :the longest the exit waits for the ring and the voices to end
 ecall sys_sound_open > status a0 u64 [19:24]
  status :sound_open's
-ecall sys_sound_write buffer address,frames u64 > status a0 u64,taken a1 u64 [25:68] :queues frames from the buffer into the ring, as many as it has room for, opening the device on the first call
+ecall sys_sound_write buffer addr,frames u64 > status a0 u64,taken a1 u64 [25:68] :queues frames from the buffer into the ring, as many as it has room for, opening the device on the first call
  buffer :ends the run unless the frames taken lie inside the program's window
  status :0, or sound_open's code
  taken :0 unless the status is 0
@@ -30,7 +30,7 @@ call local sound_control_simple code u32 > failed a0 bool,clobber a1-a6 [274:280
 call local sound_control length u32 > failed a0 bool,clobber a1-a6 [282:307] :runs the request of that many bytes in sound_request through the control queue, the hart halted until the device answers
  failed :0 when the device said OK, else 1
 call sound_service > clobber a0 [308:353] :keeps the stream running, every period the device returned mixed afresh and offered again, the file player stepped a period first; nothing until the stream is live
-call local sound_mix samples address > clobber a0-a7 [355:422] :fills a period's samples from the ring's frames and the synthesizer's voices, clipped to the sample range
+call local sound_mix samples addr > clobber a0-a7 [355:422] :fills a period's samples from the ring's frames and the synthesizer's voices, clipped to the sample range
  samples :where the period's samples go
 call local sound_submit period u64 > busy sound_busy u8,submitted sound_submitted u64 [424:448] :offers the period, full, to the device
 call local sound_drain > returned sound_returned u64,failed sound_failed u64,last sound_last_return u64 [450:492] :frees every period the device has returned, reading each one's status
@@ -50,7 +50,7 @@ bss local sound_periods [710:711] :the periods, each the stream id then its samp
 bss local sound_status [712:713] :each period's status record, written by the device
 bss local sound_request 24 u8 [714:715] :a control request
 bss local sound_response u32 [716:718] :its status
-bss sound_base address [719:720] :the device's transport
+bss sound_base addr [719:720] :the device's transport
 bss local sound_state u64 [721:723] :0 until opened, then sound_open's answer plus 1
 bss sound_live u64 [724:725] :1 while the stream runs
 bss local sound_head u64 [726:727] :the count of frames put in the ring

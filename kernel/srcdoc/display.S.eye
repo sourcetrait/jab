@@ -21,14 +21,14 @@ ecall sys_display_flip > status a0 u64 [38:64] :shows the framebuffer without wa
  status :0, 1 when early under the cap with nothing shown, 2 when not open, 3 when the device refused a command
 ecall sys_display_flip_rect x u32,y u32,width u32,height u32 > status a0 u64 [65:106] :shows a rectangle of the framebuffer without waiting
  status :sys_display_flip's, or 4 when the rectangle is empty or reaches outside the screen
-ecall sys_display_flip_rects buffer address,count u64 > status a0 u64 [107:160] :shows that many rectangles, JAB_RECT_SIZE bytes each, as one flip
+ecall sys_display_flip_rects buffer addr,count u64 > status a0 u64 [107:160] :shows that many rectangles, JAB_RECT_SIZE bytes each, as one flip
  buffer :ends the run unless the whole list lies inside the program's window
  status :sys_display_flip's, or 4 when the count is 0 or more than the window could hold, or a rectangle is empty or reaches outside the screen, nothing shown then
-call display_present_rects rectangles address,count u64 > failed a0 bool,clobber a1-a3 [161:254] :transfers the rectangles, JAB_RECT_SIZE bytes each, and flushes the one rectangle holding them all, a wait a batch
+call display_present_rects rectangles addr,count u64 > failed a0 bool,clobber a1-a3 [161:254] :transfers the rectangles, JAB_RECT_SIZE bytes each, and flushes the one rectangle holding them all, a wait a batch
  failed :1 when a command fails
 call local gpu_transfer_command x u32,y u32,width u32,height u32 > clobber a0-a1 [256:284] :adds the transfer of the rectangle to the pending batch, one chain
 call local gpu_flush_command x u32,y u32,width u32,height u32 > clobber a0-a1 [286:309] :adds the flush of the rectangle to the pending batch, one chain
-call local gpu_batch_command type u32 > command a0 address [311:328]
+call local gpu_batch_command type u32 > command a0 addr [311:328]
  command :the pending chain's command buffer, zeroed, its type set
 call local gpu_batch_add length u64 > pending GPUQ_PENDING(gpu_queue) u64 [330:365] :makes the pending chain's command and response buffers its two descriptors, offered in the available ring's next slot
  length :in a1, the bytes of the command
@@ -38,11 +38,11 @@ call local gpu_batch_run > failed a0 bool,last GPUQ_LAST_USED(gpu_queue) u64,pen
 call local gpu_wait_batch > clobber a0 [409:437] :halts until the GPU queue's used index has moved past what the kernel last saw by the pending count, the line serviced before returning
 call local gpu_queue_setup > refused a0 bool,clobber a2 [439:468] :gives the device's control queue the GPU queue record's rings, GPUQ_SIZE entries
  refused :1 when the device offers fewer
-ecall sys_display_print message address > status a0 u64 [469:487] :writes a NUL-terminated string to the screen console, opening the display if needed, stopping at the window's end
+ecall sys_display_print message addr > status a0 u64 [469:487] :writes a NUL-terminated string to the screen console, opening the display if needed, stopping at the window's end
  message :ends the run unless it starts inside the program's window
  status :0, or display_open's code
-ecall sys_print message address > status a0 u64 [488:494] :sys_display_print once the display is open, else sys_uart_print
-ecall sys_display_text message address,x i64,y i64,color u32,style u64,scale u64 > width a0 u64,height a1 u64 [495:544] :draws a NUL-terminated string into the framebuffer with the console's font, its top left at x, y, clipped, nothing presented
+ecall sys_print message addr > status a0 u64 [488:494] :sys_display_print once the display is open, else sys_uart_print
+ecall sys_display_text message addr,x i64,y i64,color u32,style u64,scale u64 > width a0 u64,height a1 u64 [495:544] :draws a NUL-terminated string into the framebuffer with the console's font, its top left at x, y, clipped, nothing presented
  message :ends the run unless it starts inside the program's window
  color :0x00RRGGBB, the glyphs' own pixels only
  style :JAB_TEXT_BOLD striking each glyph twice a pixel apart
@@ -52,7 +52,7 @@ ecall sys_display_text message address,x i64,y i64,color u32,style u64,scale u64
 call local text_glyph character u8,x i64,y i64,color u32,style u64,width u64,height u64 > clobber a5-a7 [546:603] :draws the glyph's set pixels in a cell that wide and high, each clipped to the screen
 call local text_pixel color u32,column i64,row i64 > clobber a7 [605:622] :the colour at that pixel when it is on the screen
  color :in a3, column in a5, row in a6
-call display_open > status a0 u64,state display_state u64,base gpu_base address,clobber a1-a3 [623:694] :brings the GPU up and shows the framebuffer
+call display_open > status a0 u64,state display_state u64,base gpu_base addr,clobber a1-a3 [623:694] :brings the GPU up and shows the framebuffer
  status :0, 1 with no virtio-gpu, 2 when the device refuses the features or its control queue is short, 3 when a command fails; 0 at once when open
 rodata local msg_gpu_at 13 u8 [648:649] :the debug line naming the GPU's transport, under DEBUG only
 call display_present_rect x u32,y u32,width u32,height u32 > failed a0 bool,clobber a1-a3 [695:743] :transfers the rectangle of the framebuffer to the host and flushes it to the screen
@@ -68,7 +68,7 @@ call local gpu_submit length u32,expected u32 > failed a0 bool,response gpu_resp
  failed :0 when the device answered with the expected type, else 1
 rodata local msg_gpu_cmd 14 u8 [916:917] :the debug line on a command, under DEBUG only
 rodata local msg_gpu_resp 7 u8 [918:919] :that line's response field
-call console_write bytes address,end address > column console_col u64,row console_row u64,clobber a0-a4 [934:1022] :draws the bytes up to the terminator or the end at the cursor, then shows the rows touched
+call console_write bytes addr,end addr > column console_col u64,row console_row u64,clobber a0-a4 [934:1022] :draws the bytes up to the terminator or the end at the cursor, then shows the rows touched
 call local console_glyph character u8,column u64,row u64 > clobber a3-a4 [1024:1062] :draws the glyph in that cell, white on black
 call local console_scroll [1064:1078] :moves every line up by one and clears the last
 bss local gpu_queue [1082:1084] :the GPU's control queue record
@@ -76,7 +76,7 @@ bss local gpu_cmd 64 u8 [1085:1086] :the single command's buffer
 bss local gpu_resp 408 u8 [1087:1089] :the single command's response
 bss local gpu_batch_cmds 2048 u8 [1090:1091] :a batch's command buffers, GPU_CMD_BYTES each
 bss local gpu_batch_resps 768 u8 [1092:1093] :a batch's response buffers, GPU_RESP_BYTES each
-bss local gpu_base address [1094:1095] :the GPU's transport
+bss local gpu_base addr [1094:1095] :the GPU's transport
 bss local display_state u64 [1096:1097] :1 once open
 bss local console_col u64 [1098:1099] :the cursor's column
 bss local console_row u64 [1100:1101] :the cursor's line

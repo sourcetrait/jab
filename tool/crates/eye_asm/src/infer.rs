@@ -334,7 +334,7 @@ pub(crate) fn type_bytes(ty: &str) -> Option<u64> {
         "u8" | "i8" => 1,
         "u16" | "i16" => 2,
         "u32" | "i32" | "f32" => 4,
-        "u64" | "i64" | "f64" | "address" => 8,
+        "u64" | "i64" | "f64" | "addr" => 8,
         _ => return None,
     };
     Some(count * width)

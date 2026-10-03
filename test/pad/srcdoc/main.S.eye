@@ -12,7 +12,7 @@ call local print_axis_value code u64 > clobber a0 [138:150] :appends a space and
  code :arrives in s1, a JAB_ABS_*
 call local line_begin > length line_len u64 [152:155]
  length :0, the line begun empty
-call local line_str string address > text line u8,length line_len u64,clobber a0 [157:171]
+call local line_str string addr > text line u8,length line_len u64,clobber a0 [157:171]
  string :NUL-terminated
  text :the string appended without its terminator
 call local line_int value i64 > text line u8,length line_len u64,clobber a0 [173:206]

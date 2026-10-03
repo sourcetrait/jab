@@ -565,16 +565,16 @@
     ecall
 .endm
 
-.macro jab.sys.checksum address, size
+.macro jab.sys.checksum bytes, size
     mv a1, \size
-    mv a0, \address
+    mv a0, \bytes
     li a7, JAB_SYS_CHECKSUM
     ecall
 .endm
 
-.macro jab.sys.hash address, size
+.macro jab.sys.hash bytes, size
     mv a1, \size
-    mv a0, \address
+    mv a0, \bytes
     li a7, JAB_SYS_HASH
     ecall
 .endm

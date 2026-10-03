@@ -3,7 +3,7 @@ set SCREEN_H [2] :the screen's height in pixels
 set SCREEN_PITCH [3] :a screen row's bytes
 set ZBUF_BYTES [4] :the depth buffer's bytes, a word a pixel
 set CODE_PAGE [5] :a page of code under QEMU, the alignment and the bound of a function whose loops run a pixel or a sample
-set SECTION_AT address [6] :a section's address in the map buffer
+set SECTION_AT addr [6] :a section's address in the map buffer
 set SECTION_COUNT u64 [7] :the section's record count
 set SECTION_ENTRY [8] :a sections entry's bytes, an entry a kind from 1
 set CAM_X f32 [9] :the eye's x
@@ -31,7 +31,7 @@ set EDGE_Y1 f32 [30] :its bottom y
 set EDGE_X0 f32 [31] :its x at the top
 set EDGE_DXDY f32 [32] :x's change a row
 set EDGE_SIZE [33] :an edge's bytes
-set POLY_TEX address [34] :the surface in hand's texture pixels
+set POLY_TEX addr [34] :the surface in hand's texture pixels
 set POLY_UMASK u64 [35] :u's wrap mask
 set POLY_VMASK u64 [36] :v's wrap mask
 set POLY_WSHIFT u64 [37] :a texture row's bytes as a shift
@@ -55,17 +55,17 @@ set POLY_LNZ f32 [54] :the normal's z
 set POLY_SECTOR u32 [55] :the surface's sector, for the light
 set POLY_FLAT_LIT u64 [56] :set for a surface lit at no angle, a sprite facing the camera, every light within reach lighting it by its falloff alone
 set POLY_LIGHTS 32 u8 [57] :the polygon's own light list, a count byte then that many light indices
-set POLY_LUMAP address [58] :the surface's lumel map record, 0 for a polygon with no map, a sprite lit flat by POLY_FLAT_BRIGHT
+set POLY_LUMAP addr [58] :the surface's lumel map record, 0 for a polygon with no map, a sprite lit flat by POLY_FLAT_BRIGHT
 set POLY_LUMEL u64 [59] :the read's one word for a mapped polygon, packed by the LUMEL_* shifts
 set POLY_FLAT_BRIGHT u64 [60] :the brightness word of a polygon with no map
-set POLY_TILES 4 address [61] :each level's atlas, TILE_LEVEL_COUNT of them
+set POLY_TILES 4 addr [61] :each level's atlas, TILE_LEVEL_COUNT of them
 set POLY_TILE_READY u64 [62] :the levels built whole, which a span's levels stay under
 set POLY_TILE_COLS_SHIFT u64 [63] :a cell row's tiles as a shift, the columns padded to a power of two
 set POLY_TILE_COLS u64 [64] :the cells across, which a span's ends lie within
 set POLY_TILE_ROWS u64 [65] :the cells down, which a span's ends lie within
 set POLY_MATERIAL u32 [66] :the material bound, for the level's alpha scale at a tile's build
 set POLY_SURFACE u64 [67] :the surface the polygon is, for the span record and the owner build
-set POLY_MIPS address [68] :the material's chain, its table of a level's texels eight bytes a level
+set POLY_MIPS addr [68] :the material's chain, its table of a level's texels eight bytes a level
 set POLY_MIP_COUNT u64 [69] :the levels the chain has, which a block's level is held under
 set POLY_SIZE [70] :the polygon in hand's bytes
 set LUMEL_OFFSET_BITS [71] :the read's word's low bits holding the lumels' offset into the arena
@@ -74,7 +74,7 @@ set LUMEL_ROWS_SHIFT [73] :the place of the rows in the read's word
 set LUMEL_K_SHIFT [74] :the place of k in the read's word
 set LUMEL_K_MAX [75] :k at most
 set CHANNEL_BITS [76] :the distance between a brightness word's three 16.16 channels
-set LUMAP_BASE address [77] :a lumel map's lumels in the arena, 0 for none
+set LUMAP_BASE addr [77] :a lumel map's lumels in the arena, 0 for none
 set LUMAP_W u64 [78] :its columns
 set LUMAP_H u64 [79] :its rows
 set LUMAP_U0 i64 [80] :the texel u of its first node
@@ -114,7 +114,7 @@ set POLY_SKY u64 [113] :the mode the sky
 set POLY_LIT u64 [114] :a flag over the textured and masked modes, the span lit
 set POLY_TILED u64 [115] :a flag over a lit mode, the surface's tiles read
 set TILE_LEVEL_COUNT [116] :the levels of a surface's tiles at most
-set TILE_BASE 4 address [117] :each level's atlas, 0 before it is reserved and -1 for a surface past TILE_ATLAS_MAX
+set TILE_BASE 4 addr [117] :each level's atlas, 0 before it is reserved and -1 for a surface past TILE_ATLAS_MAX
 set TILE_READY u64 [118] :the levels built whole
 set TILE_CURSOR u64 [119] :the next cell to build at the level in hand
 set TILE_LEVELS u64 [120] :the levels the surface has, TILE_LEVEL_COUNT or k + 1, the fewer
@@ -316,7 +316,7 @@ set TRACE_DIST f64 [316] :the distance
 set TRACE_PX f64 [317] :the point's x
 set TRACE_PY f64 [318] :the point's y
 set TRACE_PZ f64 [319] :the point's z
-set TRACE_ACTOR address [320] :the actor met
+set TRACE_ACTOR addr [320] :the actor met
 set TRACE_SECTOR u64 [321] :the sector the ray ended in
 set TRACE_SIZE [322] :a trace's answer's bytes
 set TRACE_TO_PLAYER u64 [323] :the trace tests the player's capsule too
@@ -339,11 +339,11 @@ set SOUND_DOOR_CLOSE u64 [339] :a door closing
 set SOUND_GATE u64 [340] :a gate
 set SOUND_RESPAWN u64 [341] :a respawn
 set SOUND_COUNT [342] :the engine's stems
-macro owner_pixel reg reg,surface 32(sp) u64 > pixel reg u64 [344:348]
- reg :the register a pixel loop is about to store
+macro owner_pixel colour reg,surface 32(sp) u64 > pixel colour u64 [344:348]
+ colour :the pixel a loop is about to store
  surface :span_fill's slot holding the polygon's surface index
- pixel :under OWNER the surface's index in place of its colour, else the register as it was
-macro section_at kind imm,reg reg > section reg address [350:353]
+ pixel :under OWNER the surface's index in place of the colour, else the colour as it was
+macro section_at kind imm,dst reg > section dst addr [350:353]
  kind :a KIND_*
-macro section_count kind imm,reg reg > count reg u64 [355:358]
+macro section_count kind imm,dst reg > count dst u64 [355:358]
  kind :a KIND_*

@@ -39,8 +39,8 @@ call synth_live [86:91] :the notes from here on are the calls' own
 call synth_from_file [92:98] :the notes from here on are the file's
 call synth_sounding > sounding a0 bool [99:111]
  sounding :1 while any voice sounds, the chip's or the font's
-call local synth_reset_channel channel address [113:122] :the channel record back to its default controllers, the program kept
-call local synth_channel channel u64 > record a0 address [124:130]
+call local synth_reset_channel channel addr [113:122] :the channel record back to its default controllers, the program kept
+call local synth_channel channel u64 > record a0 addr [124:130]
 ecall sys_midi_program channel u64,program u64 > status a0 u64 [131:141] :the channel's instrument becomes that program for the notes after, each masked to its range
  status :0, or sound_open's code
 j local midi_refused [143:147] :a MIDI call answering with sound_open's code, in a0
@@ -53,25 +53,25 @@ call synth_program channel u64,program u64 > clobber a0-a1 [249:258] :the channe
 call synth_bend channel u64,bend u64 > clobber a0-a1 [259:271] :the channel's bend becomes that one, 14 bits with JAB_MIDI_BEND_CENTER for none, each masked
 ecall sys_midi_bend channel u64,value u64 > status a0 u64 [272:281]
  status :0, or sound_open's code
-ecall sys_midi_instrument program u64,spec address > status a0 u64 [282:300] :that program plays the instrument the spec describes for the notes after
+ecall sys_midi_instrument program u64,spec addr > status a0 u64 [282:300] :that program plays the instrument the spec describes for the notes after
  spec :JAB_MIDI_INSTRUMENT_ENTRY bytes, ending the run unless inside the program's window
  status :0, or sound_open's code
 ecall sys_midi_silence > status a0 u64 [301:319] :the piece stopped, every voice free at once, and every channel's controllers back to their defaults, the programs kept
  status :0, or sound_open's code
 call synth_all_off now bool,source i64 > clobber a0 [320:351] :every voice of the source, or every voice with SOURCE_ANY, freed at once with now set, else released, the chip's and the font's
 call synth_note_on channel u64,note u64,velocity u64 > clobber a0-a3 [352:466] :starts the note on a voice, or on the font's with a SoundFont loaded
-call local synth_take > voice a0 address [468:494]
+call local synth_take > voice a0 addr [468:494]
  voice :a free one, else the oldest releasing, else the oldest of all
 call local synth_pitch note u64 > step a0 u32 [496:507]
  step :the note's phase step a frame, 2^32 a cycle
-call local synth_drum note u64 > spec a0 address,sounds a1 u64 [509:527]
+call local synth_drum note u64 > spec a0 addr,sounds a1 u64 [509:527]
  note :in a1, a note on the percussion channel
  sounds :the note the drum sounds at
 call synth_note_off channel u64,note u64 > clobber a0 [528:570] :releases every voice of the current source sounding the note on the channel, or marks it held while the pedal is down, the chip's and the font's
-call local synth_release voice address [572:590] :the voice goes to its release, falling to silence over its release time, or gone next frame with none
+call local synth_release voice addr [572:590] :the voice goes to its release, falling to silence over its release time, or gone next frame with none
 call local synth_pedal_up channel u64 > clobber a0 [592:617] :releases every voice of the channel held under the pedal, the chip's and the font's
 call local synth_channel_off channel u64,now bool > clobber a0 [619:653] :every voice of the channel from the current source freed at once with now set, else released, the chip's and the font's
-call synth_render accumulator address,frames u64 > mix 0(accumulator),clobber a0,a2-a7 [654:672] :adds every sounding voice into the accumulator, two 32-bit samples a frame, the font's voices after the chip's
+call synth_render accumulator addr,frames u64 > mix 0(accumulator),clobber a0,a2-a7 [654:672] :adds every sounding voice into the accumulator, two 32-bit samples a frame, the font's voices after the chip's
 j local voice [673:736] :synth_render's loop over the voices
 j local frame [737:843] :synth_render's loop over a voice's frames
 j local next_voice [844:865] :synth_render's step to the next voice

@@ -90,4 +90,5 @@ fn data_takes_its_count_and_width() {
     assert_eq!(gens[3].entry.shape, Shape::Line { ty: Some("3 u64".to_owned()) });
     assert_eq!(gens[3].size, Some(24));
     assert_eq!(type_bytes("64 i16"), Some(128));
+    assert_eq!(type_bytes("4 addr"), Some(32));
 }

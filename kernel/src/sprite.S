@@ -3,11 +3,11 @@
 
 .set SPRITE_SIDE_MAX, 65535
 
-.macro sprite_round255 reg, tmp
-    addi \reg, \reg, 128
-    srli \tmp, \reg, 8
-    add \reg, \reg, \tmp
-    srli \reg, \reg, 8
+.macro sprite_round255 product, tmp
+    addi \product, \product, 128
+    srli \tmp, \product, 8
+    add \product, \product, \tmp
+    srli \product, \product, 8
 .endm
 
 .section .text

@@ -52,12 +52,12 @@ j local frame [142:160] :takes the keys, the API's commands, and the pad's event
 j local no_display [162:164] :says so on the UART and exits with 1
 call local read_keys > clobber a0-a1,a7 [166:177] :takes every key event waiting from the keyboard and applies it with apply_key
 call local read_api > clobber a0-a1,a7 [179:216] :takes every key event the host has sent over the API and applies it with apply_key, a record split across reads waiting in cmd_partial, its bytes counted in cmd_pending
-call local read_pad > code label_code i64,text label_text address,left label_left i64,label label_changed bool,vx player_vx i64,vy player_vy i64,colour player_color u32,painter color_code u64,painted color_changed bool,clobber a0-a2,a7 [218:279] :takes every pad event waiting, a button pressed announcing itself and stopping or painting your sphere
+call local read_pad > code label_code i64,text label_text addr,left label_left i64,label label_changed bool,vx player_vx i64,vy player_vy i64,colour player_color u32,painter color_code u64,painted color_changed bool,clobber a0-a2,a7 [218:279] :takes every pad event waiting, a button pressed announcing itself and stopping or painting your sphere
  code :the button pressed, its name in text, label set
  left :LABEL_TIME once the announced button is released, 0 when one is pressed
  vx :0 when THUMBL or THUMBR is pressed, and vy with it
  colour :the button's own when any other is pressed, painter its code, painted set
-call local label_tick > left label_left i64,text label_text address,code label_code i64,label label_changed bool [281:302] :the frame's time off the name's three seconds once they have started
+call local label_tick > left label_left i64,text label_text addr,code label_code i64,label label_changed bool [281:302] :the frame's time off the name's three seconds once they have started
  text :name_none at their end, code NO_BUTTON, label set
 call local elapsed > dt dt u64,last last_time u64 [304:316]
  dt :the ticks since the frame before, at most DT_MAX
@@ -146,7 +146,7 @@ bss local cmd_pending u64 [1384:1385] :the bytes of a command in cmd_partial
 bss local rand_state u64 [1386:1387] :the colours' random sequence state, never zero
 bss local color_code u64 [1388:1389] :the code of the button that last painted your sphere
 bss local label_code i64 [1390:1391] :the button announced, NO_BUTTON for none
-bss local label_text address [1392:1393] :the label's NUL-terminated text
+bss local label_text addr [1392:1393] :the label's NUL-terminated text
 bss local label_left i64 [1394:1395] :the ticks the label has left once its button is released, 0 while it stays
 bss local last_time u64 [1396:1397] :the clock at the frame before, in ticks
 bss local dt u64 [1398:1399] :the frame's time in ticks, at most DT_MAX
@@ -189,4 +189,4 @@ rodata local name_mode 5 u8 [1473:1474] :evdev's name for JAB_BTN_MODE
 rodata local name_thumbl 7 u8 [1475:1476] :evdev's name for JAB_BTN_THUMBL
 rodata local name_thumbr 7 u8 [1477:1478] :evdev's name for JAB_BTN_THUMBR
 rodata local name_none 1 u8 [1479:1481] :the empty name, for a button with none and for a clear strip
-rodata local button_names 16 address [1482:1485] :every button's name from JAB_BTN_GAMEPAD, the last for a button with none
+rodata local button_names 16 addr [1482:1485] :every button's name from JAB_BTN_GAMEPAD, the last for a button with none
