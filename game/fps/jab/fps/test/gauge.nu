@@ -8,14 +8,20 @@
 # and audio, each run seeded by the console's R before its first frame;
 # `play` puts the build in the host's window, audio, and gamepad for a
 # person to play and closes the measurement after `--seconds`; `read`
-# reads a capture either made. Each writes the run's identity beside its
-# capture at launch, then gauge.nuon and the summary. A frame passes the
-# ceiling when its critical path, its start to the end of its reporting
-# with the await apart, is under 15 ms; a measurement passes when it is
-# complete and every frame in it passes. A capture of a build older
-# than the clock records holds no measurement and is read from its state
-# records alone, the drawing's and the game's microseconds. `just gauge`,
-# `just gauge-play`, and `just gauge-read` build and run it.
+# reads a capture either made; `compare` sets builds' captures side by
+# side, a walked leg per stretch of its path. Each run keeps the route
+# it played and its identity beside its capture, then gauge.nuon and the
+# summary. The measurement is the capture read in order through the
+# first end marker; what follows it counts for nothing. A frame passes
+# the ceiling when its critical path, its start to the end of its
+# reporting with the await apart, is under 15 ms; a measurement is valid
+# when it is complete, every flip presented or refused as early, every
+# phase within its frame, and every frame's clock agreeing with its
+# state, and passes when it is valid and every frame in it passes. A
+# capture of a build older than the clock records holds no measurement
+# and is read from its state records alone, the drawing's and the game's
+# microseconds. `just gauge`, `just gauge-play`, `just gauge-read`, and
+# `just gauge-compare` run it.
 use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ./pose.nu
@@ -52,6 +58,9 @@ const SEED_AT = 200ms
 # 3 the device refused it
 const FLIP_PRESENTED = 0
 const FLIP_EARLY = 1
+# the statuses a valid measurement holds; 2, 3, or any other is a frame
+# never shown
+const FLIP_VALID = [0 1]
 # the android events and what a round met, as the program reports them
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 const MET = [nothing geometry android]
@@ -60,6 +69,7 @@ def main [] {
     print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--host] [--out <dir>] [--label <name>]"
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
 }
 
 # Play the route on the build `runs` times and read every frame: the
@@ -81,7 +91,8 @@ def "main run" [
 ] {
     let at = (places $tree $kernel $image $out)
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_factory.nuon" } else { $route | path expand })
-    let r = (open $route_file)
+    let route_bytes = (open --raw $route_file | into binary)
+    let r = ($route_bytes | decode utf-8 | from nuon)
     let map_name = (if $map == "" { $r.map } else { $map })
     let disk = (romfs-of $at.game $map_name $at.out)
     let pad = ($at.out | path join "pad.nuon")
@@ -93,12 +104,14 @@ def "main run" [
         let seed = ($seeds | get -o ($n - 1) | default $n)
         let run_out = ($at.out | path join $"run_($n)")
         mkdir $run_out
+        $route_bytes | save --raw -f ($run_out | path join "route.nuon")
         let sends = ([{ at: $SEED_AT, bytes: (seed-frame $seed) }]
             | append ($r.legs | each {|l| $l.places | each {|p| { at: $p.at, bytes: (pose pose-frame $p) } } } | flatten)
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, end: $r.end, capture: $capture }
-        identity $at $set $map_name $route_file $mode | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+        let id = (identity $at $set $map_name $route_file $mode)
+        $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
             jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
         } else {
@@ -106,8 +119,10 @@ def "main run" [
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
+        $id | upsert qemu (qemu-of $launched.qemu_binary) | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let measured = (measure $launched.api $r.legs)
         print (run-line $label $n $measured $ran)
+        print (outcome-line $n $measured $ran)
         { run: $n, seed: $seed, out: $run_out, ran: $ran, measured: $measured }
     })
     report $label (open ($at.out | path join "run_1" "identity.nuon")) $runs $at.out
@@ -136,21 +151,25 @@ def "main play" [
     mkdir $run_out
     let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $end, bytes: (pose command-frame "E") }]
     let mode = { window: true, sound: "host", pad: "host", seed: $seed, end: $end, capture: $capture }
-    identity $at $set "factory" null $mode | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+    let id = (identity $at $set "factory" null $mode)
+    $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
     let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
+    $id | upsert qemu (qemu-of $launched.qemu_binary) | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     let legs = [{ name: "play", places: [], pad: [] }]
     let measured = (measure $launched.api $legs)
     print (run-line $label 1 $measured $ran)
+    print (outcome-line 1 $measured $ran)
     report $label (open ($run_out | path join "identity.nuon")) [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured }] $at.out
 }
 
 # Read a capture, a run's api.out: with the identity.nuon and run.nuon
 # its launch wrote beside it, or without them as what the capture alone
-# says; the legs from the route the identity names, else `--route`, else
-# one leg, play.
+# says; the legs from `--route`, else the route kept beside the capture,
+# else the one the identity names, refused unless it is the route that
+# played (legs-for), and one leg, play, when no route is recorded.
 def "main read" [
     api: path                    # the capture
     --route: string = ""         # the route the capture played, for its legs
@@ -161,12 +180,14 @@ def "main read" [
     let dir = ($file | path dirname)
     let id_file = ($dir | path join "identity.nuon")
     let id = (if ($id_file | path exists) { open $id_file } else { { launched: false, note: "read from the capture alone; no identity was written at its launch" } })
-    let route_file = (if $route != "" { $route | path expand } else { $id | get -o route.file | default "" })
-    let legs = (if $route_file != "" and ($route_file | path exists) { open $route_file | get legs } else { [{ name: "play", places: [], pad: [] }] })
+    let chosen = (legs-for $dir $id $route)
+    let legs = $chosen.legs
+    if $chosen.route != null and (not $chosen.checked) { print $"gauge: the legs from ($chosen.route), unchecked: the capture's identity records no route" }
     let run_file = ($dir | path join "run.nuon")
     let ran = (if ($run_file | path exists) { open $run_file } else { { status: null, fault: null, cpu_seconds: null, wall_seconds: null, qemu_binary: null, qemu: [], window: null, audio: null } })
     let measured = (measure (open --raw $file | into binary) $legs)
     print (run-line $label 1 $measured $ran)
+    print (outcome-line 1 $measured $ran)
     let target = (if $out == "" { $dir } else { $out | path expand })
     mkdir $target
     report $label $id [{ run: 1, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured }] $target
@@ -209,9 +230,11 @@ export def seed-frame [seed: int]: nothing -> binary {
 }
 
 # What a run was, written beside its capture before it starts: the
-# records' schema and clock, the build and its source, the assets, the
-# route, the cap, the QEMU, the host, the toolchain, and the mode: the
-# window, the sound, the pad, the seed, and when the measurement closes.
+# records' schema and clock, the workspace the SDK and kernel come from,
+# the program's own source, the build, the assets, the route, the cap,
+# the host, the toolchain, and the mode: the window, the sound, the pad,
+# the seed, and when the measurement closes. The QEMU is the one the
+# launch ran, written in when it returns.
 def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record]: nothing -> record {
     let built = ($at.image | path dirname)
     let flags_file = ($built | path join "flags")
@@ -220,7 +243,6 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
     let jab_inc = ($at.workspace | path join "sdk" "src" "jab.inc")
     let cap = (open --raw $jab_inc | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get -o 0.cap)
     let tree = ($at.game | path join ".target" "asset" $map)
-    let qemu = (qemu-of $at.workspace $at.image)
     let host = (sys host)
     let cpus = (sys cpu)
     {
@@ -228,7 +250,8 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         schema: $SCHEMA,
         clock: "the guest's time counter, JAB_TIME_HZ ticks a second, as microseconds; a start and a flip's end since the program's start",
         written: (date now | format date "%Y-%m-%dT%H:%M:%S%z"),
-        jab: (repo-of $at.workspace),
+        workspace: (repo-of $at.workspace),
+        program: (program-source (program-of $at.image)),
         build: {
             tree: $at.tree,
             set: $set,
@@ -242,7 +265,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         assets: { map: $map, tree: $tree, digest: (tree-digest $tree) },
         route: (if $route == null { null } else { { file: $route, sha256: (digest $route) } }),
         cap: (if $cap == null { null } else { $cap | into int }),
-        qemu: $qemu,
+        qemu: null,
         host: {
             os: $nu.os-info.name,
             name: ($host | get -o name),
@@ -262,19 +285,41 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
     }
 }
 
-# The QEMU a launch of the image runs on and its version.
-def qemu-of [workspace: path, image: path]: nothing -> record<binary: string, version: oneof<string, nothing>> {
-    let extern = ($workspace | path join "extern" "qemu")
-    let found = ([($extern | path join "bin" "qemu-system-riscv64") ($extern | path join "qemu-system-riscv64")] | where {|b| $b | path exists } | get -o 0)
-    let binary = ($found | default "qemu-system-riscv64")
+# The QEMU a launch ran, the binary it resolved, and that binary's
+# version.
+def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<string, nothing>> {
     { binary: $binary, version: (try { ^$binary --version | complete | get stdout | lines | get -o 0 } catch { null }) }
 }
 
-# The repository's commit and whether its tree held changes.
-def repo-of [workspace: path]: nothing -> record<commit: string, dirty: bool> {
+# The workspace's commit and whether its tree held changes: where the
+# SDK and the kernel came from.
+def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, dirty: bool> {
     let commit = (^git -C $workspace rev-parse --short HEAD | complete | get stdout | str trim)
     let status = (^git -C $workspace status --porcelain | complete | get stdout | str trim)
-    { commit: $commit, dirty: ($status != "") }
+    { dir: $workspace, commit: $commit, dirty: ($status != "") }
+}
+
+# The program an image was built from: the directory the image's
+# nearest `.target` sits in.
+def program-of [image: path]: nothing -> string {
+    let parts = ($image | path expand | path split)
+    let marks = ($parts | enumerate | where {|e| $e.item == ".target" } | get index)
+    if ($marks | is-empty) { $image | path expand | path dirname } else { $parts | first ($marks | last) | path join }
+}
+
+# The program's source revision: the commit an exported tree's
+# source.nuon names, else the commit of the repository that tracks the
+# program's manifest and main source, with whether they held changes;
+# unknown otherwise. A repository merely enclosing an export, which
+# tracks none of it, says nothing about it.
+def program-source [dir: string]: nothing -> record<dir: string, commit: oneof<string, nothing>, dirty: oneof<bool, nothing>, from: oneof<string, nothing>> {
+    let marker = ($dir | path join "source.nuon")
+    if ($marker | path exists) { return { dir: $dir, commit: (open $marker | get -o commit), dirty: null, from: "source.nuon" } }
+    let owned = (do { cd $dir; ^git ls-files --error-unmatch program.jab.toml src/main.S | complete })
+    if $owned.exit_code != 0 { return { dir: $dir, commit: null, dirty: null, from: null } }
+    let commit = (^git -C $dir rev-parse --short HEAD | complete | get stdout | str trim)
+    let status = (do { cd $dir; ^git status --porcelain -- . | complete | get stdout | str trim })
+    { dir: $dir, commit: $commit, dirty: ($status != ""), from: "git" }
 }
 
 # A file's SHA-256, or null when it is not there.
@@ -308,48 +353,30 @@ def outcome [launched: record]: nothing -> record {
 def u32-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 4) | into int --endian little }
 def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) | into int --endian little }
 
-# The frame and draw records and the end markers of a capture, kinds 7,
-# 8, and 9, each field microseconds or a count, in the order sent.
-export def clocks [api: binary]: nothing -> record<frames: list<any>, draws: list<any>, ends: list<int>> {
-    mut frames = []
-    mut draws = []
-    mut ends = []
-    for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
-        let kind = ($r | bytes at 0..<1 | into int)
-        if $kind == $KIND_FRAME {
-            $frames = ($frames | append {
-                frame: (u32-at $r 4), start_us: (u64-at $r 8), critical_us: (u32-at $r 16), game_us: (u32-at $r 20),
-                draw_us: (u32-at $r 24), hud_us: (u32-at $r 28), mix_us: (u32-at $r 32), flip_us: (u32-at $r 36),
-                report_us: (u32-at $r 40), await_us: (u32-at $r 44), flip_done_us: (u64-at $r 48),
-                flip_status: (u32-at $r 56), schema: (u32-at $r 60),
-            })
-        } else if $kind == $KIND_DRAW {
-            $draws = ($draws | append {
-                frame: (u32-at $r 4), clear_us: (u32-at $r 8), portals_us: (u32-at $r 12), planes_us: (u32-at $r 16),
-                walls_us: (u32-at $r 20), sprites_us: (u32-at $r 24), tiles_us: (u32-at $r 28), tiles_built: (u32-at $r 32),
-                tile_resets: (u32-at $r 36), tiled_pixels: (u32-at $r 40), lit_pixels: (u32-at $r 44),
-                tile_bytes: (u32-at $r 48), tile_peak: (u32-at $r 52), spans: (u32-at $r 56), schema: (u32-at $r 60),
-            })
-        } else if $kind == $KIND_END {
-            $ends = ($ends | append (u32-at $r 4))
-        }
-    }
-    { frames: $frames, draws: $draws, ends: $ends }
-}
-
-# A capture's state records in order, the n-th frame n's, with the
-# placements the console answered before each, whether an R was
-# answered before the first and whether one came later, and the game's
-# events with the frame each fell in.
-def states-of [api: binary]: nothing -> record<states: list<any>, seeded: bool, late_seed: bool, events: list<any>> {
+# A capture read in the order its records came, up to and including the
+# first end marker: the state records, the n-th frame n's, with the
+# placements the console answered before each, whether an R was answered
+# before the first state and whether one came later, the game's events
+# with the frame each fell in, the frame and draw records, kinds 7 and 8,
+# each field microseconds or a count, and the marker, kind 9, with its
+# frame and schema, null when none came. What follows the marker is
+# outside the measurement: its state records are counted as `past` and
+# nothing else in it is read.
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, frames: list<any>, draws: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
     mut states = []
     mut events = []
+    mut frames = []
+    mut draws = []
     mut placed = 0
     mut seeded = false
     mut late_seed = false
+    mut end: any = null
+    mut past = 0
     for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
         let kind = ($r | bytes at 0..<1 | into int)
-        if $kind == $KIND_CONSOLE {
+        if $end != null {
+            if $kind == $KIND_STATE { $past += 1 }
+        } else if $kind == $KIND_CONSOLE {
             let command = ($r | bytes at 4..<5 | into int)
             if $command == $CONSOLE_P { $placed += 1 }
             if $command == $CONSOLE_R {
@@ -367,28 +394,50 @@ def states-of [api: binary]: nothing -> record<states: list<any>, seeded: bool, 
                 frame: ($states | length), kind: $kind,
                 fields: (0..<5 | each {|f| $r | bytes at (40 + $f * 4)..<(44 + $f * 4) | into int --endian little --signed }),
             })
+        } else if $kind == $KIND_FRAME {
+            $frames = ($frames | append {
+                frame: (u32-at $r 4), start_us: (u64-at $r 8), critical_us: (u32-at $r 16), game_us: (u32-at $r 20),
+                draw_us: (u32-at $r 24), hud_us: (u32-at $r 28), mix_us: (u32-at $r 32), flip_us: (u32-at $r 36),
+                report_us: (u32-at $r 40), await_us: (u32-at $r 44), flip_done_us: (u64-at $r 48),
+                flip_status: (u32-at $r 56), schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_DRAW {
+            $draws = ($draws | append {
+                frame: (u32-at $r 4), clear_us: (u32-at $r 8), portals_us: (u32-at $r 12), planes_us: (u32-at $r 16),
+                walls_us: (u32-at $r 20), sprites_us: (u32-at $r 24), tiles_us: (u32-at $r 28), tiles_built: (u32-at $r 32),
+                tile_resets: (u32-at $r 36), tiled_pixels: (u32-at $r 40), lit_pixels: (u32-at $r 44),
+                tile_bytes: (u32-at $r 48), tile_peak: (u32-at $r 52), spans: (u32-at $r 56), schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_END {
+            $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
     }
-    { states: $states, seeded: $seeded, late_seed: $late_seed, events: $events }
+    { states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, frames: $frames, draws: $draws, end: $end, past: $past }
 }
 
 # A capture measured: its window, every frame in it as a row with its
-# leg, the leg's summaries, the outliers, and the outcomes. The window
-# is complete when an end marker names the final frame and every frame
-# from 0 to it has its state, its frame record, and its draw record,
-# numbered in order with none twice, all at the schema; the frames past
-# the marker lie outside it and count for nothing. A capture with no
-# clock records is a build older than them: its rows are its state
-# records' alone and it holds no window.
+# leg, the leg's summaries, the outliers, and the outcomes. The window is
+# the capture read in order through its first end marker (stream): it is
+# complete when that marker is at the schema and names the final frame
+# and every frame from 0 to it has its state, its frame record, and its
+# draw record before the marker, numbered in order with none twice, all
+# at the schema; what follows the marker counts for nothing, a record
+# sent late or a second marker alike. A complete window is valid unless
+# a flip was never shown, a phase or a part sums past its whole, or a
+# frame's clock disagrees with its state (invalidity); it passes when it
+# is valid and no frame reaches the ceiling. A capture with no clock
+# records is a build older than them: its rows are its state records'
+# alone and it holds no window.
 export def measure [api: binary, legs: list<any>]: nothing -> record {
-    let s = (states-of $api)
-    let c = (clocks $api)
-    let clocked = (not ($c.frames | is-empty))
-    let final = ($c.ends | get -o 0)
-    let problems = (if not $clocked { [] } else { window-problems $s $c $final })
+    let s = (stream $api)
+    let clocked = ((not ($s.frames | is-empty)) or $s.end != null)
+    let final = (if $s.end == null { null } else { $s.end.frame })
+    let problems = (if not $clocked { [] } else { window-problems $s })
     let complete = ($clocked and ($problems | is-empty))
-    let last = (if not $clocked { ($s.states | length) - 1 } else if $final == null { ($c.frames | length) - 1 } else { $final })
-    let rows = (rows-of $s $c $legs $last)
+    let last = (if not $clocked { ($s.states | length) - 1 } else if $final == null { ($s.frames | length) - 1 } else { $final })
+    let rows = (rows-of $s $legs $last)
+    let invalid = (if $complete { invalidity $rows } else { [] })
+    let valid = ($complete and ($invalid | is-empty))
     let names = ($legs | get name)
     let summaries = ($names | each {|n| leg-summary $n ($rows | where leg == $n) } | where frames > 0)
     {
@@ -396,11 +445,13 @@ export def measure [api: binary, legs: list<any>]: nothing -> record {
         complete: $complete,
         final: $final,
         problems: $problems,
+        valid: $valid,
+        invalid: $invalid,
         seeded: $s.seeded,
         late_seed: $s.late_seed,
         frames: ($rows | length),
-        past_window: (if $final == null { 0 } else { ($s.states | length) - $final - 1 }),
-        passes: (if $complete { ($rows | where {|r| $r.over } | is-empty) } else { false }),
+        past_window: $s.past,
+        passes: ($valid and ($rows | where {|r| $r.over } | is-empty)),
         over: (if $clocked { $rows | where {|r| $r.over == true } | length } else { null }),
         whole: (leg-summary "whole" $rows),
         legs: $summaries,
@@ -410,26 +461,43 @@ export def measure [api: binary, legs: list<any>]: nothing -> record {
     }
 }
 
-# What keeps a window from being complete: no end marker, a record
-# numbered out of order or twice, a frame short of a record, a schema
-# other than this one.
-def window-problems [s: record, c: record, final: oneof<int, nothing>]: nothing -> list<string> {
+# What keeps a window from being complete, read from the records before
+# its end marker alone: no marker, or one at another schema, a record
+# numbered out of order or twice, a frame short of a record or one too
+# many, a record at a schema other than this one.
+def window-problems [s: record]: nothing -> list<string> {
     mut problems = []
-    if $final == null { $problems = ($problems | append "no end marker: the measurement never closed") }
-    if ($c.ends | length) > 1 { $problems = ($problems | append $"($c.ends | length) end markers; the first closes the measurement") }
-    let last = (if $final == null { ($c.frames | length) - 1 } else { $final })
-    let frames = ($c.frames | where {|f| $f.frame <= $last })
-    let draws = ($c.draws | where {|d| $d.frame <= $last })
-    let frame_order = ($frames | enumerate | where {|e| $e.item.frame != $e.index } | length)
-    let draw_order = ($draws | enumerate | where {|e| $e.item.frame != $e.index } | length)
+    if $s.end == null {
+        $problems = ($problems | append "no end marker: the measurement never closed")
+    } else if $s.end.schema != $SCHEMA {
+        $problems = ($problems | append $"the end marker at schema ($s.end.schema), this reader's being ($SCHEMA)")
+    }
+    let last = (if $s.end == null { ($s.frames | length) - 1 } else { $s.end.frame })
+    let frame_order = ($s.frames | enumerate | where {|e| $e.item.frame != $e.index } | length)
+    let draw_order = ($s.draws | enumerate | where {|e| $e.item.frame != $e.index } | length)
     if $frame_order > 0 { $problems = ($problems | append $"($frame_order) frame records out of order or repeated") }
     if $draw_order > 0 { $problems = ($problems | append $"($draw_order) draw records out of order or repeated") }
-    if ($frames | length) != ($last + 1) { $problems = ($problems | append $"($frames | length) frame records for ($last + 1) frames") }
-    if ($draws | length) != ($last + 1) { $problems = ($problems | append $"($draws | length) draw records for ($last + 1) frames") }
-    if ($s.states | length) < ($last + 1) { $problems = ($problems | append $"($s.states | length) state records for ($last + 1) frames") }
-    let schemas = ($frames | get schema | append ($draws | get schema) | uniq)
+    if ($s.frames | length) != ($last + 1) { $problems = ($problems | append $"($s.frames | length) frame records before the end marker for ($last + 1) frames") }
+    if ($s.draws | length) != ($last + 1) { $problems = ($problems | append $"($s.draws | length) draw records before the end marker for ($last + 1) frames") }
+    if ($s.states | length) != ($last + 1) { $problems = ($problems | append $"($s.states | length) state records before the end marker for ($last + 1) frames") }
+    let schemas = ($s.frames | each {|f| $f.schema } | append ($s.draws | each {|d| $d.schema }) | uniq)
     if ($schemas | any {|v| $v != $SCHEMA }) { $problems = ($problems | append $"a record at schema ($schemas | where {|v| $v != $SCHEMA } | first), this reader's being ($SCHEMA)") }
     $problems
+}
+
+# What makes a complete window invalid: a flip at a status other than
+# presented or refused as early, which is a frame never shown; a frame
+# whose phases or whose drawing's parts sum past their whole; a frame
+# whose clock record's drawing or game time differs from its state's.
+def invalidity [rows: list<any>]: nothing -> list<string> {
+    let unshown = ($rows | where {|r| $r.flip_status not-in $FLIP_VALID })
+    let negative = ($rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
+    let misaligned = ($rows | where {|r| not $r.aligned })
+    [
+        (if ($unshown | is-empty) { null } else { $"($unshown | length) flips at status ($unshown | get flip_status | uniq | each {|v| $v | into string } | str join ', '), never shown" }),
+        (if ($negative | is-empty) { null } else { $"($negative | length) frames whose phases or parts sum past their whole" }),
+        (if ($misaligned | is-empty) { null } else { $"($misaligned | length) frames whose clock record differs from their state's" }),
+    ] | compact
 }
 
 # Every frame from 0 to `last` as one row: its leg (by the placements
@@ -438,7 +506,7 @@ def window-problems [s: record, c: record, final: oneof<int, nothing>]: nothing 
 # flip's interval from the presented one before and its latency from
 # its start, the drawing's parts, and the tile cache's counts; without
 # them the clock's columns are null.
-def rows-of [s: record, c: record, legs: list<any>, last: int]: nothing -> list<any> {
+def rows-of [s: record, legs: list<any>, last: int]: nothing -> list<any> {
     let names = ($legs | get name)
     let reach = ($legs | enumerate | each {|e| $legs | first ($e.index + 1) | each {|l| $l.places | length } | math sum })
     mut rows = []
@@ -447,8 +515,8 @@ def rows-of [s: record, c: record, legs: list<any>, last: int]: nothing -> list<
         let st = $e.item
         let leg_at = ($reach | enumerate | where {|r| $r.item >= $st.placed } | get -o 0.index | default (($names | length) - 1))
         let entry = (if $e.index == 0 { true } else { ($s.states | get ($e.index - 1) | get placed) != $st.placed })
-        let f = ($c.frames | get -o $st.frame)
-        let d = ($c.draws | get -o $st.frame)
+        let f = ($s.frames | get -o $st.frame)
+        let d = ($s.draws | get -o $st.frame)
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
@@ -577,17 +645,37 @@ def outcomes-of [events: list<any>, rows: list<any>, last: int]: nothing -> reco
     }
 }
 
-# One line on a run: complete or not and why, passing or not, the
-# critical path's spread, the seed, the outcome.
+# One line on a run: complete or not and why, valid or not and why,
+# passing or not, the critical path's spread, the seed, a program fault.
 def run-line [label: string, n: int, m: record, ran: record]: nothing -> string {
     let name = (if $label == "" { "" } else { $"($label): " })
-    let fault = (if ($ran.fault? | default null) == null { "" } else { $"; FAULT ($ran.fault)" })
+    let fault = (if ($ran.fault? | default null) == null { "" } else { $"; a program fault: ($ran.fault)" })
     if not $m.clocked {
         return $"gauge: ($name)run ($n): ($m.frames) frames from the state records alone; draw (spread $m.whole.draw), game (spread $m.whole.game)($fault)"
     }
-    let state = (if $m.complete { if $m.passes { "complete, passes" } else { $"complete, fails: ($m.over) of ($m.frames) frames at or over 15 ms" } } else { $"incomplete: ($m.problems | str join '; ')" })
+    let state = (if not $m.complete {
+        $"incomplete: ($m.problems | str join '; ')"
+    } else if not $m.valid {
+        $"complete but invalid: ($m.invalid | str join '; ')"
+    } else if $m.passes {
+        "complete, valid, passes"
+    } else {
+        $"complete, valid, fails: ($m.over) of ($m.frames) frames at or over 15 ms"
+    })
     let seed = (if $m.seeded { "seeded" } else if $m.late_seed { "seeded late, no paired comparison" } else { "unseeded" })
     $"gauge: ($name)run ($n): ($state); ($m.frames) frames to frame ($m.final), critical (spread $m.whole.critical) ms; ($seed)($fault)"
+}
+
+# One line on what a run played and on what: the rounds by what they
+# met, the androids' events, the times the player was struck, the
+# pickups, the window, and the audio backend's driver.
+def outcome-line [n: int, m: record, ran: record]: nothing -> string {
+    let o = $m.outcomes
+    let rounds = (if ($o.rounds | is-empty) { "none" } else { $o.rounds | each {|r| $"($r.met) ($r.count)" } | str join ", " })
+    let androids = (if ($o.androids | is-empty) { "none" } else { $o.androids | each {|a| $"($a.event) ($a.count)" } | str join ", " })
+    let window = ($ran.window? | default "unknown")
+    let audio = ($ran.audio? | default "unknown" | split row "," | first)
+    $"gauge:   run ($n) played: rounds ($rounds); androids ($androids); struck ($o.struck); pickups ($o.pickups); window ($window), audio ($audio)"
 }
 
 # A spread in milliseconds: least, median, 95th, 99th, greatest.
@@ -624,4 +712,133 @@ def report [label: string, id: record, runs: list<any>, out: path]: nothing -> n
         if not ($o | is-empty) { print $"gauge:   run ($r.run): ($o | length) unexplained phase outliers, the first at frame ($o | first | get frame)" }
     }
     print $"gauge: ($file)"
+}
+
+# The legs a capture's frames are assigned to, from the route that
+# played it: the route given, else the copy kept beside the capture,
+# else the file the identity names, and whichever it is must have the
+# SHA-256 the identity recorded, or the read stops naming both. A
+# capture whose identity records no route is one leg, play, unless a
+# route is given, which then goes unchecked.
+export def legs-for [dir: path, id: record, route: string]: nothing -> record<legs: list<any>, route: oneof<string, nothing>, checked: bool> {
+    let recorded = ($id | get -o route.sha256)
+    let kept = ($dir | path join "route.nuon")
+    let named = ($id | get -o route.file | default "")
+    let file = (if $route != "" { $route | path expand } else if ($kept | path exists) { $kept } else { $named })
+    if $file == "" { return { legs: [{ name: "play", places: [], pad: [] }], route: null, checked: false } }
+    if not ($file | path exists) { error make { msg: $"the route ($file) is not there" } }
+    let bytes = (open --raw $file | into binary)
+    let sha = ($bytes | hash sha256)
+    if $recorded != null and $sha != $recorded {
+        error make { msg: $"the route ($file) has SHA-256 ($sha) where the capture's identity recorded ($recorded): its legs are not the ones that played" }
+    }
+    { legs: ($bytes | decode utf-8 | from nuon | get legs), route: $file, checked: ($recorded != null) }
+}
+
+# Set builds' captures side by side: each run of each gauge.nuon a
+# measurement, a build's runs its batches, the build named by the label
+# less a trailing _<n> and its batches one image; for each leg a value
+# of `field` a run, a leg whose eye travels one bin or more taken per
+# bin of its path over the bins every run reached, a shorter one over
+# its frames, so a leg's value is its path's and not its frame count's.
+# The method, the bins, every run's bins with their medians, and the
+# table come back together.
+export def compare [files: list<string>, field: string, bin_cm: int]: nothing -> record {
+    let runs = ($files | each {|f|
+        let g = (open ($f | path expand))
+        let build = ($g.label | str replace --regex '_\d+$' '')
+        let image = ($g.identity | get -o build.image_sha256 | default "")
+        $g.runs | each {|r|
+            let rows = ($g.rows | where run == $r.run)
+            {
+                file: ($f | path expand), label: $g.label, build: $build, image: $image, run: $r.run,
+                legs: ($rows | get leg | uniq | each {|leg| leg-measure ($rows | where leg == $leg) $leg $field $bin_cm }),
+            }
+        }
+    } | flatten)
+    let builds = ($runs | get build | uniq)
+    for b in $builds {
+        let images = ($runs | where build == $b | get image | uniq)
+        if ($images | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($images | length) images; a build's batches are one build" } }
+    }
+    let names = ($runs | each {|r| $r.legs | get leg } | flatten | uniq)
+    let common = ($names | each {|leg|
+        let measured = ($runs | each {|r| $r.legs | where leg == $leg | get -o 0 } | compact)
+        let kinds = ($measured | get kind | uniq)
+        if ($kinds | length) > 1 { error make { msg: $"the leg ($leg) is walked in some runs and stands in others" } }
+        let bins = (if ($kinds | first) == "path" {
+            let sets = ($measured | each {|m| $m.bins | get bin })
+            $sets | reduce --fold ($sets | first) {|s, acc| $acc | where {|x| $x in $s } }
+        } else { [] })
+        { leg: $leg, kind: ($kinds | first), runs: ($measured | length), bins: $bins }
+    })
+    let valued = ($runs | each {|r|
+        $r | merge { legs: ($r.legs | each {|l|
+            let c = ($common | where leg == $l.leg | first)
+            let picked = ($l.bins | where {|b| $b.bin in $c.bins })
+            let value = (if $l.kind == "frames" { $l.median } else if ($picked | is-empty) { null } else { $picked | get median | math avg })
+            $l | insert value $value
+        }) }
+    })
+    let table = ($builds | each {|b|
+        $names | each {|leg|
+            let values = ($valued | where build == $b | each {|r| $r.legs | where leg == $leg | get -o 0.value } | compact)
+            if ($values | is-empty) { null } else {
+                { build: $b, leg: $leg, value_us: ($values | math avg), half_spread_us: ((($values | math max) - ($values | math min)) / 2), batches: ($values | length) }
+            }
+        } | compact
+    } | flatten)
+    {
+        method: {
+            field: $field,
+            bin_cm: $bin_cm,
+            path: "the eye's travel over the floor, x and y, summed from the leg's first frame",
+            walked: "a leg whose path reaches one bin is taken per bin; a shorter one, standing, over its frames",
+            bin_value: "a bin's value is the median of its frames' values by nearest rank",
+            leg_value: "a walked leg's value is the mean of its bin values over the bins every run in the comparison reached; a standing leg's is its frames' median by nearest rank",
+            stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
+            grouping: "a capture's label less a trailing _<n> names its build, whose runs are its batches and share the image's SHA-256",
+            table: "a build's value for a leg is the mean of its runs' values; the half spread is half their range",
+        },
+        common: $common,
+        runs: $valued,
+        table: $table,
+    }
+}
+
+# A leg's frames reduced for a comparison: the eye's travel in metres,
+# and either its frames' median, standing, or its path cut into bins of
+# `bin_cm` with each bin's frames and their median.
+def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: nothing -> record {
+    mut travelled = 0.0
+    mut previous: any = null
+    mut placed = []
+    for r in $rows {
+        if $previous != null { $travelled = $travelled + (((($r.x - $previous.x) ** 2) + (($r.y - $previous.y) ** 2)) | math sqrt) }
+        $previous = $r
+        $placed = ($placed | append { bin: (($travelled * 100 / $bin_cm) | math floor), value: ($r | get $field) })
+    }
+    if ($travelled * 100) < $bin_cm {
+        return { leg: $leg, kind: "frames", frames: ($rows | length), path_m: $travelled, median: (stats ($rows | get $field)).median, bins: [] }
+    }
+    let bins = ($placed | group-by {|p| $p.bin | into string } | transpose bin entries | each {|g| { bin: ($g.bin | into int), frames: ($g.entries | length), median: (stats ($g.entries | get value)).median } } | sort-by bin)
+    { leg: $leg, kind: "path", frames: ($rows | length), path_m: $travelled, median: null, bins: $bins }
+}
+
+# Set builds' captures side by side (compare): every leg's value of
+# `--field` a run, a build's mean and half spread a leg, printed; the
+# method, the bins every run reached, each run's bins with their
+# medians, and the table go to `--out`.
+def "main compare" [
+    ...files: string                 # the gauge.nuon files compared
+    --field: string = "draw_us"      # the row's column compared
+    --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
+    --out: string = ""               # where the comparison lands, the program's .target/compare.nuon unless given
+] {
+    let result = (compare $files $field $bin_cm)
+    let target = (if $out == "" { $env.FILE_PWD | path join ".." ".target" "compare.nuon" | path expand } else { $out | path expand })
+    mkdir ($target | path dirname)
+    $result | to nuon --indent 2 | save --raw -f $target
+    for t in $result.table { print $"gauge: ($t.build) ($t.leg): (ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches" }
+    print $"gauge: ($target)"
 }

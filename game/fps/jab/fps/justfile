@@ -60,19 +60,25 @@ smoke seeds='[1]' seconds='60': assets
 # summary printed: `just gauge`, the release build three times; `just
 # gauge debug 1`; `just gauge release 3 --host` in the host's window and
 # audio
-gauge tree='release' runs='3' *args: assets
+gauge tree='release' runs='3' *args:
     ^just build {{ if tree == "debug" { "--set debug" } else { "" } }}; ^nu "{{here}}/test/gauge.nu" run --tree {{tree}} --runs {{runs}} {{args}}
 
 # Build, then put the factory in the host's window, with its audio and
 # its own gamepad, for you to play; the measurement closes after that
 # many seconds and the window with it: `just gauge-play 120`
-gauge-play seconds='120' tree='release': assets
+gauge-play seconds='120' tree='release':
     ^just build {{ if tree == "debug" { "--set debug" } else { "" } }}; ^nu "{{here}}/test/gauge.nu" play --tree {{tree}} --seconds {{seconds}}
 
 # Read a run's capture as the gauge reads its own, the identity its
 # launch wrote beside it taken up: `just gauge-read <run>/api.out`
 gauge-read api:
     ^nu "{{here}}/test/gauge.nu" read "{{api}}"
+
+# Set builds' gauge.nuon files side by side, each walked leg per half
+# metre of its path, the method and every bin kept in
+# .target/compare.nuon: `just gauge-compare a/gauge.nuon b/gauge.nuon`
+gauge-compare *files:
+    ^nu "{{here}}/test/gauge.nu" compare {{files}}
 
 # Build with DEBUG set, then hand the factory to robojab for an agent or
 # a script to play: `just play` prints the MCP server line and config

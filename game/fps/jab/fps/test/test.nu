@@ -306,6 +306,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert (($assets | path exists)) "the sdk built the assets image"
     hot-functions $image
     release-strings $image
+    gauge-rules ($out | path join "gauge_rules")
+    print "fps: the gauge's rules hold on synthetic captures"
     let game = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let trees = ($game | path join ".target" "asset")
     mut runs = []
@@ -717,6 +719,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let walk_clock = (gauge measure $factory_walk.api [{ name: "walk", places: $factory_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert $walk_clock.complete $"the walk's measurement complete: ($walk_clock.problems)"
+    assert $walk_clock.valid $"the walk's measurement valid: ($walk_clock.invalid)"
     assert ($walk_clock.past_window > 0) $"the game went on past the measurement: ($walk_clock.past_window) frames"
     let clock_rows = $walk_clock.rows
     let outside = ($clock_rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
@@ -1483,3 +1486,119 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
     $bytes | save --raw -f ($tree | path join "map" $"($name).jabfps.map")
     $tree
 }
+
+# The gauge's rules over synthetic captures (gauge.nu's stream, measure,
+# and legs-for), each built as the program sends one and then broken the
+# way a wrong reading would accept: a frame record sent after the end
+# marker fills no gap before it; a second marker past the window changes
+# nothing; a marker at another schema refuses the window; a flip never
+# shown, a phase or a part past its whole, and a clock disagreeing with
+# its state each make a complete window invalid, while a flip refused as
+# early does not; a frame at the ceiling fails a valid window; a seed
+# answered after the first state is late; a route the identity did not
+# record is refused, kept or given, and a capture with no route is one
+# leg, play.
+def gauge-rules [dir: path]: nothing -> nothing {
+    let legs = [{ name: "walk", places: [], pad: [] }]
+    let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
+    let good = (fx-items 3)
+    let m = (do $measure $good)
+    assert ($m.complete and $m.valid and $m.passes and $m.seeded) $"a well-formed capture: ($m.problems) ($m.invalid)"
+    assert equal [$m.final $m.frames $m.past_window] [2 3 2] "the marker names frame 2: three frames in the window, two past it"
+
+    let sent_late = ($good | where {|i| not ($i.kind == "frame" and $i.frame == 1) } | append (fx-frame 1))
+    assert (not (do $measure $sent_late).complete) "a frame record sent after the marker fills no gap before it"
+    let twice = ($good | append { kind: "end", frame: 4, schema: 1 })
+    let mt = (do $measure $twice)
+    assert ($mt.complete and $mt.valid and $mt.final == 2) $"a second marker past the window changes nothing: ($mt.problems)"
+    let schema = ($good | each {|i| if $i.kind == "end" { $i | update schema 2 } else { $i } })
+    assert (not (do $measure $schema).complete) "a marker at another schema refuses the window"
+
+    for s in [[0 true] [1 true] [2 false] [3 false] [7 false]] {
+        let flipped = ($good | each {|i| if $i.kind == "frame" and $i.frame == 1 { $i | update status $s.0 } else { $i } })
+        let mf = (do $measure $flipped)
+        assert ($mf.complete and $mf.valid == $s.1) $"a flip at status ($s.0), valid ($s.1): ($mf.invalid)"
+        assert ($s.1 or ($mf.invalid | any {|r| $r =~ "never shown" })) $"a flip at status ($s.0) named: ($mf.invalid)"
+    }
+    let short = ($good | each {|i| if $i.kind == "frame" and $i.frame == 0 { $i | update critical 1000 } else { $i } })
+    let ms = (do $measure $short)
+    assert ((not $ms.valid) and ($ms.invalid | any {|r| $r =~ "past their whole" })) $"phases past the critical path: ($ms.invalid)"
+    let parts = ($good | each {|i|
+        if $i.kind == "frame" and $i.frame == 0 { $i | update draw 900 } else if $i.kind == "state" and ($i.frame? == 0) { $i | insert draw 900 } else { $i }
+    })
+    let mp = (do $measure $parts)
+    assert ((not $mp.valid) and ($mp.invalid | any {|r| $r =~ "past their whole" }) and (not ($mp.invalid | any {|r| $r =~ "differs" }))) $"parts past the drawing: ($mp.invalid)"
+    let misaligned = ($good | each {|i| if $i.kind == "state" and ($i.frame? == 2) { $i | insert draw 999 } else { $i } })
+    let mm = (do $measure $misaligned)
+    assert ((not $mm.valid) and ($mm.invalid | any {|r| $r =~ "differs" })) $"a clock disagreeing with its state: ($mm.invalid)"
+    let over = ($good | each {|i| if $i.kind == "frame" and $i.frame == 2 { $i | update critical 15000 } else { $i } })
+    let mo = (do $measure $over)
+    assert ($mo.valid and (not $mo.passes)) "a frame at 15 ms leaves the window valid and failing"
+    let late = ($good | skip 1 | insert 1 { kind: "ack" })
+    let ml = (do $measure $late)
+    assert ((not $ml.seeded) and $ml.late_seed) "a seed answered after the first state is late"
+
+    mkdir $dir
+    let played = "{ legs: [{ name: \"played\", places: [], pad: [] }] }"
+    let other = "{ legs: [{ name: \"other\", places: [], pad: [] }] }"
+    let kept = ($dir | path join "route.nuon")
+    let id = { route: { file: $kept, sha256: ($played | hash sha256) } }
+    $played | save --raw -f $kept
+    assert equal ((gauge legs-for $dir $id "").legs | get 0.name) "played" "the kept route the identity recorded"
+    $other | save --raw -f $kept
+    assert (try { gauge legs-for $dir $id ""; false } catch { true }) "a kept route the identity did not record is refused"
+    let given = ($dir | path join "given.nuon")
+    $other | save --raw -f $given
+    assert (try { gauge legs-for $dir $id $given; false } catch { true }) "a route given that the identity did not record is refused"
+    assert equal ((gauge legs-for ($dir | path join "bare") { route: null } "").legs | get 0.name) "play" "a capture with no route is one leg, play"
+}
+
+# A synthetic capture's records as the program sends them over `frames`
+# frames: the seed's answer, frame 0's state, then at each frame's top
+# the frame before's clock and drawing, the end marker after the final
+# frame's, and the frame's state, two frames' states past the window.
+def fx-items [frames: int]: nothing -> list<any> {
+    let tops = (1..$frames | each {|n|
+        [(fx-frame ($n - 1)) { kind: "draw", frame: ($n - 1), schema: 1 }]
+        | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: 1 }] } else { [] })
+        | append [{ kind: "state", frame: $n }]
+    } | flatten)
+    [{ kind: "ack" } { kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+}
+
+# A frame record's fields for a synthetic capture: its phases 1.72 ms of
+# a critical path of 1.8, the drawing 1 ms, presented.
+def fx-frame [frame: int]: nothing -> record {
+    { kind: "frame", frame: $frame, critical: 1800, game: 100, draw: 1000, status: 0, schema: 1 }
+}
+
+# A synthetic capture's records as bytes, 64 each in render.inc's
+# layouts: the console's answer to R; a state, its drawing and game
+# microseconds at 32 and 36, 1000 and 100 unless given; a frame's clock,
+# the crosshair and the mix 10 us each, the flip 500, the reporting 100,
+# the await 16 ms; a drawing whose parts take 0.95 ms, its tiles 0.1;
+# and the end marker's frame and schema.
+def fx-bytes [items: list<any>]: nothing -> binary {
+    $items | each {|i|
+        match $i.kind {
+            "ack" => (fx-pad ([0x[0b 00 00 00] 0x[52]] | bytes collect)),
+            "state" => (fx-pad ([0x[01 00 00 00] (fx-zeros 28) (fx-u32 ($i.draw? | default 1000)) (fx-u32 ($i.game? | default 100))] | bytes collect)),
+            "frame" => ([
+                0x[07 00 00 00] (fx-u32 $i.frame) (fx-u64 ($i.frame * 20000)) (fx-u32 $i.critical) (fx-u32 $i.game) (fx-u32 $i.draw)
+                (fx-u32 10) (fx-u32 10) (fx-u32 500) (fx-u32 100) (fx-u32 16000) (fx-u64 ($i.frame * 20000 + 1700)) (fx-u32 $i.status) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "draw" => ([
+                0x[08 00 00 00] (fx-u32 $i.frame) (fx-u32 100) (fx-u32 100) (fx-u32 300) (fx-u32 400) (fx-u32 50) (fx-u32 100)
+                (fx-u32 2) (fx-u32 0) (fx-u32 10) (fx-u32 20) (fx-u32 50) (fx-u32 100) (fx-u32 5) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "end" => ([0x[09 00 00 00] (fx-u32 $i.frame) (fx-zeros 52) (fx-u32 $i.schema)] | bytes collect),
+        }
+    } | bytes collect
+}
+
+# A little-endian word, a double word, a run of zero bytes, and a record
+# filled with zeros to its 64 bytes.
+def fx-u32 [v: int]: nothing -> binary { $v | into binary --endian little | bytes at 0..<4 }
+def fx-u64 [v: int]: nothing -> binary { $v | into binary --endian little | bytes at 0..<8 }
+def fx-zeros [n: int]: nothing -> binary { if $n <= 0 { 0x[] } else { 1..$n | each { 0x[00] } | bytes collect } }
+def fx-pad [b: binary]: nothing -> binary { [$b (fx-zeros ($RECORD - ($b | bytes length)))] | bytes collect }
