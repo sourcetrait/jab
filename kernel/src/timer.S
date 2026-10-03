@@ -2,24 +2,11 @@
 .include "qemu_virt.inc"
 .include "jab.inc"
 
-# The frame clock and the wait: a tick every 1/JAB_DISPLAY_FPS_CAP of a
-# second, kept as the time of the next tick. jab.sys.display.flip moves it,
-# jab.sys.display.ready reads it, and jab.sys.await halts the hart until it,
-# or until a key arrives, through the supervisor timer (stimecmp) and
-# the PLIC, with the interrupts enabled only while waiting and taken by
-# wfi rather than by the trap vector. A tick that has passed is
-# reported by the next wait as it stands and moved on by the flip, so
-# a program that woke on an input and comes back after the tick loses
-# nothing; the wait moves a passed tick itself only when it reported
-# that tick already and no flip has answered it (frame_reported).
 .set TICK, (QEMU_VIRT_TIMEBASE / JAB_DISPLAY_FPS_CAP)
-# A wait on the sound stream alone wakes this often to look for a stall
-# (sound.S), since a device that stops returning raises no line
 .set SOUND_POLL, (QEMU_VIRT_TIMEBASE / 2)
 
 .section .text
 
-# frame_clock_init: the first tick is now.
 .global frame_clock_init
 frame_clock_init:
     rdtime t0
@@ -27,7 +14,6 @@ frame_clock_init:
     sd t0, 0(t1)
     ret
 
-# frame_ready: a0 becomes 1 when the next tick has come, else 0.
 .global frame_ready
 frame_ready:
     rdtime t0
@@ -37,11 +23,6 @@ frame_ready:
     xori a0, a0, 1
     ret
 
-# frame_flipped: a flip went through now. The next tick is one period
-# after the current one, or one period from now when a whole period has
-# already gone by, so a punctual program keeps an exact cadence and a
-# slow one is never refused. The tick the program was told of is
-# answered by this flip, so the wait no longer owes it a move.
 .global frame_flipped
 frame_flipped:
     rdtime t0
@@ -57,19 +38,6 @@ frame_flipped:
     sd zero, 0(t2)
     ret
 
-# sys_await (jab.sys.await): a0 is the mask of events to wait for, and
-# the wait is for those and nothing else, since a program claims the
-# inputs it reads: the display's next tick (JAB_AWAIT_DISPLAY), a key
-# event (JAB_AWAIT_KEYBOARD), which brings the keyboard up and is
-# dropped from the mask when there is none, bytes from the host over
-# the API (JAB_AWAIT_API), dropped when the machine has no API port, a
-# pad event (JAB_AWAIT_PAD), which brings the pad up and is dropped
-# when there is none, and room in the sound stream (JAB_AWAIT_SOUND),
-# which brings the sound device up and is dropped when there is none.
-# A source in the mask that a program never drains holds every wait
-# at once, which is why nothing is in the mask but what it names. a0
-# becomes the events that ended the wait, 0 when nothing in the mask
-# can happen, at once for a mask of 0.
 .global sys_await
 sys_await:
     mv s0, a0
@@ -100,14 +68,6 @@ sys_await:
 24:
     li a0, 0
     beqz s0, 9f
-    # the display's tick: a tick the program was told of and has not
-    # flipped on (frame_reported) moves forward past now, period by
-    # period, so a program that only idles wakes once a period; a tick
-    # that passed since the last flip stays where it is, so the wait
-    # reports it at once, while the program was handling a key or a
-    # pad event, and the flip after it lands one period on from the
-    # tick rather than a period late; then the timer is armed, and a
-    # tick already past ends the wait before it halts
     andi t0, s0, JAB_AWAIT_DISPLAY
     beqz t0, 3f
     la t2, frame_tick
@@ -133,7 +93,6 @@ sys_await:
     li t4, SIE_SEIE
     csrs sie, t4
 4:
-    # wait: what in the mask has happened, else halt
     li s1, 0
     andi t0, s0, JAB_AWAIT_DISPLAY
     beqz t0, 5f
@@ -167,16 +126,12 @@ sys_await:
     beqz a0, 611f
     ori s1, s1, JAB_AWAIT_SOUND
 611:
-    # a stream that has stopped returning is declared dead and its bit
-    # dropped; with nothing else in the mask the wait ends with 0
     call sound_stalled
     beqz a0, 612f
     andi s0, s0, ~JAB_AWAIT_SOUND
     beqz s0, 7f
     j 62f
 612:
-    # the sound line raises nothing from a stalled device, so with no
-    # display tick armed the timer wakes the wait to look
     andi t0, s0, JAB_AWAIT_DISPLAY
     bnez t0, 62f
     rdtime t0
@@ -191,8 +146,6 @@ sys_await:
     call plic_service
     j 4b
 7:
-    # the display's tick reported: the next wait moves it on unless a
-    # flip answers it first
     andi t0, s1, JAB_AWAIT_DISPLAY
     beqz t0, 71f
     la t0, frame_reported
@@ -201,8 +154,6 @@ sys_await:
 71:
     li t4, SIE_STIE
     csrc sie, t4
-    # the external lines stay enabled while the sound stream is live,
-    # so its interrupt keeps reaching the vector as the program runs
     la t4, sound_live
     ld t4, 0(t4)
     bnez t4, 8f
@@ -220,6 +171,5 @@ sys_await:
 .balign 8
 frame_tick:
     .skip 8
-# 1 once a wait has reported the tick, 0 once a flip has answered it
 frame_reported:
     .skip 8
