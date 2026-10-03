@@ -46,14 +46,10 @@ probe kind category name *args:
 
 # Record the running Jab QEMU per thread, once a second, to
 # .target/watch.nuonl: `just watch` from any shell while a program
-# runs, until the run ends
-watch:
-    ^nu "{{jab}}" watch "{{here}}"
-
-# Report on the last recording as one NUON record to paste: per thread
+# runs; when the run ends, one NUON record on it to paste, per thread
 # the steady CPU seconds a second after the first five, or `--skip N`
-watched *args:
-    ^nu "{{jab}}" watched "{{here}}" {{args}}
+watch *args:
+    ^nu "{{jab}}" watch "{{here}}" {{args}}
 
 clean:
     rm -rf "{{here}}/.target"

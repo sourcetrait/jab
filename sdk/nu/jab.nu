@@ -899,12 +899,12 @@ def watch-file [ws: path]: nothing -> string {
 # workspace's .target/watch.nuonl, whatever shell this is run from: a
 # first line describing the run (host, the running QEMU's version, the
 # window, the kernel and the symbols it was built with, read from its
-# tree's flags stamp),
-# then a line per sample with every thread's cumulative CPU seconds.
-# One short line is printed per sample, the rates since the last; the
-# file is what `watched` reports on. Ends when the run does, or when
-# interrupted.
-def "main watch" [ws: path] {
+# tree's flags stamp), then a line per sample with every thread's
+# cumulative CPU seconds, one short line printed per sample with the
+# rates since the last. When the run ends, the report on the recording
+# is printed to paste (watch-report), the first `--skip` seconds dropped
+# as the load. Interrupted, it ends with no report.
+def "main watch" [ws: path, --skip: float = 5.0] {
     let pids = (jab-pids)
     if ($pids | is-empty) { error make {msg: "no jab is running"} }
     let pid = ($pids | first)
@@ -941,24 +941,27 @@ def "main watch" [ws: path] {
         $last = { at: $at, threads: $threads }
         sleep 1sec
     }
+    print (watch-report $ws $skip | to nuon --indent 2)
 }
 
-# Report on what `watch` recorded, as one NUON record to paste: the run
-# as recorded, the stretch reported on (the first `--skip` seconds
-# dropped as the load), and per thread the steady CPU seconds a second
-# over that stretch and the peak second, with the process total;
-# threads under 0.005 a second are left out. On macOS a thread is its
+# The report on what `watch` recorded, as one NUON record: the run as
+# recorded, the stretch reported on, and per thread the steady CPU
+# seconds a second over that stretch and the peak second, with the
+# process total; threads under 0.005 a second are left out. The stretch
+# drops the first `skip` seconds as the load, or nothing for a run too
+# short to spare them, `skipped` saying which. On macOS a thread is its
 # row, and QEMU's worker threads come and go, so a row can change
 # identity between samples: a row whose second-by-second rate is
 # impossible for one thread, negative or past one, is reported with
 # `stable: false` and no peak, its steady figure a mix.
-def "main watched" [ws: path, --skip: float = 5.0] {
-    let file = (watch-file $ws)
-    if not ($file | path exists) { error make {msg: $"nothing recorded at ($file); run `just watch` during a run first"} }
-    let lines = (open --raw $file | decode | lines | where {|l| ($l | str trim) != "" })
+def watch-report [ws: path, skip: float]: nothing -> record {
+    let lines = (open --raw (watch-file $ws) | decode | lines | where {|l| ($l | str trim) != "" })
     let header = ($lines | first | from nuon)
-    let samples = ($lines | skip 1 | each {|l| $l | from nuon } | where at >= $skip)
-    if ($samples | length) < 2 { error make {msg: $"only ($samples | length) samples after the first ($skip) seconds; watch longer or lower --skip"} }
+    let recorded = ($lines | skip 1 | each {|l| $l | from nuon })
+    let after = ($recorded | where at >= $skip)
+    let skipped = (if ($after | length) >= 2 { $skip } else { 0.0 })
+    let samples = (if ($after | length) >= 2 { $after } else { $recorded })
+    if ($samples | length) < 2 { error make {msg: $"the run ended after ($samples | length) samples, too few for a report; watch a run of two seconds or more"} }
     let first = ($samples | first)
     let last = ($samples | last)
     let seconds = ($last.at - $first.at)
@@ -974,15 +977,14 @@ def "main watched" [ws: path, --skip: float = 5.0] {
             { name: ($series | last).name, id: $id, steady: ($steady | math round -p 3), peak: (if $stable { $rates | math max | math round -p 3 } else { null }), stable: $stable }
         }
     } | compact | where steady >= 0.005 | sort-by steady --reverse)
-    let report = {
+    {
         run: $header.run,
-        skipped: $skip,
+        skipped: $skipped,
         seconds: ($seconds | math round -p 1),
         samples: ($samples | length),
         process: (if ($threads | is-empty) { 0.0 } else { $threads | get steady | math sum | math round -p 3 }),
         threads: $threads,
     }
-    print ($report | to nuon --indent 2)
 }
 
 # The nearest parent of `dir` holding workspace.jab.toml, or null.
@@ -1724,5 +1726,5 @@ def "main clean" [dir: path, --kernel] {
 }
 
 def main [] {
-    print "nu jab.nu <build|test|clean> <dir> [--kernel] [--set names]; nu jab.nu run <dir> [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu probe <dir> sdl [--seconds N] [--set names]; nu jab.nu workspace <build|test|run> <ws> [category [name]] [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu workspace probe <ws> sdl <category> <name> [--seconds N]; nu jab.nu watch <ws>; nu jab.nu watched <ws> [--skip N]"
+    print "nu jab.nu <build|test|clean> <dir> [--kernel] [--set names]; nu jab.nu run <dir> [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu probe <dir> sdl [--seconds N] [--set names]; nu jab.nu workspace <build|test|run> <ws> [category [name]] [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu workspace probe <ws> sdl <category> <name> [--seconds N]; nu jab.nu watch <ws> [--skip N]"
 }

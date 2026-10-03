@@ -144,10 +144,11 @@ second's rates as it goes: on Linux the harts as `CPU 0/TCG` and on
 and the main loop under the process name, which is where the host's
 copy and paint of each flip lands; on macOS, whose threads carry no
 names, the first row is the thread that draws the window and the rest
-are numbered. `just watched` then prints one NUON record on the
+are numbered. When the run ends it prints one NUON record on the
 recording, the run as it was (host, QEMU, window, the symbols the
 kernel was built with) and per thread the steady CPU seconds a second
-after the first five, which `--skip` changes, ready to paste. On
+after the first five, which `--skip` changes, a run too short for them
+reported over all it has, ready to paste. On
 macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
