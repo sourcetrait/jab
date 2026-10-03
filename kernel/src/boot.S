@@ -18,9 +18,11 @@ _start:
     li t0, MIDELEG_S_ALL
     csrw mideleg, t0
     csrw mie, zero
-    li t0, MENVCFG_STCE
+    li t0, (MENVCFG_STCE | MENVCFG_CBZE | MENVCFG_CBCFE | MENVCFG_CBIE_FLUSH)
     csrs menvcfg, t0
-    li t0, MCOUNTEREN_CY_TM_IR
+    li t0, MSTATEEN0_ENVCFG
+    csrs mstateen0, t0
+    li t0, MCOUNTEREN_ALL
     csrw mcounteren, t0
     csrr t0, mstatus
     li t1, MSTATUS_MPP_MASK

@@ -46,8 +46,9 @@ The toolchain is found by its install directory, the one holding
 or program, else the workspace's `extern/riscv`, else the tools on
 `PATH`. QEMU is found the same way, by its install directory: an
 `extern/qemu` link beside the program, else the workspace's
-`extern/qemu`, its `bin/qemu-system-riscv64`, else `qemu-system-riscv64`
-on `PATH`; an `extern/qemu` with no binary under it is an error, never a
+`extern/qemu`, its `qemu-system-riscv64` under `bin/` or at its top,
+`.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
+a test alike; an `extern/qemu` with no binary in it is an error, never a
 fall to `PATH`. A program the workspace does not list, `game/fps` the first,
 builds against it: its kernel is built here with the same symbols, and
 the generic disk, the toolchain link, the shims, and discovery are this
@@ -213,7 +214,13 @@ without the model, any before 9.2, is refused with its version and a
 line saying to link `extern/qemu` to a QEMU 11 install, and nothing
 overrides it. The assembler takes the same profile, `-march=rva23u64`
 for a program and `-march=rva23s64` for the kernel, so a source may use
-anything RVA23 carries, vectors included, with no `.option`.
+anything RVA23 carries, vectors included, with no `.option`. The kernel
+lets a program run the cache-block operations, `cbo.zero`, `cbo.clean`,
+`cbo.flush`, and `cbo.inval`, the last as a flush, and read every counter
+the hart has. `time`, at `JAB_TIME_HZ`, is the clock to measure a frame's
+work by; under QEMU's TCG, `cycle` and `instret` both read the host's tick
+counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
+0, since no event is selected and selecting one stays machine mode's.
 `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,
 such as `-trace alsa_* -D trace.log`; the value is split as a shell

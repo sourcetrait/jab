@@ -22,8 +22,10 @@ kmain:
     li t0, SSTATUS_FS_INITIAL | SSTATUS_VS_INITIAL
     csrs sstatus, t0
     csrw sie, zero
-    li t0, SCOUNTEREN_TM
+    li t0, SCOUNTEREN_ALL
     csrw scounteren, t0
+    li t0, (SENVCFG_CBZE | SENVCFG_CBCFE | SENVCFG_CBIE_FLUSH)
+    csrs senvcfg, t0
     call serial_open
 .ifdef DEBUG
     la a0, msg_banner

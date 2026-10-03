@@ -30,5 +30,6 @@ programs = [
   'test/hash',
   'test/png',
   'test/sprite',
-  'test/purity'
+  'test/purity',
+  'test/profile'
 ]

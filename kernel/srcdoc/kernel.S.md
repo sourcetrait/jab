@@ -14,8 +14,9 @@ a port of the same device.
 The kernel reads and writes program memory (a message to print, the
 framebuffer), so SUM. The machine is RVA23, so the program has floating
 point and vectors; their state starts Initial, since Off makes the first
-such instruction an illegal instruction. The program may read the time
-counter.
+such instruction an illegal instruction. The program may read every
+counter the hart has and run the cache-block operations, cbo.inval as a
+flush (riscv.inc), which boot.S opened below machine mode.
 
 The ports come up before the program starts: the API when the run put its
 port on the machine, and under DEBUG the debug channel, first, so the banner

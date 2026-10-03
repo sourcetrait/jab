@@ -12,9 +12,16 @@
 .set SIE_SEIE, (1 << 9)
 
 .set MENVCFG_STCE, (1 << 63)
+.set MENVCFG_CBZE, (1 << 7)
+.set MENVCFG_CBCFE, (1 << 6)
+.set MENVCFG_CBIE_FLUSH, (1 << 4)
+.set SENVCFG_CBZE, (1 << 7)
+.set SENVCFG_CBCFE, (1 << 6)
+.set SENVCFG_CBIE_FLUSH, (1 << 4)
+.set MSTATEEN0_ENVCFG, (1 << 62)
 
-.set MCOUNTEREN_CY_TM_IR, 0x7
-.set SCOUNTEREN_TM, 0x2
+.set MCOUNTEREN_ALL, 0xffffffff
+.set SCOUNTEREN_ALL, 0xffffffff
 
 .set PMP_NAPOT_RWX, 0x1f
 
