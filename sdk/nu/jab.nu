@@ -68,35 +68,51 @@ const machine_rest = [
 ]
 
 # The QEMU a machine runs on: an extern when there is one, else PATH.
-# `extern/qemu` is a QEMU install prefix, the binary under its `bin/`,
-# looked for as the toolchain's `extern/riscv` is, beside `here` (the
-# program) and then in the workspace; one that holds no binary is an
-# error rather than a quiet fall to PATH, since a run on another QEMU is
-# what the link is there to prevent. With no extern, the name, for PATH.
+# `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
+# top, where the Windows installer puts it, looked for as the
+# toolchain's `extern/riscv` is, beside `here` (the program) and then in
+# the workspace; one that holds no binary is an error rather than a
+# quiet fall to PATH, since a run on another QEMU is what the link is
+# there to prevent. With no extern, the name, for PATH.
 def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> string {
     let places = (if $workspace == null { [$here] } else { [$here $workspace] })
+    let file = (exe-name $qemu_name)
     for place in $places {
         let prefix = ($place | path join "extern" "qemu")
         if ($prefix | path type) != null {
-            let binary = ($prefix | path join "bin" $qemu_name)
-            if not ($binary | path exists) {
-                error make {msg: $"($prefix) holds no bin/($qemu_name): link extern/qemu to a QEMU install, the directory with bin/ in it"}
+            let found = ([($prefix | path join "bin" $file) ($prefix | path join $file)] | where {|b| $b | path exists })
+            if ($found | is-empty) {
+                error make {msg: $"($prefix) holds no ($file), in bin/ or at its top: link extern/qemu to a QEMU install"}
             }
-            return $binary
+            return ($found | first)
         }
     }
     $qemu_name
 }
 
-# Where a launch looks for extern/qemu before the workspace: the
-# directory a built image's .target sits in, the program's own for one
-# outside the workspace's members and the workspace for a member; the
-# image's own directory when it lies under no .target.
+# An executable's file name on this host: `<name>.exe` on Windows, which
+# a path checked for the file has to name whole.
+def exe-name [name: string]: nothing -> string {
+    if $nu.os-info.name == "windows" { $name + ".exe" } else { $name }
+}
+
+# Where a launch looks for extern/qemu before the workspace, as a run
+# does: the directory of the program a built image came from. A member's
+# image lies under the workspace's .target at the member's path, any
+# other program's under the program's own .target, and an image under no
+# .target is taken to sit beside its program.
 def image-home [image: path]: nothing -> string {
     let parts = ($image | path expand | path split)
     let marks = ($parts | enumerate | where item == ".target" | get index)
     if ($marks | is-empty) { return ($image | path expand | path dirname) }
-    $parts | first ($marks | last) | path join
+    let mark = ($marks | last)
+    let base = ($parts | first $mark | path join)
+    # past .target: the tree, debug or release, then the program's
+    # workspace-relative path or its name, then the image
+    let relative = ($parts | skip ($mark + 2) | drop 1)
+    if ($relative | is-empty) or not ($base | path join "workspace.jab.toml" | path exists) { return $base }
+    let program = ($base | path join ...$relative)
+    if (member-of $program $base) { $program } else { $base }
 }
 
 # The CPU every machine runs, the RVA23 profile, once the QEMU it runs on
@@ -177,8 +193,9 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # A headless machine prepared and not run: everything a launch sets up
 # before QEMU starts, handed back for whoever runs and drives it, the SDK's
 # own `launch` or a harness that plays interactively. `qemu_binary` is the
-# QEMU it runs on (qemu-binary, beside the program's build tree and then in
-# the workspace), `qemu` the whole argument vector after it, `env` what the
+# QEMU it runs on (qemu-binary, beside the program the image came from and
+# then in the workspace, as a run's), `qemu` the whole argument vector
+# after it, `env` what the
 # process runs under (the evdev shim preloaded when a gamepad rides the
 # fifo), and the
 # rest the paths: the UART's log, QEMU's guest-error log, the screen a
@@ -1017,15 +1034,16 @@ def toolchain [here: path, workspace: oneof<string, nothing>]: nothing -> oneof<
 }
 
 # The tools' command prefix: under a toolchain directory, `bin/<triple>`
-# for the first triple whose `as` is there; on PATH, the first triple
-# whose `as` `which` finds. Untyped because it ends in an error.
+# for the first triple whose `as` is there, `as.exe` on Windows; on PATH,
+# the first triple whose `as` `which` finds. Untyped because it ends in
+# an error.
 def tool-prefix [toolchain: oneof<string, nothing>] {
-    let looked = ($triples | each {|t| $t + "as" } | str join ", ")
+    let looked = ($triples | each {|t| exe-name ($t + "as") } | str join ", ")
     if $toolchain != null {
         let bin = ($toolchain | path join "bin")
         for t in $triples {
             let prefix = ($bin | path join $t)
-            if (($prefix + "as") | path exists) { return $prefix }
+            if (exe-name ($prefix + "as") | path exists) { return $prefix }
         }
         error make {msg: $"no riscv64 binutils under ($bin): looked for ($looked)"}
     }
