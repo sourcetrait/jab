@@ -1,8 +1,3 @@
-# jab_keys.inc: the key codes jab.sys.keyboard.input reports, Linux's own
-# (input-event-codes.h), and the values that come with them. Included
-# by jab.inc.
-
-# What a key event's value means
 .set JAB_KEY_RELEASED, 0
 .set JAB_KEY_PRESSED, 1
 .set JAB_KEY_HELD, 2

@@ -78,11 +78,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $strays [] $"every jab: line in the release kernel is a fault line; not these: ($strays)"
 
     # the table of record and the SDK agree name for name: every call
-    # in doc/syscalls.nuon has a macro of its name in sdk/jab.inc, the
+    # in doc/syscalls.nuon has a macro of its name in sdk/src/jab.inc, the
     # JAB_SYS_ constant spelled from that name carries the table's
     # number, and jab.inc defines no call the table lacks
     let table = (open ($ws | path join "doc" "syscalls.nuon"))
-    let inc = (open --raw ($ws | path join "sdk" "jab.inc") | decode)
+    let inc = (open --raw ($ws | path join "sdk" "src" "jab.inc") | decode)
     let macros = ($inc | parse --regex '(?m)^\.macro (?P<name>jab\.[A-Za-z0-9_.]+)' | get name)
     let numbers = ($inc | parse --regex '(?m)^\.set (?P<sym>JAB_SYS_[A-Z0-9_]+), (?P<n>\d+)' | each {|r| { sym: $r.sym, n: ($r.n | into int) } })
     for row in $table {

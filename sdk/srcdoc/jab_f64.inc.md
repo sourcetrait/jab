@@ -1,5 +1,12 @@
 # jab_f64.inc
 
+Double-precision mathematics as macros expanded in place: no call, no trap.
+Operands are registers, the destination first; a vecN is N consecutive
+doubles at the address in an integer register, and a `reg` form takes its
+values as float registers instead, touching only its destination. The
+scratch set is jab_f32.inc's, ft0-ft7, t0-t2, which a `reg` form leaves
+alone but `reg.norm`.
+
 The double twin of jab_f32.inc, whose mirror carries what the two share:
 macros over calls, bit-pattern constants, the `\@` labels, the scratch set,
 and how test/math measures. A 64-bit pattern costs `li` more, eight

@@ -7,8 +7,9 @@ runs only under QEMU's `virt` machine.
 
 - `workspace.jab.toml` the workspace: the kernel and the programs.
 - `kernel/` the kernel: `kernel.jab.toml`, a `justfile`, sources under
-  `src/`.
-- `sdk/` what a program uses: `jab.inc`, whose `jab.sys.*` macros are
+  `src/`, and each source's `.eye` and `.md` under `srcdoc/`.
+- `sdk/` what a program uses, its sources under `src/` and their `.eye`
+  and `.md` under `srcdoc/`: `jab.inc`, whose `jab.sys.*` macros are
   the kernel's calls, each a trap into it; `jab_f32.inc`,
   `jab_f64.inc`, and `jab_rng.inc`, mathematics and chance as macros
   the program carries and expands in place, never a call and never a
@@ -16,8 +17,8 @@ runs only under QEMU's `virt` machine.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `example/<name>/`, `test/<name>/` programs by category, each with
-  `program.jab.toml`, a `justfile`, `src/main.S`, and its integration
-  test at `test/test.nu`.
+  `program.jab.toml`, a `justfile`, `src/main.S` and its `srcdoc/`, and
+  its integration test at `test/test.nu`.
 - `shim/` the preload shims, a cargo workspace, a crate each under
   `crates/`: `sdl` for the probe and `evdev` for the pad tests.
 - `tool/` the host tools, a cargo workspace, a crate each under
@@ -208,17 +209,18 @@ and no shell ever reads it, so a `*` needs no quoting.
 
 The machine has 4 GiB of RAM, and a program owns nearly all of it: the
 kernel keeps the first 2 MiB and the framebuffer the 8 MiB after, and
-the window from there to the end of RAM is the program's, `sdk/jab.inc`
-naming its base, its size, and the stack top at its end. A program's
-assets ship on a romfs disk the tool builds from the directory its
-manifest names, a virtio-blk device on the PCI Express root the kernel
-brings up itself, BARs and all, since no firmware runs before it; read
-with `jab.sys.romfs.*`. A second disk, serial `mix`, rides beside it on
-every run and launch: the workspace's generic assets, `generic/`
-mirrored to the image's root plus what `generic/manifest.nuon`
-fetches, today the FluidR3 GM and GS soundfonts under `/mix/snd/font`
-with their license under `/doc/license/fluid-soundfont`, fetched into
-`.target/fetch` on first use, verified by sha256, and never committed.
+the window from there to the end of RAM is the program's,
+`sdk/src/jab.inc` naming its base, its size, and the stack top at its
+end. A program's assets ship on a romfs disk the tool builds from the
+directory its manifest names, a virtio-blk device on the PCI Express
+root the kernel brings up itself, BARs and all, since no firmware runs
+before it; read with `jab.sys.romfs.*`. A second disk, serial `mix`,
+rides beside it on every run and launch: the workspace's generic
+assets, `generic/` mirrored to the image's root plus what
+`generic/manifest.nuon` fetches, today the FluidR3 GM and GS soundfonts
+under `/mix/snd/font` with their license under
+`/doc/license/fluid-soundfont`, fetched into `.target/fetch` on first
+use, verified by sha256, and never committed.
 Both asset disks are attached read-only, so a program's write to one
 comes back as the device's error and the image the next run reads is
 the one the tool built; the blank data disk a run carries when a

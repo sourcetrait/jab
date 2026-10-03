@@ -1,5 +1,10 @@
 # jab_f32.inc
 
+Single-precision mathematics as macros expanded in place: no call, no trap.
+Operands are registers, the destination first; a vecN is N consecutive
+singles at the address in an integer register, and a `reg` form takes its
+values as float registers instead, touching only its destination.
+
 Macros rather than calls because of how the machine runs the program: QEMU's
 TCG ends a translation block at a 4 KiB page boundary and at every call, so a
 hot loop that calls a sine pays two block exits, about 45 ns, per call.
@@ -18,7 +23,9 @@ unsigned pattern and the value. Macro-internal labels carry `\@` so a macro
 expands more than once in a function.
 
 The scratch set ft0-ft7, t0-t2 is the whole clobber contract: a caller keeps
-nothing live there across an expansion.
+nothing live there across an expansion. A `reg` form leaves the set alone,
+but for `reg.norm`. The scratch each macro's .eye entry names is what that
+macro writes today, always inside the set; the contract is the set.
 
 Precisions are measured by test/math, which expands every macro over fixed
 inputs in the guest, prints each result as its bit pattern, and holds the
@@ -107,6 +114,6 @@ and the squares touch only their destination, so they may be used on values
 in the scratch set and cost 2 to 4 instructions; the destination must not
 be one of the operands, since the first instruction writes it. `reg.norm`
 scales its three registers in place by their length through ft0, ft1, and
-t0, 13 instructions, a zero vector left as it is as the memory form leaves
-it. Measured by test/math over the same vectors as the memory forms: 5.7e-8
+t0, 13 instructions, a zero vector left as it is, as jab.f64.vec3.norm leaves
+one. Measured by test/math over the same vectors as the memory forms: 5.7e-8
 relative, held under 1e-7.

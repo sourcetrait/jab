@@ -12,7 +12,7 @@ use std/assert
 const FRAMES = 64
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let cap = (open --raw ($env.FILE_PWD | path join ".." ".." ".." "sdk" "jab.inc") | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get 0.cap | into int)
+    let cap = (open --raw ($env.FILE_PWD | path join ".." ".." ".." "sdk" "src" "jab.inc") | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get 0.cap | into int)
     let run = (jab launch --kernel $kernel --image $image --out $out --set $set)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"

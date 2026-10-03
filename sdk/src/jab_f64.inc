@@ -1,38 +1,18 @@
-# Double-precision mathematics as macros expanded in place: no call, no trap.
-# Operands are registers, the destination first; a vecN is N consecutive
-# doubles at the address in an integer register, and a `reg` form takes its
-# values as float registers instead, touching only its destination.
-# Scratch: ft0-ft7, t0-t2, which a `reg` form leaves alone but `reg.norm`.
-
-# Pi.
-# returns
-#   dst f64 0x400921fb54442d18.
 .macro jab.f64.PI dst
     li t0, 0x400921fb54442d18
     fmv.d.x \dst, t0
 .endm
 
-# Two pi.
-# returns
-#   dst f64 0x401921fb54442d18.
 .macro jab.f64.TAU dst
     li t0, 0x401921fb54442d18
     fmv.d.x \dst, t0
 .endm
 
-# Pi over two.
-# returns
-#   dst f64 0x3ff921fb54442d18.
 .macro jab.f64.FRAC_PI_2 dst
     li t0, 0x3ff921fb54442d18
     fmv.d.x \dst, t0
 .endm
 
-# Dot product of two vec3.
-# a address Three doubles.
-# b address Three doubles.
-# returns
-#   dst f64 The dot product.
 .macro jab.f64.vec3.dot dst, a, b
     fld ft0, 0(\a)
     fld ft1, 0(\b)
@@ -45,10 +25,6 @@
     fmadd.d \dst, ft0, ft1, \dst
 .endm
 
-# Squared length of a vec3.
-# a address Three doubles.
-# returns
-#   dst f64 The squared length.
 .macro jab.f64.vec3.sqrlen dst, a
     fld ft0, 0(\a)
     fmul.d \dst, ft0, ft0
@@ -58,10 +34,6 @@
     fmadd.d \dst, ft0, ft0, \dst
 .endm
 
-# Length of a vec3.
-# a address Three doubles.
-# returns
-#   dst f64 The length.
 .macro jab.f64.vec3.len dst, a
     fld ft0, 0(\a)
     fmul.d \dst, ft0, ft0
@@ -72,10 +44,6 @@
     fsqrt.d \dst, \dst
 .endm
 
-# A vec3 scaled to unit length, written at dst.
-# dst address Three doubles written; may be a.
-# a address Three doubles.
-# returns A zero vector is written unchanged.
 .macro jab.f64.vec3.norm dst, a
     fld ft0, 0(\a)
     fmul.d ft2, ft0, ft0
@@ -101,10 +69,6 @@
     fsd ft0, 16(\dst)
 .endm
 
-# Squared length of a vec2.
-# a address Two doubles.
-# returns
-#   dst f64 The squared length.
 .macro jab.f64.vec2.sqrlen dst, a
     fld ft0, 0(\a)
     fmul.d \dst, ft0, ft0
@@ -112,10 +76,6 @@
     fmadd.d \dst, ft0, ft0, \dst
 .endm
 
-# Length of a vec2.
-# a address Two doubles.
-# returns
-#   dst f64 The length.
 .macro jab.f64.vec2.len dst, a
     fld ft0, 0(\a)
     fmul.d \dst, ft0, ft0
@@ -124,31 +84,18 @@
     fsqrt.d \dst, \dst
 .endm
 
-# Dot product of two vec3 in registers.
-# ax f64; ay f64; az f64 The first.
-# bx f64; by f64; bz f64 The second.
-# returns Touches nothing else; dst is none of the operands.
-#   dst f64 The dot product.
 .macro jab.f64.vec3.reg.dot dst, ax, ay, az, bx, by, bz
     fmul.d \dst, \ax, \bx
     fmadd.d \dst, \ay, \by, \dst
     fmadd.d \dst, \az, \bz, \dst
 .endm
 
-# Squared length of a vec3 in registers.
-# x f64; y f64; z f64
-# returns Touches nothing else; dst is none of the operands.
-#   dst f64 The squared length.
 .macro jab.f64.vec3.reg.sqrlen dst, x, y, z
     fmul.d \dst, \x, \x
     fmadd.d \dst, \y, \y, \dst
     fmadd.d \dst, \z, \z, \dst
 .endm
 
-# Length of a vec3 in registers.
-# x f64; y f64; z f64
-# returns Touches nothing else; dst is none of the operands.
-#   dst f64 The length.
 .macro jab.f64.vec3.reg.len dst, x, y, z
     fmul.d \dst, \x, \x
     fmadd.d \dst, \y, \y, \dst
@@ -156,10 +103,6 @@
     fsqrt.d \dst, \dst
 .endm
 
-# A vec3 in registers scaled to unit length in place.
-# x f64; y f64; z f64 Outside ft0 and ft1.
-# returns A zero vector is left as it is. Uses ft0, ft1, t0.
-#   x, y, z The unit vector.
 .macro jab.f64.vec3.reg.norm x, y, z
     fmul.d ft0, \x, \x
     fmadd.d ft0, \y, \y, ft0
@@ -176,19 +119,11 @@
     fdiv.d \z, \z, ft0
 .endm
 
-# Squared length of a vec2 in registers.
-# x f64; y f64
-# returns Touches nothing else; dst is none of the operands.
-#   dst f64 The squared length.
 .macro jab.f64.vec2.reg.sqrlen dst, x, y
     fmul.d \dst, \x, \x
     fmadd.d \dst, \y, \y, \dst
 .endm
 
-# Length of a vec2 in registers.
-# x f64; y f64
-# returns Touches nothing else; dst is none of the operands.
-#   dst f64 The length.
 .macro jab.f64.vec2.reg.len dst, x, y
     fmul.d \dst, \x, \x
     fmadd.d \dst, \y, \y, \dst

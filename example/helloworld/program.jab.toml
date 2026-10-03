@@ -1,5 +1,5 @@
 name = 'helloworld'
 sdk = '../../sdk'
-includes = ['../../sdk']
-link = '../../sdk/program.ld'
+includes = ['../../sdk/src']
+link = '../../sdk/src/program.ld'
 display = 'none'

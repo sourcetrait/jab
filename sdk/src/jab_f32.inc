@@ -1,57 +1,30 @@
-# Single-precision mathematics as macros expanded in place: no call, no trap.
-# Operands are registers, the destination first; a vecN is N consecutive
-# singles at the address in an integer register, and a `reg` form takes its
-# values as float registers instead, touching only its destination.
-# Scratch: ft0-ft7, t0-t2, which a `reg` form leaves alone but `reg.norm`.
-
-# Pi.
-# returns
-#   dst f32 0x40490fdb.
 .macro jab.f32.PI dst
     li t0, 0x40490fdb
     fmv.w.x \dst, t0
 .endm
 
-# Two pi.
-# returns
-#   dst f32 0x40c90fdb.
 .macro jab.f32.TAU dst
     li t0, 0x40c90fdb
     fmv.w.x \dst, t0
 .endm
 
-# Pi over two.
-# returns
-#   dst f32 0x3fc90fdb.
 .macro jab.f32.FRAC_PI_2 dst
     li t0, 0x3fc90fdb
     fmv.w.x \dst, t0
 .endm
 
-# Degrees to radians.
-# src f32 Degrees.
-# returns
-#   dst f32 Radians.
 .macro jab.f32.rad dst, src
     li t0, 0x3c8efa35               # pi/180, 0.0174532924
     fmv.w.x ft0, t0
     fmul.s \dst, \src, ft0
 .endm
 
-# Radians to degrees.
-# src f32 Radians.
-# returns
-#   dst f32 Degrees.
 .macro jab.f32.deg dst, src
     li t0, 0x42652ee1               # 180/pi, 57.2957802
     fmv.w.x ft0, t0
     fmul.s \dst, \src, ft0
 .endm
 
-# Sine.
-# src f32 Radians, any size.
-# returns
-#   dst f32 The sine of src.
 .macro jab.f32.sin dst, src
     li t0, 0x3e22f983               # 1/tau, 0.159154937
     fmv.w.x ft0, t0
@@ -94,10 +67,6 @@
     fmul.s \dst, ft1, ft3
 .endm
 
-# Cosine.
-# src f32 Radians, any size.
-# returns
-#   dst f32 The cosine of src.
 .macro jab.f32.cos dst, src
     li t0, 0x3e22f983               # 1/tau
     fmv.w.x ft0, t0
@@ -141,11 +110,6 @@
     fmv.s \dst, ft3
 .endm
 
-# The angle of the point x, y from the x axis, counter-clockwise.
-# y f32
-# x f32
-# returns Both zero gives zero, and a zero y of either sign reads as zero.
-#   dst f32 Radians, within a half turn either way.
 .macro jab.f32.atan2 dst, y, x
     fabs.s ft0, \y
     fabs.s ft1, \x
@@ -205,11 +169,6 @@
 .Ljab_f32_atan2_done\@:
 .endm
 
-# Dot product of two vec3.
-# a address Three singles.
-# b address Three singles.
-# returns
-#   dst f32 The dot product.
 .macro jab.f32.vec3.dot dst, a, b
     flw ft0, 0(\a)
     flw ft1, 0(\b)
@@ -222,31 +181,18 @@
     fmadd.s \dst, ft0, ft1, \dst
 .endm
 
-# Dot product of two vec3 in registers.
-# ax f32; ay f32; az f32 The first.
-# bx f32; by f32; bz f32 The second.
-# returns Touches nothing else; dst is none of the operands.
-#   dst f32 The dot product.
 .macro jab.f32.vec3.reg.dot dst, ax, ay, az, bx, by, bz
     fmul.s \dst, \ax, \bx
     fmadd.s \dst, \ay, \by, \dst
     fmadd.s \dst, \az, \bz, \dst
 .endm
 
-# Squared length of a vec3 in registers.
-# x f32; y f32; z f32
-# returns Touches nothing else; dst is none of the operands.
-#   dst f32 The squared length.
 .macro jab.f32.vec3.reg.sqrlen dst, x, y, z
     fmul.s \dst, \x, \x
     fmadd.s \dst, \y, \y, \dst
     fmadd.s \dst, \z, \z, \dst
 .endm
 
-# Length of a vec3 in registers.
-# x f32; y f32; z f32
-# returns Touches nothing else; dst is none of the operands.
-#   dst f32 The length.
 .macro jab.f32.vec3.reg.len dst, x, y, z
     fmul.s \dst, \x, \x
     fmadd.s \dst, \y, \y, \dst
@@ -254,10 +200,6 @@
     fsqrt.s \dst, \dst
 .endm
 
-# A vec3 in registers scaled to unit length in place.
-# x f32; y f32; z f32 Outside ft0 and ft1.
-# returns A zero vector is left as it is. Uses ft0, ft1, t0.
-#   x, y, z The unit vector.
 .macro jab.f32.vec3.reg.norm x, y, z
     fmul.s ft0, \x, \x
     fmadd.s ft0, \y, \y, ft0
@@ -274,19 +216,11 @@
     fdiv.s \z, \z, ft0
 .endm
 
-# Squared length of a vec2 in registers.
-# x f32; y f32
-# returns Touches nothing else; dst is none of the operands.
-#   dst f32 The squared length.
 .macro jab.f32.vec2.reg.sqrlen dst, x, y
     fmul.s \dst, \x, \x
     fmadd.s \dst, \y, \y, \dst
 .endm
 
-# Length of a vec2 in registers.
-# x f32; y f32
-# returns Touches nothing else; dst is none of the operands.
-#   dst f32 The length.
 .macro jab.f32.vec2.reg.len dst, x, y
     fmul.s \dst, \x, \x
     fmadd.s \dst, \y, \y, \dst

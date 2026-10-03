@@ -70,7 +70,7 @@ A record is a fixed size, so the next one is always that many bytes on.
 Each field is the width the thing it describes actually is, and it sits
 where its own width wants it, so a field is one load and nothing has to
 be shifted or masked. The sizes and the offsets are named in
-`sdk/jab.inc`; a block record is `JAB_BLOCK_ENTRY` bytes and a romfs
+`sdk/src/jab.inc`; a block record is `JAB_BLOCK_ENTRY` bytes and a romfs
 record is `JAB_ROMFS_ENTRY`.
 
 Fields are named after the thing they come from. A disk's capacity is

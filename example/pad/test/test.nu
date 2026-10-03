@@ -47,11 +47,11 @@ const WALL_LEFT = 0
 const WALL_RIGHT = 491264
 const WALL_TOP = 0
 const WALL_BOTTOM = 276224
-# Linux's codes, as sdk/jab_keys.inc
+# Linux's codes, as sdk/src/jab_keys.inc
 const KEY_D = 32
 const PRESSED = 1
 const RELEASED = 0
-# evdev's East, as sdk/jab_pad.inc, and the least any channel of a
+# evdev's East, as sdk/src/jab_pad.inc, and the least any channel of a
 # button's colour can be
 const BTN_EAST = 305
 const COLOR_FLOOR = 64
