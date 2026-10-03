@@ -14,7 +14,7 @@ simplicity in hardware support and isolation from the host.
 
 Development tools are written in Rust. Build tools are written in Nushell.
 
-Agent-maintained documentation can be found in [UNDERSTOOD.md](./doc/UNDERSTOOD.md).
+Agent-maintained documentation can be found in [UNDERSTOOD.md](./doc/understood/UNDERSTOOD.md).
 
 ## Assembly
 
@@ -31,7 +31,7 @@ for each item documented. They are intended agents use, to initially and
 conservatively read-in to an assembly codebase.
 
 The 'eye-asm' tool can be used to view all signatures within a given src
-directory and, optionally, specific relative file or directoryy.
+directory and, optionally, specific relative file or directory.
 (Eg, `eye-asm ./kernel/src`, `eye-asm ./kerne/src timer.S`)
 
 ## Environment
