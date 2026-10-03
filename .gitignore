@@ -4,3 +4,4 @@
 /.target
 /extern/
 !/extern/.gitignore
+*.eye.stub

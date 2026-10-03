@@ -286,6 +286,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "eye_asm"
+version = "0.0.0-1"
+
+[[package]]
+name = "eye_asm_cli"
+version = "0.0.0-1"
+dependencies = [
+ "eye_asm",
+]
+
+[[package]]
+name = "eye_gen_asm_cli"
+version = "0.0.0-1"
+dependencies = [
+ "eye_asm",
+]
+
+[[package]]
 name = "fdeflate"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

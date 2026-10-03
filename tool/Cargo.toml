@@ -1,13 +1,18 @@
 # The tools: what runs on the host beside a Jab machine and is never
 # shipped on one, one crate each under crates/: jabdisco, the device
-# discovery every launcher asks for the gamepad and the audio output,
-# and robojab, the harness that runs a prepared machine and lets an
-# agent play it a move at a time. A crate declares only its name and
+# discovery every launcher asks for the gamepad and the audio output;
+# robojab, the harness that runs a prepared machine and lets an agent
+# play it a move at a time; and the eye tools, eye_asm with its two
+# binaries, eye-asm printing the .eye files of assembly sources and
+# eye-gen-asm generating them. A crate declares only its name and
 # description; everything else is the workspace's.
 [workspace]
 resolver = "3"
 members = [
     "crates/disco",
+    "crates/eye_asm",
+    "crates/eye_asm_cli",
+    "crates/eye_gen_asm_cli",
     "crates/robojab",
 ]
 
@@ -23,6 +28,7 @@ publish = false
 [workspace.dependencies]
 base64 = "0.23"
 cpal = { version = "0.18", features = ["pulseaudio"] }
+eye_asm = { path = "crates/eye_asm" }
 gilrs = "0.11"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 rmcp = { version = "3.5", features = ["server", "transport-io", "schemars", "macros"] }

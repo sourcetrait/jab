@@ -1,0 +1,10 @@
+[package]
+name = "eye_asm"
+description = "The .eye files of assembly sources: read from a srcdoc tree, generated from the sources, and merged with what an existing .eye already says."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
