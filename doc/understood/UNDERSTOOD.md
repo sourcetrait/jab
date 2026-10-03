@@ -211,7 +211,10 @@ there.
 The CPU is RVA23, `-cpu rva23s64,pmp=true`, on every machine: a QEMU
 without the model, any before 9.2, is refused with its version and a
 line saying to link `extern/qemu` to a QEMU 11 install, and nothing
-overrides it. `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
+overrides it. The assembler takes the same profile, `-march=rva23u64`
+for a program and `-march=rva23s64` for the kernel, so a source may use
+anything RVA23 carries, vectors included, with no `.option`.
+`JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,
 such as `-trace alsa_* -D trace.log`; the value is split as a shell
 would split it, quotes grouping a word with spaces and then removed,

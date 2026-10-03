@@ -70,9 +70,9 @@ and the brightness are carried on by the pixel loop.
 ## frame_vector
 
 As many elements a store as the machine's vector length gives at e32 with
-eight registers grouped, v8 to v15. RVA23 mandates vectors; the rv64 fallback
-lacks them and this faults there, which is why it is built only with --set
-vector.
+eight registers grouped, v8 to v15. RVA23 mandates vectors, and the assembler
+takes them from the program's profile, so no `.option` is needed; built only
+with --set vector.
 
 ## poly
 

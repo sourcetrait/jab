@@ -687,8 +687,6 @@ poly_frame:
     ret
 
 .ifdef VECTOR
-.option push
-.option arch, +v
 frame_vector:
     la t0, frames
     ld t0, 0(t0)
@@ -708,7 +706,6 @@ frame_vector:
     sub t3, t3, t4
     bnez t3, 1b
     ret
-.option pop
 .endif
 
 .section .bss

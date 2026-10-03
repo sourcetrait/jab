@@ -53,6 +53,11 @@ const qemu_name = "qemu-system-riscv64"
 # forever. It is the one CPU a machine runs: QEMU carries it from 9.2,
 # and a QEMU without it is refused rather than run on another model.
 const cpu_profile = "rva23s64,pmp=true"
+# The assembler takes the same profile, so the source may use whatever
+# the CPU carries: the user profile for a program, which runs in U-mode,
+# and the supervisor profile for the kernel.
+const march_program = "-march=rva23u64"
+const march_kernel = "-march=rva23s64"
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
 # on every refresh its cursor blinks.
@@ -1167,7 +1172,7 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     let includes = ($m | get -o includes | default [])
     let include_flags = ($includes | each {|i| ["-I" $i] } | flatten)
     let set_flags = (defsyms $names)
-    let flags = (($include_flags ++ $set_flags ++ [$c.prefix]) | str join " ")
+    let flags = (($include_flags ++ $set_flags ++ [$march_kernel $c.prefix]) | str join " ")
     let elf = ($c.out | path join "jab.elf")
     let stamp = ($c.out | path join "flags")
     cd $c.here
@@ -1182,7 +1187,7 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     # object left by a source since deleted or renamed never rides along
     let objects = (glob src/*.S | sort | each {|f|
         let obj = ($c.out | path join (($f | path parse | get stem) + ".o"))
-        ^$asm ...$include_flags ...$set_flags $f -o $obj
+        ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
         $obj
     })
     for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { rm $stray }
@@ -1197,7 +1202,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let includes = ($m | get -o includes | default [])
     let include_flags = ($includes | each {|i| ["-I" $i] } | flatten)
     let set_flags = (defsyms $names)
-    let flags = (($include_flags ++ $set_flags ++ [$c.prefix]) | str join " ")
+    let flags = (($include_flags ++ $set_flags ++ [$march_program $c.prefix]) | str join " ")
     let image = ($c.out | path join $"($m.name).jab")
     let stamp = ($c.out | path join "flags")
     cd $c.here
@@ -1210,7 +1215,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let objcopy = ($c.prefix + "objcopy")
     let obj = ($c.out | path join $"($m.name).o")
     let elf = ($c.out | path join $"($m.name).elf")
-    ^$asm ...$include_flags ...$set_flags src/main.S -o $obj
+    ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
     ^$ld -T $m.link -nostdlib $obj -o $elf
     ^$objcopy -O binary $elf $image
     $id | save -f $stamp

@@ -43,32 +43,32 @@ call local frame_polygon > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,clo
 call local frame_fixed > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,clobber a0-a7,fa0-fa1 [305:307] :the quad unlit with an integer depth, through poly_frame
 call local frame_integer > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,clobber a0-a7,fa0-fa1 [309:311] :the quad unlit with no float in the span, through poly_frame
 call local frame_lit > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,clobber a0-a7,fa0-fa1 [313:315] :the integer quad with its brightness multiplied into every pixel, through poly_frame
-call local poly_frame flags u64 > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,ends cross 12 f32,clobber a0-a7,fa0-fa1 [317:691] :the depth buffer cleared, then every row of the screen, the quad's span on it filled in blocks of BLOCK pixels, a texel read, a depth compare, and a pixel and depth store when nearer
+call local poly_frame flags u64 > screen JAB_DISPLAY_BASE u32,depth zbuf PIXELS u32,ends cross 12 f32,clobber a0-a7,fa0-fa1 [317:689] :the depth buffer cleared, then every row of the screen, the quad's span on it filled in blocks of BLOCK pixels, a texel read, a depth compare, and a pixel and depth store when nearer
  flags :POLY_FIXED, POLY_INTEGER, and POLY_LIT
-call local frame_vector count frames u64 > screen JAB_DISPLAY_BASE u32 [692:712] :the whole framebuffer one colour through vector stores, built only with --set vector
-bss local frames u64 [716:717] :the frame count, for the routines
-bss local elapsed u64 [718:719] :the mode's ticks
-bss local digits DIGITS_BYTES u8 [720:721] :append_dec's scratch, the digits built backwards from its end
-bss local line LINE_BYTES u8 [722:724] :the UART line
-bss local texture TEX_SIDE*TEX_SIDE u32 [725:726] :the texture
-bss local cross 12 f32 [727:729] :a row's two crossings of the quad, an attribute set each
-bss local zbuf PIXELS u32 [730:731] :the depth buffer, 1/z a pixel as a float or in 6.26
-rodata local name_fill 5 u8 [734:735]
-rodata local name_texture 8 u8 [736:737]
-rodata local name_perspective 12 u8 [738:739]
-rodata local name_polygon 8 u8 [740:741]
-rodata local name_fixed 6 u8 [742:743]
-rodata local name_integer 8 u8 [744:745]
-rodata local name_lit 4 u8 [746:747]
-rodata local name_vector 7 u8 [748:749]
-rodata local name_textureflip 12 u8 [750:751]
-rodata local word_frames 9 u8 [752:753]
-rodata local word_shown 8 u8 [754:755]
-rodata local word_ticks 8 u8 [756:757]
-rodata local word_pixels 9 u8 [758:759]
-rodata local msg_no_display 22 u8 [760:762]
-rodata local poly 24 f32 [763:767] :the quad, at each vertex the screen x and y, 1/z, u/z, v/z, and the brightness
-rodata local k_half f32 [768:769]
-rodata local k_one f32 [770:771]
-rodata local k_sixty_four_k f32 [772:773] :one in 16.16
-rodata local k_depth_scale f32 [774:775] :2^26, 1/z into 6.26
+call local frame_vector count frames u64 > screen JAB_DISPLAY_BASE u32 [690:709] :the whole framebuffer one colour through vector stores, built only with --set vector
+bss local frames u64 [713:714] :the frame count, for the routines
+bss local elapsed u64 [715:716] :the mode's ticks
+bss local digits DIGITS_BYTES u8 [717:718] :append_dec's scratch, the digits built backwards from its end
+bss local line LINE_BYTES u8 [719:721] :the UART line
+bss local texture TEX_SIDE*TEX_SIDE u32 [722:723] :the texture
+bss local cross 12 f32 [724:726] :a row's two crossings of the quad, an attribute set each
+bss local zbuf PIXELS u32 [727:728] :the depth buffer, 1/z a pixel as a float or in 6.26
+rodata local name_fill 5 u8 [731:732]
+rodata local name_texture 8 u8 [733:734]
+rodata local name_perspective 12 u8 [735:736]
+rodata local name_polygon 8 u8 [737:738]
+rodata local name_fixed 6 u8 [739:740]
+rodata local name_integer 8 u8 [741:742]
+rodata local name_lit 4 u8 [743:744]
+rodata local name_vector 7 u8 [745:746]
+rodata local name_textureflip 12 u8 [747:748]
+rodata local word_frames 9 u8 [749:750]
+rodata local word_shown 8 u8 [751:752]
+rodata local word_ticks 8 u8 [753:754]
+rodata local word_pixels 9 u8 [755:756]
+rodata local msg_no_display 22 u8 [757:759]
+rodata local poly 24 f32 [760:764] :the quad, at each vertex the screen x and y, 1/z, u/z, v/z, and the brightness
+rodata local k_half f32 [765:766]
+rodata local k_one f32 [767:768]
+rodata local k_sixty_four_k f32 [769:770] :one in 16.16
+rodata local k_depth_scale f32 [771:772] :2^26, 1/z into 6.26
