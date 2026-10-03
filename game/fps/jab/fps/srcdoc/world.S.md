@@ -1,5 +1,9 @@
 # world.S
 
+The world drawn from the camera: the view flowed through the compiler's
+portals to a screen rectangle a sector, then each reached sector's planes and
+wall pieces drawn within its rectangle over the depth buffer.
+
 The view is flowed through the compiler's portals before any drawing, and
 every sector reached is drawn within a screen rectangle. The flow's queue
 starts with the camera's sector at the whole screen, or every sector at
@@ -21,6 +25,44 @@ can appear, never the visibility: the depth buffer stays and decides
 every pixel, so an opening is never tested against what is drawn, and
 the sampled test that could miss an opening narrower than its stride is
 gone with the allowance that hid such a miss.
+
+Every plane and wall piece, and a masked opening's fill, binds its tiles
+right before its fill (tiles_bind, tile.S): after the mode and the map's
+bind, since the tiled flag rides the lit one, and after the loops'
+projection, which is why the plane's bind sits at the end of its loop
+rather than beside the map's. The frame's tile budget is set beside the
+stats' zeroing, so the first polygons drawn build first.
+
+## k_flow_near_sq_d
+
+1.522 times the near distance, an on-screen point's distance being at most
+that times its depth (the screen's half extents over hz are 1 and 0.5625),
+so an opening whose wall lies further off loses nothing on screen to the
+near plane.
+
+## world_draw
+
+The draw order is the flow's first-reach order, breadth-first from the
+camera's sector, which puts the near sectors first for the depth test;
+a sector reached twice is drawn once. Sprites and actors are drawn within
+their sector's rectangle, which also stops a quad poking through a wall
+from showing in the sector beyond.
+
+The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
+count's are aligned to 32 bytes inside their functions. On a DEBUG build the
+frame is painted magenta first, so a capture shows what no surface reached;
+the release build leaves the frame before. The flow is timed as the portals'
+phase; the sectors are drawn in the order the flow reached them, then the
+sprites and the actors of the sectors drawn.
+
+## world_flow
+
+Every rectangle is emptied and no sector is seen or waiting; the camera's
+sector takes the whole screen, queued, and in no sector every sector does.
+The queue is drained, each sector flowed with its rectangle as it stands,
+into the draw order the first time.
+
+## sector_flow
 
 The opening's rectangle is the projected polygon's extents under the
 fill's own pixel-centre rule, a pixel of slack each side, since a span's
@@ -50,11 +92,16 @@ neighbour the sector's rectangle; the proof map's line pose holds it.
 The draw's own facing test stays strict, since a wall edge-on draws
 nothing.
 
-The draw order is the flow's first-reach order, breadth-first from the
-camera's sector, which puts the near sectors first for the depth test;
-a sector reached twice is drawn once. Sprites and actors are drawn within
-their sector's rectangle, which also stops a quad poking through a wall
-from showing in the sector beyond.
+Facing: the camera on the sector's side of the wall's line, its left from a
+to b; the ends kept as doubles for the cut. On the line within a millimetre,
+which the near case takes: the product's square against the slack's square
+times the run's square. The sector's planes are taken at both ends, for the
+opening's clamp; the near case once a wall. Near, the neighbour takes the
+sector's own rectangle; otherwise the opening is projected and its rectangle
+held within the sector's. An opening flowed grows the neighbour, queued when
+it grew.
+
+## sector_draw
 
 A sector's facing walls are gathered with the squared distance from the eye
 to each wall's nearest point as the key, insertion-sorted into wall_order,
@@ -71,24 +118,23 @@ sector later. The rectangles reach the pixels the depth test rejected,
 which never enter a span now; the overwrite inside the camera's own
 rectangle stays, SpanSort's.
 
-A wall is drawn as pieces between the sectors across it, which the file's
-portals give sorted from the top down: for k over the portals plus one, the
-piece's top is the sector's ceiling for k 0 and portal k-1's sector's floor
-after, its bottom portal k's sector's ceiling or the sector's floor at the
-end, each height taken at both ends of the wall. Above each piece but the
-first lies the opening into portal k-1's sector, which only a masked wall
-draws: its surface filled over the opening in masked mode, the opening
-cut by opening_cut as the flow cuts it, the neighbour's ceiling and floor
-clamped to the sector's where they pass it at both ends, unless the camera
-is within the near distance of the wall, where the opening would clip
-away. A piece is cut where its planes cross along the wall: the quad when
-the top is above the bottom at both ends, the triangle at the end where it
-is.
+The sector's rectangle clips every span of it. The planes: the floor unless
+the camera is below it, the ceiling unless the camera is above it, judged at
+the plane's height under the camera. The walls facing the camera: the camera
+on the sector's side of the wall's line, its left from a to b; each gathered
+with the squared distance to its nearest point as the key, then drawn nearest
+first, so the depth test rejects more of the far ones. The key is the eye's
+offset from a less its share along the run, clamped to the segment, squared;
+each wall is inserted in order of the key and drawn in that order.
 
-A wall's u runs along it from its first vertex and its v down from the
-author's anchor height, the same for every piece of the wall and over its
-openings. The wall's unit direction is a vec2 norm by hand over
-jab.f64.vec2.reg.len, the library carrying no vec2 norm.
+## material_bind
+
+material_bind names the material's mip chain in the polygon beside its
+texture, the table of levels and the levels it has (mip.S), which the
+span's blocks read at their footprint's level (raster.S). The width's
+power of two below it gives the mask and the row shift.
+
+## plane_draw
 
 A plane's and a wall's surface name their surface index and their lumel
 map in the polygon, then run surface_setup, the mode, and lumap_bind in
@@ -103,17 +149,39 @@ the per-polygon list had no reader on the baked path, and the box and the
 cull ran for nothing; a sprite still culls for its one evaluation
 (sprite.S), and the bake culls once a map (light.S).
 
-material_bind names the material's mip chain in the polygon beside its
-texture, the table of levels and the levels it has (mip.S), which the
-span's blocks read at their footprint's level (raster.S).
+The plane is the normal (-a, -b, 1) and the point (0, 0, c), u along x and v
+along y by the surface's scales and offsets. The loops' edges go into one
+list, each loop a polygon of its walls' first vertices at the plane's height.
 
-Every plane and wall piece, and a masked opening's fill, binds its tiles
-right before its fill (tiles_bind, tile.S): after the mode and the map's
-bind, since the tiled flag rides the lit one, and after the loops'
-projection, which is why the plane's bind sits at the end of its loop
-rather than beside the map's. The frame's tile budget is set beside the
-stats' zeroing, so the first polygons drawn build first.
+## piece_polygon
 
-The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
-count's are aligned to 32 bytes inside their functions. On a DEBUG build the
-frame is painted magenta first, so a capture shows what no surface reached.
+The quad; the triangle at the start, the start's top and bottom and the
+crossing along the top; or the triangle at the end.
+
+## wall_surface
+
+A wall's u runs along it from its first vertex and its v down from the
+author's anchor height, the same for every piece of the wall and over its
+openings. The wall's unit direction is a vec2 norm by hand over
+jab.f64.vec2.reg.len, the library carrying no vec2 norm.
+
+The normal and a point; e, the unit direction along the wall, and the
+start's distance; u, the scale along e from the start; v, the scale down
+from the anchor height. The mode comes after the setup, which clears the
+flat flag the mode reads, then the lumel map is bound.
+
+## wall_draw
+
+A wall is drawn as pieces between the sectors across it, which the file's
+portals give sorted from the top down: for k over the portals plus one, the
+piece's top is the sector's ceiling for k 0 and portal k-1's sector's floor
+after, its bottom portal k's sector's ceiling or the sector's floor at the
+end, each height taken at both ends of the wall. Above each piece but the
+first lies the opening into portal k-1's sector, which only a masked wall
+draws: its surface filled over the opening in masked mode, the opening
+cut by opening_cut as the flow cuts it, the neighbour's ceiling and floor
+clamped to the sector's where they pass it at both ends, unless the camera
+is within the near distance of the wall, where the opening would clip
+away. A piece is cut where its planes cross along the wall: the quad when
+the top is above the bottom at both ends, the triangle at the end where it
+is.

@@ -1,17 +1,12 @@
-# The Jab FPS map, <name>.jabfps.map, as byte offsets, and the program's
-# limits on what a map may hold.
 .set MAP_MAGIC, 0x0042414a          # JAB and a zero
 .set MAP_MAGIC_AT, 0
 .set MAP_SECTION_COUNT, 4
 .set MAP_HEADER_SIZE, 8
-# A directory entry: the kind, the offset from the file's start, the
-# record size, the record count
 .set ENTRY_KIND, 0
 .set ENTRY_OFFSET, 4
 .set ENTRY_SIZE, 8
 .set ENTRY_COUNT, 12
 .set ENTRY_BYTES, 16
-# The kinds
 .set KIND_NAMES, 1
 .set KIND_MATERIALS, 2
 .set KIND_VERTICES, 3
@@ -23,17 +18,12 @@
 .set KIND_AMBIENTS, 9
 .set KIND_SECTOR_LIGHTS, 10
 .set KIND_COUNT, 10
-# A material: its name, an offset into the names table, the romfs stem
-# the texture loads from with .png appended; flags
 .set MATERIAL_NAME, 0
 .set MATERIAL_FLAGS, 4
 .set MATERIAL_SIZE, 8
-# A vertex: x, y
 .set VERTEX_X, 0
 .set VERTEX_Y, 4
 .set VERTEX_SIZE, 8
-# A surface: the material or -1, the scales in repeats a metre, the
-# offsets in repeats, flags (bit 0 solid, bit 1 masked, bit 2 sky)
 .set SURFACE_MATERIAL, 0
 .set SURFACE_U_SCALE, 4
 .set SURFACE_V_SCALE, 8
@@ -44,9 +34,6 @@
 .set SURFACE_SOLID, 1
 .set SURFACE_MASKED, 2
 .set SURFACE_SKY, 4
-# A sector: the floor and ceiling planes as a, b, c with z = a x + b y
-# + c; the two surfaces; the loops, consecutive; the bounds; the tag;
-# the ambient or -1; the light list, consecutive in the sector lights
 .set SECTOR_FLOOR, 0
 .set SECTOR_CEILING, 12
 .set SECTOR_FLOOR_SURFACE, 24
@@ -65,13 +52,9 @@
 .set PLANE_A, 0
 .set PLANE_B, 4
 .set PLANE_C, 8
-# A loop: its walls, consecutive in order around it
 .set LOOP_FIRST_WALL, 0
 .set LOOP_WALL_COUNT, 4
 .set LOOP_SIZE, 8
-# A wall: vertex a to vertex b with its sector on the left; the
-# surface; the anchor, the world height where v is 0; its portals,
-# consecutive and sorted from the top down; the tag
 .set WALL_A, 0
 .set WALL_B, 4
 .set WALL_SECTOR, 8
@@ -81,14 +64,9 @@
 .set WALL_PORTAL_COUNT, 44
 .set WALL_TAG, 48
 .set WALL_SIZE, 52
-# A portal: the sector across and its wall running the edge back
 .set PORTAL_SECTOR, 0
 .set PORTAL_WALL, 4
 .set PORTAL_SIZE, 8
-# An entity: the class, the position, the angles in degrees, the size,
-# the material or -1, the colour, the radius, the spread, flags (bit 0
-# facing the camera, bit 1 flat, bit 2 two-sided, bit 3 solid), the
-# tag, the target or -1, the sector
 .set ENTITY_CLASS, 0
 .set ENTITY_X, 4
 .set ENTITY_Y, 8
@@ -119,12 +97,9 @@
 .set ENTITY_FLAT, 2
 .set ENTITY_TWO_SIDED, 4
 .set ENTITY_SOLID, 8
-# An ambient: its name, the MIDI's romfs stem
 .set AMBIENT_NAME, 0
 .set AMBIENT_SIZE, 4
-# A sector light: an entity index
 .set SECTOR_LIGHT_SIZE, 4
-# What a map may hold in this build, each a number to raise
 .set MAX_SECTORS, 1024
 .set MAX_LOOPS, 4096
 .set MAX_WALLS, 8192

@@ -1,17 +1,5 @@
-# The lit texture cached a surface at a time, in levels: a surface's
-# atlas a level, a tile one lumel cell at the texture's resolution at
-# level 0 and half a side each level after, each level 0 texel the
-# texture's times the lumel brightness bilinear across the cell and each
-# coarser texel the average of four below it; a surface is built whole, a
-# level at a time from the finest, under a budget a frame, and a lit span
-# reads the levels built whole in place of the texture and the map; the
-# arena reset whole when an atlas does not fit
-
 .section .text
 
-# Every surface's tiles forgotten and the arena emptied: at load, and when
-# an atlas does not fit
-# returns Clobbers t0, t1
 tiles_reset:
     la t0, tile_cursor
     la t1, tile_arena
@@ -25,12 +13,6 @@ tiles_reset:
     bltu t0, t1, 1b
     ret
 
-# The lit, mapped polygon in hand bound to its tiles: the atlases reserved
-# on first sight, the surface's next cells built at the level in hand
-# under the frame's budget, the padding columns stepped over, and the
-# mode's tiled flag and the read's fields set once a level is whole; a
-# surface whose atlas is too large stays on the lit loop
-# returns Clobbers t0 to t6, a0 to a7
 tiles_bind:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -44,7 +26,6 @@ tiles_bind:
     beqz s2, 9f
     ld t1, LUMAP_BASE(s2)
     beqz t1, 9f
-    # the record at the map's index
     la t1, lumaps
     sub t1, s2, t1
     li t2, LUMAP_SIZE
@@ -61,10 +42,6 @@ tiles_bind:
 2:
     ld t1, TILE_BASE(s3)
     bltz t1, 9f
-    # the next cells at the level in hand while the budget holds: a
-    # level 0 cell costs its square of the texture's texels, a coarser
-    # one four reads a texel of its own; a level whole moves the hand to
-    # the next, and a cell the budget cannot hold whole waits
 3:
     ld t1, TILE_READY(s3)
     ld t2, TILE_LEVELS(s3)
@@ -98,8 +75,6 @@ tiles_bind:
     sd t1, STAT_TILES_BUILT(t0)
     ld t1, TILE_CURSOR(s3)
     addi t1, t1, 1
-    # a column at the map's width is padding: the cursor moves on to
-    # the next row's first cell, so no padding tile is built
     ld t2, TILE_COLS_SHIFT(s3)
     li t3, 1
     sll t3, t3, t2
@@ -151,15 +126,6 @@ tiles_bind:
     addi sp, sp, 32
     ret
 
-# A surface's atlases, one a level, reserved from the arena: the cells
-# across and down are the map's nodes, the columns padded to a power of
-# two so a cell row is a shift, the rows as they are; the levels are
-# TILE_LEVEL_COUNT or k + 1, the fewer, each atlas a quarter of the one
-# before; a level 0 atlas past TILE_ATLAS_MAX marks the record never;
-# atlases the arena cannot hold reset it first
-# a0 address The record
-# a1 address The map
-# returns Clobbers t0 to t6, a2 to a6
 tiles_alloc:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -190,7 +156,6 @@ tiles_alloc:
     sd a3, TILE_BASE(a0)
     j 9f
 22:
-    # the atlases' bytes over the levels, each a quarter of the last
     mv a6, t0
     li a3, 1
 23:
@@ -208,8 +173,6 @@ tiles_alloc:
     li a6, TILE_ARENA_BYTES
     add a5, a5, a6
     bleu t4, a5, 6f
-    # the arena full: emptied, every surface forgotten, and this one
-    # reserved at its start; counted for the frame line
     la t4, stats
     ld t5, STAT_TILE_RESETS(t4)
     addi t5, t5, 1
@@ -224,7 +187,6 @@ tiles_alloc:
     sd a4, TILE_LEVELS(a0)
     sd zero, TILE_READY(a0)
     sd zero, TILE_CURSOR(a0)
-    # each level's atlas from the arena's cursor
     la t6, tile_cursor
     ld t4, 0(t6)                    # the arena's cursor
     ld t2, LUMAP_K(a1)
@@ -248,16 +210,6 @@ tiles_alloc:
     addi sp, sp, 16
     ret
 
-# One cell of the surface in hand built into its level 0 tile: the
-# brightness at each texel bilinear across the cell from its four nodes,
-# the far nodes the greatest where the cell is the last, stepped along a
-# row by each lane's change over the cell's texels; the texture's texel
-# there scaled by it, each channel as the lit loop scales one, into the
-# tile
-# a0 address The record
-# a1 address The map
-# a2 int The cell's tile index, its column in the low TILE_COLS_SHIFT bits
-# returns Clobbers t0 to t6, a0 to a7
 .balign CODE_PAGE
 tile_build:
     addi sp, sp, -144
@@ -283,7 +235,6 @@ tile_build:
     ld s9, LUMAP_K(s3)              # k
     li s8, 1
     sll s8, s8, s9                  # the cell's texels a side
-    # the four nodes, the far ones the greatest at the map's end
     ld t1, LUMAP_BASE(s3)
     ld t2, LUMAP_W(s3)
     slli t2, t2, 3                  # a row's bytes
@@ -315,7 +266,6 @@ tile_build:
     add t6, t1, t5
     ld t3, 0(t6)
     sd t3, 24(sp)                   # below right
-    # the tile by its index, and the cell's first texel
     ld t1, TILE_BASE(s2)
     slli t4, s9, 1
     addi t4, t4, 2
@@ -326,8 +276,6 @@ tile_build:
     li s7, 0                        # the row
 10:
     bgeu s7, s8, 90f
-    # the brightness at the row's start and end, the nodes weighted by
-    # the row's fraction in 256ths, the lanes whole
     slli t0, s7, 8
     srl t0, t0, s9                  # the fraction
     li t1, 256
@@ -342,8 +290,6 @@ tile_build:
     ld t5, 24(sp)
     mul t5, t5, t0
     add t4, t4, t5                  # the end
-    # the step a texel: each lane's change over the cell's texels,
-    # toward zero so no lane runs past its end, packed again
     li a0, ((1 << CHANNEL_BITS) - 1)
     and a5, t3, a0
     and a6, t4, a0
@@ -363,7 +309,6 @@ tile_build:
     div a6, a6, s8
     slli a6, a6, (2 * CHANNEL_BITS)
     add s10, s10, a6
-    # the texture's row
     la t0, poly
     ld a1, POLY_TEX(t0)
     ld a2, POLY_VMASK(t0)
@@ -430,16 +375,6 @@ tile_build:
     addi sp, sp, 144
     ret
 
-# One cell of the surface in hand built into its tile at a coarser level
-# from the level below: each texel's colour the mean of the two by two
-# texels under it weighted by their alphas, a channel at a time, and its
-# alpha their mean scaled by the material's factor for the level, so the
-# level passes the masked test about where the texture does
-# a0 address The record
-# a1 address The map
-# a2 int The cell's tile index
-# a3 int The level, 1 or more
-# returns Clobbers t0 to t6, a0 to a7
 tile_shrink:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -466,7 +401,6 @@ tile_shrink:
     sll t6, a2, t2
     add s3, s3, t6                  # its tile
     slli s5, s4, 3                  # the finer tile's row pitch in bytes, twice the texels
-    # the level's alpha scale of the material bound
     la t0, poly
     lw t0, POLY_MATERIAL(t0)
     li t1, ALPHA_MATERIAL_SIZE
@@ -514,19 +448,6 @@ tile_shrink:
     addi sp, sp, 80
     ret
 
-# Every material's alpha coverage by level of its chain, the map's and
-# the engine's images', and the scale that holds it, into
-# material_alpha: level 0's share of texels at or above
-# the pass is the target; each coarser level's alphas are the means of
-# the level before, as tile_shrink makes them, and the threshold T whose
-# share at or above it lies nearest the target becomes the level's scale,
-# ceil(2^23 / T), so the scaled means pass exactly where the raw ones
-# reach T. The least error wins, a tie goes to the lower share, and among
-# equal shares to the T nearest the pass, so a texture whose levels pass
-# as the texture does keeps one. A texture full or empty at the pass
-# stays so at every level and keeps one, as does one under eight a side
-# or past the scratch planes. A line a material under full coverage on a
-# debug build
 alphas_measure:
     addi sp, sp, -128
     sd ra, 120(sp)
@@ -540,7 +461,6 @@ alphas_measure:
     sd s9, 56(sp)
     sd s10, 48(sp)
     sd s11, 40(sp)
-    # every scale one
     la t0, material_alpha
     li t1, (MAX_MATERIALS * ALPHA_MATERIAL_SIZE)
     add t1, t1, t0
@@ -578,7 +498,6 @@ alphas_measure:
     srli t0, s8, 2
     li t1, ALPHA_PLANE_BYTES
     bgtu t0, t1, 8f
-    # level 0: the count of texels at or above the pass
     call alpha_hist_clear
     addi t0, s5, (JAB_SPRITE_PIXELS + 3)
     mv t1, s8
@@ -605,8 +524,6 @@ alphas_measure:
     sd zero, 24(t0)
     beq s9, s8, 8f                  # full at every level: one, no line
     beqz s9, 7f                     # empty at every level: one
-    # the levels: the source the texture's alphas, four bytes apart, then
-    # the plane just made, a byte apart
     addi s10, s5, (JAB_SPRITE_PIXELS + 3)
     li s11, 4
     sd s6, 0(sp)                    # the level's width
@@ -636,7 +553,6 @@ alphas_measure:
     mul a0, a0, a1                  # the level's texels
     sd a0, 32(sp)
     call alpha_search
-    # the scale, ceil(2^23 / T), stored for the level
     li t0, ALPHA_SCALE_TOP
     add t0, t0, a0
     addi t0, t0, -1
@@ -645,7 +561,6 @@ alphas_measure:
     slli t2, t1, 2
     add t2, t2, s4
     sw t0, 0(t2)
-    # the level's share
     li t2, ALPHA_SHARE
     mul a1, a1, t2
     ld t2, 32(sp)
@@ -654,7 +569,6 @@ alphas_measure:
     slli t4, t1, 3
     add t3, t3, t4
     sd a1, 0(t3)
-    # the plane scaled in place and capped, the next level's source
     ld t1, 24(sp)
     ld t2, 32(sp)
     add t2, t2, t1                  # past the plane's last
@@ -677,12 +591,10 @@ alphas_measure:
     j 4b
 7:
 .ifdef DEBUG
-    # the line: the material's name, the shares by level, the scales
     la a0, line
     la a1, msg_alpha
     call append_str
     sd a0, 32(sp)
-    # the map material's name, or the engine's image by its frame
     section_count KIND_MATERIALS, t0
     bgeu s3, t0, 71f
     mv a0, s3
@@ -756,8 +668,6 @@ alphas_measure:
     addi sp, sp, 128
     ret
 
-# The counts of each alpha value emptied
-# returns A leaf; clobbers t0, t1
 alpha_hist_clear:
     la t0, alpha_hist
     li t1, 256
@@ -768,9 +678,6 @@ alpha_hist_clear:
     bnez t1, 1b
     ret
 
-# The count of alphas at or above the pass in the histogram
-# returns A leaf; clobbers t0 to t2
-#   a0 The count
 alpha_hist_pass:
     la t0, alpha_hist
     addi t0, t0, (ALPHA_PASS * 8)
@@ -784,14 +691,6 @@ alpha_hist_pass:
     bnez t1, 1b
     ret
 
-# A level's alphas from the level before, each the mean of the two by two
-# under it, into the plane, and the histogram of the plane's values
-# a0 int The level's width
-# a1 int Its height
-# a2 address The plane written
-# s10 address The level before's first alpha
-# s11 int The bytes between its alphas
-# returns A leaf; clobbers t0 to t6, a3 to a5
 alpha_shrink:
     la t1, alpha_hist
     li t2, 256
@@ -842,16 +741,6 @@ alpha_shrink:
 9:
     ret
 
-# The threshold whose share of the level's alphas at or above it lies
-# nearest the texture's target share, over the histogram: from 256, which
-# passes nothing, down to 1, the least error in share wins, a tie the
-# lower share, equal shares the threshold nearest the pass
-# a0 int The level's texels
-# s8 int The texture's texels
-# s9 int The texture's count at or above the pass
-# returns A leaf; clobbers t0 to t5, a2 to a5
-#   a0 The threshold
-#   a1 The count at or above it
 alpha_search:
     la t0, alpha_hist
     li t1, 256                      # the threshold
@@ -897,11 +786,6 @@ alpha_search:
     mv a1, a4
     ret
 
-# Every lumel of every map set to the full brightness, one on each lane
-# in a lumel's 256ths, for a debug build's console: a capture then reads
-# the texture sampled as the lit one samples it, and the lit over it is
-# the light alone
-# returns Clobbers t0 to t5
 lumels_bright:
     li t2, 256
     slli t3, t2, CHANNEL_BITS
@@ -946,27 +830,20 @@ word_of_scale:
 
 .section .bss
 .balign 8
-# The arena's next free byte; the frame's budget left, in texels, and
-# the budget a frame starts with, TILE_BUDGET until the console lifts it
 tile_cursor:
     .skip 8
 tile_budget:
     .skip 8
 tile_budget_frame:
     .skip 8
-# Every surface's tiles, at the map's index
 tilemaps:
     .skip (LUMAP_COUNT * TILE_SIZE)
-# Each material's alpha scale a level, 16.16
 material_alpha:
     .skip (MAX_MATERIALS * ALPHA_MATERIAL_SIZE)
-# The search's scratch: the counts of each alpha value, the shares by
-# level for the line, and two planes a level's alphas alternate between
 alpha_hist:
     .skip (256 * 8)
 alpha_cover:
     .skip (MIP_LEVELS * 8)
-# The chain's levels of the material in hand, the scales to find
 alpha_chain_levels:
     .skip 8
 alpha_plane_a:

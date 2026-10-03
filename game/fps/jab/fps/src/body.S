@@ -1,7 +1,3 @@
-# The body under the camera and under every android: a capsule walked along
-# the level forward and right, held off the walls and the other bodies, on
-# the floor plane of its sector.
-
 .section .rodata
 .balign 8
 k_body_radius_d:
@@ -24,11 +20,6 @@ k_walk_speed:
 
 .section .text
 
-# The player's feet moved for the frame, then the walls, the sector, the
-# floor, and the eye placed.
-# fa0 f32 The seconds.
-# fa1 f32 The strafe throw, -1 to 1.
-# fa2 f32 The forward throw.
 body_move:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -47,7 +38,6 @@ body_move:
     fmv.s fs4, fa0                  # the seconds, single
     fsw fa1, 0(sp)
     fsw fa2, 4(sp)
-    # the level forward and right from the yaw
     la t0, camera
     flw fa0, CAM_YAW(t0)
     jab.f32.cos ft8, fa0
@@ -111,16 +101,6 @@ body_move:
     addi sp, sp, 112
     ret
 
-# The feet placed after a step: the walls of their sector twice over, the
-# other bodies, the sector followed, then the floor met and the fall.
-# a0 int The sector the feet were in.
-# a1 address The fall speed, a double.
-# a2 address The actor walking, 0 for the player.
-# fa0 f32 The seconds.
-# fs0 f64 The feet's x; fs1 y; fs2 z.
-# returns In no sector nothing holds the body.
-#   fs0, fs1, fs2 The feet placed.
-#   a0 The sector, -1 when none holds them.
 feet_move:
     addi sp, sp, -96
     sd ra, 88(sp)
@@ -172,7 +152,6 @@ feet_move:
 8:
     ld a0, 24(sp)
     call bodies_push
-    # the sector followed from the moved feet, at the eye's height
     mv a0, s2
     fmv.d fa0, fs0
     fmv.d fa1, fs1
@@ -183,7 +162,6 @@ feet_move:
     mv s2, a0
     section_count KIND_SECTORS, t1
     bgeu s2, t1, 9f
-    # the floor met
     mv a0, s2
     li a1, 0
     fmv.d fa0, fs0
@@ -195,7 +173,6 @@ feet_move:
     fadd.d ft1, fs3, ft0            # a step above the floor
     flt.d t1, ft1, fs2
     beqz t1, 5f
-    # the floor lies further below: falling
     fld ft2, 0(s6)
     la t1, k_body_gravity_d
     fld ft3, 0(t1)
@@ -226,11 +203,6 @@ feet_move:
     addi sp, sp, 96
     ret
 
-# The feet at fs0, fs1, fs2 pushed out of every other body in the plan:
-# every solid android but the walker, and the player's when the walker is
-# an android.
-# a0 address The walker, 0 for the player.
-# returns Clobbers t2 to t5, ft0 to ft7.
 bodies_push:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -271,11 +243,6 @@ bodies_push:
     addi sp, sp, 16
     ret
 
-# The feet at fs0, fs1, fs2 pushed out of the body at ft0, ft1, ft2 to twice
-# the radius in the plan when within it and the heights overlap; two on one
-# spot part eastward.
-# ft0 f64 Its feet's x; ft1 y; ft2 z.
-# returns Clobbers t2, t3, ft3 to ft7.
 body_push:
     fsub.d ft3, fs2, ft2
     fabs.d ft3, ft3
@@ -307,10 +274,6 @@ body_push:
 9:
     ret
 
-# The feet at fs0, fs1, fs2 pushed out of a wall when it blocks the body and
-# lies within its radius.
-# a0 int The wall.
-# returns Clobbers t0 to t6, a0 to a5, ft0 to ft11, fa0 to fa3; fs5 to fs7.
 wall_push:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -355,7 +318,6 @@ wall_push:
     fld ft8, 0(t0)
     fle.d t1, ft8, ft9
     bnez t1, 9f                     # clear of the wall
-    # does the wall block: its surface, then any sector across it
     lwu t1, (WALL_SURFACE + SURFACE_FLAGS)(s4)
     andi t1, t1, SURFACE_SOLID
     bnez t1, 5f
@@ -373,8 +335,6 @@ wall_push:
     call portal_at
     lwu a5, PORTAL_SECTOR(a0)       # the sector across
     sd a5, 16(sp)
-    # admitted when its floor at the point is at most a step above the
-    # feet and its ceiling leaves the body's height over that floor
     mv a0, a5
     li a1, 0
     fmv.d fa0, fs5
@@ -403,8 +363,6 @@ wall_push:
     sd a1, 0(sp)
     j 1b
 5:
-    # pushed out along the nearest point's normal, or the wall's when
-    # the feet sit on the wall
     fsub.d ft4, fs0, fs5
     fsub.d ft5, fs1, fs6
     jab.f64.vec2.reg.len ft9, ft4, ft5  # the distance

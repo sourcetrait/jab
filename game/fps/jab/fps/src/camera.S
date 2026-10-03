@@ -1,7 +1,3 @@
-# The camera: the eye and its yaw, pitch, and roll, with the basis of right,
-# up, and forward derived from the angles each frame; the pad's look and
-# walk; the camera's sector; the records over the API.
-
 .section .rodata
 .balign 4
 k_turn_speed:
@@ -27,7 +23,6 @@ k_sky_turns:
 
 .section .text
 
-# The camera at the map's first spawn, facing its yaw and pitch, roll 0.
 camera_spawn:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -59,9 +54,6 @@ camera_spawn:
     addi sp, sp, 16
     ret
 
-# The basis from the angles: forward (cos p cos y, cos p sin y, sin p), right
-# (sin y, -cos y, 0) and up = right x forward, both turned by the roll; the
-# camera as doubles into camera_d for the surface mathematics.
 camera_basis:
     addi sp, sp, -48
     fsd fs0, 40(sp)
@@ -81,13 +73,11 @@ camera_basis:
     jab.f32.sin fs4, fa0            # sr
     jab.f32.cos fs5, fa0            # cr
     la t0, camera
-    # forward
     fmul.s ft0, fs3, fs1
     fsw ft0, (CAM_FORWARD + 0)(t0)
     fmul.s ft0, fs3, fs0
     fsw ft0, (CAM_FORWARD + 4)(t0)
     fsw fs2, (CAM_FORWARD + 8)(t0)
-    # level right (sy, -cy, 0) and up (-cy sp, -sy sp, cp)
     fmv.s ft0, fs0
     fneg.s ft1, fs1
     fmul.s ft3, fs1, fs2
@@ -95,7 +85,6 @@ camera_basis:
     fmul.s ft4, fs0, fs2
     fneg.s ft4, ft4
     fmv.s ft5, fs3
-    # turned by the roll: right' = right cr - up sr, up' = up cr + right sr
     fmul.s ft6, ft0, fs5
     fnmsub.s ft6, ft3, fs4, ft6
     fsw ft6, (CAM_RIGHT + 0)(t0)
@@ -113,7 +102,6 @@ camera_basis:
     fsw ft6, (CAM_UP + 4)(t0)
     fmul.s ft6, ft5, fs5
     fsw ft6, (CAM_UP + 8)(t0)
-    # the camera as doubles, a float at a time
     la t1, camera_d
     li t2, (CAM_SIZE / 4)
 1:
@@ -133,8 +121,6 @@ camera_basis:
     addi sp, sp, 48
     ret
 
-# The right stick's axis codes into right_x and right_y: Z and RZ when the
-# pad has a Z, else RX and RY.
 camera_axes:
     la a0, axis_record
     li a1, JAB_ABS_Z
@@ -152,10 +138,6 @@ camera_axes:
     sw t2, 0(t0)
     ret
 
-# A pad axis as -1 to 1: 0 within the dead zone, the rest rescaled to 1.
-# a0 int The axis code.
-# returns Clobbers t0 to t2, ft0 to ft2.
-#   fa0 f32 The throw.
 axis:
     la t0, pad_state
     slli t1, a0, 1
@@ -182,9 +164,6 @@ axis:
     fsgnj.s fa0, ft1, fa0
     ret
 
-# One frame of the pad: the trigger fires, the right stick turns the yaw and
-# the pitch, the left stick walks the body; no pad, the body meets the floor.
-# fa0 f32 The seconds since the frame before.
 camera_look:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -198,7 +177,6 @@ camera_look:
     la t0, pad_state
     jab.sys.pad.read t0
     beqz a0, 1f
-    # no pad: the body stands where it is
     fmv.s fa0, fs0
     la t0, k_zero
     flw fa1, 0(t0)
@@ -206,8 +184,6 @@ camera_look:
     call body_move
     j 9f
 1:
-    # the buttons pressed since the frame before, and every press among
-    # the events since, so a press released within the frame is kept
     la t0, pad_state
     lwu t1, JAB_PAD_KEYS(t0)
     la t0, pad_prev
@@ -252,7 +228,6 @@ camera_look:
     jab.f32.PI ft8
     jab.f32.TAU ft9
     la t3, camera
-    # the yaw, counter-clockwise from east, so a right turn takes from it
     la t1, k_turn_speed
     flw ft0, 0(t1)
     fmul.s ft0, fs3, ft0
@@ -269,7 +244,6 @@ camera_look:
     fadd.s ft1, ft1, ft9
 3:
     fsw ft1, CAM_YAW(t3)
-    # the pitch, within its limit
     la t1, k_look_speed
     flw ft0, 0(t1)
     fmul.s ft0, fs4, ft0
@@ -282,7 +256,6 @@ camera_look:
     fneg.s ft2, ft2
     fmax.s ft1, ft1, ft2
     fsw ft1, CAM_PITCH(t3)
-    # the walk: the body moved by the left stick's throws
     fmv.s fa0, fs0
     fmv.s fa1, fs1
     fmv.s fa2, fs2
@@ -298,8 +271,6 @@ camera_look:
     addi sp, sp, 64
     ret
 
-# cam_sector followed to the sector holding the eye, from the one it was in;
-# none stays none until one holds it.
 camera_locate:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -319,8 +290,6 @@ camera_locate:
     addi sp, sp, 16
     ret
 
-# The sky's offsets for the frame from the yaw and pitch, repeats in 16.16.
-# returns Clobbers t0, t1, ft0, ft1.
 sky_setup:
     la t0, camera
     la t1, k_sky_turns
@@ -342,7 +311,6 @@ sky_setup:
     sd t1, 0(t0)
     ret
 
-# The state record over the API.
 state_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -361,9 +329,6 @@ state_report:
     addi sp, sp, 16
     ret
 
-# An event record over the API, its fields over the state's.
-# a0 int The kind.
-# a1 to a5 int The fields.
 event_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -381,9 +346,6 @@ event_report:
     addi sp, sp, 16
     ret
 
-# The state's fields into report_record: the sector, the eye, the angles in
-# degrees, the last frame's drawing and game microseconds.
-# returns Clobbers t0, t3 to t5, ft0, ft8.
 report_fill:
     la t3, report_record
     la t4, cam_sector

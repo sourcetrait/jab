@@ -1,5 +1,13 @@
 # tile.S
 
+The lit texture cached a surface at a time, in levels: a surface's atlas a
+level, a tile one lumel cell at the texture's resolution at level 0 and half a
+side each level after, each level 0 texel the texture's times the lumel
+brightness bilinear across the cell and each coarser texel the average of
+four below it; a surface is built whole, a level at a time from the finest,
+under a budget a frame, and a lit span reads the levels built whole in place
+of the texture and the map; the arena reset whole when an atlas does not fit.
+
 The lit loop's cost over the unlit loop's is its three channel
 multiplies and the unpacking around them, about twenty ops a pixel, and
 its sampling of the lumel map once an interval; a tile pays them once.
@@ -30,6 +38,49 @@ consecutive rows then sit an image row apart, kilobytes and a page
 each; and the measurement that decided this cut, the frame after a
 reset with nothing tiled costing 3 to 6 ms a view over no binds, the
 per-block judgement and marking alone.
+
+### The levels
+
+A tile is built at one of the levels, each half a side of the one
+before. The block picks its level from its texel step a pixel, the
+largest of the step along the span and the step down a row on each
+axis, so a block reads about a texel a pixel from its level and the
+spans a row apart read the same lines: the fourth cut judged nearness
+along the span alone, and a receding floor whose rows sat four texels
+apart along the screen's rows still read level 0, so the spans a row
+apart shared no cache lines and every pixel fetched one, Astra's point.
+The step down a row is measured at the span's two ends, a divide each,
+and interpolated along it, so a block's level costs about twenty-five
+ops, and the only bound on it is the levels the surface has whole. The
+seventh cut bounded it further by two levels taken at the span's ends,
+each the larger of the row step there and the step along the span, the
+end's coordinate less the start's over the pixels, an average over the
+whole span; where the row steps at both ends sat under that average,
+the common case on a wall receding into the distance, the two bounds
+met at the average's level and every block of the span took it, near
+blocks blurred and far blocks read a finer level than their step and
+missed the cache for it, Astra's finding on the seventh cut. The bounds
+added nothing a correct level needs and cost two divides a span. A
+level 1 tile and up is built from the level below by averaging two by
+two at four reads a texel, the colour weighted by alpha and the alpha
+scaled for its coverage (tile_shrink); the fifth cut box-filtered the
+texture at every level from the full square, which read every source
+texel for every level.
+
+### What the data costs
+
+With the hit path's work under what it saves, measured by pinning every
+tile read to one cache-hot tile (the garage 19.9 ms against 20 to 21
+with no binds), the garage's remaining 7 ms is the tile data: a floor's
+spans at yaw 0 walk across the tile rows and read sixteen lines a
+block, the spans a row apart reading the same lines, so the lines come
+from the second-level cache, about 4 ns each, where the 64 KiB
+texture's come from the first; a frame's tiles at the right level are
+the screen's pixels, 8 MB, whatever the layout. Four-by-four blocks or
+Morton order would cut a block's lines to four on any walk, about a
+quarter of the loss and about what the hit saves, the floor views being
+where the next cuts work; a wall's spans walk along the rows and read
+level to a millisecond better.
 
 ## tiles_reset
 
@@ -69,6 +120,11 @@ skip and 53,704 after, with the tiled pixel count unchanged at
 2,423,311. The skip is two loads and a mask at the cursor's step, off
 the pixel path.
 
+The record sits at the map's index. Cells are built at the level in hand
+while the budget holds; a level whole moves the hand to the next. A column
+at the map's width is padding: the cursor moves on to the next row's first
+cell, so no padding tile is built.
+
 ## tiles_alloc
 
 The cells across and down are the map's nodes, not the nodes less one:
@@ -82,33 +138,10 @@ levels are TILE_LEVEL_COUNT or k + 1, the fewer, each atlas a quarter
 of the one before, reserved together on first sight. An atlas past
 TILE_ATLAS_MAX marks the surface never, the lit loop for good.
 
-## The levels
-
-A tile is built at one of the levels, each half a side of the one
-before. The block picks its level from its texel step a pixel, the
-largest of the step along the span and the step down a row on each
-axis, so a block reads about a texel a pixel from its level and the
-spans a row apart read the same lines: the fourth cut judged nearness
-along the span alone, and a receding floor whose rows sat four texels
-apart along the screen's rows still read level 0, so the spans a row
-apart shared no cache lines and every pixel fetched one, Astra's point.
-The step down a row is measured at the span's two ends, a divide each,
-and interpolated along it, so a block's level costs about twenty-five
-ops, and the only bound on it is the levels the surface has whole. The
-seventh cut bounded it further by two levels taken at the span's ends,
-each the larger of the row step there and the step along the span, the
-end's coordinate less the start's over the pixels, an average over the
-whole span; where the row steps at both ends sat under that average,
-the common case on a wall receding into the distance, the two bounds
-met at the average's level and every block of the span took it, near
-blocks blurred and far blocks read a finer level than their step and
-missed the cache for it, Astra's finding on the seventh cut. The bounds
-added nothing a correct level needs and cost two divides a span. A
-level 1 tile and up is built from the level below by averaging two by
-two at four reads a texel, the colour weighted by alpha and the alpha
-scaled for its coverage (tile_shrink); the fifth cut box-filtered the
-texture at every level from the full square, which read every source
-texel for every level.
+The atlases' bytes are summed over the levels, each a quarter of the last.
+With the arena full it is emptied, every surface forgotten, and this one
+reserved at its start, counted for the frame line; each level's atlas comes
+from the arena's cursor.
 
 ## tile_build
 
@@ -121,6 +154,11 @@ scaled as the lit loop scales one, the same two shifts a channel, so the
 tile holds the same bytes the loop would have stored, the brightness at
 the texel's own position rather than the block's step. Page-aligned and
 under a page, since its inner loop runs a texel, which the test holds.
+
+The four nodes are read first, the far ones the greatest at the map's end;
+the tile is found by its index, with the cell's first texel; then each row's
+brightness at its start and end, the nodes weighted by the row's fraction in
+256ths, the lanes whole, its step a texel, and the texture's row.
 
 ## tile_shrink
 
@@ -162,7 +200,19 @@ holds for every T to 2896, so every T. The masked loops then test the
 word's top bit, the alpha at or above 128, in place of any nonzero
 alpha, the same op count.
 
+The scale is the level's of the material bound.
+
 ## alphas_measure
+
+Level 0's share of texels at or above the pass is the target; each coarser
+level's alphas are the means of the level before, as tile_shrink makes them,
+and the threshold T whose share at or above it lies nearest the target
+becomes the level's scale, ceil(2^23 / T), so the scaled means pass exactly
+where the raw ones reach T. The least error wins, a tie goes to the lower
+share, and among equal shares to the T nearest the pass, so a texture whose
+levels pass as the texture does keeps one. A texture full or empty at the
+pass stays so at every level and keeps one, as does one under eight a side
+or past the scratch planes.
 
 The coverage policy is coverage-preserving alpha scaling, the technique
 of NVIDIA Texture Tools, a best effort and not a guarantee, from outside
@@ -206,11 +256,11 @@ coarsest, which reads 50.0 at a scale of one, the step above it
 further from the target. The lines equal, to the digit, a reading of
 the same rule in python over the PNG files for the fence, the grate,
 the hazard sign, and the proof's sign, and the test holds the engine's
-lines for four textures of its own equal to a nushell reading. The share moves in jumps where many means share one
-value, the 127 of a half-covered square among them, so the nearest
-reachable share can sit two points from the target, as the fence's
-coarser levels do. The far fence in the yard view keeps its mesh where
-the seventh cut thinned it.
+lines for four textures of its own equal to a nushell reading. The share
+moves in jumps where many means share one value, the 127 of a
+half-covered square among them, so the nearest reachable share can sit
+two points from the target, as the fence's coarser levels do. The far
+fence in the yard view keeps its mesh where the seventh cut thinned it.
 
 The two scratch planes bound a level at a quarter of a megabyte, a
 1024-texel-square texture's level 1; a texture past that or under eight
@@ -222,6 +272,13 @@ tiled and were left out. The line prints the first four levels, the
 deeper scales following the same search unprinted; an image's line
 names it by its frame.
 
+Every scale starts at one. Level 0 counts its texels at or above the pass;
+the levels' source is the texture's alphas, four bytes apart, then the plane
+just made, a byte apart; each level's scale, ceil(2^23 / T), is stored with
+its share, and the plane is scaled in place and capped as the next level's
+source. The line carries the material's name, or the engine's image by its
+frame, the shares by level, and the scales.
+
 ## lumels_bright
 
 The console's L frame with its byte 4 set rewrites every lumel at one on
@@ -232,18 +289,3 @@ lit one does, tile for tile, so the lit over the bright is the light
 alone; a dark copy on the unlit loop point-samples where a tile at a
 level averages, and read 8 of 256 of view dependence that was the
 texture's.
-
-## What the data costs
-
-With the hit path's work under what it saves, measured by pinning every
-tile read to one cache-hot tile (the garage 19.9 ms against 20 to 21
-with no binds), the garage's remaining 7 ms is the tile data: a floor's
-spans at yaw 0 walk across the tile rows and read sixteen lines a
-block, the spans a row apart reading the same lines, so the lines come
-from the second-level cache, about 4 ns each, where the 64 KiB
-texture's come from the first; a frame's tiles at the right level are
-the screen's pixels, 8 MB, whatever the layout. Four-by-four blocks or
-Morton order would cut a block's lines to four on any walk, about a
-quarter of the loss and about what the hit saves, the floor views being
-where the next cuts work; a wall's spans walk along the rows and read
-level to a millisecond better.

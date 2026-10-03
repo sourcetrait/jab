@@ -1,7 +1,3 @@
-# The game's program: the map loaded off its disk and held to its format, the
-# title drawn, then the frame loop: the pad, the camera and the body, the
-# console, the actors, the ambient, the world drawn, the HUD, the flip, the
-# state over the API, and the display's tick or the pad awaited
 .include "jab.inc"
 .include "jab_f32.inc"
 .include "jab_f64.inc"
@@ -19,8 +15,6 @@
 .set PATH_BYTES, 256
 .set LINE_BYTES, 512
 .set DIGITS_BYTES, 24
-# The title: bold at four times the console's cell, centred; bold adds
-# a pixel to the width
 .set TITLE_SCALE, (JAB_TEXT_SCALE_ONE * 4)
 .set TITLE_CELL, (JAB_TEXT_WIDTH * 4)
 .set TITLE_HEIGHT, (JAB_TEXT_HEIGHT * 4)
@@ -28,7 +22,6 @@
 .set TITLE_COLOR, 0x00ebe6dc
 .set MS_TICKS, (JAB_TIME_HZ / 1000)
 .set US_TICKS, (JAB_TIME_HZ / 1000000)
-# What a texture's load can fail with, beyond the kernel's own PNG codes
 .set LOAD_TOO_BIG, 101
 .set LOAD_ARENA_FULL, 102
 
@@ -43,7 +36,6 @@ _start:
     jab.sys.block.find serial_fps
     beqz a0, no_disk
     mv s0, a0                       # the program's disk
-    # the map's name, trailing whitespace dropped
     la a0, name
     li a1, (NAME_BYTES - 1)
     mv a2, s0
@@ -62,7 +54,6 @@ _start:
     sb zero, 0(t1)
     j 1b
 2:
-    # the map's path: /map/<name>.jabfps.map
     la a0, map_path
     la a1, word_map_dir
     call append_str
@@ -71,7 +62,6 @@ _start:
     la a1, word_map_ext
     call append_str
     sb zero, 0(a0)
-    # the title, centred on the black screen
     la a0, name
     call str_len
     li t1, TITLE_CELL
@@ -88,7 +78,6 @@ _start:
     ecall
     jab.sys.display.await
     jab.sys.display.flip
-    # the map read whole, then held to its format
     la a0, map
     li a1, MAP_BYTES
     mv a2, s0
@@ -118,7 +107,6 @@ _start:
     call player_reset
     call camera_spawn
     call camera_axes
-    # loaded: the screen cleared, the report
     call clear_screen
     jab.sys.display.await
     jab.sys.display.flip
@@ -173,7 +161,6 @@ frame:
     jab.sys.display.flip
     call state_report
 .ifdef DEBUG
-    # the first frame's report, and the first after a console placement
     la t0, report_pending
     lbu t1, 0(t0)
     sb zero, 0(t0)
@@ -218,7 +205,6 @@ bad_magic:
     call line_end
     jab.sys.exit 6
 
-# Exit 7: the file ends before its structures do
 short_file:
     call line_map
     la a1, word_ends_at
@@ -242,8 +228,6 @@ map_too_big:
     call line_end
     jab.sys.exit 7
 
-# Exit 8: the map holds more of a kind than this build does
-# a1 address The kind's word
 too_many:
     mv s6, a1
     call line_map
@@ -256,8 +240,6 @@ too_many:
     call line_end
     jab.sys.exit 8
 
-# Exit 9: a material's name is too long for a path
-# a0 int The material
 path_too_long:
     mv s6, a0
     la a0, line
@@ -270,9 +252,6 @@ path_too_long:
     call line_end
     jab.sys.exit 9
 
-# Exit 10: a material's texture failed to load
-# a0 int The material
-# a1 int The code
 load_failed:
     mv s6, a1
     mv s7, a0
@@ -288,10 +267,6 @@ load_failed:
     call line_end
     jab.sys.exit 10
 
-# Exit 11: a record broke a rule of the format
-# a1 address The record's word
-# a2 int Its index
-# a3 address What is wrong with it
 check_failed:
     mv s6, a1
     mv s7, a2
@@ -308,8 +283,6 @@ check_failed:
     call line_end
     jab.sys.exit 11
 
-# Exit 11: the map lacks what a1 names
-# a1 address The lack, NUL-terminated
 map_lacks:
     mv s6, a1
     call line_map
@@ -318,8 +291,6 @@ map_lacks:
     call line_end
     jab.sys.exit 11
 
-# Exit 12: the section directory is broken
-# a1 address How, NUL-terminated
 bad_directory:
     mv s6, a1
     call line_map
@@ -330,9 +301,6 @@ bad_directory:
     call line_end
     jab.sys.exit 12
 
-# Begins the line with the prefix and the map's path
-# returns
-#   a0 The cursor past it
 line_map:
     la a0, line
     la a1, msg_prefix
@@ -343,8 +311,6 @@ line_map:
     mv ra, t1
     ret
 
-# Ends the line at the cursor with a newline and prints it on the UART
-# a0 address The cursor
 line_end:
     li t0, '\n'
     sb t0, 0(a0)
@@ -352,11 +318,7 @@ line_end:
     jab.sys.uart.print line
     ret
 
-# The reports are the program's own debug lines, for its test: a release
-# build carries neither them nor their text, and says nothing but an exit
 .ifdef DEBUG
-# The load line on the UART: the counts of what loaded
-# s5 int The milliseconds
 load_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -425,10 +387,6 @@ load_report:
     addi sp, sp, 16
     ret
 
-# The frame line on the UART: the counts, the ticks by phase, the spans and
-# the pixels they entered, the lit ones among them, the light's ticks, the
-# pixels the depth test rejected, and the lumel samples read
-# s10 int The frame's ticks
 frame_report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -567,7 +525,6 @@ frame_report:
     addi sp, sp, 16
     ret
 
-# The sectors line on the UART: the last frame's walk in order
 sectors_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -599,10 +556,6 @@ sectors_report:
     ret
 .endif
 
-# The map's records by index
-# a0 int The index
-# returns Clobbers t0
-#   a0 The record's address
 sector_at:
     li t0, SECTOR_SIZE
     mul a0, a0, t0
@@ -652,20 +605,13 @@ material_at:
     add a0, a0, t0
     ret
 
-# A name in the names table
-# a0 int The offset
-# returns Clobbers t0
-#   a0 The name's address
 name_at:
     section_at KIND_NAMES, t0
     add a0, a0, t0
     ret
 
-# The framebuffer black
 clear_screen:
     li a0, 0
-# The framebuffer one colour
-# a0 u32 The colour
 fill_screen:
     slli t2, a0, 32
     or t2, t2, a0
@@ -679,13 +625,6 @@ fill_screen:
     bltu t0, t1, 1b
     ret
 
-# Reads a file off a disk whole, a page at a time
-# a0 address The buffer
-# a1 int Its bytes
-# a2 int The disk
-# a3 address The path from the root, NUL-terminated
-# returns
-#   a0 The bytes read, 0 when the file is not there
 read_file:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -740,10 +679,6 @@ read_file:
     addi sp, sp, 64
     ret
 
-# The length of a string
-# a0 address NUL-terminated, kept
-# returns Clobbers t0
-#   a1 The length
 str_len:
     li a1, 0
 1:
@@ -755,11 +690,6 @@ str_len:
 2:
     ret
 
-# Appends a string at the cursor
-# a0 address The cursor
-# a1 address NUL-terminated
-# returns Clobbers t0
-#   a0 The cursor past it
 append_str:
 1:
     lbu t0, 0(a1)
@@ -771,11 +701,6 @@ append_str:
 2:
     ret
 
-# Appends a number in decimal at the cursor
-# a0 address The cursor
-# a1 u64
-# returns Clobbers t0 to t3
-#   a0 The cursor past the digits
 append_dec:
     la t0, digits
     addi t0, t0, DIGITS_BYTES
@@ -818,7 +743,6 @@ pixel_cursor:
     .skip 8
 ambient_cursor:
     .skip 8
-# The sections as the loader placed them, an entry a kind
 sections:
     .skip (KIND_COUNT * SECTION_ENTRY)
 spawn_index:
@@ -833,14 +757,11 @@ frame_us:
     .skip 4
 game_us:
     .skip 4
-# The seconds since the frame before, clamped
 frame_seconds:
     .skip 4
 .balign 8
-# Each material's texture record in the pixel arena, 0 for none
 material_record:
     .skip (MAX_MATERIALS * 8)
-# Each ambient piece's bytes in its arena and their count, 0 for none
 ambient_at:
     .skip (MAX_AMBIENTS * 8)
 ambient_bytes:
@@ -914,7 +835,6 @@ msg_no_disk:
     .asciz "fps: no disk of serial fps\n"
 msg_no_name:
     .asciz "fps: the disk has no /map/name\n"
-# The debug lines' text, in a debug build alone
 .ifdef DEBUG
 msg_ambient:
     .asciz "fps: ambient "

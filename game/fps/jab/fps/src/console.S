@@ -1,15 +1,8 @@
-# The console, a test channel over the API's input: CONSOLE_FRAME-byte frames
-# by kind, P placing the camera, T a trace, F a round, N a noise, L the
-# tiles reset with the lumels bright or the tiles held off, each reported
-# back as REPORT_CONSOLE.
-
 .set CONSOLE_FRAME, 64
 .set CONSOLE_CAPACITY, 1024
 
 .section .text
 
-# What the host has sent taken in behind what waits, every whole frame done,
-# the rest kept.
 console_read:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -34,7 +27,6 @@ console_read:
     addi s2, s2, -CONSOLE_FRAME
     j 1b
 8:
-    # the partial frame moved to the front
     la t0, console_buf
     mv t1, s2
 2:
@@ -54,8 +46,6 @@ console_read:
     addi sp, sp, 32
     ret
 
-# A frame done by its kind byte, then reported; an unknown kind only reports.
-# a0 address The frame.
 console_frame:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -105,11 +95,6 @@ console_frame:
     call noise_heard
     j 8f
 5:
-    # L: the tiles forgotten and rebuilt under no budget from the next
-    # frame, every lumel set full bright first when the frame's byte 4
-    # is 1, so a capture reads the texture sampled as the lit one is;
-    # under a budget of nothing instead when byte 5 is 1, so every
-    # surface stays on the lit loop
     li t1, 'L'
     bne t0, t1, 8f
     lbu t1, 4(s2)
@@ -137,8 +122,6 @@ console_frame:
     addi sp, sp, 32
     ret
 
-# A trace from the eye along the forward over the trace's range, the geometry
-# and the androids alone, answered as REPORT_TRACE in millimetres.
 console_trace:
     addi sp, sp, -16
     sd ra, 8(sp)

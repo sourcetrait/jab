@@ -1,5 +1,9 @@
 # body.S
 
+The body under the camera and under every android: a capsule walked along the
+level forward and right, held off the walls and the other bodies, on the floor
+plane of its sector.
+
 The capsule is BODY_RADIUS 0.35 wide and BODY_HEIGHT 1.8 tall with the eye
 EYE_HEIGHT 1.6 above its feet, the same for the player and every android.
 Walls being vertical, the body against a wall is a circle against the wall's
@@ -22,3 +26,20 @@ body_push takes the square of the offset through `reg.sqrlen`, compares it,
 and roots it only when the bodies overlap; wall_push takes the push vector's
 length in place. The register forms touch only their destination, so the
 vectors survive them and nothing is stored or reloaded.
+
+## body_move
+
+The level forward and right come from the yaw.
+
+## feet_move
+
+The sector is followed from the moved feet at the eye's height; then the
+floor is met, and where it lies further below the feet fall.
+
+## wall_push
+
+The wall blocks by its surface, then by any sector across it; a sector across
+admits the body when its floor at the point is at most a step above the feet
+and its ceiling leaves the body's height over that floor. The feet are pushed
+out along the nearest point's normal, or the wall's when the feet sit on the
+wall.

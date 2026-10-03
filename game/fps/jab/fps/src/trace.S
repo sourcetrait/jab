@@ -1,6 +1,3 @@
-# The 3D trace: a ray from a point in a sector along a unit direction for a
-# distance, walked sector to sector, then against the capsules.
-
 .section .rodata
 .balign 8
 k_trace_eps_d:
@@ -16,15 +13,6 @@ k_trace_range_d:
 
 .section .text
 
-# The ray walked: the geometry, then the capsules; trace_hit filled.
-# a0 int The sector the origin is in.
-# a1 address The actor left out, 0 for none.
-# a2 int TRACE_TO_PLAYER to test the player's capsule too.
-# fa0 f64 The origin's x; fa1 y; fa2 z.
-# fa3 f64 The direction's x; fa4 y; fa5 z, unit.
-# fa6 f64 The distance.
-# returns
-#   a0 The kind met.
 trace_ray:
     addi sp, sp, -208
     sd ra, 200(sp)
@@ -65,7 +53,6 @@ trace_ray:
     la t0, trace_hit
     sd zero, TRACE_ACTOR(t0)
 1:
-    # the sector in hand: the nearest wall crossing past what is walked
     section_count KIND_SECTORS, t0
     bgeu s2, t0, 20f                # in no sector: the ray ends at its distance
     fmv.d fs8, fs6                  # the nearest crossing, the distance to start
@@ -140,8 +127,6 @@ trace_ray:
     addi s11, s11, 1
     j 2b
 6:
-    # the planes met before the crossing: the ray's height against the
-    # plane's along it, down through the floor or up through the ceiling
     li s7, 0
 7:
     li t0, 2
@@ -196,8 +181,6 @@ trace_ray:
     li t0, -2
     beq s6, t0, 30f
     bltz s6, 20f
-    # the wall's crossing: its point, then the first portal whose
-    # sector holds the ray's height there
     fmv.d fa0, fs8
     call trace_point
     lwu s8, WALL_FIRST_PORTAL(s6)
@@ -233,7 +216,6 @@ trace_ray:
     fld ft1, TRACE_PZ(t0)
     flt.d t1, fa0, ft1
     bnez t1, 111f                   # over its ceiling
-    # entered
     mv s2, s7
     fmv.d fs7, fs8
     addi s3, s3, -1
@@ -243,7 +225,6 @@ trace_ray:
     addi s8, s8, 1
     j 11b
 12:
-    # a piece
     la t0, trace_hit
     li t1, TRACE_PIECE
     sd t1, TRACE_KIND(t0)
@@ -251,7 +232,6 @@ trace_ray:
     sd s2, TRACE_SECTOR(t0)
     j 40f
 20:
-    # nothing within the distance
     la t0, trace_hit
     sd zero, TRACE_KIND(t0)
     fsd fs6, TRACE_DIST(t0)
@@ -260,7 +240,6 @@ trace_ray:
     call trace_point
     j 40f
 30:
-    # a plane
     la t0, trace_hit
     li t1, TRACE_PLANE
     sd t1, TRACE_KIND(t0)
@@ -269,7 +248,6 @@ trace_ray:
     fmv.d fa0, fs8
     call trace_point
 40:
-    # the capsules within what is met
     la s7, actors
     li s8, MAX_ACTORS
 41:
@@ -346,10 +324,6 @@ trace_ray:
     addi sp, sp, 208
     ret
 
-# trace_hit's point set to the ray's at a distance, from the origin and
-# direction trace_ray holds in fs0 to fs5.
-# fa0 f64 The distance, kept.
-# returns Clobbers t0, ft0.
 trace_point:
     la t0, trace_hit
     fmadd.d ft0, fs3, fa0, fs0
@@ -360,12 +334,6 @@ trace_point:
     fsd ft0, TRACE_PZ(t0)
     ret
 
-# Whether the ray trace_ray holds in fs0 to fs5 meets the capsule on the
-# feet fa0, fa1, fa2 before the distance in trace_hit.
-# fa0 f64 The feet's x; fa1 y; fa2 z.
-# returns Clobbers t0, t1, ft0 to ft11.
-#   a0 1 or 0.
-#   fa0 f64 The distance when met.
 trace_capsule:
     fmul.d ft0, fs3, fs3
     fmadd.d ft0, fs4, fs4, ft0      # the direction's share in the plan

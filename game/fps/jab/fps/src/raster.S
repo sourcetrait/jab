@@ -1,7 +1,3 @@
-# The polygon rasteriser: world points into the camera's basis, clipped and
-# projected into edges, the even-odd fill within a rectangle, the span
-# record, the integer span
-
 .section .rodata
 .balign 8
 k_half_d:
@@ -18,11 +14,6 @@ k_hy_d:
     .double 540.0
 k_hz_d:
     .double 960.0
-# A lane's bias and the masks that step a brightness word's three lanes
-# at once by 16, 32, or 64 pixels: the end less the start, each lane
-# biased past zero, its low 4, 5, or 6 bits cleared by the shift's mask
-# so none spill into the lane below, the word shifted, and the bias's
-# share taken back
 k_lane_bias:
     .dword ((1 << 20) | (1 << 41) | (1 << 62))
 k_lane_masks:
@@ -45,18 +36,11 @@ k_big:
 
 .section .text
 
-# Empties the polygon in hand
-# returns Clobbers t0
 poly_reset:
     la t0, vert_count
     sd zero, 0(t0)
     ret
 
-# Appends a world point to the polygon in hand; one past MAX_VERTS is dropped
-# fa0 f32 x
-# fa1 f32 y
-# fa2 f32 z
-# returns Clobbers t0 to t3
 poly_point:
     la t0, vert_count
     ld t1, 0(t0)
@@ -74,8 +58,6 @@ poly_point:
 1:
     ret
 
-# Empties the edge list, its rows unbounded
-# returns Clobbers t0, t1, ft0
 edges_reset:
     la t0, edge_count
     sd zero, 0(t0)
@@ -88,10 +70,6 @@ edges_reset:
     fsw ft0, 0(t1)
     ret
 
-# The polygon in hand into the camera's basis, clipped to the near plane,
-# projected, its edges appended to the list
-# returns
-#   a0 The clipped point count, 0 when nothing is left
 poly_project:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -101,7 +79,6 @@ poly_project:
     sd s5, 40(sp)
     sd s6, 32(sp)
     sd s7, 24(sp)
-    # into the camera's basis, down being the negative of up
     la t0, vert_count
     ld s3, 0(t0)
     la s2, verts
@@ -146,8 +123,6 @@ poly_project:
     addi t1, t1, -1
     j 1b
 2:
-    # clipped to the near plane: a point in front kept, an edge that
-    # crosses adding its crossing
     la t0, k_near
     flw ft0, 0(t0)
     la s4, vview
@@ -201,7 +176,6 @@ poly_project:
 6:
     li t0, 3
     bltu s6, t0, 90f                # nothing left
-    # projected: x = hx + right * hz / depth, y = hy + down * hz / depth
     la t0, k_hz
     flw ft0, 0(t0)
     la t0, k_hx
@@ -226,7 +200,6 @@ poly_project:
     addi t1, t1, -1
     j 7b
 8:
-    # the edges, each from its higher end, a level one dropped
     la s4, pverts
     la t0, edge_count
     ld s7, 0(t0)
@@ -302,9 +275,6 @@ poly_project:
     addi sp, sp, 80
     ret
 
-# The surface's affine coefficients over the screen from the plane in hand
-# and the camera, in double, into the polygon in hand, with the unit normal
-# facing the camera; a plane through the eye zeroes them all
 surface_setup:
     addi sp, sp, -144
     sd ra, 136(sp)
@@ -320,7 +290,6 @@ surface_setup:
     fsd fs9, 56(sp)
     fsd fs10, 48(sp)
     fsd fs11, 40(sp)
-    # the plane as doubles, a float at a time
     la t3, plane
     la t4, plane_d
     li t5, (PLANED_SIZE / 8)
@@ -332,7 +301,6 @@ surface_setup:
     addi t4, t4, 8
     addi t5, t5, -1
     bnez t5, 1b
-    # n.right, n.down, n.forward, and n.(q - p)
     la t3, plane_d
     la t4, camera_d
     addi t5, t4, CAMD_RIGHT
@@ -355,7 +323,6 @@ surface_setup:
     fcvt.d.w ft0, zero
     feq.d t0, fs3, ft0
     bnez t0, 80f
-    # the unit normal facing the camera, for the light
     la t1, poly
     sd zero, POLY_FLAT_LIT(t1)      # lit at its angle unless the caller says
     fld ft8, 0(t3)
@@ -389,7 +356,6 @@ surface_setup:
     fnmsub.d ft3, fs0, fs5, ft3     # n.f hz - n.r hx
     fnmsub.d ft3, fs1, fs6, ft3     # - n.d hy
     fmul.d fs10, ft3, fs7           # C
-    # 1/z into the polygon, 6.26, the half pixel in C
     la t0, k_depth_scale_d
     fld ft4, 0(t0)
     la t1, poly
@@ -406,7 +372,6 @@ surface_setup:
     fmul.d ft5, ft5, ft4
     fcvt.l.d t2, ft5, rne
     sd t2, POLY_IZC(t1)
-    # u/z: K = (a.p + u0) * w; the coefficients K A + a.r / hz and on
     la a0, plane_d
     addi a0, a0, PLANED_AU
     li a1, PLANED_U0
@@ -449,13 +414,6 @@ surface_setup:
     addi sp, sp, 144
     ret
 
-# One texture coordinate's affine coefficients into the polygon in hand
-# a0 address The gradient, three doubles in plane_d
-# a1 int The offset's field in plane_d
-# a2 int The first of the three polygon fields written
-# fa1 f32 The texture's size
-# fs4 f64 hz; fs5 hx; fs6 hy; fs8, fs9, fs10 A, B, C, from surface_setup
-# returns Clobbers t0 to t4, ft0 to ft11, fs11
 surface_axis:
     la t3, camera_d
     jab.f64.vec3.dot fs11, a0, t3   # a.p
@@ -475,7 +433,6 @@ surface_axis:
     addi t4, t3, CAMD_FORWARD
     jab.f64.vec3.dot ft11, a0, t4
     fmul.d ft11, ft11, ft8          # a.f
-    # UA = K A + a.r / hz; UB = K B + a.d / hz; UC = K C + a.f - (a.r hx + a.d hy) / hz
     fdiv.d ft4, ft9, fs4
     fmadd.d ft4, fs11, fs8, ft4     # UA
     fdiv.d ft5, ft10, fs4
@@ -504,13 +461,6 @@ surface_axis:
     sd t3, 16(t2)
     ret
 
-# The lit, mapped polygon in hand bound to its lumel map: the map's texel
-# origin folded into the u/z and v/z coefficients, so the span's texel
-# coordinates count from the map's first node and the wrap by the mask is
-# unchanged, the origin being a multiple of the texture's size; and the
-# read's one word set, the lumels' base, a row's bytes, and k. A polygon
-# unlit or without a map is left alone
-# returns Clobbers t0 to t5
 lumap_bind:
     la t0, poly
     ld t1, POLY_MODE(t0)
@@ -518,7 +468,6 @@ lumap_bind:
     beqz t1, 9f
     ld t2, POLY_LUMAP(t0)
     beqz t2, 9f
-    # u/z less U0/z, 1/z being 6.26 and u/z 48.16
     ld t3, LUMAP_U0(t2)
     ld t4, POLY_IZA(t0)
     mul t4, t4, t3
@@ -557,8 +506,6 @@ lumap_bind:
     ld t5, POLY_VZC(t0)
     sub t5, t5, t4
     sd t5, POLY_VZC(t0)
-    # the read's word: the lumels' offset into the arena, a row's bytes,
-    # the rows, and k
     ld t3, LUMAP_BASE(t2)
     la t4, lumel_arena
     sub t3, t3, t4
@@ -575,10 +522,6 @@ lumap_bind:
 9:
     ret
 
-# The edges the row centre crosses, their x in crossings sorted ascending
-# fa0 f32 The row's centre
-# returns Clobbers t0 to t5, ft0 to ft6
-#   a0 The count
 .balign CODE_PAGE
 row_crossings:
     li a0, 0
@@ -618,10 +561,6 @@ row_crossings:
 9:
     ret
 
-# The first pixel whose centre is at or past fa0, within the screen's columns
-# fa0 f32
-# returns Clobbers t0, ft0
-#   a0 The pixel
 span_bound:
     la t0, k_half
     flw ft0, 0(t0)
@@ -636,10 +575,6 @@ span_bound:
 2:
     ret
 
-# The rows the edges cover, within the screen
-# returns Clobbers t0, ft0, ft1
-#   a0 The first row
-#   a1 The row past the last
 row_range:
     la t0, k_half
     flw ft0, 0(t0)
@@ -660,9 +595,6 @@ row_range:
 2:
     ret
 
-# The polygon in hand filled by scanlines with the surface in hand, its
-# rows and each span held within the rectangle in hand, each span
-# recorded before it is drawn
 poly_fill:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -743,14 +675,6 @@ poly_fill:
     addi sp, sp, 48
     ret
 
-# The span recorded before it is drawn: its row, its pixels, the mode,
-# the surface, and the polygon's serial, into the frame's table while it
-# has room; the count runs on past the table, which a reader takes as
-# the frame's records being incomplete
-# a0 int The first pixel
-# a1 int The pixel past the last
-# a2 int The row
-# returns Clobbers t0 to t3; a0 to a2 kept
 span_record:
     la t0, span_count
     ld t1, 0(t0)
@@ -775,11 +699,6 @@ span_record:
 9:
     ret
 
-# The screen rectangle of the projected polygon in hand, a pixel of
-# slack each side, held within the screen
-# a0 int The projected point count
-# returns Clobbers t0, t1, ft0 to ft5
-#   a0 x0; a1 x1; a2 y0; a3 y1
 poly_rect:
     la t0, pverts
     flw ft0, 0(t0)
@@ -799,8 +718,6 @@ poly_rect:
     addi t1, t1, -1
     j 1b
 2:
-    # the pixel-centre rule, as the fill bounds a span and its rows, a
-    # pixel of slack against the fill's rounding
     la t0, k_half
     flw ft5, 0(t0)
     fsub.s ft0, ft0, ft5
@@ -831,23 +748,11 @@ poly_rect:
 6:
     ret
 
-# The brightness at a texel coordinate of the surface in hand from its
-# lumel map, the coordinate counted from the map's first node and held
-# within the map: the lumel's 2^k texels shifted off for the column and
-# the row, the fractions in 256ths, the four lumels about it summed under
-# weights adding to 256
-# a5 int u, 16.16 texels from the map's origin
-# a6 int v, 16.16 texels from the map's origin
-# returns Clobbers a0, a6, a7, t3, t4
-#   a5 The brightness, the three channels in 16.16 packed CHANNEL_BITS apart
 .macro lumel_sample
     la t3, poly
     ld t3, POLY_LUMEL(t3)           # the arena offset, a row's bytes, the rows, k
     srli a7, t3, LUMEL_K_SHIFT
     addi a7, a7, 16                 # k + 16
-    # the coordinates held within the map: a pixel past a span's edge
-    # can lie before the first node or past the last, and a read past
-    # the map would fault
     bgez a5, .Llumel_u0\@
     li a5, 0
 .Llumel_u0\@:
@@ -908,13 +813,6 @@ poly_rect:
     add a5, a0, t4
 .endm
 
-# The texture's level for the block in hand bound for the loops: the
-# block's level held under the chain's levels, the level's texels and
-# its masks and row shift into the texture's registers, and u, v, and
-# their steps a pixel shifted to the level's resolution, the lumel map
-# having been sampled at level 0 before; the block's end reloads level
-# 0's exact coordinates for the next
-# returns Clobbers a5 to a7; a1 to a4, s8, s9, t5, t6 rebound
 .macro mip_bind
     ld a5, 192(sp)                  # the block's level
     la a6, poly
@@ -939,13 +837,6 @@ poly_rect:
     sra t6, t6, a5
 .endm
 
-# The pixels a0 to a1 of row a2 filled with the surface in hand: textured,
-# masked, sky, or lit, from its lumel map at the lumel's own cadence or flat
-# by one brightness, the texture read from its chain at each block's level;
-# no float in the loop
-# a0 int The first pixel
-# a1 int The pixel past the last
-# a2 int The row
 .balign CODE_PAGE
 span_fill:
     addi sp, sp, -232
@@ -999,7 +890,6 @@ span_fill:
     ld t4, STAT_PIXELS(t3)
     add t4, t4, s10
     sd t4, STAT_PIXELS(t3)
-    # lit: counted
     la t3, poly
     ld t4, POLY_MODE(t3)
     andi t4, t4, POLY_LIT
@@ -1032,7 +922,6 @@ span_fill:
     li t5, POLY_SKY
     beq t4, t5, 70f
     sd t4, 16(sp)                   # the mode
-    # u and v at the start, 16.16
     mv t3, s2
     li t4, IZ_MIN
     bge t3, t4, 1f
@@ -1045,11 +934,6 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
-    # every span's footprint, for its blocks' levels: the end's texel
-    # coordinates at one divide, the step down a row at each end at a
-    # divide each, and the row step's change a pixel, which ride the
-    # frame for the blocks. The texture's four registers serve as
-    # scratch and are reloaded after
     li t3, -1
     sd t3, 200(sp)                  # no tiles for the span
     la a0, poly
@@ -1072,7 +956,6 @@ span_fill:
     mul a6, a6, t4
     srai a6, a6, 16                 # v at the end
     sd a6, 184(sp)
-    # the step down a row at the start
     ld a6, POLY_IZB(a0)
     add a6, a6, s2
     li t4, IZ_MIN
@@ -1102,7 +985,6 @@ span_fill:
     mv a6, a7
 24:
     sd a6, 208(sp)                  # the step down a row at the start
-    # and at the end
     ld a7, POLY_IZB(a0)
     add a7, a7, t3                  # 1/z a row below the end
     li t4, IZ_MIN
@@ -1141,9 +1023,6 @@ span_fill:
     sub t3, a6, a7
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
-    # a tiled surface's span judged once for its tiles: its ends inside
-    # the map, else the lit loop, which clamps; the levels the surface
-    # has whole bound every block's level
     ld t3, 16(sp)
     andi t3, t3, POLY_TILED
     beqz t3, 29f
@@ -1175,9 +1054,6 @@ span_fill:
     ld a2, POLY_VMASK(a0)
     ld a3, POLY_UMASK(a0)
     ld a4, POLY_WSHIFT(a0)
-    # lit: a polygon with no map takes its one brightness over the whole
-    # span, no step and no sample; a mapped one samples its map at the
-    # span's start, an interval starting at the first block
     ld t3, 16(sp)
     andi t3, t3, POLY_LIT
     beqz t3, 30f
@@ -1195,7 +1071,6 @@ span_fill:
     sd t3, 160(sp)                  # the brightness entering the first block: unsampled yet
     sd zero, 152(sp)                # the interval's pixels left: none, so one starts
 30:
-    # the block: its length, its end's u and v, the steps
     li s11, BLOCK
     ble s10, s11, 31f
     j 32f
@@ -1227,11 +1102,6 @@ span_fill:
     sd t5, 8(sp)
     mv t5, t4
     mv t2, s11
-    # the block's level by its footprint: the largest of its texel steps
-    # along the span and down a row, the row's interpolated along the
-    # span; level m where the step is under 2^(m + 1) texels, the chain's
-    # last at most, which the tiles and the loops each hold under what
-    # they have
     srai a6, t5, 63
     xor a7, t5, a6
     sub a7, a7, a6                  # |du|
@@ -1269,11 +1139,6 @@ span_fill:
     beq t3, a5, 500f
     j 400f
 44:
-    # lit: a span judged for its tiles (the prologue) takes them block
-    # by block at the block's level held under the levels the surface
-    # has whole; a block read from tiles pays no sample, no interval, and
-    # no brightness carry. A span with no tiles takes the lit loop at the
-    # chain's level
     ld a5, 200(sp)
     bltz a5, 4300f
     ld a6, 192(sp)
@@ -1295,10 +1160,6 @@ span_fill:
     addi a0, a0, 1
     sd a0, 176(sp)
 431:
-    # the texel step a pixel, the larger of |du| and |dv|, against the
-    # lumel's 2^k texels: four blocks when they stay within half a
-    # lumel over 64 pixels, two when within it over 32, else one, so a
-    # lumel spans at least two samples wherever one block allows it
     srai a5, t5, 63
     xor a0, t5, a5
     sub a0, a0, a5                  # |du|
@@ -1323,8 +1184,6 @@ span_fill:
     ble t2, s10, 443f
     mv t2, s10                      # cut short by the span's end
 443:
-    # the end's u and v: the block's own when the interval is one block,
-    # else from one divide at the interval's pixels on
     beq t2, s11, 445f
     mul t3, t2, s3
     add t3, t3, s2                  # 1/z at the interval's end
@@ -1354,12 +1213,6 @@ span_fill:
     ld a0, 176(sp)
     addi a0, a0, 1
     sd a0, 176(sp)
-    # a whole interval of one, two, or four blocks steps the lanes at
-    # once by its shift: the end less the start, each lane biased past
-    # zero and its low bits cleared under the shift's mask so nothing
-    # spills into the lane below, shifted, the bias's share taken back;
-    # any other length, the span cutting the interval short, divides
-    # each lane's change by it and packs the quotients again
     li a7, (INTERVAL_SHIFT_MAX - 2)
     li t4, BLOCK
     beq t2, t4, 447f
@@ -1416,9 +1269,6 @@ span_fill:
     andi a5, a5, POLY_MASKED
     bnez a5, 55f
 45:
-    # textured, lit: the depth first, then the texel, each channel
-    # scaled by its brightness, the texel's bytes blue, green, red from
-    # the low end
     lwu a7, 0(t1)
     bgeu a7, s2, 46f
     addi t4, t4, 1
@@ -1469,7 +1319,6 @@ span_fill:
     bnez t2, 45b
     j 61f
 55:
-    # masked, lit: the depth, the texel, its alpha at or above the pass
     lwu a7, 0(t1)
     bgeu a7, s2, 56f
     addi t4, t4, 1
@@ -1521,19 +1370,11 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 55b
 61:
-    # a lit block's brightness carried into the next block of its
-    # interval; where the interval ended, the exact end sample is there
     ld t5, 152(sp)
     beqz t5, 60f
     sd t3, 160(sp)
     j 60f
 80:
-    # a block on its tiles at its level: the depth first, then the texel
-    # read from the level's atlas, the cell from the coordinate shifted
-    # by k, the texel within the cell at the level's resolution; no
-    # multiply, no sample, no brightness. The constants ride the
-    # texture's four registers, the brightness's two, and one spilled
-    # saved register, all free here
     li t4, 0
     sd s5, 40(sp)
     la a0, poly
@@ -1587,8 +1428,6 @@ span_fill:
     bnez t2, 81b
     j 83f
 85:
-    # masked, on its tiles: the tile's texel, whose alpha under the pass
-    # leaves the pixel
     lwu a7, 0(t1)
     bgeu a7, s2, 86f
     addi t4, t4, 1
@@ -1621,10 +1460,6 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 85b
 83:
-    # the block's end: the pixels counted as read from tiles, the
-    # spilled register back, the interval over and the brightness
-    # entering the next block marked stale, so a lit block after samples
-    # its own start
     la a5, stats
     ld a6, STAT_TILED_PIXELS(a5)
     add a6, a6, s11
@@ -1637,7 +1472,6 @@ span_fill:
 400:
     mip_bind
 40:
-    # textured: the depth test, then the texel and the stores
     lwu a7, 0(t1)
     bgeu a7, s2, 41f
     addi t4, t4, 1
@@ -1665,8 +1499,6 @@ span_fill:
 500:
     mip_bind
 50:
-    # masked: the depth test, then the texel, whose alpha under the pass
-    # leaves the pixel
     lwu a7, 0(t1)
     bgeu a7, s2, 51f
     addi t4, t4, 1
@@ -1693,8 +1525,6 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 50b
 60:
-    # the block's end is the next block's start; its rejected pixels,
-    # the block's less those past the depth test, kept
     sub t3, s11, t4
     ld t5, 144(sp)
     add t5, t5, t3
@@ -1709,9 +1539,6 @@ span_fill:
     bgtz s10, 30b
     j 90f
 70:
-    # sky: the texel by screen position, the texture's width across the
-    # screen's and its height down the same count of rows, offset by
-    # the sky's yaw and pitch in repeats, 16.16; drawn where nothing has
     la t3, poly
     lwu t4, POLY_TEXWI(t3)
     slli t3, t4, 16
@@ -1795,8 +1622,6 @@ edge_ymin:
     .skip 4
 edge_ymax:
     .skip 4
-# The sky's offsets from the camera's yaw and pitch, in texture
-# repeats, 16.16
 sky_uoff:
     .skip 8
 sky_voff:
@@ -1823,8 +1648,6 @@ edges:
     .skip (MAX_EDGES * EDGE_SIZE)
 crossings:
     .skip (MAX_EDGES * 4)
-# The frame's spans as the fill emitted them, their count, and the
-# polygons submitted so far, the serial a record carries
 .balign 16
 span_records:
     .skip (SPAN_RECORDS * SPAN_RECORD_SIZE)

@@ -1,9 +1,3 @@
-# The map's lights, without shadows: the brightness at a world point of a
-# surface, the ambient plus each light of a list by cosine and falloff; a
-# lumel map baked over every textured surface at load in the surface's own
-# texels, which the lit spans read, and a sprite's one brightness taken at
-# its centre a frame.
-
 .section .rodata
 .balign 8
 k_lumel_d:
@@ -32,8 +26,6 @@ word_unmapped:
 
 .section .text
 
-# The light entities into the light table, then each sector's list of light
-# indices from the file's.
 lights_gather:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -92,8 +84,6 @@ lights_gather:
     flw ft1, 0(t0)
     fdiv.s ft1, ft1, ft0
     fsw ft1, LIGHT_OVER_RADIUS(s5)
-    # the axis from the yaw and pitch, and the cosine of the spread; a
-    # spread of none makes a point light
     flw fa0, ENTITY_YAW(s3)
     jab.f32.rad fa0, fa0
     jab.f32.sin fs0, fa0            # sin yaw
@@ -125,7 +115,6 @@ lights_gather:
     addi s4, s4, 1
     j 1b
 6:
-    # each sector's list: the file's light entities as light indices
     section_count KIND_SECTORS, s2
     li s3, 0
 7:
@@ -176,14 +165,6 @@ lights_gather:
     addi sp, sp, 80
     ret
 
-# The world box of the polygon in hand's points
-# returns Clobbers t0, t1, ft0
-#   fa0 f32 min x
-#   fa1 f32 max x
-#   fa2 f32 min y
-#   fa3 f32 max y
-#   fa4 f32 min z
-#   fa5 f32 max z
 verts_bounds:
     la t0, verts
     la t1, vert_count
@@ -211,17 +192,6 @@ verts_bounds:
 9:
     ret
 
-# The world box of a sector's plane: its bounds in the plan and the plane's
-# height at their corners
-# a0 address The sector
-# a1 address Its plane, a, b, c
-# returns Clobbers ft0 to ft6
-#   fa0 f32 min x
-#   fa1 f32 max x
-#   fa2 f32 min y
-#   fa3 f32 max y
-#   fa4 f32 min z
-#   fa5 f32 max z
 plane_box:
     flw fa0, SECTOR_MIN_X(a0)
     flw fa1, SECTOR_MAX_X(a0)
@@ -250,16 +220,6 @@ plane_box:
     fmax.s fa5, fa5, ft6
     ret
 
-# The surface's sector's lights culled into the polygon's own list: a light
-# stays when its sphere meets the box and, unless the surface is lit at no
-# angle, it lies ahead of the plane's normal facing the camera
-# fa0 f32 min x
-# fa1 f32 max x
-# fa2 f32 min y
-# fa3 f32 max y
-# fa4 f32 min z
-# fa5 f32 max z
-# returns Clobbers t0 to t6, a5, ft0 to ft7
 lights_cull:
     la t0, poly
     lw t1, POLY_SECTOR(t0)
@@ -278,7 +238,6 @@ lights_cull:
     mul t1, t6, t1
     la t4, lights
     add t4, t4, t1                  # the light
-    # the box's gap to the light on each axis, none inside, squared
     flw ft0, LIGHT_X(t4)
     fsub.s ft1, fa0, ft0
     fsub.s ft2, ft0, fa1
@@ -299,7 +258,6 @@ lights_cull:
     flt.s t1, ft7, ft6
     bnez t1, 7f                     # out of reach
     bnez a5, 6f                     # lit at no angle: kept
-    # ahead of the plane: n . (light - q) > 0
     la t1, plane
     flw ft0, LIGHT_X(t4)
     flw ft1, (PLANE_Q + 0)(t1)
@@ -331,14 +289,6 @@ lights_cull:
     sb t1, POLY_LIGHTS(t0)          # the count
     ret
 
-# The brightness at a pixel of the surface in hand over the polygon's list,
-# for a dynamic light: the world point down the pixel's ray, then point_light
-# under the surface's normal facing the camera.
-# a0 int The pixel.
-# a1 int The row.
-# a2 int 1/z there, 6.26.
-# returns A leaf; clobbers t0 to t5 and every temporary float register.
-#   a0 The packed brightness.
 .balign CODE_PAGE
 span_light:
     li t0, IZ_MIN
@@ -369,7 +319,6 @@ span_light:
     fneg.s ft2, ft2                 # hy - y - 1/2: the ray's share of up
     la t0, k_hz
     flw ft3, 0(t0)                  # hz
-    # the point: the camera plus (right sx + up sy + forward hz) z/hz
     la t0, camera
     flw ft4, (CAM_RIGHT + 0)(t0)
     fmul.s ft4, ft4, ft1
@@ -401,17 +350,7 @@ span_light:
     flw fa5, POLY_LNZ(t0)
     ld t6, POLY_FLAT_LIT(t0)
     addi t2, t0, POLY_LIGHTS
-    # falls into point_light
 
-# The brightness at a world point of a surface: the three channels in 16.16
-# packed CHANNEL_BITS apart, the ambient plus each light of a list in reach,
-# in single precision throughout.
-# fa0 f32 The point's x; fa1 y; fa2 z.
-# fa3 f32 The unit normal's x; fa4 y; fa5 z.
-# t6 int 1 lit at no angle, every light in reach by its falloff alone.
-# t2 address The list, a count byte then that many light indices.
-# returns A leaf; clobbers t0 to t5 and every temporary float register.
-#   a0 The packed brightness.
 point_light:
     la t1, k_light_ambient
     flw fa6, 0(t1)                  # red
@@ -449,7 +388,6 @@ point_light:
     bnez t5, 7f                     # behind the surface
     fdiv.s ft5, ft5, ft6            # the cosine at the surface
 4:
-    # the falloff: one at the light, straight to nothing at the radius
     flw ft7, LIGHT_OVER_RADIUS(t4)
     fmul.s ft7, ft7, ft6            # the distance over the radius
     fsub.s ft7, ft10, ft7
@@ -459,8 +397,6 @@ point_light:
     flw ft9, 0(t5)
     flt.s t5, ft7, ft9
     bnez t5, 6f                     # a point light
-    # the spotlight: the cosine from the light's axis to the point,
-    # from the spread's edge scaled to one on the axis
     flw ft8, (LIGHT_AXIS + 0)(t4)
     flw ft9, (LIGHT_AXIS + 4)(t4)
     flw ft4, (LIGHT_AXIS + 8)(t4)
@@ -486,7 +422,6 @@ point_light:
     addi t3, t3, -1
     j 2b
 8:
-    # each channel clamped to one, in 16.16, packed
     la t0, k_sixty_four_k
     flw ft1, 0(t0)
     fmin.s fa6, fa6, ft10
@@ -504,10 +439,6 @@ point_light:
     or a0, a0, t1
     ret
 
-# A brightness word's channels as a lumel's: each lane's 16.16 to 256ths.
-# a0 int The brightness, packed.
-# returns Clobbers t0, t1.
-#   a0 The lumel.
 lumel_pack:
     slli t0, a0, (64 - CHANNEL_BITS)
     srli t0, t0, (64 - CHANNEL_BITS + 8)
@@ -521,10 +452,6 @@ lumel_pack:
     or a0, t0, t1
     ret
 
-# Every textured surface's lumel map baked in the surface's own texels, the
-# sector planes then the walls, each over the sector's lights culled to the
-# surface; a line on the UART of a debug build. A map with no lights bakes
-# none and draws unlit.
 lumaps_bake:
     addi sp, sp, -208
     sd ra, 200(sp)
@@ -558,7 +485,6 @@ lumaps_bake:
     sd zero, 0(t0)
     la t0, lumap_missing
     sd zero, 0(t0)
-    # every map none
     la t0, lumaps
     li t1, (LUMAP_COUNT * LUMAP_SIZE)
     add t1, t1, t0
@@ -569,7 +495,6 @@ lumaps_bake:
     la t0, light_count
     lwu t0, 0(t0)
     beqz t0, 90f
-    # the planes
     section_count KIND_SECTORS, s2
     li s3, 0                        # the sector
 10:
@@ -600,9 +525,6 @@ lumaps_bake:
     li t0, SECTOR_CEILING
     mul t0, s4, t0
     add s8, s5, t0                  # the plane's a, b, c
-    # the mapping as doubles, a scale of none leaving the surface
-    # unmapped: fs0 u_scale, fs1 v_scale, fs2 u_offset, fs3 v_offset,
-    # fs4 the texture's width, fs5 its height, fs6 a, fs7 b, fs8 c
     flw ft0, SURFACE_U_SCALE(s6)
     fcvt.d.s fs0, ft0
     flw ft0, SURFACE_V_SCALE(s6)
@@ -627,8 +549,6 @@ lumaps_bake:
     fcvt.d.s fs7, ft0
     flw ft0, PLANE_C(s8)
     fcvt.d.s fs8, ft0
-    # the unit normal into the room: (-a, -b, 1) for the floor, its
-    # negative for the ceiling
     fneg.d ft6, fs6
     fneg.d ft7, fs7
     la t0, k_one_d
@@ -646,8 +566,6 @@ lumaps_bake:
     fsw ft7, (GRID_N + 4)(t1)
     fcvt.s.d ft8, ft8
     fsw ft8, (GRID_N + 8)(t1)
-    # the lights culled to the plane: its box, a point on it at the
-    # bounds' corner, and the normal
     la t0, plane
     flw ft0, SECTOR_MIN_X(s5)
     fsw ft0, (PLANE_Q + 0)(t0)
@@ -673,9 +591,6 @@ lumaps_bake:
     mv a1, s8
     call plane_box
     call lights_cull
-    # the frame in texels: the world point where u and v are 0, and the
-    # world step a texel along each, u along x with the plane's rise a
-    # and v along y with b
     la t1, bake_grid
     fdiv.d ft1, fs2, fs0
     fneg.d ft1, ft1                 # x at u 0: -u_offset / u_scale
@@ -701,8 +616,6 @@ lumaps_bake:
     fsd ft5, (GRID_V + 8)(t1)
     fmul.d ft0, fs7, ft5
     fsd ft0, (GRID_V + 16)(t1)
-    # the surface's texels: u at the bounds' x ends, v at the y ends,
-    # the lesser and the greater of each
     flw ft0, SECTOR_MIN_X(s5)
     fcvt.d.s ft0, ft0
     fmadd.d ft0, fs0, ft0, fs2
@@ -742,7 +655,6 @@ lumaps_bake:
     addi s3, s3, 1
     j 10b
 30:
-    # the walls
     section_count KIND_WALLS, s2
     li s3, 0                        # the wall
 31:
@@ -775,8 +687,6 @@ lumaps_bake:
     fcvt.d.s fs2, ft0
     flw ft0, VERTEX_Y(a0)
     fcvt.d.s fs3, ft0               # b
-    # the wall's extent: from the higher ceiling end down to the lower
-    # floor end
     mv a0, s4
     li a1, 1
     fmv.d fa0, fs0
@@ -801,7 +711,6 @@ lumaps_bake:
     fmv.d fa1, fs3
     call plane_height
     fmin.d fs5, fs5, fa0            # the bottom
-    # the run, unit, and its length; a wall of no length has no map
     fsub.d fs6, fs2, fs0
     fsub.d fs7, fs3, fs1
     jab.f64.vec2.reg.len fs8, fs6, fs7
@@ -810,7 +719,6 @@ lumaps_bake:
     bnez t0, 47f
     fdiv.d fs6, fs6, fs8
     fdiv.d fs7, fs7, fs8
-    # the unit normal into the sector, the run turned a quarter left
     la t1, bake_grid
     fneg.d ft0, fs7
     fcvt.s.d ft0, ft0
@@ -818,8 +726,6 @@ lumaps_bake:
     fcvt.s.d ft0, fs6
     fsw ft0, (GRID_N + 4)(t1)
     sw zero, (GRID_N + 8)(t1)
-    # the lights culled to the wall: its box, its first vertex at the
-    # top, and the normal
     la t0, plane
     fcvt.s.d ft0, fs0
     fsw ft0, (PLANE_Q + 0)(t0)
@@ -846,9 +752,6 @@ lumaps_bake:
     fcvt.s.d fa4, fs5
     fcvt.s.d fa5, fs4
     call lights_cull
-    # the mapping as doubles, a scale of none leaving the wall unmapped:
-    # fs9 u_scale, fs10 v_scale, fs11 u_offset, fs2 v_offset, fs3 the
-    # anchor height
     flw ft0, (WALL_SURFACE + SURFACE_U_SCALE)(s5)
     fcvt.d.s fs9, ft0
     flw ft0, (WALL_SURFACE + SURFACE_V_SCALE)(s5)
@@ -864,9 +767,6 @@ lumaps_bake:
     fcvt.d.s fs2, ft0
     flw ft0, WALL_ANCHOR(s5)
     fcvt.d.s fs3, ft0
-    # the frame in texels: the world point where u and v are 0, along
-    # the wall from its first vertex and at the height v reaches 0; the
-    # step a texel along the wall, and down it
     la t1, bake_grid
     fdiv.d ft1, fs11, fs9
     fneg.d ft1, ft1                 # the distance along e at u 0
@@ -897,8 +797,6 @@ lumaps_bake:
     sd zero, (GRID_V + 0)(t1)
     sd zero, (GRID_V + 8)(t1)
     fsd ft6, (GRID_V + 16)(t1)
-    # the wall's texels: u from its first vertex to its length, v from
-    # the top to the bottom against the anchor
     fmul.d ft0, fs11, ft2           # u at the start
     fmadd.d ft1, fs9, fs8, fs11
     fmul.d ft1, ft1, ft2            # u at the end
@@ -929,8 +827,6 @@ lumaps_bake:
     j 31b
 50:
 .ifdef DEBUG
-    # the line: the maps baked, the time, the lumels, and the textured
-    # surfaces left without a map
     rdtime t0
     sub t0, t0, s9
     li t1, MS_TICKS
@@ -984,19 +880,7 @@ lumaps_bake:
     addi sp, sp, 208
     ret
 
-# A map's frame from the surface's texel range: k, the lumel's texels as
-# the power of two nearest half a metre along u; the origin, a multiple of
-# the texture's size at or below the least texel less one on each axis; the
-# columns and rows reaching a node past the greatest texel, two at the
-# least.
-# a0 address The record.
-# fa0 f64 The least texel u of the surface; fa1 the greatest.
-# fa2 f64 The least texel v; fa3 the greatest.
-# fa4 f64 Texels a metre along u.
-# returns Clobbers t0 to t6, ft0.
 lumap_frame:
-    # k from the double's exponent, rounded up where the mantissa is at
-    # or past root two's
     la t0, k_lumel_d
     fld ft0, 0(t0)
     fmul.d ft0, fa4, ft0            # texels in half a metre
@@ -1020,7 +904,6 @@ lumap_frame:
 3:
     sd t2, LUMAP_K(a0)
     la t4, poly
-    # the origin: the least texel less one, floored to the texture's size
     fcvt.l.d t3, fa0, rdn
     addi t3, t3, -1
     ld t5, POLY_UMASK(t4)
@@ -1045,12 +928,6 @@ lumap_frame:
     sd t6, LUMAP_H(a0)
     ret
 
-# A map's lumels baked over bake_grid: each node's point, the frame's
-# origin along the texel axes by the node's texel coordinate, under the
-# normal over the polygon's list through point_light, its channels to
-# 256ths, into the arena from the cursor; the record's base, or none when
-# the arena is full, which counts the map unmapped.
-# a0 address The record, its frame set.
 lumap_fill:
     addi sp, sp, -96
     sd ra, 88(sp)
@@ -1094,8 +971,6 @@ lumap_fill:
     li s4, 0                        # the column
 2:
     bgeu s4, s6, 7f
-    # the node's texel coordinate, the origin plus the column and the
-    # row of lumels, then its point along the frame's axes
     sll t0, s4, s10
     add t0, t0, s8
     fcvt.d.l ft8, t0                # u
@@ -1165,12 +1040,9 @@ lights:
     .skip (MAX_LIGHTS * LIGHT_SIZE)
 sector_lights:
     .skip (MAX_SECTORS * SECTOR_LIGHTS_SIZE)
-# Each entity's light index, -1 for an entity that is no light
 entity_light:
     .skip (MAX_ENTITIES * 4)
 .balign 8
-# The arena's next free lumel; the maps baked, the lumels in them, and the
-# textured surfaces left without a map
 lumel_cursor:
     .skip 8
 lumap_count:
@@ -1179,11 +1051,9 @@ lumel_count:
     .skip 8
 lumap_missing:
     .skip 8
-# The frame the map in hand is baked over
 bake_grid:
     .skip GRID_SIZE
 .balign 8
-# Every surface's map
 lumaps:
     .skip (LUMAP_COUNT * LUMAP_SIZE)
 .balign 8

@@ -1,6 +1,3 @@
-# The world's geometry asked about a point: a plane's height, the even-odd
-# rule, the sector holding a point.
-
 .section .rodata
 .balign 8
 k_hold_slack_d:
@@ -8,13 +5,6 @@ k_hold_slack_d:
 
 .section .text
 
-# The height of a sector's plane at a point.
-# a0 int The sector.
-# a1 int 0 the floor, 1 the ceiling.
-# fa0 f64 x.
-# fa1 f64 y.
-# returns Clobbers t0 to t2, ft0 to ft2.
-#   fa0 f64 The height.
 plane_height:
     li t0, SECTOR_SIZE
     mul t0, a0, t0
@@ -34,13 +24,6 @@ plane_height:
     fadd.d fa0, fa0, ft2
     ret
 
-# Whether a sector holds a point in the plan, by the even-odd rule over the
-# walls of its loops.
-# a0 int The sector.
-# fa0 f64 x.
-# fa1 f64 y.
-# returns Clobbers t0 to t6, a1 to a5, ft0 to ft7.
-#   a0 1 or 0.
 sector_holds_plan:
     li t0, SECTOR_SIZE
     mul t0, a0, t0
@@ -81,8 +64,6 @@ sector_holds_plan:
     flt.d a1, fa1, ft1              # ay > y
     flt.d a2, fa1, ft3              # by > y
     beq a1, a2, 3f
-    # the wall's x at y past the point's: (y - ay)(bx - ax) against
-    # (x - ax)(by - ay), the sense by the sign of by - ay
     fsub.d ft4, fa1, ft1
     fsub.d ft5, ft2, ft0
     fmul.d ft4, ft4, ft5            # (y - ay)(bx - ax)
@@ -109,12 +90,6 @@ sector_holds_plan:
     andi a0, a0, 1
     ret
 
-# Whether a sector holds a point: in the plan and between its planes there,
-# a thousandth's slack either way.
-# a0 int The sector.
-# fs0 f64 x; fs1 y; fs2 z.
-# returns
-#   a0 1 or 0.
 sector_holds:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -154,14 +129,6 @@ sector_holds:
     addi sp, sp, 32
     ret
 
-# The sector holding a point, from the sector it was last in: itself, else a
-# breadth-first walk through its portals, then every sector from the top.
-# a0 int The sector before, or past the count for a search from the top.
-# fa0 f64 x.
-# fa1 f64 y.
-# fa2 f64 z.
-# returns
-#   a0 The sector, -1 when none holds the point.
 sector_find:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -181,7 +148,6 @@ sector_find:
     section_count KIND_SECTORS, s2
     mv s3, a0
     bltu s3, s2, 2f
-    # from the top
     addi s4, s2, -1
 1:
     bltz s4, 8f
@@ -195,7 +161,6 @@ sector_find:
     call sector_holds
     mv s4, s3
     bnez a0, 7f
-    # the walk: nothing seen but the start, the fifo empty
     la t0, sector_seen
     add t1, t0, s2
 3:
@@ -214,8 +179,6 @@ sector_find:
     addi s8, s2, -1                 # the sectors left to try
 5:
     blez s8, 8f
-    # every portal of every wall of the sector in hand, its sector
-    # queued
     mv a0, s3
     call sector_at
     lwu t1, SECTOR_FIRST_LOOP(a0)
@@ -266,7 +229,6 @@ sector_find:
     addi t2, t2, -1
     j 51b
 55:
-    # the next sector: the fifo's, else one not yet reached
     bgeu s5, s6, 56f
     la t0, sector_fifo
     slli t1, s5, 2

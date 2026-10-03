@@ -1,17 +1,11 @@
-# The actors: the androids the map places, the magazines they drop, the
-# sparks where a round lands; an android runs rows of a frame set, a time,
-# and an action.
-
 .section .rodata
 .balign 8
-# The engine's images: the rotating sets' stems, then the singles'
 frame_sets:
     .dword word_set_stand, word_set_walk1, word_set_walk2, word_set_walk3
     .dword word_set_walk4, word_set_aim, word_set_fire, word_set_struck
 frame_singles:
     .dword word_single_fallen, word_single_spark1, word_single_spark2
     .dword word_single_spark3, word_single_magazine
-# An android's rows: the set, the milliseconds, the action, the next
 android_rows:
     .word SET_STAND, 400, ACT_LOOK, ROW_STAND
     .word SET_WALK1, 200, ACT_WALK, ROW_PATROL2
@@ -34,7 +28,6 @@ action_table:
     .dword action_aim, action_fire, action_seek, action_struck
     .dword action_destroy, action_fall
 .balign 4
-# The tangent of an eighth of a half turn, the octants' edge
 k_octant:
     .float 0.41421356
 k_thousandth_f:
@@ -72,8 +65,6 @@ word_single_magazine:
 
 .section .text
 
-# Every actor gone, then one placed for each android and magazine entity:
-# facing its yaw, its target the entity's, its feet on its sector's floor.
 actors_place:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -125,7 +116,6 @@ actors_place:
     sw t3, ACTOR_TARGET(s4)
     li t3, -1
     sw t3, ACTOR_ROW(s4)
-    # the feet on the sector's floor
     lw a0, ENTITY_SECTOR(s5)
     li a1, 0
     fld fa0, ACTOR_X(s4)
@@ -139,7 +129,6 @@ actors_place:
     sw t0, ACTOR_HEALTH(s4)
     li t0, (ACTOR_SOLID | ACTOR_SHOOTABLE)
     sw t0, ACTOR_FLAGS(s4)
-    # patrolling from the start when it has a waypoint, else standing
     lw t0, ACTOR_TARGET(s4)
     li a1, ROW_PATROL1
     bgez t0, 6f
@@ -161,9 +150,6 @@ actors_place:
     addi sp, sp, 48
     ret
 
-# An actor put in a row: its timer the row's milliseconds, the action taken.
-# a0 address The actor.
-# a1 int The row.
 actor_row:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -191,10 +177,6 @@ actor_row:
     addi sp, sp, 32
     ret
 
-# The milliseconds of an actor's row, negative for a held row.
-# a0 address The actor.
-# returns Clobbers t1.
-#   t0 The milliseconds.
 actor_ms:
     lwu t0, ACTOR_ROW(a0)
     la t1, android_rows
@@ -203,8 +185,6 @@ actor_ms:
     lw t0, ROW_MS(t0)
     ret
 
-# One frame of every actor: an android's walk and its row's timer, a row
-# ended entering the next with the leftover carried; a spark's frames.
 actors_tick:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -224,7 +204,6 @@ actors_tick:
     beq t0, t1, 5f
     li t1, ACTOR_ANDROID
     bne t0, t1, 8f
-    # a walking row steps toward its target
     lwu t0, ACTOR_ROW(s2)
     la t1, android_rows
     slli t0, t0, 4
@@ -277,7 +256,6 @@ actors_tick:
     bnez s4, 2b
     j 8f
 5:
-    # a spark
     flw ft0, ACTOR_TIMER(s2)
     fsub.s ft0, ft0, fs0
     fsw ft0, ACTOR_TIMER(s2)
@@ -309,7 +287,6 @@ actors_tick:
     addi sp, sp, 48
     ret
 
-# Every actor whose sector the walk reached drawn.
 actors_draw:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -327,7 +304,6 @@ actors_draw:
     add t1, t1, t0
     lbu t1, 0(t1)
     beqz t1, 8f
-    # its surface index: the actors after the map sprites, by index
     mv a0, s2
     call actor_index
     li t0, SURFACE_ACTORS
@@ -347,9 +323,6 @@ actors_draw:
     addi sp, sp, 32
     ret
 
-# An actor drawn through sprite_draw from the scratch entity: by its class
-# and row the frame's material, the quad's size, and the facing.
-# a0 address The actor.
 actor_draw:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -383,7 +356,6 @@ actor_draw:
     beq t1, t2, 3f
     li t2, ACTOR_SPARK
     beq t1, t2, 4f
-    # an android: its row's set
     lwu t1, ACTOR_ROW(s2)
     la t2, android_rows
     slli t1, t1, 4
@@ -450,11 +422,6 @@ actor_draw:
     addi sp, sp, 48
     ret
 
-# The rotation frame of an actor as the eye sees it: the eighth of a turn
-# nearest the angle from the direction toward the eye to the facing.
-# a0 address The actor.
-# returns
-#   a0 The frame, 0 facing the eye, 2 showing its right side.
 actor_rotation:
     addi sp, sp, -32
     sd s2, 16(sp)
@@ -519,9 +486,6 @@ actor_rotation:
     addi sp, sp, 32
     ret
 
-# A free actor, cleared.
-# returns Clobbers t0 to t3.
-#   a0 The actor, 0 when the table is full.
 actor_alloc:
     la a0, actors
     li t1, MAX_ACTORS
@@ -545,10 +509,6 @@ actor_alloc:
     li a0, 0
     ret
 
-# An actor's index in the table.
-# a0 address The actor.
-# returns Clobbers t0, t1.
-#   a0 The index.
 actor_index:
     la t0, actors
     sub a0, a0, t0
@@ -556,9 +516,6 @@ actor_index:
     divu a0, a0, t1
     ret
 
-# An actor's event reported over the API with its index and its row.
-# a0 address The actor.
-# a1 int The event.
 actor_event:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -573,12 +530,6 @@ actor_event:
     addi sp, sp, 16
     ret
 
-# The point at an actor's chest.
-# a0 address The actor.
-# returns Clobbers t0.
-#   fa0 f64 x.
-#   fa1 f64 y.
-#   fa2 f64 z.
 actor_chest:
     fld fa0, ACTOR_X(a0)
     fld fa1, ACTOR_Y(a0)
@@ -588,8 +539,6 @@ actor_chest:
     fadd.d fa2, fa2, ft0
     ret
 
-# An actor roused into ALERT, unless it is already or is no longer shootable.
-# a0 address The actor.
 actor_rouse:
     lwu t0, ACTOR_FLAGS(a0)
     andi t1, t0, ACTOR_ROUSED
@@ -613,10 +562,6 @@ actor_rouse:
 9:
     ret
 
-# An actor hurt: its health less the damage; destroyed at none, else struck,
-# either reported and its row entered.
-# a0 address The actor.
-# a1 int The damage.
 actor_hurt:
     lwu t0, ACTOR_FLAGS(a0)
     andi t1, t0, ACTOR_SHOOTABLE
@@ -653,12 +598,6 @@ actor_hurt:
 9:
     ret
 
-# A spark at a point: a free actor on its first frame, its feet a quarter
-# metre under the point so the quad centres on it; the spark's sound there.
-# a0 int The sector.
-# fa0 f64 x.
-# fa1 f64 y.
-# fa2 f64 z.
 spark_spawn:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -696,13 +635,6 @@ spark_spawn:
     addi sp, sp, 48
     ret
 
-# An actor walked toward a point for the frame: at its speed, no further
-# than the point, facing its heading, the feet through feet_move.
-# a0 address The actor.
-# fa0 f64 The point's x.
-# fa1 f64 The point's y.
-# returns
-#   a0 1 arrived, 2 blocked past the blocked seconds, else 0.
 actor_walk:
     addi sp, sp, -96
     sd ra, 88(sp)
@@ -740,7 +672,6 @@ actor_walk:
     fmadd.d fs1, fs4, ft3, fs1
     fld fs2, ACTOR_Z(s2)
     fsd ft2, 0(sp)                  # the step
-    # facing the heading
     fcvt.s.d fa0, fs4
     fcvt.s.d fa1, fs3
     jab.f32.atan2 fa0, fa0, fa1
@@ -753,7 +684,6 @@ actor_walk:
     bltz a0, 1f
     sw a0, ACTOR_SECTOR(s2)
 1:
-    # the move made against the step
     fld ft0, ACTOR_X(s2)
     fsub.d ft0, fs0, ft0
     fld ft1, ACTOR_Y(s2)
@@ -800,9 +730,6 @@ actor_walk:
     addi sp, sp, 96
     ret
 
-# An actor's frame of its patrol: walked toward its target waypoint;
-# arrived or blocked, the next waypoint, or standing when there is none.
-# a0 address The actor.
 actor_patrol_step:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -845,9 +772,6 @@ actor_patrol_step:
     addi sp, sp, 32
     ret
 
-# An actor's frame of its search: walked toward where it last saw the
-# player; arrived or blocked, its patrol resumes, or it stands.
-# a0 address The actor.
 actor_seek_step:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -871,11 +795,6 @@ actor_seek_step:
     addi sp, sp, 32
     ret
 
-# The line from an actor's eye to the player's into aim: the eye, the unit
-# direction, and the distance.
-# a0 address The actor.
-# returns Clobbers t0 to t4, ft0 to ft10, fa1.
-#   fa0 f64 The facing's share of the level direction, the cosine off it.
 actor_to_eye:
     la t3, aim
     fld ft0, ACTOR_X(a0)
@@ -904,7 +823,6 @@ actor_to_eye:
     jab.f64.vec3.len ft8, t4        # the distance
     fsd ft8, AIM_DIST(t3)
     jab.f64.vec3.norm t4, t4        # the unit direction
-    # the facing's share of the level direction
     flw fa0, ACTOR_YAW(a0)
     jab.f32.sin fa1, fa0
     fcvt.d.s ft9, fa1               # sin yaw
@@ -916,11 +834,6 @@ actor_to_eye:
     fmadd.d fa0, ft9, ft4, fa0
     ret
 
-# Whether an actor sees the player: within range and the front half turn,
-# or near all round, and the trace from eye to eye reaching its capsule.
-# a0 address The actor.
-# returns Sighted, its last sight is the player's feet.
-#   a0 1 or 0.
 actor_sight:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -957,7 +870,6 @@ actor_sight:
     call trace_ray
     li t0, TRACE_PLAYER
     bne a0, t0, 8f
-    # seen: the player's feet remembered
     la t0, camera
     flw ft0, CAM_X(t0)
     fcvt.d.s ft0, ft0
@@ -985,9 +897,6 @@ actor_sight:
     addi sp, sp, 32
     ret
 
-# An actor turned to the player.
-# a0 address The actor.
-# returns Clobbers t0 to t3, ft0 to ft5, fa0, fa1.
 actor_face:
     la t3, camera
     flw fa0, CAM_Y(t3)
@@ -1002,9 +911,6 @@ actor_face:
     fsw fa0, ACTOR_YAW(a0)
     ret
 
-# An actor's footstep for its row, the first on the first walking frame and
-# the second on the third, at its feet.
-# a0 address The actor.
 actor_footstep:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1034,12 +940,9 @@ actor_footstep:
     addi sp, sp, 32
     ret
 
-# The actions, each on entering a row.
-# a0 address The actor.
 action_none:
     ret
 
-# The player seen rouses it.
 action_look:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1055,7 +958,6 @@ action_look:
     addi sp, sp, 32
     ret
 
-# A patrol row: its footstep, then the look.
 action_walk:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1069,7 +971,6 @@ action_walk:
     addi sp, sp, 32
     ret
 
-# Faced to the player, the alert at its chest.
 action_alert:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1086,8 +987,6 @@ action_alert:
     addi sp, sp, 32
     ret
 
-# Faced to the player and the sight taken; the sight lost for the lost
-# seconds, a cycle at a time, sends it searching.
 action_aim:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1116,8 +1015,6 @@ action_aim:
     addi sp, sp, 32
     ret
 
-# With the player sighted, a round, the first after rousing certain and the
-# rest by FIRE_CHANCE in 256: the line to the player's eye strayed, traced.
 action_fire:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1144,8 +1041,6 @@ action_fire:
     call sound_start
     mv a0, s2
     call actor_to_eye
-    # the stray: the direction moved along the level right and up by
-    # two shares of chance, then made unit again
     la t3, rng
     jab.rng.byte a0, t3
     addi t0, a0, -128
@@ -1208,8 +1103,6 @@ action_fire:
     addi sp, sp, 32
     ret
 
-# A search row: its footstep, then the look, the player seen rousing it
-# afresh.
 action_seek:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1228,7 +1121,6 @@ action_seek:
     addi sp, sp, 32
     ret
 
-# The struck sound at its chest; roused.
 action_struck:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1243,7 +1135,6 @@ action_struck:
     addi sp, sp, 16
     ret
 
-# The destruction's sound at its chest and three sparks about it by chance.
 action_destroy:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1285,8 +1176,6 @@ action_destroy:
     addi sp, sp, 32
     ret
 
-# The magazine dropped half a metre to the android's right, on its floor;
-# the fall reported.
 action_fall:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1329,17 +1218,12 @@ action_fall:
 
 .section .rodata
 .balign 8
-# The chest over the feet, a spark's drop under its point, and how far
-# the destruction's sparks spread a unit of chance
 k_chest_d:
     .double 1.2
 k_spark_drop_d:
     .double 0.25
 k_spark_spread_d:
     .double 0.004
-# The android's numbers: its walk a second, the arrival radius, its
-# sight's range and the range all round, and the G-1's stray a unit of
-# chance, the tangent of twelve degrees over 128
 k_android_speed_d:
     .double 1.5
 k_arrive_d:
@@ -1353,8 +1237,6 @@ k_near_sight_d:
 k_stray_d:
     .double 0.0016606
 .balign 4
-# The seconds blocked before a waypoint is given up, a cycle of aim and
-# fire, and the seconds without sight before the search
 k_blocked_seconds:
     .float 1.0
 k_cycle_seconds:
@@ -1366,10 +1248,7 @@ k_lost_seconds:
 .balign 8
 actors:
     .skip (MAX_ACTORS * ACTOR_SIZE)
-# The scratch entity an actor draws through
 actor_entity:
     .skip ENTITY_SIZE
-# The line from an actor's eye to the player's: the eye, the unit
-# direction, the distance
 aim:
     .skip AIM_SIZE

@@ -1,11 +1,6 @@
-# The player's frame beyond the camera and the body: its health and its
-# rounds; a round fired, the frame hurt, a magazine taken, a noise heard.
-
 .set HEALTH_START, 100
 .set MAGAZINE_ROUNDS, 30
-# A noise floods this many sectors deep, and rouses within its range
 .set NOISE_HOPS, 6
-# What a round met, over the API
 .set MET_NOTHING, 0
 .set MET_GEOMETRY, 1
 .set MET_ANDROID, 2
@@ -23,8 +18,6 @@ k_noise_range_sq_d:
 
 .section .text
 
-# The frame's health and rounds at the start, the chance seeded from the
-# kernel's entropy, the clock without it, the pad's last keys none.
 player_reset:
     li t0, HEALTH_START
     la t1, health
@@ -45,8 +38,6 @@ player_reset:
     jab.rng.seed t3, t4
     ret
 
-# One round: the G-1's report at the player, the trace from the eye along
-# the forward, an android met hurt, a spark where it lands, the shot heard.
 player_fire:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -78,7 +69,6 @@ player_fire:
     ld t1, TRACE_KIND(t0)
     li t2, TRACE_ANDROID
     bne t1, t2, 2f
-    # an android: the spark on it, then the hurt
     ld s2, TRACE_ACTOR(t0)
     fld fa0, TRACE_PX(t0)
     fld fa1, TRACE_PY(t0)
@@ -100,7 +90,6 @@ player_fire:
     j 8f
 2:
     beqz t1, 3f
-    # geometry: the spark at the point, in the ray's sector
     fld fa0, TRACE_PX(t0)
     fld fa1, TRACE_PY(t0)
     fld fa2, TRACE_PZ(t0)
@@ -129,8 +118,6 @@ player_fire:
     addi sp, sp, 32
     ret
 
-# The frame hurt: the health less the damage, floored at 0, reported.
-# a0 int The damage.
 player_hurt:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -152,8 +139,6 @@ player_hurt:
     addi sp, sp, 16
     ret
 
-# Every magazine within a metre of the feet in the plan and a metre in
-# height taken: its rounds added, the pickup sound, the rounds reported.
 player_pickups:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -193,7 +178,6 @@ player_pickups:
     fld ft1, 0(t1)
     flt.d t1, ft1, ft0
     bnez t1, 8f
-    # taken
     sw zero, ACTOR_CLASS(s2)
     la t0, rounds
     lw t1, 0(t0)
@@ -221,8 +205,6 @@ player_pickups:
     addi sp, sp, 32
     ret
 
-# A noise at the player: a flood from the camera's sector through the walls'
-# portals NOISE_HOPS deep, every unroused android in it within range roused.
 noise_heard:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -315,7 +297,6 @@ noise_heard:
     addi t2, t2, -1
     j 31b
 5:
-    # the androids in the flooded sectors within range
     la s2, actors
     li s3, MAX_ACTORS
 6:
@@ -371,7 +352,6 @@ noise_heard:
 
 .section .bss
 .balign 8
-# The generator's state word
 rng:
     .skip 8
 health:

@@ -1,7 +1,3 @@
-# The game's sounds into the kernel's stream: MIX_CHANNELS channels mixed
-# into stereo frames kept MIX_AHEAD ahead of what plays, a sound at the
-# player or from a world point by distance and pan.
-
 .set MIX_CHANNELS, 8
 .set MIX_AHEAD, (JAB_SOUND_PERIOD * 3)
 .set MIX_MAX, 4096
@@ -28,8 +24,6 @@ k_mix_range_d:
     .double 38.0
 k_mix_pan_d:
     .double 0.6
-# A sound's full gain, three eighths in 256ths, so three sounds
-# together stay under full scale
 k_gain_full_d:
     .double 96.0
 k_mix_level_eps_d:
@@ -79,9 +73,6 @@ msg_sounds:
 
 .section .text
 
-# Every sound of the engine's stems read off the disk into the sound arena;
-# one not there or not fitting is named on the UART of a debug build and
-# left as none.
 sounds_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -121,7 +112,6 @@ sounds_load:
     call read_file
     beqz a0, 4f
     bgeu a0, s3, 5f
-    # kept, the cursor moved on to a word boundary
     la t0, sound_cursor
     ld t1, 0(t0)
     la t2, sound_at
@@ -189,11 +179,6 @@ sounds_load:
     addi sp, sp, 48
     ret
 
-# A sound started on a channel, at the player or from a world point: full
-# within MIX_NEAR of the eye, nothing past the range, panned by its side.
-# a0 int The sound.
-# a1 int 1 at the player, else from the point.
-# fa0 f64 The point's x; fa1 y; fa2 z.
 sound_start:
     addi sp, sp, -48
     sd s2, 40(sp)
@@ -216,7 +201,6 @@ sound_start:
     fld fs0, 0(t0)                  # the left gain
     fmv.d fs1, fs0                  # and the right
     bnez a1, 3f
-    # from the world: the volume by the distance to the eye
     la t3, camera
     flw ft0, CAM_X(t3)
     fcvt.d.s ft0, ft0
@@ -246,8 +230,6 @@ sound_start:
     fmul.d fs0, fs0, ft4
     fmv.d fs1, fs0
 2:
-    # the pan: the point's share to the right, along the level right
-    # (sin yaw, -cos yaw), over the level distance
     jab.f64.vec2.reg.len ft9, ft10, ft11
     la t0, k_mix_level_eps_d
     fld ft5, 0(t0)
@@ -276,7 +258,6 @@ sound_start:
 3:
     fcvt.w.d a4, fs0, rne           # the left gain, 0 to the full
     fcvt.w.d a5, fs1, rne
-    # a free channel, else the one with the least left to play
     la t0, channels
     li t1, MIX_CHANNELS
     mv t2, t0                       # the pick
@@ -314,8 +295,6 @@ sound_start:
     addi sp, sp, 48
     ret
 
-# The stream kept MIX_AHEAD frames ahead: what the ring lacks mixed from
-# every channel and written.
 .balign CODE_PAGE
 mixer_update:
     addi sp, sp, -16
@@ -332,7 +311,6 @@ mixer_update:
     mv t1, t0
 1:
     mv a2, t1                       # the frames
-    # the buffer cleared, then each channel added
     la t0, mixbuf
     slli t1, a2, 3
     add t1, t1, t0
@@ -380,7 +358,6 @@ mixer_update:
     addi t3, t3, -1
     j 3b
 6:
-    # clipped into 16-bit pairs, in place from the front
     la t0, mixbuf
     mv t1, t0
     mv t2, a2
@@ -419,7 +396,6 @@ mixer_update:
 .balign 8
 sound_cursor:
     .skip 8
-# Each sound's samples in the arena and their count, 0 for none
 sound_at:
     .skip (SOUND_COUNT * 8)
 sound_frames:

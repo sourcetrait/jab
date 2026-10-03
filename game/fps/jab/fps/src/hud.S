@@ -1,21 +1,14 @@
-# What the player sees over the world: the crosshair.
-
 .set CROSSHAIR_RADIUS, 5
 .set CROSSHAIR_X, (SCREEN_W / 2)
 .set CROSSHAIR_Y, (SCREEN_H / 2)
 
 .section .text
 
-# The crosshair over the frame: a disc at the centre, each pixel under it
-# halved and added to half of white.
-# returns Clobbers t0 to t6, a0, a1.
 hud_draw:
     li t0, -CROSSHAIR_RADIUS        # the row, from the top
 1:
     li t1, CROSSHAIR_RADIUS
     bgt t0, t1, 9f
-    # the row's half width: the greatest w with w * w within the
-    # radius's square less the row's
     mul t2, t0, t0
     li t3, (CROSSHAIR_RADIUS * CROSSHAIR_RADIUS)
     sub t2, t3, t2

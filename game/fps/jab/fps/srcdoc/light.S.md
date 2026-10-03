@@ -1,5 +1,11 @@
 # light.S
 
+The map's lights, without shadows: the brightness at a world point of a
+surface, the ambient plus each light of a list by cosine and falloff; a lumel
+map baked over every textured surface at load in the surface's own texels,
+which the lit spans read, and a sprite's one brightness taken at its centre a
+frame.
+
 A surface point is lit, in each of red, green, and blue, by the ambient 0.15
 plus, for each light of a list within the light's radius, the light's channel
 times the cosine at the surface's unit normal into the room, one for a
@@ -23,24 +29,40 @@ up to 44 levels apart from three yaws at one spot, light that moved as the
 camera turned; a held table keyed by the span's ends and a stride of rows
 went with that scheme.
 
+## lights_gather
+
+The axis comes from the yaw and pitch, with the cosine of the spread; a
+spread of none makes a point light. Each sector's list is the file's light
+entities as light indices.
+
 ## lights_cull
 
 The sector's list is the compiler's, by bounds and radius in the plan without
 z, so the bay's holds nineteen lights, the garage's four below the slab among
 them. The bake culls it once a map into the polygon's own list: a light stays
 when its sphere meets the surface's world box, the gap on each axis clamped
-at zero and squared, and when it lies ahead of the plane's normal, a light
-behind the surface adding nothing at any point; a surface lit at no angle
-keeps every light in reach. The box comes from the polygon's world points
-for a sprite, and for a plane from the sector's bounds with the plane's
-height at their corners (plane_box). Per frame only a sprite culls, for its
-one evaluation; a plane or a wall piece reads its baked map and nothing
-reads a per-polygon list, so the cull and the box ran there for no reader
-and were dropped. The dynamic lights to come, the muzzle flash first, loop a
-polygon's list through span_light and bring the cull back for the frames
-they live.
+at zero and squared, and when it lies ahead of the plane's normal, n . (light
+- q) > 0, a light behind the surface adding nothing at any point; a surface
+lit at no angle keeps every light in reach. The box comes from the polygon's
+world points for a sprite, and for a plane from the sector's bounds with the
+plane's height at their corners (plane_box). Per frame only a sprite culls,
+for its one evaluation; a plane or a wall piece reads its baked map and
+nothing reads a per-polygon list, so the cull and the box ran there for no
+reader and were dropped. The dynamic lights to come, the muzzle flash first,
+loop a polygon's list through span_light and bring the cull back for the
+frames they live.
 
-## point_light and span_light
+## span_light
+
+span_light is the frame's form for a dynamic light, the muzzle flash to come:
+the world point down a pixel's ray from its 1/z, the camera plus (right sx +
+up sy + forward hz) z/hz, then point_light under the polygon's normal facing
+the camera over the polygon's list. It falls into point_light rather than
+calling it, both being leaves, so the pixel-to-point part stays page-aligned
+on its own for the hot-function check while the model is shared with the bake
+and the sprites. No frame calls it yet.
+
+## point_light
 
 Single precision throughout. The brightness ends as a 16.16 fraction per
 channel, which a single's 24 bits cover with margin; positions within the
@@ -52,12 +74,18 @@ normal's cosine, and the spotlight's axis with no store and no reload; the
 memory form on the same vector cost three stores and nine loads a light and
 measured about a millisecond a frame when this ran per span.
 
-span_light is the frame's form for a dynamic light, the muzzle flash to come:
-the world point down a pixel's ray from its 1/z, then point_light under the
-polygon's normal facing the camera over the polygon's list. It falls into
-point_light rather than calling it, both being leaves, so the pixel-to-point
-part stays page-aligned on its own for the hot-function check while the model
-is shared with the bake and the sprites. No frame calls it yet.
+The falloff is one at the light, straight to nothing at the radius; the
+spotlight takes the cosine from the light's axis to the point, from the
+spread's edge scaled to one on the axis; each channel is clamped to one, in
+16.16, and packed.
+
+## lumel_pack
+
+A lumel holds each channel in 256ths, the brightness word's 16.16 lane
+shifted down eight, so four lumels summed under weights adding to 256 give
+back a 16.16 lane, exactly the brightness word the lit loops step. The
+weighted sum rides the packed lanes whole, since 256 times 256 is 17 bits
+and a lane is 21.
 
 ## lumaps_bake
 
@@ -104,10 +132,30 @@ baked 42,485 lumels, the texel grid's margins and its lumel a power of two
 of texels, 0.625 m on the parking's 0.4 repeats a metre, being the
 difference.
 
-## lumel_pack
+Every map starts as none. For a plane the mapping is held as doubles, fs0
+u_scale, fs1 v_scale, fs2 u_offset, fs3 v_offset, fs4 the texture's width,
+fs5 its height, fs6 a, fs7 b, fs8 c; the lights are culled to the plane by
+its box, a point on it at the bounds' corner, and the normal; the frame's
+origin is the world point where u and v are 0, its steps u along x with the
+plane's rise a and v along y with b; the surface's texels are u at the
+bounds' x ends and v at the y ends, the lesser and the greater of each. For
+a wall the extent is from the higher ceiling end down to the lower floor
+end; the run is made unit with its length; the lights are culled to the wall
+by its box, its first vertex at the top, and the normal; the mapping is held
+as doubles, fs9 u_scale, fs10 v_scale, fs11 u_offset, fs2 v_offset, fs3 the
+anchor height; the frame's origin lies along the wall from its first vertex
+at the height v reaches 0, its steps a texel along the wall and down it; the
+wall's texels are u from its first vertex to its length and v from the top to
+the bottom against the anchor. The line carries the maps baked, the time,
+the lumels, and the textured surfaces left without a map.
 
-A lumel holds each channel in 256ths, the brightness word's 16.16 lane
-shifted down eight, so four lumels summed under weights adding to 256 give
-back a 16.16 lane, exactly the brightness word the lit loops step. The
-weighted sum rides the packed lanes whole, since 256 times 256 is 17 bits
-and a lane is 21.
+## lumap_frame
+
+k comes from the double's exponent, rounded up where the mantissa is at or
+past root two's; the origin is the least texel less one, floored to the
+texture's size.
+
+## lumap_fill
+
+A node's texel coordinate is the origin plus the column and the row of
+lumels, its point taken along the frame's axes.

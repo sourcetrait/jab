@@ -1,30 +1,17 @@
-# The world drawn from the camera: the view flowed through the compiler's
-# portals to a screen rectangle a sector, then each reached sector's planes
-# and wall pieces drawn within its rectangle over the depth buffer
-
 .section .rodata
 .balign 8
 k_near_sq_d:
     .double 0.003906640625
 k_zero_d:
     .double 0.0
-# The flow's near case, squared: 1.522 times the near distance, an
-# on-screen point's distance being at most that times its depth (the
-# screen's half extents over hz are 1 and 0.5625), so an opening whose
-# wall lies further off loses nothing on screen to the near plane
 k_flow_near_sq_d:
     .double 0.00905
 .balign 4
-# The flow's facing slack: a millimetre squared, the eye on a wall's
-# line within it still flowing the wall
 k_facing_slack_sq:
     .float 0.000001
 
 .section .text
 
-# The frame drawn: the depth buffer cleared, the view flowed from the
-# camera's sector or from every sector, the sectors reached drawn in that
-# order, then the sprites and the actors
 world_draw:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -44,8 +31,6 @@ world_draw:
     addi t0, t0, 32
     bltu t0, t1, 1b
 .ifdef DEBUG
-    # the frame painted magenta first, so a pixel no surface reaches
-    # shows in a capture; the release build leaves the frame before
     li t0, JAB_DISPLAY_BASE
     li t1, SCREEN_PITCH
     li t2, SCREEN_H
@@ -94,14 +79,12 @@ world_draw:
     sd zero, 0(t0)
     la t0, poly_serial
     sd zero, 0(t0)
-    # the view flowed through the portals, timed as the portals' phase
     rdtime s2
     call world_flow
     rdtime t0
     sub t0, t0, s2
     la t1, stats
     sd t0, STAT_PORTAL_TICKS(t1)
-    # the sectors drawn in the order the flow reached them
     la s3, walk_fifo
     li s4, 0                        # the fifo's read
 8:
@@ -115,7 +98,6 @@ world_draw:
     call sector_draw
     j 8b
 9:
-    # the sprites and the actors of the sectors drawn
     rdtime s2
     call sprites_draw
     call actors_draw
@@ -130,19 +112,12 @@ world_draw:
     addi sp, sp, 48
     ret
 
-# The view flowed through the portals before any drawing: every sector's
-# rectangle emptied, the camera's sector given the screen, or every
-# sector when the camera is in none; then each queued sector flowed, its
-# portals' openings projected to rectangles that grow the sectors
-# across, a sector grown queued again; the sectors into walk_fifo in the
-# order first reached, marked in walk_seen
 world_flow:
     addi sp, sp, -32
     sd ra, 24(sp)
     sd s2, 16(sp)
     sd s3, 8(sp)
     section_count KIND_SECTORS, s2
-    # every rectangle empty, no sector seen or waiting
     la t0, sector_rect
     li t1, SCREEN_W
     li t2, SCREEN_H
@@ -178,11 +153,9 @@ world_flow:
     la t0, cam_sector
     lw a0, 0(t0)
     bgeu a0, s2, 6f
-    # the camera's sector: the whole screen, queued
     call flow_screen
     j 8f
 6:
-    # in no sector: every sector the whole screen
     li s3, 0
 7:
     bgeu s3, s2, 8f
@@ -191,8 +164,6 @@ world_flow:
     addi s3, s3, 1
     j 7b
 8:
-    # the queue drained, each sector flowed with its rectangle as it
-    # stands, into the draw order the first time
     la t0, flow_head
     ld t1, 0(t0)
     la t2, flow_tail
@@ -233,9 +204,6 @@ world_flow:
     addi sp, sp, 32
     ret
 
-# A sector's rectangle set to the whole screen, and the sector queued
-# a0 int The sector
-# returns Clobbers t0 to t3
 flow_screen:
     la t0, sector_rect
     slli t1, a0, 4
@@ -246,11 +214,7 @@ flow_screen:
     sw zero, RECT_Y0(t0)
     li t1, SCREEN_H
     sw t1, RECT_Y1(t0)
-    # falls into flow_queue
 
-# A sector queued for the flow, unless it waits already
-# a0 int The sector
-# returns Clobbers t0 to t3
 flow_queue:
     la t0, flow_pending
     add t0, t0, a0
@@ -270,11 +234,6 @@ flow_queue:
 9:
     ret
 
-# A sector's rectangle grown by one, and the sector queued when it grew;
-# a rectangle inside it already changes nothing
-# a0 int x0; a1 x1; a2 y0; a3 y1
-# a4 int The sector
-# returns Clobbers t0 to t5, a0
 rect_grow:
     la t0, sector_rect
     slli t1, a4, 4
@@ -308,13 +267,6 @@ rect_grow:
     mv a0, a4
     j flow_queue
 
-# A sector's portals flowed: for each wall facing the camera, each
-# portal's opening cut and projected, its rectangle intersected with the
-# sector's, and the neighbour's rectangle grown by it; the eye within the
-# flow's near distance of the wall hands the neighbour the sector's own
-# rectangle, since an opening that near can lie before the near plane
-# and still on screen
-# a0 int The sector
 sector_flow:
     addi sp, sp, -208
     sd ra, 184(sp)
@@ -337,7 +289,6 @@ sector_flow:
     fsd fs6, 48(sp)
     fsd fs7, 40(sp)
     mv s2, a0
-    # the sector's rectangle
     la t0, sector_rect
     slli t1, s2, 4
     add t0, t0, t1
@@ -364,8 +315,6 @@ sector_flow:
     sd a0, 0(sp)                    # the wall
     lwu t0, WALL_PORTAL_COUNT(a0)
     beqz t0, 7f                     # solid
-    # facing: the camera on the sector's side of the wall's line, its
-    # left from a to b; the ends kept as doubles for the cut
     lwu a0, WALL_A(a0)
     call vertex_at
     flw ft2, VERTEX_X(a0)
@@ -393,8 +342,6 @@ sector_flow:
     flw ft7, 0(t0)
     flt.s t1, ft7, ft6
     bnez t1, 25f                    # ahead of the line
-    # on the line within a millimetre, which the near case takes: the
-    # product's square against the slack's square times the run's square
     fmul.s ft6, ft6, ft6
     fmul.s ft7, ft4, ft4
     fmadd.s ft7, ft5, ft5, ft7      # the run squared
@@ -404,7 +351,6 @@ sector_flow:
     flt.s t1, ft7, ft6
     bnez t1, 7f                     # behind
 25:
-    # the sector's planes at both ends, for the opening's clamp
     mv a0, s2
     li a1, 1
     fmv.d fa0, fs0
@@ -429,7 +375,6 @@ sector_flow:
     fmv.d fa1, fs3
     call plane_height
     fmv.d fs7, fa0                  # and at the end
-    # the near case, once a wall
     la t0, k_flow_near_sq_d
     fld fa0, 0(t0)
     call wall_within
@@ -450,14 +395,12 @@ sector_flow:
     sd a0, 32(sp)                   # the neighbour
     ld t0, 8(sp)
     beqz t0, 4f
-    # near: the sector's own rectangle
     mv a0, s8
     mv a1, s9
     mv a2, s10
     mv a3, s11
     j 5f
 4:
-    # the opening projected, its rectangle within the sector's
     ld a0, 32(sp)
     call opening_cut
     li t0, 3
@@ -478,7 +421,6 @@ sector_flow:
     bge a0, a1, 6f                  # empty
     bge a2, a3, 6f
 5:
-    # an opening flowed, the neighbour grown and queued when it grew
     la t0, stats
     ld t1, STAT_OPENINGS(t0)
     addi t1, t1, 1
@@ -519,16 +461,6 @@ sector_flow:
     addi sp, sp, 208
     ret
 
-# The opening into a neighbour across the wall in hand cut as a polygon:
-# the neighbour's ceiling at both ends, clamped to the sector's where it
-# passes it at both, over the neighbour's floor, clamped to the sector's
-# floor the same way, through piece_polygon
-# a0 int The neighbour
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
-# fs4 f64 The sector's ceiling at the start; fs5 at the end
-# fs6 f64 The sector's floor at the start; fs7 at the end
-# returns
-#   a0 The clipped point count, 0 for nothing
 opening_cut:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -590,9 +522,6 @@ opening_cut:
     addi sp, sp, 48
     ret
 
-# A sector's planes facing the camera, then its walls facing the camera,
-# nearest first
-# a0 int The sector
 sector_draw:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -605,7 +534,6 @@ sector_draw:
     sd s8, 16(sp)
     mv s2, a0
     li s8, 0                        # the facing walls gathered
-    # the sector's rectangle clips every span of it
     la t0, sector_rect
     slli t1, s2, 4
     add t0, t0, t1
@@ -620,9 +548,6 @@ sector_draw:
     sd t1, STAT_SECTORS(t0)
     rdtime t0
     sd t0, 0(sp)
-    # the planes: the floor unless the camera is below it, the ceiling
-    # unless the camera is above it, judged at the plane's height under
-    # the camera
     li s3, 0
 1:
     li t0, 2
@@ -662,10 +587,6 @@ sector_draw:
     sd t2, STAT_PLANE_TICKS(t1)
     rdtime t0
     sd t0, 0(sp)
-    # the walls facing the camera: the camera on the sector's side of
-    # the wall's line, its left from a to b; each gathered with the
-    # squared distance to its nearest point as the key, then drawn
-    # nearest first, so the depth test rejects more of the far ones
     mv a0, s2
     call sector_at
     lwu s3, SECTOR_FIRST_LOOP(a0)
@@ -702,8 +623,6 @@ sector_draw:
     fmul.s ft7, ft5, ft0
     flt.s t1, ft7, ft6              # (bx - ax)(py - ay) > (by - ay)(px - ax): in front
     beqz t1, 61f
-    # the key: the eye's offset from a less its share along the run,
-    # clamped to the segment, squared
     fmul.s ft6, ft0, ft4
     fmadd.s ft6, ft1, ft5, ft6      # along the run
     fmul.s ft7, ft4, ft4
@@ -719,7 +638,6 @@ sector_draw:
     fnmsub.s ft1, ft6, ft5, ft1
     fmul.s ft6, ft0, ft0
     fmadd.s ft6, ft1, ft1, ft6
-    # inserted in order of the key
     la t0, wall_order
     slli t1, s8, 3
     add t1, t1, t0                  # past the last entry
@@ -744,7 +662,6 @@ sector_draw:
     addi s3, s3, 1
     j 5b
 8:
-    # drawn in that order
     li s3, 0
 81:
     bgeu s3, s8, 82f
@@ -775,11 +692,6 @@ sector_draw:
     addi sp, sp, 80
     ret
 
-# A material's texture into the surface in hand: pixels, size, wraps, and
-# the material's index for the tile builder
-# a0 int The material
-# returns Clobbers t0 to t4, a1
-#   a0 1, or 0 with the sizes 1 when the material is none or has no texture
 material_bind:
     la t1, poly
     sw a0, POLY_MATERIAL(t1)
@@ -789,7 +701,6 @@ material_bind:
     add t0, t0, t2
     ld t0, 0(t0)
     beqz t0, 8f
-    # its chain's table and levels, for a block's read at its level
     la t4, material_mips
     li t2, MIP_ENTRY
     mul t2, a0, t2
@@ -810,7 +721,6 @@ material_bind:
     fsw ft0, POLY_TEXW(t1)
     fcvt.s.wu ft0, t3
     fsw ft0, POLY_TEXH(t1)
-    # the width's power of two below it, its mask, and the row shift
     li t4, 1
     li t0, 0
 1:
@@ -845,9 +755,6 @@ material_bind:
     li a0, 0
     ret
 
-# POLY_MODE from a surface's flags: the sky, else textured, lit with lights
-# a0 u32 The flags
-# returns Clobbers t0, t1
 surface_mode:
     andi t0, a0, SURFACE_SKY
     li a0, POLY_TEXTURED
@@ -857,10 +764,6 @@ surface_mode:
     sd a0, POLY_MODE(t0)
     ret
 
-# POLY_MODE set, the lit flag added when the map has lights and the polygon
-# has no map, a sprite lit flat, or a baked one
-# a0 int The mode
-# returns Clobbers t0, t1
 poly_mode:
     la t0, light_count
     lwu t0, 0(t0)
@@ -877,10 +780,6 @@ poly_mode:
     sd a0, POLY_MODE(t0)
     ret
 
-# A sector's plane when its surface has a material: every loop's points at
-# the plane's height into one edge list and one even-odd fill
-# a0 int The sector
-# a1 int 0 the floor, 1 the ceiling
 plane_draw:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -892,7 +791,6 @@ plane_draw:
     sd s7, 8(sp)
     mv s2, a0
     mv s3, a1
-    # the plane's surface index, and its lumel map at it
     slli t0, s2, 1
     add t0, t0, s3
     la t1, poly
@@ -912,7 +810,6 @@ plane_draw:
     lw a0, SURFACE_MATERIAL(s5)
     call material_bind
     beqz a0, 90f
-    # the plane: the normal (-a, -b, 1) and the point (0, 0, c)
     la t0, plane
     li t1, SECTOR_CEILING
     mul t1, s3, t1
@@ -930,7 +827,6 @@ plane_draw:
     sw zero, (PLANE_Q + 4)(t0)
     flw ft0, PLANE_C(t1)
     fsw ft0, (PLANE_Q + 8)(t0)
-    # u along x and v along y, by the surface's scales and offsets
     flw ft0, SURFACE_U_SCALE(s5)
     fsw ft0, (PLANE_AU + 0)(t0)
     sw zero, (PLANE_AU + 4)(t0)
@@ -944,15 +840,11 @@ plane_draw:
     flw ft0, SURFACE_V_OFFSET(s5)
     fsw ft0, PLANE_V0(t0)
     call surface_setup
-    # the mode after the setup, which clears the flat flag the mode
-    # reads, then the lumel map bound
     lwu a0, SURFACE_FLAGS(s5)
     call surface_mode
     la t0, poly
     sw s2, POLY_SECTOR(t0)
     call lumap_bind
-    # the loops' edges, each loop a polygon of its walls' first
-    # vertices at the plane's height
     call edges_reset
     lwu s6, SECTOR_FIRST_LOOP(s4)
     lwu s7, SECTOR_LOOP_COUNT(s4)
@@ -1014,15 +906,6 @@ plane_draw:
     addi sp, sp, 64
     ret
 
-# The polygon in hand set to the wall piece between two heights at each
-# end: the quad, the triangle where the planes cross, or nothing
-# fa0 f64 The top at the start
-# fa1 f64 The top at the end
-# fa2 f64 The bottom at the start
-# fa3 f64 The bottom at the end
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
-# returns
-#   a0 The clipped point count, 0 for nothing
 piece_polygon:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -1044,7 +927,6 @@ piece_polygon:
     flt.d t2, ft2, ft1              # dz1 > 0
     beqz t1, 3f
     beqz t2, 2f
-    # the quad
     fcvt.s.d fa0, fs0
     fcvt.s.d fa1, fs1
     fcvt.s.d fa2, fs4
@@ -1063,8 +945,6 @@ piece_polygon:
     call poly_point
     j 5f
 2:
-    # the triangle at the start: the start's top and bottom and the
-    # crossing along the top
     fsub.d ft3, ft0, ft1
     fdiv.d ft3, ft0, ft3            # f
     fcvt.s.d fa0, fs0
@@ -1080,7 +960,6 @@ piece_polygon:
     j 5f
 3:
     beqz t2, 9f
-    # the triangle at the end
     fsub.d ft3, ft0, ft1
     fdiv.d ft3, ft0, ft3
     call piece_cross
@@ -1107,13 +986,6 @@ piece_polygon:
     addi sp, sp, 64
     ret
 
-# The point a fraction along the wall from its start, at the top's height
-# there
-# ft3 f64 The fraction
-# returns Clobbers ft4
-#   fa0 f32 x
-#   fa1 f32 y
-#   fa2 f32 z
 piece_cross:
     fsub.d ft4, fs2, fs0
     fmadd.d ft4, ft4, ft3, fs0
@@ -1126,13 +998,6 @@ piece_cross:
     fcvt.s.d fa2, ft4
     ret
 
-# The plane and surface in hand set for a wall: the normal into the sector,
-# u along the wall from its first vertex, v down from its anchor height
-# a0 int The sector
-# a1 int The wall
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
-# returns
-#   a0 1 when the wall's material has a texture, else 0
 wall_surface:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -1141,7 +1006,6 @@ wall_surface:
     sd s6, 16(sp)
     mv s4, a0
     mv s5, a1
-    # the wall's surface index, and its lumel map at it
     li t0, LUMAP_PLANES
     add t0, t0, s5
     la t1, poly
@@ -1156,7 +1020,6 @@ wall_surface:
     call wall_at
     mv s6, a0                       # the wall
     la t0, plane
-    # the normal and a point
     fcvt.s.d ft0, fs1
     fcvt.s.d ft1, fs3
     fsub.s ft2, ft0, ft1            # ay - by
@@ -1170,7 +1033,6 @@ wall_surface:
     fcvt.s.d ft0, fs1
     fsw ft0, (PLANE_Q + 4)(t0)
     sw zero, (PLANE_Q + 8)(t0)
-    # e, the unit direction along the wall, and the start's distance
     fsub.d ft0, fs2, fs0
     fsub.d ft1, fs3, fs1
     jab.f64.vec2.reg.len ft8, ft0, ft1
@@ -1181,7 +1043,6 @@ wall_surface:
     fmul.d ft1, ft1, ft2            # ey
     fmul.d ft4, ft0, fs0
     fmadd.d ft4, ft1, fs1, ft4      # e . a
-    # u: the scale along e from the start
     flw ft5, (WALL_SURFACE + SURFACE_U_SCALE)(s6)
     fcvt.d.s ft5, ft5
     fmul.d ft6, ft5, ft0
@@ -1196,7 +1057,6 @@ wall_surface:
     fnmsub.d ft6, ft5, ft4, ft6     # u_offset - u_scale e.a
     fcvt.s.d ft7, ft6
     fsw ft7, PLANE_U0(t0)
-    # v: the scale down from the anchor height
     flw ft5, (WALL_SURFACE + SURFACE_V_SCALE)(s6)
     fcvt.d.s ft5, ft5
     sw zero, (PLANE_AV + 0)(t0)
@@ -1215,8 +1075,6 @@ wall_surface:
     call material_bind
     mv s5, a0
     call surface_setup
-    # the mode after the setup, which clears the flat flag the mode
-    # reads, then the lumel map bound
     lwu a0, (WALL_SURFACE + SURFACE_FLAGS)(s6)
     call surface_mode
     la t0, poly
@@ -1230,11 +1088,6 @@ wall_surface:
     addi sp, sp, 48
     ret
 
-# Whether the camera is within a distance of the wall in hand, in the plan
-# fa0 f64 The distance, squared
-# fs0 f64 The wall's start x; fs1 y; fs2 the end x; fs3 y
-# returns Clobbers t0, ft0 to ft7
-#   a0 1 or 0
 wall_within:
     la t0, camera
     flw ft0, CAM_X(t0)
@@ -1263,11 +1116,6 @@ wall_within:
     fle.d a0, ft4, fa0
     ret
 
-# A wall of a sector facing the camera: its portals from the top down, the
-# solid pieces between them and, on a masked wall, its surface over each
-# opening
-# a0 int The sector
-# a1 int The wall
 wall_draw:
     addi sp, sp, -192
     sd ra, 168(sp)
@@ -1315,7 +1163,6 @@ wall_draw:
     fcvt.d.s fs2, ft0
     flw ft0, VERTEX_Y(a0)
     fcvt.d.s fs3, ft0               # the end
-    # the sector's planes at the two ends
     mv a0, s2
     li a1, 1
     fmv.d fa0, fs0
@@ -1346,7 +1193,6 @@ wall_draw:
 1:
     bgt s6, s5, 90f
     beqz s6, 20f
-    # the neighbour above this piece: its floor is the piece's top
     add a0, s9, s6
     addi a0, a0, -1
     call portal_at
@@ -1363,9 +1209,6 @@ wall_draw:
     fmv.d fa1, fs3
     call plane_height
     fmv.d fs9, fa0
-    # a masked wall's surface filled over the opening into it, unless the
-    # camera is within the near distance of the wall, where the opening
-    # would clip away
     andi t2, s8, SURFACE_MASKED
     beqz t2, 20f
     la t0, k_near_sq_d
@@ -1385,7 +1228,6 @@ wall_draw:
     call tiles_bind
     call poly_fill
 20:
-    # the piece's bottom: the next neighbour's ceiling, or the floor
     bge s6, s5, 21f
     add a0, s9, s6
     call portal_at
@@ -1452,9 +1294,6 @@ wall_draw:
     addi sp, sp, 192
     ret
 
-# How many pixels no surface reached this frame, the depth buffer's zeros
-# returns Clobbers t0 to t2
-#   a0 The count
 uncovered:
     la t0, zbuf
     li t1, ZBUF_BYTES
@@ -1480,15 +1319,9 @@ walk_fifo:
     .skip (MAX_SECTORS * 4)
 walk_seen:
     .skip MAX_SECTORS
-# A sector's facing walls in the order they are drawn: the key, the
-# squared distance from the eye to the wall's nearest point, a float,
-# and the wall
 .balign 8
 wall_order:
     .skip (MAX_WALLS * 8)
-# Every sector's screen rectangle, the union of the openings it is seen
-# through; the flow's waiting flags and its ring with the ring's read and
-# write; the rectangle the spans in hand are clipped to
 .balign 16
 sector_rect:
     .skip (MAX_SECTORS * RECT_SIZE)

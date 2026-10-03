@@ -1,5 +1,14 @@
 # sprite.S
 
+The sprite entities drawn after the walk, each a flat quad facing the camera,
+fixed along its yaw, or flat on the floor, masked by alpha.
+
+## sprites_draw
+
+A map sprite's surface index is after every map, by entity.
+
+## sprite_draw
+
 A sprite's position is its feet; with w and h its width and height: facing
 the camera, the centre is h/2 up, r is the camera's right kept level and
 scaled to w/2, and d is (0, 0, -h/2), so it turns to the eye about the
@@ -13,7 +22,8 @@ the side the texture faces.
 The quad is pulled a hundredth of the way to the eye with its axes scaled the
 same, so a sprite laid on a wall wins the depth test. The plane record is the
 normal, the pulled centre, and u and v as world gradients, r over twice its
-length squared and d likewise, with offsets putting a half at the centre.
+length squared and d likewise, with offsets putting a half at the centre, so
+each is 0 at the near edge and 1 at the far.
 
 A sprite is lit flat: one evaluation a frame at the quad's centre,
 point_light over the polygon's culled list, written as the polygon's one
@@ -32,6 +42,11 @@ only per-frame evaluation left.
 
 The level length of the camera's right is jab.f64.vec2.len over camera_d's
 right, the doubles the basis already wrote.
+
+The feet and the half extents are taken as doubles, and the yaw's sine and
+cosine. The quad goes in from the corner at u 0, v 0 around.
+
+## sprite_within
 
 The quad is clipped to its sector's rectangle from the flow (world.S)
 only when it is proven within the sector, by sprite_within: the pulled
@@ -60,3 +75,8 @@ beyond, as before this clip; a sprite in a sector the flow did not reach
 is not drawn, as before. The surface index the caller names in
 sprite_surface, a map sprite's by its entity and an actor's by its index,
 goes into the polygon for the span record and the owner build.
+
+The segment's ends a and b are the centre less and plus the half width, its
+run d twice the half width; parallel, a crossing when the segment's start
+lies within the slack of the wall's line, the cross with the run over its
+length.

@@ -1,8 +1,3 @@
-# The texture's mip chain: each material's coarser levels built at load from
-# the level before by the tile shrink's rule under the level's alpha scale,
-# so a span reads the level a block's footprint asks for, and a tile at a
-# level and the lit loop at the same level draw the same texel
-
 .section .rodata
 .ifdef DEBUG
 msg_mips:
@@ -19,19 +14,6 @@ word_ms_end:
 
 .section .text
 
-# A coarser texel from the two by two under it: alike alphas take the plain
-# mean a channel and the alpha as it is; unalike, each channel's mean
-# weighted by the alphas, so a transparent texel's colour counts for
-# nothing, by one reciprocal of their sum, each product rounded to the
-# nearest so an exact mean survives, the alpha their mean; the alpha then
-# scaled by the level's factor and capped at 255
-# a0 u32 The texel above left
-# a7 u32 The texel above right
-# t2 u32 The texel below left
-# t3 u32 The texel below right
-# s6 int The level's alpha scale, 16.16
-# returns Clobbers t0, t4 to t6, a1, a3 to a5
-#   a2 The texel
 .macro texel_shrink
     srli t4, a0, 24                 # the four alphas
     srli t5, a7, 24
@@ -43,7 +25,6 @@ word_ms_end:
     bne t4, t5, .Lshrink_unalike\@
     bne t4, t6, .Lshrink_unalike\@
     bne t4, a3, .Lshrink_unalike\@
-    # alike: the plain mean a channel, the alpha theirs
     andi a2, a0, 0xff
     andi a4, a7, 0xff
     add a2, a2, a4
@@ -83,10 +64,6 @@ word_ms_end:
     mv a5, t4                       # the alpha
     j .Lshrink_scale\@
 .Lshrink_unalike\@:
-    # unalike: each channel's mean weighted by the alphas, so a
-    # transparent texel's colour counts for nothing, by one reciprocal
-    # of their sum, each product rounded to the nearest so an exact
-    # mean survives; the alpha their mean
     li t0, (1 << 24)
     divu t0, t0, a1                 # the reciprocal of the sum, 8.24
     andi a2, a0, 0xff
@@ -148,7 +125,6 @@ word_ms_end:
     or a2, a2, a4                   # red
     srli a5, a1, 2                  # the alpha, the mean
 .Lshrink_scale\@:
-    # the alpha scaled by the level's factor, capped
     mul a5, a5, s6
     srli a5, a5, ALPHA_SCALE_BITS
     li a4, 255
@@ -159,12 +135,6 @@ word_ms_end:
     or a2, a2, a5
 .endm
 
-# The levels a texture's chain has: one, and one more for every halving
-# while both sides stay two texels or more, MIP_LEVELS at most
-# a0 int The width
-# a1 int The height
-# returns Clobbers t0, t1, a1
-#   a0 The levels
 mip_levels:
     li t0, 1
 1:
@@ -181,12 +151,6 @@ mip_levels:
     mv a0, t0
     ret
 
-# Every material's chain built, the map's and the engine's images': level
-# 0 the record's own texels, each coarser level half a side from the one
-# before by texel_shrink under the level's alpha scale, into the arena
-# while both sides stay two texels or more and the arena holds it; the
-# levels a material has into material_mip_count, one for the texture
-# alone; a line on the UART of a debug build
 mips_build:
     addi sp, sp, -160
     sd ra, 152(sp)
@@ -269,7 +233,6 @@ mips_build:
     sd a1, 8(sp)
     sd a1, 64(sp)                   # the rows left
     sd t4, 32(sp)                   # the level's texels, for the count
-    # the level's alpha scale
     la t0, material_alpha
     li t3, ALPHA_MATERIAL_SIZE
     mul t3, s3, t3
@@ -303,7 +266,6 @@ mips_build:
     sd t1, 64(sp)
     j 3b
 6:
-    # the level built: counted, and the next builds from it
     ld t0, 48(sp)
     addi t0, t0, 1
     sd t0, 48(sp)
@@ -320,7 +282,6 @@ mips_build:
     sd t2, 24(sp)
     j 2b
 7:
-    # the chain ends: the count is the level in hand
     ld t2, 24(sp)
     sd t2, 0(s5)
     li t3, 1
@@ -374,8 +335,6 @@ mips_build:
 
 .section .bss
 .balign 8
-# Each material's chain: the texels of every level eight bytes a level,
-# level 0 the record's own; the levels it has; the arena's next free byte
 material_mips:
     .skip (MAX_MATERIALS * MIP_ENTRY)
 material_mip_count:

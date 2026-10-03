@@ -1,5 +1,10 @@
 # console.S
 
+The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
+kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
+with the lumels bright or the tiles held off, each reported back as
+REPORT_CONSOLE.
+
 A frame is 64 bytes: a kind byte, three of padding, the rest by the kind, zero
 to the end; a partial frame is kept until the rest arrives. P carries six
 floats from byte 4, the eye's x, y, z then the yaw, pitch, and roll in
@@ -17,3 +22,14 @@ in place of unbound, so no surface ever completes level 0 and every span takes
 the lit loop: the lit loop's picture from the same build, which the alpha
 fixture reads against the tiled one. Both bytes exist for the test; play never
 sends the frame.
+
+## console_read
+
+The partial frame is moved to the front of the buffer.
+
+## console_frame
+
+L: the tiles forgotten and rebuilt under no budget from the next frame, every
+lumel set full bright first when the frame's byte 4 is 1, so a capture reads
+the texture sampled as the lit one is; under a budget of nothing instead when
+byte 5 is 1, so every surface stays on the lit loop.

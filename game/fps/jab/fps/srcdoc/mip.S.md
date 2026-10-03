@@ -1,5 +1,10 @@
 # mip.S
 
+The texture's mip chain: each material's coarser levels built at load from the
+level before by the tile shrink's rule under the level's alpha scale, so a
+span reads the level a block's footprint asks for, and a tile at a level and
+the lit loop at the same level draw the same texel.
+
 The chain exists so a block reads the texture at about a texel a pixel
 whatever its distance: the lit and unlit loops read level 0 at any
 distance before it, a far floor sampling every fourth to sixteenth texel,
@@ -10,7 +15,13 @@ surface at its nearest point, which an engine with faces capped at a few
 hundred units can afford, would leave the far end of a twenty-metre floor
 at level 0.
 
-## texel_shrink
+## .macro texel_shrink
+
+Alike alphas take the plain mean a channel and the alpha as it is; unalike,
+each channel's mean weighted by the alphas, so a transparent texel's colour
+counts for nothing, by one reciprocal of their sum, each product rounded to
+the nearest so an exact mean survives, the alpha their mean; the alpha then
+scaled by the level's factor and capped at 255.
 
 One macro for the tile and the chain, lifted from tile_shrink's loop
 instruction for instruction, so a tile at a level and the chain's level
@@ -40,3 +51,7 @@ material's count says so, the span holding its level under the count.
 Nothing is freed: the chain is a property of the load, as the lumel maps
 are. The arena is bss, free until touched, and a chain is a third of its
 texture, so the factory's chains take about six megabytes of the thirty-two.
+
+Each level takes its alpha scale from material_alpha; a level built is
+counted and the next builds from it; where the chain ends the count is the
+level in hand.

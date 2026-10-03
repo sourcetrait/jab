@@ -1,0 +1,5 @@
+set CROSSHAIR_RADIUS [1] :the disc's radius in pixels
+set CROSSHAIR_X [2] :the disc's centre column
+set CROSSHAIR_Y [3] :the disc's centre row
+call local hud_draw > screen JAB_DISPLAY_BASE u32,clobber a0-a1 [7:49] :the crosshair over the frame, a disc at the screen's centre
+ screen :each pixel under the disc halved and added to half of white

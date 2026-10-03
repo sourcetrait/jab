@@ -1,33 +1,8 @@
-# fillrate: what the hart draws a second at 1080p. Opens the display,
-# then runs each mode for three seconds of the clock, rendering frame
-# after frame with no wait: fill, a 64-bit store of two pixels at a
-# time; texture, an affine textured span a row, a texel read and a
-# store a pixel; perspective, the same with a divide every sixteen
-# pixels; polygon, a convex quad receding into the screen filled by
-# scanlines with perspective-correct texture coordinates, a divide
-# every sixteen pixels and a depth compare and store a pixel over a
-# depth buffer cleared each frame, the depth 1/z as a float; fixed, the
-# same with the depth a 32-bit integer, 1/z in 6.26; integer, the same
-# with the blocks' ends worked in 64-bit fixed point as well, no float
-# in the span; lit, the integer polygon with a brightness interpolated
-# across it and multiplied into every pixel; vector,
-# built with --set vector, a vector store over the framebuffer; then
-# textureflip, the texture with a whole flip after every frame, which
-# the cap refuses when early. Each mode reports its frames, the flips
-# shown, the clock's ticks, and the pixels a frame on the UART, and
-# the test works out the rates. Only the last mode reaches the window,
-# and its last frame stays up until the window closes.
 .include "jab.inc"
 
-# Three seconds of the clock a mode
 .set DURATION, (JAB_TIME_HZ * 3)
 .set PIXELS, (JAB_DISPLAY_WIDTH * JAB_DISPLAY_HEIGHT)
 .set ZBUF_BYTES, (PIXELS * 4)
-# The polygon: four vertices of six floats, the screen x and y, one
-# over z, u over z, v over z, and the brightness, every attribute
-# affine across the quad; a span is divided into blocks of BLOCK
-# pixels, the texture coordinates exact at each block's ends and
-# stepped within
 .set POLY_X, 0
 .set POLY_Y, 4
 .set POLY_IZ, 8
@@ -37,24 +12,17 @@
 .set POLY_VERTEX, 24
 .set POLY_VERTICES, 4
 .set BLOCK, 16
-# The polygon modes' flags: the depth an integer, the pixels lit, the
-# blocks' ends in fixed point. The integer forms: 1/z in 6.26, u/z and
-# v/z in 48.16, z in 48.16 as 2^42 over 1/z, u and v in 16.16
 .set POLY_FIXED, 1
 .set POLY_LIT, 2
 .set POLY_INTEGER, 4
 .set DEPTH_BITS, 26
 .set Z_SHIFT, (DEPTH_BITS + 16)
-# The texture: TEX_SIDE by TEX_SIDE pixels, a row TEX_ROW_BYTES, so a
-# row's offset is its index shifted by TEX_ROW_SHIFT
 .set TEX_BITS, 6
 .set TEX_SIDE, (1 << TEX_BITS)
 .set TEX_MASK, (TEX_SIDE - 1)
 .set TEX_ROW_BYTES, (TEX_SIDE * 4)
 .set TEX_ROW_SHIFT, (TEX_BITS + 2)
-# A drawn pixel steps this far across the texture, 16.16: half a texel
 .set TEX_STEP, 0x8000
-# A perspective span's length in pixels, and the spans in a row
 .set SPAN, 16
 .set SPANS, (JAB_DISPLAY_WIDTH / SPAN)
 .set LINE_BYTES, 128
@@ -104,7 +72,6 @@ _start:
     la a1, name_textureflip
     li a2, 1
     call mode_run
-    # the last frame stays up, so a capture reads what the stores wrote
 idle:
     jab.sys.display.await
     j idle
@@ -113,10 +80,6 @@ no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
 
-# mode_run: render frames with the routine at a0 for DURATION of the
-# clock, flipping the whole screen after each when a2 is set, then
-# report the line named by a1: <name> frames=N shown=M ticks=T
-# pixels=P. The frame count is in `frames` for the routines.
 mode_run:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -182,8 +145,6 @@ mode_run:
     addi sp, sp, 64
     ret
 
-# append_str: the NUL-terminated string at a1 copied to a0, which moves
-# past it. Clobbers t0.
 append_str:
 1:
     lbu t0, 0(a1)
@@ -195,8 +156,6 @@ append_str:
 2:
     ret
 
-# append_dec: a1, unsigned, written in decimal at a0, which moves past
-# the digits. Clobbers t0 to t3.
 append_dec:
     la t0, digits
     addi t0, t0, DIGITS_BYTES   # built backwards from the scratch's end
@@ -218,8 +177,6 @@ append_dec:
     bltu t0, t3, 2b
     ret
 
-# make_texture: a checker of eight-pixel squares in two colours with a
-# gradient across each row, so a scrolled texture shows motion.
 make_texture:
     la t0, texture
     li t1, 0                    # y
@@ -245,8 +202,6 @@ make_texture:
     bltu t1, t6, 1b
     ret
 
-# frame_fill: the whole framebuffer one colour, a shade of the frame
-# count, two pixels a store, eight stores a turn.
 frame_fill:
     la t0, frames
     ld t0, 0(t0)
@@ -271,10 +226,6 @@ frame_fill:
     bltu t0, t1, 1b
     ret
 
-# frame_texture: every row an affine span across the texture, u in
-# 16.16 stepping TEX_STEP a pixel from an offset that scrolls a texel a
-# frame, the row's texture row from the row and the frame; a texel read
-# and a pixel stored each.
 frame_texture:
     la t0, frames
     ld t0, 0(t0)
@@ -307,10 +258,6 @@ frame_texture:
     bltu t5, a4, 1b
     ret
 
-# frame_perspective: the textured row in spans of SPAN pixels, each
-# span's depth from a divide of a numerator by a 1/z that grows along
-# the row and down the screen, its u and its step from that depth,
-# then the span affine: the shape of a perspective-correct span.
 frame_perspective:
     la t0, frames
     ld t0, 0(t0)
@@ -351,10 +298,6 @@ frame_perspective:
     bltu t5, a2, 1b
     ret
 
-# frame_polygon: the quad unlit with a float depth; frame_fixed: the
-# quad unlit with an integer depth; frame_integer: the quad unlit with
-# no float in the span; frame_lit: the integer quad with its brightness
-# multiplied into every pixel. All through poly_frame.
 frame_polygon:
     li a0, 0
     j poly_frame
@@ -371,19 +314,6 @@ frame_lit:
     li a0, (POLY_FIXED | POLY_INTEGER | POLY_LIT)
     j poly_frame
 
-# poly_frame: the depth buffer cleared, then every row of the screen:
-# the quad's edges crossed at the row's centre for the two ends of its
-# span, each end's attributes interpolated along its edge, the span
-# clipped to the screen and its attributes stepped a pixel; the span in
-# blocks of BLOCK pixels, u and v exact at each block's ends from one
-# divide of 1/z and two multiplies, stepped in 16.16 within; a pixel a
-# texel read, a depth compare, and a pixel and depth store when nearer.
-# The depth is 1/z stepped a pixel: a float, or with POLY_FIXED in a0 a
-# 32-bit integer in 6.26, compared and stepped as integers; with
-# POLY_INTEGER the blocks' ends are worked in 64-bit fixed point too,
-# z as 2^42 over 1/z and u and v as u/z and v/z times z, so the span
-# holds no float at all; with POLY_LIT the brightness is stepped a
-# pixel in 16.16 and each channel multiplied by it.
 poly_frame:
     addi sp, sp, -208
     sd ra, 200(sp)
@@ -412,7 +342,6 @@ poly_frame:
     fsd fs10, 16(sp)
     fsd fs11, 8(sp)
     mv s0, a0                       # lit
-    # the depth buffer cleared
     la t0, zbuf
     li t1, ZBUF_BYTES
     add t1, t1, t0
@@ -431,7 +360,6 @@ poly_frame:
     la t0, k_half
     flw ft0, 0(t0)
     fadd.s fs0, fs0, ft0            # the row's centre
-    # the crossings of the row with the quad's edges
     li s2, 0                        # the edge
     li s3, 0                        # the crossings found
 11:
@@ -494,8 +422,6 @@ poly_frame:
     fmv.s ft0, ft1
     fmv.s ft1, ft2
 21:
-    # the pixels the span covers, the first centre at or past each end,
-    # within the screen
     la t0, k_half
     flw ft2, 0(t0)
     fsub.s ft3, ft0, ft2
@@ -510,7 +436,6 @@ poly_frame:
     mv s7, t0
 23:
     bge s6, s7, 89f
-    # the steps a pixel, over the span's width on the screen
     fsub.s ft3, ft1, ft0            # the width
     flw ft4, POLY_IZ(s4)
     flw ft5, POLY_IZ(s5)
@@ -528,7 +453,6 @@ poly_frame:
     flw ft5, POLY_BR(s5)
     fsub.s fs8, ft5, ft4
     fdiv.s fs8, fs8, ft3            # d(brightness)
-    # the attributes at the first pixel's centre
     fcvt.s.w ft4, s6
     fadd.s ft4, ft4, ft2
     fsub.s ft4, ft4, ft0            # from the left end to the centre
@@ -540,7 +464,6 @@ poly_frame:
     fmadd.s fs3, ft4, fs7, fs3      # v/z
     flw fs4, POLY_BR(s4)
     fmadd.s fs4, ft4, fs8, fs4      # brightness
-    # u and v at the span's start, 16.16
     la t0, k_one
     flw ft4, 0(t0)
     fdiv.s ft5, ft4, fs1            # z
@@ -552,19 +475,16 @@ poly_frame:
     fmul.s ft7, ft7, fs9
     fcvt.w.s s8, ft6, rdn           # u
     fcvt.w.s s9, ft7, rdn           # v
-    # the depth as an integer, 6.26, and its step a pixel
     la t0, k_depth_scale
     flw ft4, 0(t0)
     fmul.s ft5, fs1, ft4
     fcvt.w.s s2, ft5, rne
     fmul.s ft5, fs5, ft4
     fcvt.w.s s3, ft5, rne
-    # the brightness, 16.16, and its step a pixel
     fmul.s ft5, fs4, fs9
     fcvt.w.s a3, ft5, rdn
     fmul.s ft5, fs8, fs9
     fcvt.w.s a4, ft5, rdn
-    # the pointers and the count
     li t0, JAB_DISPLAY_PITCH
     mul t0, s1, t0
     slli t1, s6, 2
@@ -574,8 +494,6 @@ poly_frame:
     li t2, JAB_DISPLAY_BASE
     add t0, t0, t2                  # the pixel
     sub s10, s7, s6                 # the pixels left
-    # u/z and v/z as integers, 48.16, and their steps a pixel, in the
-    # registers the span's ends and bounds no longer need
     fmul.s ft5, fs2, fs9
     fcvt.l.s s4, ft5, rne
     fmul.s ft5, fs6, fs9
@@ -588,7 +506,6 @@ poly_frame:
     li a6, 0x00ff00ff
     li a2, 0x0000ff00
 30:
-    # the block: its length, its end's attributes, u and v there
     li s11, BLOCK
     ble s10, s11, 31f
     j 32f
@@ -598,7 +515,6 @@ poly_frame:
     li a7, POLY_INTEGER
     and a7, s0, a7
     bnez a7, 35f
-    # in float: 1/z, u/z, and v/z at the end, one divide, two multiplies
     fcvt.s.w ft4, s11
     fmadd.s fs10, ft4, fs5, fs1     # 1/z at the block's end
     fmadd.s ft5, ft4, fs6, fs2      # u/z there
@@ -614,7 +530,6 @@ poly_frame:
     fcvt.w.s t4, ft6, rdn           # v at the end
     j 36f
 35:
-    # in fixed point: the same over 64-bit integers
     mul t3, s11, s3
     add t3, t3, s2                  # 1/z at the block's end, 6.26
     li t4, 1
@@ -647,7 +562,6 @@ poly_frame:
     and a7, s0, a7
     bnez a7, 45f
 40:
-    # unlit, a float depth: the texel, the depth test, the stores
     srli a0, s9, 16
     andi a0, a0, TEX_MASK
     slli a0, a0, TEX_ROW_SHIFT
@@ -672,8 +586,6 @@ poly_frame:
     bnez t2, 40b
     j 60f
 45:
-    # unlit, an integer depth: the same with the depth compared and
-    # stepped as integers
     srli a0, s9, 16
     andi a0, a0, TEX_MASK
     slli a0, a0, TEX_ROW_SHIFT
@@ -697,8 +609,6 @@ poly_frame:
     bnez t2, 45b
     j 60f
 50:
-    # lit, an integer depth: the texel's channels multiplied by the
-    # brightness in 256ths
     srli a0, s9, 16
     andi a0, a0, TEX_MASK
     slli a0, a0, TEX_ROW_SHIFT
@@ -732,9 +642,6 @@ poly_frame:
     addi t2, t2, -1
     bnez t2, 50b
 60:
-    # the block's end is the next block's start, in float and in fixed
-    # point alike; the integer depth and the brightness carried on by
-    # the pixel loop
     ld s8, 0(sp)
     ld s9, 8(sp)
     fld fs1, 16(sp)
@@ -780,11 +687,6 @@ poly_frame:
     ret
 
 .ifdef VECTOR
-# frame_vector: the whole framebuffer one colour through vector stores,
-# as many elements a store as the machine's vector length gives at
-# e32 with eight registers grouped. RVA23 mandates vectors; the rv64
-# fallback lacks them and this faults there, which is why it is built
-# only with --set vector.
 .option push
 .option arch, +v
 frame_vector:
@@ -822,7 +724,6 @@ line:
 .balign 4
 texture:
     .skip TEX_SIDE * TEX_ROW_BYTES
-# A row's two crossings of the quad, an attribute set each
 cross:
     .skip (2 * POLY_VERTEX)
 .balign 16
@@ -858,11 +759,6 @@ word_pixels:
     .asciz " pixels="
 msg_no_display:
     .asciz "fillrate: no display\n"
-# The quad: a wall from z 2 at the screen's left edge to z 8 at its
-# right, 9 units tall and 12 long at 64 texels a unit, whose projection
-# through a 960 focal length covers the screen and beyond, so every
-# pixel is inside it; at each vertex the screen x and y, 1/z, u/z, v/z,
-# and the brightness, 1 at the near edge and a quarter at the far
 .balign 4
 poly:
     .float 0.0, -1620.0, 0.5, 0.0, 0.0, 1.0
@@ -875,8 +771,5 @@ k_one:
     .float 1.0
 k_sixty_four_k:
     .float 65536.0
-# 1/z as an integer in 6.26: two to the 26th, so 1/z reaches 32 and z
-# a thirty-second, and z at 50 units still resolves under a tenth of a
-# millimetre
 k_depth_scale:
     .float 67108864.0

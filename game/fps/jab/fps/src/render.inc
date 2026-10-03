@@ -1,20 +1,11 @@
-# The engine's own records and limits beyond the map's, read after map.inc
 .set SCREEN_W, JAB_DISPLAY_WIDTH
 .set SCREEN_H, JAB_DISPLAY_HEIGHT
 .set SCREEN_PITCH, JAB_DISPLAY_PITCH
 .set ZBUF_BYTES, (SCREEN_W * SCREEN_H * 4)
-# A page of code under QEMU: a function whose loops run a pixel or a sample
-# is aligned to one and kept under one, which the test holds
 .set CODE_PAGE, 4096
-# The sections as the loader placed them, an entry a kind from 1: the
-# section's address in the map buffer and its record count, 64 bits
-# each
 .set SECTION_AT, 0
 .set SECTION_COUNT, 8
 .set SECTION_ENTRY, 16
-# The camera: the eye, floats; the yaw, pitch, and roll in radians; then
-# the basis derived from them each frame, right, up, and forward, three
-# floats each
 .set CAM_X, 0
 .set CAM_Y, 4
 .set CAM_Z, 8
@@ -25,34 +16,21 @@
 .set CAM_UP, 36
 .set CAM_FORWARD, 48
 .set CAM_SIZE, 60
-# The camera as doubles, written with the basis each frame for the surface
-# mathematics, at twice the camera's offsets
 .set CAMD_X, 0
 .set CAMD_RIGHT, 48
 .set CAMD_UP, 72
 .set CAMD_FORWARD, 96
 .set CAMD_SIZE, 120
-# A polygon before clipping, its points world positions of three
-# floats; a sector's loop is one polygon, so it holds a room's whole
-# ring; clipping against the near plane can add one point an edge
 .set MAX_VERTS, 256
 .set MAX_CLIPPED, (MAX_VERTS * 2)
 .set VERT_SIZE, 12
 .set PVERT_SIZE, 8
-# An edge of a projected polygon: its top and bottom y, its x at the
-# top, and x's change a row, floats; a sector's planes put every loop's
-# edges in one list
 .set MAX_EDGES, 2048
 .set EDGE_Y0, 0
 .set EDGE_Y1, 4
 .set EDGE_X0, 8
 .set EDGE_DXDY, 12
 .set EDGE_SIZE, 16
-# The surface in hand, as the rasteriser reads it: the texture's pixels
-# and its wraps, the affine coefficients of 1/z (6.26), u/z and v/z
-# (48.16) over the screen as 64-bit fixed point, each C carrying the
-# half-pixel offsets so a value at a pixel is C + A * column + B * row,
-# the mode, and the texture's size as floats
 .set POLY_TEX, 0
 .set POLY_UMASK, 8
 .set POLY_VMASK, 16
@@ -71,53 +49,22 @@
 .set POLY_TEXH, 116
 .set POLY_TEXWI, 120
 .set POLY_TEXHI, 124
-# The unit normal facing the camera, floats, and the surface's sector,
-# for the light
 .set POLY_LNX, 128
 .set POLY_LNY, 132
 .set POLY_LNZ, 136
 .set POLY_SECTOR, 140
-# Set for a surface lit at no angle, a sprite facing the camera: every
-# light within reach lights it by its falloff alone
 .set POLY_FLAT_LIT, 144
-# The polygon's own light list, the sector's culled to the lights whose
-# sphere meets its world box and which lie ahead of its plane: a count
-# byte, then that many light indices, as a sector's list is shaped,
-# SECTOR_LIGHTS_SIZE bytes
 .set POLY_LIGHTS, 152
-# The surface's lumel map record; 0 for a polygon with no map, a sprite,
-# lit flat by POLY_FLAT_BRIGHT over its whole extent
 .set POLY_LUMAP, 184
-# The read's one word for a mapped polygon: the lumels' offset into the
-# arena in the low LUMEL_OFFSET_BITS, a row's bytes from
-# LUMEL_ROWBYTES_SHIFT, the rows from LUMEL_ROWS_SHIFT, and k, the
-# lumel's texels as a power of two, from LUMEL_K_SHIFT; the columns and
-# rows bound the read, a texel coordinate past the map's last node or
-# before its first reading the node there
 .set POLY_LUMEL, 192
-# The brightness of a polygon with no map, packed as a brightness word
 .set POLY_FLAT_BRIGHT, 200
-# The surface's tiles, for a lit span's blocks: the atlas of each level,
-# TILE_LEVEL_COUNT of them eight bytes apart; the levels built whole,
-# which a span's levels must stay under; the shift of a cell row in
-# tiles (the columns padded to a power of two); and the cells across
-# and down, which a span's ends must lie within
 .set POLY_TILES, 208
 .set POLY_TILE_READY, 240
 .set POLY_TILE_COLS_SHIFT, 248
 .set POLY_TILE_COLS, 256
 .set POLY_TILE_ROWS, 264
-# The material bound, its index, for the level's alpha scale at a tile's
-# build
 .set POLY_MATERIAL, 272
-# The surface the polygon is, for the span record and the owner build: a
-# plane at twice its sector's index and its ceiling after and a wall at
-# LUMAP_PLANES past them, as the lumel maps are indexed, a map sprite at
-# SURFACE_SPRITES plus its entity, an actor at SURFACE_ACTORS plus its
-# index
 .set POLY_SURFACE, 280
-# The material's chain, its table of a level's texels eight bytes a level
-# (mip.S), and the levels it has, which a block's level is held under
 .set POLY_MIPS, 288
 .set POLY_MIP_COUNT, 296
 .set POLY_SIZE, 304
@@ -126,19 +73,7 @@
 .set LUMEL_ROWS_SHIFT, 40
 .set LUMEL_K_SHIFT, 56
 .set LUMEL_K_MAX, 15
-# A brightness word packs three 16.16 channels CHANNEL_BITS apart, which
-# integer addition steps exactly while every lane stays in range; a
-# lumel packs the same three channels in 256ths, 0 to 256, so four
-# lumels summed under weights adding to 256 are a brightness word
 .set CHANNEL_BITS, 21
-# A surface's lumel map: its lumels in the arena, 0 for none; its columns
-# and rows; the texel coordinate of its first node, U0 and V0, each a
-# multiple of the texture's size at or below the surface's least texel
-# less one, so a texel coordinate counted from it is never negative and
-# wraps by the mask unchanged; k, a lumel being 2^k texels along both
-# axes, the power of two nearest half a metre along u. A node sits at
-# every (U0 + i 2^k, V0 + j 2^k), one past each end of the surface, so a
-# sample within the surface and the lumel past it both lie in the map
 .set LUMAP_BASE, 0
 .set LUMAP_W, 8
 .set LUMAP_H, 16
@@ -146,33 +81,19 @@
 .set LUMAP_V0, 32
 .set LUMAP_K, 40
 .set LUMAP_SIZE, 48
-# The maps by surface: a sector's floor at twice its index and its
-# ceiling after, then the walls; a lumel is one word, the grid's spacing
-# in metres is near k_lumel_d, and the arena holds every map
 .set LUMAP_PLANES, (MAX_SECTORS * 2)
 .set LUMAP_COUNT, (LUMAP_PLANES + MAX_WALLS)
 .set LUMEL_BYTES, 8
 .set LUMEL_ARENA_BYTES, (8 * 1024 * 1024)
 .set SURFACE_SPRITES, LUMAP_COUNT
 .set SURFACE_ACTORS, (LUMAP_COUNT + MAX_ENTITIES)
-# A screen rectangle: the columns x0 to x1 and the rows y0 to y1, the ends
-# past the last; empty when an end is at or before its start
 .set RECT_X0, 0
 .set RECT_X1, 4
 .set RECT_Y0, 8
 .set RECT_Y1, 12
 .set RECT_SIZE, 16
-# The flow's queue, a ring of sector indices twice the sectors long, so
-# its read and its write never meet while sectors wait
 .set FLOW_RING, (MAX_SECTORS * 2)
 .set FLOW_RING_MASK, (FLOW_RING - 1)
-# A span the fill emits before drawing it: the row, the first pixel, and
-# the pixel past the last, 16 bits each; the polygon's mode, 16 bits; the
-# surface, the stable index; and the polygon's serial in the frame, which
-# tells a masked opening's fill from its wall's pieces. SPAN_RECORDS of
-# them a frame; the count runs on past the table when a frame has more,
-# and a reader of a frame whose count passed the table falls back, since
-# the prefix it holds is not the frame
 .set SPAN_ROW, 0
 .set SPAN_X0, 2
 .set SPAN_X1, 4
@@ -181,58 +102,17 @@
 .set SPAN_POLY, 12
 .set SPAN_RECORD_SIZE, 16
 .set SPAN_RECORDS, (1 << 16)
-# The frame a map is baked over, in texels: the world point at texel
-# (0, 0) of the surface's mapping, the world step a texel along u, and
-# the step a texel along v, doubles; the unit normal into the room,
-# singles. A node's point is the origin plus its texel coordinate along
-# each step
 .set GRID_O, 0
 .set GRID_U, 24
 .set GRID_V, 48
 .set GRID_N, 72
 .set GRID_SIZE, 84
-# A lit span samples its map at the ends of intervals of 1, 2, or 4
-# blocks, the shift of the interval's pixels 4 to INTERVAL_SHIFT_MAX,
-# chosen so a lumel spans at least two samples: the longest whose pixels
-# times the texel step a pixel stay within half a lumel
 .set INTERVAL_SHIFT_MAX, 6
 .set POLY_TEXTURED, 0
 .set POLY_MASKED, 1
 .set POLY_SKY, 2
-# A flag over the textured and masked modes: the span lit
 .set POLY_LIT, 4
-# A flag over a lit mode: the surface has tiles, the lit texture cached,
-# which a near block of the span reads in place of the texture and the
-# lumel map when its cells are built
 .set POLY_TILED, 8
-# A surface's tiles: the lit texture cached a cell at a time, a cell a
-# lumel's 2^k texels square, each texel the texture's times the lumel
-# brightness bilinear across the cell; the cells across and down are the
-# map's nodes, a node past each end of the surface, the last cell's far
-# nodes the greatest, so a texel coordinate the span can reach has a
-# cell. The atlas holds the cells row-major with the columns padded to a
-# power of two, TILE_COLS_SHIFT, the rows as they are, reserved whole on
-# first sight, which costs no memory until a cell is written; the
-# padding columns are never built, the build's cursor stepping over them
-# to the next row. The record's base is 0 before the atlas is reserved
-# and -1 for a surface whose atlas is larger than TILE_ATLAS_MAX, which
-# stays on the lit loop. The arena is reset whole, every surface
-# forgotten, when an atlas does not fit. The tiles come in levels, a
-# surface's atlases one a level: level 0 a cell at the texture's
-# resolution, each level after it half a side, built from the level
-# before by averaging two by two, the colour weighted by alpha and the
-# alpha scaled for its coverage (alphas_measure), TILE_LEVEL_COUNT
-# levels or k + 1 if fewer. A surface is built whole, a level at a time
-# from the finest, under the frame's budget in texels read, and a span
-# reads tiles only from the levels built whole, so no cell is ever
-# checked; until level 0 is whole the surface draws on the lit loop. A
-# block takes its own level from its texel step a pixel, the largest of
-# the steps along the span and down a row on each axis, 16.16, level m
-# where the step is under 2^(m + 1) texels, the last level for any step
-# beyond, held under the levels whole alone, so a block reads about a
-# texel a pixel and the spans a row apart read the same lines; a span
-# whose ends lie past the map's edge keeps the lit loop, which clamps.
-# The records' and the polygon's level fields sit eight bytes apart
 .set TILE_LEVEL_COUNT, 4
 .set TILE_BASE, 0
 .set TILE_READY, 32
@@ -247,27 +127,9 @@
 .set TILE_ATLAS_MAX, (64 * 1024 * 1024)
 .set TILE_BUDGET, (24 * 64 * 64)
 .set TILE_BUDGET_UNBOUND, (1 << 40)
-# A material's mip chain: the texels of each level from 1, level 0 the
-# record's own, each level half a side of the one before, built at load
-# by the tile shrink's rule under the level's alpha scale (mip.S), so a
-# lit or unlit span reads the level a block's footprint asks for and the
-# lit loop and a tile at one level hold the same texel; MIP_LEVELS deep
-# at most, a level while both sides stay two texels or more and the
-# arena holds it; a material's table holds a level's texels eight bytes
-# a level
 .set MIP_LEVELS, 10
 .set MIP_ENTRY, (MIP_LEVELS * 8)
 .set MIP_ARENA_BYTES, (32 * 1024 * 1024)
-# A masked texel passes at an alpha at or above ALPHA_PASS, at every
-# level. A material's alpha scale a level, 16.16, by which a coarser
-# level's mean alpha is scaled at a tile's or a chain level's build so
-# the level's share of texels passing stays near the texture's:
-# ceil(2^23 / T) for the threshold T the load's search chose, which
-# lands a mean at or above T at or above the pass and nothing under T
-# there; one, ALPHA_SCALE_ONE, where the levels pass as the texture
-# does; a scale a level of the chain. ALPHA_PLANE_BYTES bounds the
-# scratch a level's alphas take at the search, a texture past it left
-# at one; ALPHA_SHARE is the unit the debug line reports a share in
 .set ALPHA_PASS, 128
 .set ALPHA_SCALE_BITS, 16
 .set ALPHA_SCALE_ONE, (1 << ALPHA_SCALE_BITS)
@@ -276,9 +138,6 @@
 .set ALPHA_MATERIAL_SIZE, (MIP_LEVELS * ALPHA_LEVEL_SIZE)
 .set ALPHA_PLANE_BYTES, (256 * 1024)
 .set ALPHA_SHARE, 10000
-# A light as the engine holds it, floats: the position, the colour, the
-# radius squared and one over the radius, the spotlight's unit axis and
-# the cosine of its spread (under -1 for a point light)
 .set MAX_LIGHTS, 256
 .set LIGHT_X, 0
 .set LIGHT_Y, 4
@@ -291,11 +150,8 @@
 .set LIGHT_COS, 40
 .set LIGHT_OVER_RADIUS, 44
 .set LIGHT_SIZE, 48
-# A sector's lights: a count byte, then that many light indices
 .set SECTOR_LIGHTS_MAX, 31
 .set SECTOR_LIGHTS_SIZE, 32
-# The plane in hand, floats: its normal, a point on it, and the world
-# gradients and offsets of u and v in texture repeats
 .set PLANE_N, 0
 .set PLANE_Q, 12
 .set PLANE_AU, 24
@@ -303,7 +159,6 @@
 .set PLANE_AV, 40
 .set PLANE_V0, 52
 .set PLANE_SIZE, 56
-# The plane in hand as doubles, widened once a polygon, at twice its offsets
 .set PLANED_N, 0
 .set PLANED_Q, 24
 .set PLANED_AU, 48
@@ -311,16 +166,11 @@
 .set PLANED_AV, 80
 .set PLANED_V0, 104
 .set PLANED_SIZE, 112
-# The depth: 1/z as an integer in 6.26, z as 2^42 over it in 48.16, a
-# span in blocks of BLOCK pixels; a 1/z under IZ_MIN is clamped to it
-# for the divide, a sky pixel stores SKY_DEPTH so anything drawn later
-# overwrites it
 .set DEPTH_BITS, 26
 .set Z_SHIFT, (DEPTH_BITS + 16)
 .set BLOCK, 16
 .set IZ_MIN, 4096
 .set SKY_DEPTH, 1
-# The frame's counts and its ticks by phase, 64 bits each
 .set STAT_SECTORS, 0
 .set STAT_WALLS, 8
 .set STAT_PIECES, 16
@@ -332,9 +182,6 @@
 .set STAT_PORTAL_TICKS, 64
 .set STAT_SPRITES, 72
 .set STAT_SPRITE_TICKS, 80
-# The spans filled and the pixels they entered, the lit ones among them,
-# the ticks the light's evaluation took, the pixels the depth test
-# rejected, and the lumel samples the lit spans read
 .set STAT_SPANS, 88
 .set STAT_PIXELS, 96
 .set STAT_LIT_SPANS, 104
@@ -342,22 +189,10 @@
 .set STAT_LIGHT_TICKS, 120
 .set STAT_REJECTED, 128
 .set STAT_SAMPLES, 136
-# The tiles built this frame and the pixels read from tiles
 .set STAT_TILES_BUILT, 144
 .set STAT_TILED_PIXELS, 152
-# The tile arena's resets since the load, never zeroed by the frame
 .set STAT_TILE_RESETS, 160
 .set STAT_SIZE, 168
-# The records over the API, 64 bytes each: the state a frame, kind
-# REPORT_STATE, the camera's sector, the eye, the yaw, pitch, and roll
-# in degrees, the drawing's and the game's microseconds, zero to the
-# end; the console's answer, kind REPORT_CONSOLE, the command's byte;
-# an event carries the state's fields and its own from REPORT_FIELD0:
-# a round of the player's (what it met, the actor, its health after),
-# an android's event (the event, the actor, its row), the player struck
-# (the damage, the health after), a pickup (the rounds after), a
-# trace's answer (the kind met, the distance and the point in
-# millimetres)
 .set REPORT_KIND, 0
 .set REPORT_SECTOR, 4
 .set REPORT_X, 8
@@ -381,7 +216,6 @@
 .set REPORT_PICKUP, 5
 .set REPORT_TRACE, 6
 .set REPORT_CONSOLE, 11
-# An android's events over the API
 .set EVENT_ROUSED, 1
 .set EVENT_FIRED, 2
 .set EVENT_STRUCK, 3
@@ -389,12 +223,6 @@
 .set EVENT_FALLEN, 5
 .set EVENT_WAYPOINT, 6
 
-# An actor, the engine's own things in play: the class (0 free, an
-# android, a magazine, a spark), flags, the feet as doubles, the yaw in
-# radians, the sector, the row and its timer in seconds, health, the
-# target waypoint entity or -1, the fall speed, the last sight's point,
-# the time blocked, the spark's frame, the time since the sight was
-# lost, and the entity it came from
 .set MAX_ACTORS, 64
 .set ACTOR_CLASS, 0
 .set ACTOR_FLAGS, 4
@@ -424,12 +252,8 @@
 .set ACTOR_SHOOTABLE, 2
 .set ACTOR_ROUSED, 4
 .set ACTOR_SIGHTED, 8
-# The first round after rousing is certain, the rest by chance
 .set ACTOR_FIRST, 16
 .set FIRE_CHANCE, 128
-# The engine's images by frame index: the android's eight rotating sets
-# of eight, then the fallen frame, the three sparks, and the magazine;
-# a frame's material index is frame_base plus its frame index
 .set SET_STAND, 0
 .set SET_WALK1, 1
 .set SET_WALK2, 2
@@ -444,8 +268,6 @@
 .set FRAME_MAGAZINE, 68
 .set FRAME_COUNT, 69
 .set SPARK_FRAMES, 3
-# An android's row: the frame set, the milliseconds it lasts, -1 for a
-# held row, the action on entry, and the row next
 .set ROW_SET, 0
 .set ROW_MS, 4
 .set ROW_ACTION, 8
@@ -477,8 +299,6 @@
 .set ACT_DESTROY, 8
 .set ACT_FALL, 9
 .set ANDROID_HEALTH, 100
-# The line from an actor's eye to the player's, doubles: the eye, the
-# unit direction, the distance
 .set AIM_OX, 0
 .set AIM_OY, 8
 .set AIM_OZ, 16
@@ -487,9 +307,6 @@
 .set AIM_DZ, 40
 .set AIM_DIST, 48
 .set AIM_SIZE, 56
-# A trace's answer: what the ray met (nothing, a plane, a wall piece, an
-# android, the player), the distance, the point, the actor met, and the
-# sector the ray ended in, doubles and 64-bit fields
 .set TRACE_NONE, 0
 .set TRACE_PLANE, 1
 .set TRACE_PIECE, 2
@@ -503,14 +320,9 @@
 .set TRACE_ACTOR, 40
 .set TRACE_SECTOR, 48
 .set TRACE_SIZE, 56
-# The trace tests the player's capsule too
 .set TRACE_TO_PLAYER, 1
-# The pad's key that fires, the right trigger's button, as its bit in
-# the state record's keys
 .set TRIGGER_BIT, (1 << (JAB_BTN_TR2 - JAB_BTN_GAMEPAD))
-# The G-1's round on either side: what a round takes from its target
 .set ROUND_DAMAGE, 25
-# The sounds the content holds, by index into the engine's stems
 .set SOUND_G1_SHOT, 0
 .set SOUND_G1_RELOAD, 1
 .set SOUND_G1_EMPTY, 2
@@ -529,29 +341,17 @@
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
 
-# Under OWNER a pixel loop stores the surface's index in place of its
-# colour, from the slot span_fill's prologue fills, so a capture reads which
-# surface won each pixel; the crosshair stays off
-# reg The register the loop is about to store
 .macro owner_pixel reg
 .ifdef OWNER
     ld \reg, 32(sp)
 .endif
 .endm
 
-# A section's address in the map
-# kind int The kind
-# returns
-#   reg The address
 .macro section_at kind, reg
     la \reg, sections
     ld \reg, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\reg)
 .endm
 
-# A section's record count
-# kind int The kind
-# returns
-#   reg The count
 .macro section_count kind, reg
     la \reg, sections
     ld \reg, (SECTION_COUNT + SECTION_ENTRY * (\kind - 1))(\reg)

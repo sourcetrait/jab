@@ -1,11 +1,5 @@
-# The map held to its format: the header and the sections parsed, the
-# records checked, the materials, the engine's images, the ambients, and the
-# soundfont loaded; a fault says so on the UART and exits with its code.
-
 .section .rodata
 .balign 8
-# A kind's record size and the most of it this build holds, by kind
-# from 1, and the kind's word
 kind_sizes:
     .word 1, MATERIAL_SIZE, VERTEX_SIZE, SECTOR_SIZE, LOOP_SIZE
     .word WALL_SIZE, PORTAL_SIZE, ENTITY_SIZE, AMBIENT_SIZE, SECTOR_LIGHT_SIZE
@@ -23,8 +17,6 @@ k_slack_d:
 
 .section .text
 
-# The header and the section directory held to the format, every section's
-# address and count into sections; a fault exits.
 map_parse:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -46,7 +38,6 @@ map_parse:
     slli t0, s4, 4
     addi t0, t0, MAP_HEADER_SIZE
     bgtu t0, s3, short_file
-    # the table and the kinds seen cleared
     la t0, sections
     li t1, (KIND_COUNT * SECTION_ENTRY)
     add t1, t1, t0
@@ -106,7 +97,6 @@ map_parse:
     ld a1, 0(a1)
     j too_many
 5:
-    # every kind present
     la t0, kind_seen
     li t1, 0
 6:
@@ -150,10 +140,6 @@ directory_missing:
     la a1, word_directory_missing
     j bad_directory
 
-# Whether the names table holds a NUL-terminated name at an offset.
-# a0 int The offset.
-# returns Clobbers t0 to t3.
-#   a0 1 or 0.
 name_check:
     section_count KIND_NAMES, t1
     bgeu a0, t1, 8f
@@ -173,8 +159,6 @@ name_check:
     li a0, 1
     ret
 
-# The records held to the format's rules, the first to break one named on
-# the UART with exit 11; the first spawn's index and the sprite count taken.
 map_check:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -190,7 +174,6 @@ map_check:
     fsd fs0, 24(sp)
     fsd fs1, 16(sp)
     fsd fs2, 8(sp)
-    # the names of the materials and the ambients within the table
     section_count KIND_MATERIALS, s7
     li s2, 0
 1:
@@ -227,9 +210,6 @@ map_check:
     addi s2, s2, 1
     j 4b
 6:
-    # the sectors: their loops, lights, ambient, and materials in range;
-    # every loop three walls or more, each wall the sector's own and
-    # leading to the next around it
     section_count KIND_SECTORS, s7
     li s2, 0
 10:
@@ -339,9 +319,6 @@ map_check:
     addi s2, s2, 1
     j 10b
 30:
-    # the walls: vertices, sector, portals, and material in range, and
-    # every portal exact: its wall in its sector, another sector than
-    # the wall's, running the same two vertices back
     section_count KIND_WALLS, s7
     li s2, 0
 31:
@@ -435,9 +412,6 @@ map_check:
     addi s2, s2, 1
     j 31b
 50:
-    # the entities: class, material, target, and sector in range, each
-    # inside its sector by the loops, the spawn between its planes too;
-    # the first spawn and the sprites counted
     li t0, -1
     la t1, spawn_index
     sw t0, 0(t1)
@@ -506,7 +480,6 @@ map_check:
     bgez t2, 57f
     sw s2, 0(t1)
 57:
-    # between the planes, with a thousandth's slack
     lw a0, ENTITY_SECTOR(s3)
     li a1, 0
     fmv.d fa0, fs0
@@ -542,7 +515,6 @@ map_check:
     la a1, word_no_spawn
     j map_lacks
 71:
-    # the sector lights: each an entity that is a light
     section_count KIND_SECTOR_LIGHTS, s7
     section_at KIND_SECTOR_LIGHTS, s3
     li s2, 0
@@ -585,8 +557,6 @@ map_check:
     addi sp, sp, 112
     ret
 
-# Every material's texture read off the disk at /<name>.png into
-# material_record; texture_count and missing_count.
 materials_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -646,11 +616,6 @@ materials_load:
     addi sp, sp, 48
     ret
 
-# The texture at tile_path read whole and decoded into the pixel arena.
-# a0 int The material's index, for the UART.
-# a1 address The message before it on the UART.
-# returns A load that fails exits.
-#   a0 The record, or 0 when the file is not there, named as missing.
 material_read:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -667,7 +632,6 @@ material_read:
     call read_file
     bnez a0, 30f
 .ifdef DEBUG
-    # missing: named on the UART
     la a0, line
     mv a1, s5
     call append_str
@@ -693,8 +657,6 @@ material_read:
     mv t1, s3
     jab.sys.png.size t0, t1
     bnez a2, 35f
-    # the record's capacity: the header, then a row's pixels and its
-    # span for every row
     slli t0, a0, 2
     addi t0, t0, 4
     mul t0, t0, a1
@@ -735,8 +697,6 @@ material_read:
     addi sp, sp, 48
     ret
 
-# The engine's own images read off the disk at /sprite/<stem>.png into the
-# material records after the map's, the first at frame_base.
 frames_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -762,7 +722,6 @@ frames_load:
     call append_str
     li t0, FRAME_FALLEN
     bgeu s2, t0, 2f
-    # a rotating set: android/<set>_<r>
     la a1, word_android_dir
     call append_str
     srli t0, s2, 3
@@ -833,9 +792,6 @@ frames_load:
     addi sp, sp, 48
     ret
 
-# Every ambient piece read off the disk at /<name>.mid into its arena; one
-# not there, too long a name, or not fitting is named on the UART of a
-# debug build and left as none.
 ambients_load:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -893,7 +849,6 @@ ambients_load:
     li a2, 2                        # not fitting the arena
     j 7f
 4:
-    # kept, the cursor moved on to a word boundary
     la t0, ambient_cursor
     ld t1, 0(t0)
     la t2, ambient_at
@@ -910,8 +865,6 @@ ambients_load:
     j 9f
 7:
 .ifdef DEBUG
-    # named on the UART: `fps: ambient N <path> missing`, or with no
-    # path when the name is too long
     mv s4, a2
     la a0, line
     la a1, msg_ambient
@@ -944,8 +897,6 @@ ambients_load:
     addi sp, sp, 48
     ret
 
-# The generic disk's soundfont put into the synthesizer, its counts on the
-# UART of a debug build; without the disk or the file the chip voices play.
 soundfont_load:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1003,8 +954,6 @@ soundfont_load:
     addi sp, sp, 32
     ret
 
-# The piece of the camera's sector played: a change stops the one playing
-# and starts the new, said on the UART; a piece that has ended starts again.
 ambient_follow:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1085,7 +1034,6 @@ kind_seen:
     .skip 16
 ambient_playing:
     .skip 4
-# The material index of the engine's first image, after the map's
 frame_base:
     .skip 4
 
@@ -1188,7 +1136,6 @@ word_sprite_dir:
     .asciz "/sprite/"
 word_android_dir:
     .asciz "android/"
-# The debug lines' text, in a debug build alone
 .ifdef DEBUG
 msg_soundfont:
     .asciz "fps: soundfont "

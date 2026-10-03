@@ -1,6 +1,3 @@
-# The sprite entities drawn after the walk, each a flat quad facing the
-# camera, fixed along its yaw, or flat on the floor, masked by alpha.
-
 .section .rodata
 .balign 8
 k_pull_d:
@@ -10,7 +7,6 @@ k_tiny_d:
 
 .section .text
 
-# Every sprite entity in a sector the walk reached drawn.
 sprites_draw:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -28,7 +24,6 @@ sprites_draw:
     add t1, t1, t0
     lbu t1, 0(t1)
     beqz t1, 8f
-    # its surface index: the map sprites after every map, by entity
     section_at KIND_ENTITIES, t0
     sub t0, s3, t0
     li t1, ENTITY_SIZE
@@ -50,9 +45,6 @@ sprites_draw:
     addi sp, sp, 32
     ret
 
-# A sprite entity drawn when it has a texture and faces the camera or is
-# two-sided; lit flat by one brightness at its centre.
-# a0 address The entity.
 sprite_draw:
     addi sp, sp, -128
     sd ra, 120(sp)
@@ -75,7 +67,6 @@ sprite_draw:
     call material_bind
     beqz a0, 90f
     lwu s3, ENTITY_FLAGS(s2)
-    # the feet and the half extents, doubles
     flw ft0, ENTITY_X(s2)
     fcvt.d.s fs0, ft0
     flw ft0, ENTITY_Y(s2)
@@ -90,7 +81,6 @@ sprite_draw:
     flw ft0, ENTITY_HEIGHT(s2)
     fcvt.d.s ft0, ft0
     fmul.d fs10, ft0, ft1           # half the height
-    # the yaw's sine and cosine, doubles
     flw fa0, ENTITY_YAW(s2)
     jab.f32.rad fa0, fa0
     jab.f32.sin fa1, fa0
@@ -99,22 +89,18 @@ sprite_draw:
     fcvt.d.s ft9, fa1               # cos yaw
     andi t0, s3, ENTITY_FLAT
     bnez t0, 2f
-    # standing: the centre half the height up, d straight down
     fadd.d fs2, fs2, fs10
     fcvt.d.w fs6, zero
     fcvt.d.w fs7, zero
     fneg.d fs8, fs10
     andi t0, s3, ENTITY_CAMERA
     bnez t0, 1f
-    # fixed: facing its yaw, r to the right of a viewer in front
     fneg.d fs3, fs11
     fmul.d fs3, fs3, fs9
     fmul.d fs4, ft9, fs9
     fcvt.d.w fs5, zero
     j 3f
 1:
-    # facing the camera: r along the camera's right kept level; a
-    # right that stands on end leaves the sprite facing its yaw
     la t3, camera_d
     addi t3, t3, CAMD_RIGHT
     jab.f64.vec2.len ft8, t3        # the level length of right
@@ -136,7 +122,6 @@ sprite_draw:
     fcvt.d.w fs5, zero
     j 3f
 2:
-    # flat: along its yaw with its face up
     fmul.d fs3, ft9, fs9
     fmul.d fs4, fs11, fs9
     fcvt.d.w fs5, zero
@@ -145,7 +130,6 @@ sprite_draw:
     fmul.d fs7, fs7, fs10
     fcvt.d.w fs8, zero
 3:
-    # the normal, d x r, the side the texture faces
     fmul.d ft6, fs7, fs5
     fnmsub.d ft6, fs8, fs4, ft6     # d.y r.z - d.z r.y
     fmul.d ft7, fs8, fs3
@@ -171,7 +155,6 @@ sprite_draw:
     fle.d t1, ft3, ft4
     bnez t1, 90f                    # the camera behind it
 4:
-    # pulled a hundredth toward the camera
     la t0, k_pull_d
     fld ft5, 0(t0)
     la t0, camera
@@ -193,8 +176,6 @@ sprite_draw:
     fmul.d fs6, fs6, ft5
     fmul.d fs7, fs7, ft5
     fmul.d fs8, fs8, ft5
-    # the plane: the normal, the centre, u across r and v across d,
-    # each 0 at the near edge and 1 at the far
     la t0, plane
     fcvt.s.d ft0, ft6
     fsw ft0, (PLANE_N + 0)(t0)
@@ -254,9 +235,6 @@ sprite_draw:
     fnmsub.d ft6, ft4, fs2, ft6
     fcvt.s.d ft0, ft6
     fsw ft0, PLANE_V0(t0)
-    # no lumel map: a sprite moves, so it is lit flat by one brightness
-    # taken below once the lights are culled; the surface index the
-    # caller named
     la t0, poly
     sd zero, POLY_LUMAP(t0)
     lw t1, ENTITY_SECTOR(s2)
@@ -264,9 +242,6 @@ sprite_draw:
     la t1, sprite_surface
     ld t1, 0(t1)
     sd t1, POLY_SURFACE(t0)
-    # its sector's rectangle clips the quad only when the quad is proven
-    # within the sector; a flat quad, or one unproven, draws over the
-    # whole screen, depth-tested as before
     andi t0, s3, ENTITY_FLAT
     bnez t0, 480f
     lw a0, ENTITY_SECTOR(s2)
@@ -292,9 +267,6 @@ sprite_draw:
     sw t2, RECT_Y1(t1)
 481:
     call surface_setup
-    # facing the camera, its face is the eye's, so it is lit at no
-    # angle, else a light behind it would leave it black; the mode
-    # after the setup, which clears the flag
     andi t0, s3, ENTITY_CAMERA
     beqz t0, 45f
     la t0, poly
@@ -303,7 +275,6 @@ sprite_draw:
 45:
     li a0, POLY_MASKED
     call poly_mode
-    # the quad, from the corner at u 0, v 0 around
     call edges_reset
     call poly_reset
     fsub.d ft0, fs0, fs3
@@ -351,10 +322,6 @@ sprite_draw:
     bltu a0, t0, 90f
     call verts_bounds
     call lights_cull
-    # lit: the brightness at the quad's centre over the polygon's list,
-    # at no angle for a face the eye's, as the polygon's one brightness,
-    # which the fill takes over the whole quad; its ticks are the
-    # frame's light
     la t0, poly
     ld t1, POLY_MODE(t0)
     andi t1, t1, POLY_LIT
@@ -404,18 +371,6 @@ sprite_draw:
     addi sp, sp, 128
     ret
 
-# Whether a standing sprite's quad is proven within a sector: its pulled
-# centre inside the sector in the plan, its level segment crossing no
-# wall of the sector's loops, a touch or a collinear overlap counting as
-# a crossing, and its bottom and top a millimetre or more inside the
-# floor and the ceiling at both ends of the segment; every slack points
-# toward unproven, so anything short of that is not proven
-# a0 int The sector
-# fs0 f64 The pulled centre's x; fs1 y; fs2 z
-# fs3 f64 The pulled half width's x; fs4 y, level
-# fs8 f64 The pulled half height's z, the quad from the centre less it to the centre plus it
-# returns
-#   a0 1 proven within, else 0
 sprite_within:
     addi sp, sp, -112
     sd ra, 104(sp)
@@ -428,13 +383,10 @@ sprite_within:
     fsd fs10, 48(sp)
     fsd fs11, 40(sp)
     mv s4, a0
-    # the centre inside
     fmv.d fa0, fs0
     fmv.d fa1, fs1
     call sector_holds_plan
     beqz a0, 8f
-    # the segment's ends a and b, the centre less and plus the half
-    # width, and its run d, twice the half width
     fsub.d ft0, fs0, fs3
     fsd ft0, 0(sp)                  # ax
     fsub.d ft0, fs1, fs4
@@ -488,8 +440,6 @@ sprite_within:
     fld ft10, 0(t0)
     flt.d t1, ft3, ft10
     beqz t1, 3f
-    # parallel: a crossing when the segment's start lies within the
-    # slack of the wall's line, the cross with the run over its length
     fmul.d ft3, ft0, ft5
     fnmsub.d ft3, ft1, ft4, ft3     # cross(p - a, e)
     fmul.d ft3, ft3, ft3
@@ -502,8 +452,6 @@ sprite_within:
     bnez t1, 8f                     # on the line: not proven
     j 7f
 3:
-    # the crossing's share along the segment and along the wall, each
-    # within the unit range widened by the slack
     fmul.d ft3, ft0, ft5
     fnmsub.d ft3, ft1, ft4, ft3     # cross(p - a, e)
     fdiv.d ft3, ft3, ft2            # t, along the segment
@@ -530,8 +478,6 @@ sprite_within:
     addi s5, s5, 1
     j 1b
 5:
-    # the quad's bottom and top a millimetre or more inside the planes at
-    # both ends, the margin pointing toward unproven
     fabs.d ft11, fs8
     fsub.d fs11, fs2, ft11          # the bottom
     fadd.d fs10, fs2, ft11          # the top
@@ -594,10 +540,6 @@ sprite_within:
 
 .section .rodata
 .balign 8
-# The containment's slacks: a cross product under which a wall runs
-# parallel to the quad's segment, a millimetre squared for a start on
-# such a wall's line, and the crossing's shares widened by a thousandth
-# past the unit range either way
 k_within_den_d:
     .double 0.000000000001
 k_within_slack_sq_d:
@@ -609,7 +551,5 @@ k_within_high_d:
 
 .section .bss
 .balign 8
-# The surface index the next sprite draws as, a map sprite's by its
-# entity or an actor's by its index, named by the caller
 sprite_surface:
     .skip 8
