@@ -10,8 +10,10 @@
 # a program's manifest names from outside any), the
 # toolchain (RISCV_TOOLCHAIN, else extern/riscv beside the kernel or
 # program, else the workspace's, else the tools on PATH, under the
-# official triple or a distribution's name), the target (.target in the
-# workspace, else beside the kernel or program), and the manifests.
+# official triple or a distribution's name), QEMU (extern/qemu beside
+# the program, else the workspace's, else qemu-system-riscv64 on PATH),
+# the target (.target in the workspace, else beside the kernel or
+# program), and the manifests.
 #
 # A build is described by its symbols: `--set debug,stats` names them,
 # comma separated, in any case, and each reaches the assembler as
@@ -39,6 +41,8 @@ const memory = ["-m" "4G"]
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
+# The QEMU every machine runs on, by its binary's name.
+const qemu_name = "qemu-system-riscv64"
 # RVA23 is the profile Jab pins, so everything it mandates is on whether
 # or not Jab itself uses it; the supervisor profile is the one carrying
 # an MMU mode and the supervisor timer the frame clock needs. RVA23 says
@@ -46,13 +50,9 @@ const transport_limit = 8
 # memory protection at all, and the kernel enters in machine mode and
 # opens PMP before it has a trap vector: without `pmp=true` that write
 # is an illegal instruction which traps to address zero and spins there
-# forever. QEMU carries the profile from 9.2; an older QEMU gets the
-# generic rv64, which has what the kernel needs (Sv39, Sstc, PMP, F and
-# D) and lacks only what the profile would add for a program. RVA22's
-# model is not the fallback: it starts bare with the profile's mandatory
-# set, and Sstc is optional there, so the frame clock would fault.
+# forever. It is the one CPU a machine runs: QEMU carries it from 9.2,
+# and a QEMU without it is refused rather than run on another model.
 const cpu_profile = "rva23s64,pmp=true"
-const cpu_generic = "rv64,pmp=true"
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
 # on every refresh its cursor blinks.
@@ -62,19 +62,54 @@ const machine_rest = [
     "-parallel" "none"
 ]
 
-# The CPU model for this host's QEMU: JAB_CPU as given, else the RVA23
-# profile when `-cpu help` lists it, else the generic rv64.
-def cpu-model []: nothing -> string {
-    let forced = ($env.JAB_CPU? | default "")
-    if $forced != "" { return $forced }
-    let listed = (^qemu-system-riscv64 -cpu help | complete | get stdout | lines | any {|l| ($l | str trim) == "rva23s64" })
-    if $listed { $cpu_profile } else { $cpu_generic }
+# The QEMU a machine runs on: an extern when there is one, else PATH.
+# `extern/qemu` is a QEMU install prefix, the binary under its `bin/`,
+# looked for as the toolchain's `extern/riscv` is, beside `here` (the
+# program) and then in the workspace; one that holds no binary is an
+# error rather than a quiet fall to PATH, since a run on another QEMU is
+# what the link is there to prevent. With no extern, the name, for PATH.
+def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> string {
+    let places = (if $workspace == null { [$here] } else { [$here $workspace] })
+    for place in $places {
+        let prefix = ($place | path join "extern" "qemu")
+        if ($prefix | path type) != null {
+            let binary = ($prefix | path join "bin" $qemu_name)
+            if not ($binary | path exists) {
+                error make {msg: $"($prefix) holds no bin/($qemu_name): link extern/qemu to a QEMU install, the directory with bin/ in it"}
+            }
+            return $binary
+        }
+    }
+    $qemu_name
 }
 
-# The machine: virt, the CPU this host can give, four harts, every
+# Where a launch looks for extern/qemu before the workspace: the
+# directory a built image's .target sits in, the program's own for one
+# outside the workspace's members and the workspace for a member; the
+# image's own directory when it lies under no .target.
+def image-home [image: path]: nothing -> string {
+    let parts = ($image | path expand | path split)
+    let marks = ($parts | enumerate | where item == ".target" | get index)
+    if ($marks | is-empty) { return ($image | path expand | path dirname) }
+    $parts | first ($marks | last) | path join
+}
+
+# The CPU every machine runs, the RVA23 profile, once the QEMU it runs on
+# lists the model; a QEMU that does not is refused with its version.
+def cpu-model [qemu: string]: nothing -> string {
+    let listed = (^$qemu -cpu help | complete | get stdout | lines | any {|l| ($l | str trim) == "rva23s64" })
+    if not $listed {
+        let version = (^$qemu --version | complete | get stdout | lines | get -o 0 | default "a QEMU")
+        let found = (which $qemu | get -o 0.path | default $qemu)
+        error make {msg: $"($version) at ($found) has no rva23s64, the RVA23 CPU every Jab machine runs on\nlink extern/qemu, in the workspace or beside the program, to a QEMU 11 install"}
+    }
+    $cpu_profile
+}
+
+# The machine on `qemu`: virt, the RVA23 CPU, four harts, every
 # transport modern.
-def machine-args []: nothing -> list<string> {
-    ["-machine" "virt" "-cpu" (cpu-model)] ++ $machine_rest
+def machine-args [qemu: string]: nothing -> list<string> {
+    ["-machine" "virt" "-cpu" (cpu-model $qemu)] ++ $machine_rest
 }
 # The guest is named for the program, `jab <program>`, which is what
 # QEMU's window shows inside its own prefix, hardcoded in every front
@@ -136,9 +171,11 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 
 # A headless machine prepared and not run: everything a launch sets up
 # before QEMU starts, handed back for whoever runs and drives it, the SDK's
-# own `launch` or a harness that plays interactively. `qemu` is the whole
-# argument vector after the program's name, `env` what the process runs
-# under (the evdev shim preloaded when a gamepad rides the fifo), and the
+# own `launch` or a harness that plays interactively. `qemu_binary` is the
+# QEMU it runs on (qemu-binary, beside the program's build tree and then in
+# the workspace), `qemu` the whole argument vector after it, `env` what the
+# process runs under (the evdev shim preloaded when a gamepad rides the
+# fifo), and the
 # rest the paths: the UART's log, QEMU's guest-error log, the screen a
 # screendump lands in, the pid file, the monitor's pipe pair (`<monitor>.in`
 # and `.out`), the debug channel's log under DEBUG, the API's `api_in` pipe
@@ -159,7 +196,7 @@ export def plan [
     --pad-port
     --no-kbm
     --sound
-]: nothing -> record<qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string> {
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string> {
     let out = ($out | path expand)
     mkdir $out
     let log = ($out | path join "serial.log")
@@ -172,19 +209,21 @@ export def plan [
     }
     ^mkfifo ($monitor + ".in") ($monitor + ".out")
     let ws = (workspace-dir ($kernel | path expand) | default (workspace-dir $out))
+    let qemu = (qemu-binary (image-home $image) $ws)
     let pad = (pad-attach $gamepad $out $pad_port $ws)
     let ports = (ports (symbols $set) $out $api $pad.port)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" and ($wav | path exists) { rm $wav }
     let audio = (if $sound { sound-args $"wav,path=($wav)" --streams 1 } else { [] })
-    let args = ((machine-args) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let args = ((machine-args $qemu) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" "none" "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
     ] ++ (disks-args (machine-disks $disk $serial true $ws)))
     {
+        qemu_binary: $qemu,
         qemu: $args,
         env: $pad.env,
         out: $out,
@@ -255,7 +294,7 @@ export def launch [
     let monitor = $machine.monitor
     let ports = { debug_log: $machine.debug_log }
     let wav = $machine.sound
-    let disked = (["--signal=TERM" $"($seconds)" "qemu-system-riscv64"] ++ $machine.qemu)
+    let disked = (["--signal=TERM" $"($seconds)" $machine.qemu_binary] ++ $machine.qemu)
     let api_out = $machine.api_out
     let api_in = $machine.api_in
     let pad_in = $machine.pad_pipe_in
@@ -324,7 +363,8 @@ export def launch [
 
 # Read a wav QEMU's wav backend recorded: its rate, channels, and bits
 # a sample from the format chunk, and the data chunk's samples as they
-# lie, little-endian, the channels interleaved a frame at a time.
+# lie, little-endian, the channels interleaved a frame at a time, to the
+# end of the file when the chunk's size was never written.
 export def wave [path: path]: nothing -> record<rate: int, channels: int, bits: int, frames: int, samples: binary> {
     let bytes = (open --raw ($path | path expand) | into binary)
     let total = ($bytes | bytes length)
@@ -343,7 +383,12 @@ export def wave [path: path]: nothing -> record<rate: int, channels: int, bits: 
             $rate = ($bytes | bytes at ($body + 4)..<($body + 8) | into int --endian little)
             $bits = ($bytes | bytes at ($body + 14)..<($body + 16) | into int --endian little)
         } else if $id == "data" {
-            $samples = ($bytes | bytes at $body..<([($body + $size) $total] | math min))
+            # the backend writes this size as it closes the file, which
+            # QEMU 11.1.2 never does at exit, so a size of 0, or one past
+            # the file's end, means the samples run to the end of the file
+            let unwritten = ($size == 0 or ($body + $size) > $total)
+            $samples = ($bytes | bytes at $body..<(if $unwritten { $total } else { $body + $size }))
+            if $unwritten { break }
         }
         $at = ($body + $size + ($size mod 2))
     }
@@ -795,11 +840,18 @@ def wait-for-file [path: path]: nothing -> nothing {
 }
 
 # The Jab QEMU processes on this host, by their command line, which
-# every Jab line marks with `-name jab`: the QEMU itself, never the
-# `timeout` a test wraps it in, whose command line carries the same
-# words.
+# every Jab line marks with `-name jab`: the QEMU itself, wherever its
+# binary lives, never the `timeout` a test wraps it in, whose command
+# line carries the same words.
 def jab-pids []: nothing -> list<int> {
-    ps -l | where {|p| (($p.command | split row " " | first | path basename) == "qemu-system-riscv64") and ($p.command | str contains "-name jab") } | get pid
+    ps -l | where {|p| ((command-binary $p.command | path basename) == $qemu_name) and ($p.command | str contains "-name jab") } | get pid
+}
+
+# The binary a command line runs: everything before its first option, so
+# a binary whose path holds a space, an extern/qemu under such a
+# directory, stays whole.
+def command-binary [command: string]: nothing -> string {
+    $command | split row " -" | first
 }
 
 # The threads of a process with their cumulative CPU seconds: on Linux
@@ -845,8 +897,9 @@ def watch-file [ws: path]: nothing -> string {
 
 # Record the running Jab QEMU per thread, once a second, to the
 # workspace's .target/watch.nuonl, whatever shell this is run from: a
-# first line describing the run (host, QEMU, the window, the kernel and
-# the symbols it was built with, read from its tree's flags stamp),
+# first line describing the run (host, the running QEMU's version, the
+# window, the kernel and the symbols it was built with, read from its
+# tree's flags stamp),
 # then a line per sample with every thread's cumulative CPU seconds.
 # One short line is printed per sample, the rates since the last; the
 # file is what `watched` reports on. Ends when the run does, or when
@@ -861,7 +914,8 @@ def "main watch" [ws: path] {
     let stamp_file = (if $kernel == "" { "" } else { $kernel | path dirname | path join "flags" })
     let stamp = (if $stamp_file != "" and ($stamp_file | path exists) { open --raw $stamp_file | decode | str trim } else { "" })
     let symbols = ($stamp | parse --regex '--defsym (?P<s>[A-Z0-9_]+)=1' | get s)
-    let qemu = (^qemu-system-riscv64 --version | complete | get stdout | lines | get -o 0 | default "")
+    let binary = (command-binary $command)
+    let qemu = (try { ^$binary --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" })
     let file = (watch-file $ws)
     mkdir ($file | path dirname)
     let started = (date now)
@@ -1196,16 +1250,19 @@ def test-args [ready: record]: nothing -> list<string> {
     if $assets == "" { $common } else { $common ++ ["--assets" $assets] }
 }
 
-# The QEMU line that runs a program, built first: the full virtio device
-# set, the program's own disk when it has one else the blank image that
-# has always been there, the debug channel to a file when DEBUG is set,
-# the API's port when `api` asks, the window given (null for the one a
-# run would open), the UART where `serial` says (`stdio` or `none`), and
-# no monitor. The ports' files sit beside the build output, named in the
-# README.
-def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool]: nothing -> record<args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string> {
+# The QEMU line that runs a program, built first: the QEMU it runs on
+# (qemu-binary, beside the program and then in the workspace) and its
+# arguments, the full virtio device set, the program's own disk when it
+# has one else the blank image that has always been there, the debug
+# channel to a file when DEBUG is set, the API's port when `api` asks,
+# the window given (null for the one a run would open), the UART where
+# `serial` says (`stdio` or `none`), and no monitor. The ports' files sit
+# beside the build output, named in the README.
+def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string> {
     let ready = (prepared $dir $names)
     let c = $ready.context
+    let qemu = (qemu-binary $c.here $c.workspace)
+    let machine = (machine-args $qemu)
     let assets = (assets-image $c)
     let disk = (if $assets == "" {
         let blank = ($c.target | path join "disk.img")
@@ -1219,7 +1276,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let ports = (ports $c.symbols $c.out $api $gamepad.port)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { sound-args (audio-plan ($found | get -o audio)) } else { [] })
-    let args = ((machine-args) ++ (name-args $c.manifest.name) ++ $memory ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
+    let args = ($machine ++ (name-args $c.manifest.name) ++ $memory ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($program_base),force-raw=on"
         "-display" $shown "-serial" $serial "-monitor" "none"
@@ -1228,7 +1285,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
-    { args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, pad_pipe: $ports.pad_pipe }
+    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, pad_pipe: $ports.pad_pipe }
 }
 
 # Whatever JAB_QEMU_ARGS holds, split into words as a shell would read
@@ -1383,7 +1440,8 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
         let product = (if $b.product == null { "" } else { $b.product | into string })
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
-    ^qemu-system-riscv64 ...$line.args
+    let qemu = $line.qemu_binary
+    ^$qemu ...$line.args
     if $bridge != null { try { job kill $bridge } }
 }
 
@@ -1428,9 +1486,10 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
     let driver = (if $server { "" } else { "offscreen" })
     let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
-    let run = (with-env $extra { ^timeout --signal=TERM ($seconds | into string) qemu-system-riscv64 ...$line.args | complete })
+    let binary = $line.qemu_binary
+    let run = (with-env $extra { ^timeout --signal=TERM ($seconds | into string) $binary ...$line.args | complete })
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
-    let qemu = (^qemu-system-riscv64 --version | complete | get stdout | lines | get -o 0 | default "")
+    let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
     let report = (sdl-report $log)
     let record = ({
         run: {

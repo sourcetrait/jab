@@ -1,9 +1,9 @@
 use crate::*;
 
-/// A machine the SDK prepared, as `jab.nu plan` prints it: QEMU's
-/// arguments and environment, and where everything lands.
+/// A machine the SDK prepared, as `jab.nu plan` prints it.
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
+    pub(crate) qemu_binary: String,
     pub(crate) qemu: Vec<String>,
     pub(crate) env: HashMap<String, String>,
     pub(crate) out: PathBuf,
@@ -49,6 +49,7 @@ impl Plan {
             .collect::<RoboResult<HashMap<String, String>>>()?;
         let pad_header = unhex(&text_field("pad_header")?)?;
         Ok(Plan {
+            qemu_binary: text_field("qemu_binary")?,
             qemu,
             env,
             out: PathBuf::from(text_field("out")?),
@@ -70,7 +71,7 @@ impl Plan {
 /// Bytes from a hex string, either case, whitespace ignored.
 pub(crate) fn unhex(text: &str) -> RoboResult<Vec<u8>> {
     let digits: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if digits.len() % 2 != 0 {
+    if !digits.len().is_multiple_of(2) {
         return Err(RoboError::Command(format!("odd hex: {text}")));
     }
     digits

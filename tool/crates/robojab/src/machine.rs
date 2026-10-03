@@ -3,8 +3,7 @@ use crate::*;
 /// Linux's non-blocking open flag, for a fifo that may have no reader.
 const O_NONBLOCK: i32 = 0o4000;
 
-/// A file read from where the last read left off: the UART's log, the
-/// debug channel's, the API's bytes.
+/// A file read from where the last read left off.
 pub(crate) struct Tail {
     path: PathBuf,
     offset: u64,
@@ -39,8 +38,7 @@ impl Tail {
     }
 }
 
-/// The running machine: QEMU under `timeout` for the bound, its monitor,
-/// the pad, the API's pipe, and the tails of what it writes.
+/// The running machine: QEMU under `timeout` for the bound.
 pub(crate) struct Machine {
     pub(crate) plan: Plan,
     child: Child,
@@ -57,16 +55,11 @@ pub(crate) struct Machine {
 }
 
 impl Machine {
-    /// QEMU started from the plan under `timeout --signal=TERM <seconds>`,
-    /// as the SDK's launch runs it, its own output beside the plan's files,
-    /// the files a previous run left emptied, the pad and the API's pipe
-    /// opened once it is up.
+    /// QEMU started from the plan under `timeout`, as the SDK's launch runs it.
     pub(crate) fn start(plan: Plan, seconds: u64) -> RoboResult<Machine> {
         let _ = fs::remove_file(&plan.pidfile);
-        for stale in [&plan.api_out, &plan.debug_log] {
-            if let Some(path) = stale {
-                fs::write(path, b"").map_err(RoboError::io(path.display().to_string()))?;
-            }
+        for path in [&plan.api_out, &plan.debug_log].into_iter().flatten() {
+            fs::write(path, b"").map_err(RoboError::io(path.display().to_string()))?;
         }
         let stdout = fs::File::create(plan.out.join("robojab.stdout")).map_err(RoboError::io("robojab.stdout"))?;
         let stderr = fs::File::create(plan.out.join("robojab.stderr")).map_err(RoboError::io("robojab.stderr"))?;
@@ -74,13 +67,13 @@ impl Machine {
         command
             .arg("--signal=TERM")
             .arg(seconds.to_string())
-            .arg("qemu-system-riscv64")
+            .arg(&plan.qemu_binary)
             .args(&plan.qemu)
             .envs(&plan.env)
             .stdin(Stdio::null())
             .stdout(stdout)
             .stderr(stderr);
-        let child = command.spawn().map_err(RoboError::io("timeout qemu-system-riscv64"))?;
+        let child = command.spawn().map_err(RoboError::io(format!("timeout {}", plan.qemu_binary)))?;
         let started = Instant::now();
         let mut machine = Machine {
             serial: Tail::new(plan.serial_log.clone()),
@@ -104,8 +97,7 @@ impl Machine {
         Ok(machine)
     }
 
-    /// Until the pid file appears, five seconds at most; a QEMU that died
-    /// first says so with what it wrote.
+    /// Until the pid file appears, five seconds at most.
     fn wait_up(&mut self) -> RoboResult<()> {
         for _ in 0..100 {
             if self.plan.pidfile.exists() {
@@ -125,8 +117,7 @@ impl Machine {
         self.started.elapsed().as_secs_f32()
     }
 
-    /// Whether QEMU still runs; its exit code is kept once it does not,
-    /// 124 when the bound ended it.
+    /// Whether QEMU still runs; its exit code kept once it does not.
     pub(crate) fn alive(&mut self) -> bool {
         if self.exit.is_some() {
             return false;
@@ -145,8 +136,7 @@ impl Machine {
         self.exit
     }
 
-    /// A command into the monitor's pipe, opened without blocking so a
-    /// monitor nobody reads, QEMU gone, errors instead of hanging.
+    /// A command into the monitor's pipe, opened without blocking.
     pub(crate) fn monitor(&mut self, command: &str) -> RoboResult<()> {
         let path = PathBuf::from(format!("{}.in", self.plan.monitor.display()));
         let mut pipe = fs::OpenOptions::new().write(true).custom_flags(O_NONBLOCK).open(&path).map_err(RoboError::io("the monitor"))?;
@@ -173,8 +163,7 @@ impl Machine {
         self.api_out.is_some()
     }
 
-    /// The UART read up to now: its new lines kept for the next `serial`,
-    /// and a `jab: ` line among them is a fault, kept for good.
+    /// The UART read up to now, its new lines kept and its faults noted.
     pub(crate) fn poll(&mut self) -> RoboResult<()> {
         let lines = self.serial.lines()?;
         for line in &lines {
@@ -200,8 +189,7 @@ impl Machine {
         }
     }
 
-    /// The screen taken through the monitor into a fresh PPM beside the
-    /// plan's files, waited for until it stops growing; its path.
+    /// The screen through the monitor into a fresh PPM beside the plan's files.
     pub(crate) fn screendump(&mut self) -> RoboResult<PathBuf> {
         self.shots += 1;
         let path = self.plan.out.join(format!("shot_{}.ppm", self.shots));
@@ -223,8 +211,7 @@ impl Machine {
         Err(RoboError::Machine("no screendump landed in ten seconds".to_owned()))
     }
 
-    /// The run ended: quit asked of the monitor, QEMU given three seconds,
-    /// then sent TERM through its pid file; the exit code.
+    /// The run ended, by the monitor's quit, then TERM, then a kill.
     pub(crate) fn quit(&mut self) -> RoboResult<i32> {
         if !self.alive() {
             return Ok(self.exit.unwrap_or(-1));
@@ -251,9 +238,7 @@ impl Machine {
         Ok(-9)
     }
 
-    /// A fault line's routine from the ELF's text symbols through the
-    /// toolchain's nm: the greatest address at or below the epc, with the
-    /// offset into it; nothing without an ELF or an epc.
+    /// A fault line's routine and offset from the ELF's symbols through nm.
     pub(crate) fn resolve(fault: &str, elf: Option<&Path>, prefix: &str) -> Option<String> {
         let elf = elf?;
         let epc = fault.split("epc=").nth(1)?.split_whitespace().next()?;

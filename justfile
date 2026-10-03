@@ -1,12 +1,12 @@
 # LowKick Jab workspace. Every recipe hands off to the SDK's nushell tool,
 # sdk/nu/jab.nu, which reads workspace.jab.toml and does all lookups and
 # up-to-date checks in one process. Needs nushell, just, a riscv64 GNU
-# toolchain, and qemu-system-riscv64; see the tool for how the toolchain
-# and the target directory are found. `--set debug,stats` after a recipe
-# names the build symbols; a build lands in .target/debug with DEBUG set
-# and in .target/release otherwise. `--api` on a run puts the API's
-# port on the machine; every build carries the API and runs either
-# way.
+# toolchain, and a QEMU with the RVA23 model, rva23s64; see the tool for
+# how the toolchain, QEMU, and the target directory are found. `--set
+# debug,stats` after a recipe names the build symbols; a build lands in
+# .target/debug with DEBUG set and in .target/release otherwise. `--api`
+# on a run puts the API's port on the machine; every build carries the
+# API and runs either way.
 
 set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]

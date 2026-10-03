@@ -43,8 +43,12 @@ and otherwise serves the console over VNC on 127.0.0.1:5930, to tunnel
 and view; `JAB_DISPLAY` overrides with any `-display` value.
 The toolchain is found by its install directory, the one holding
 `bin/`: `RISCV_TOOLCHAIN`, else an `extern/riscv` link beside the kernel
-or program, else `extern/riscv` beside this file, else the tools on
-`PATH`. A program the workspace does not list, `game/fps` the first,
+or program, else the workspace's `extern/riscv`, else the tools on
+`PATH`. QEMU is found the same way, by its install directory: an
+`extern/qemu` link beside the program, else the workspace's
+`extern/qemu`, its `bin/qemu-system-riscv64`, else `qemu-system-riscv64`
+on `PATH`; an `extern/qemu` with no binary under it is an error, never a
+fall to `PATH`. A program the workspace does not list, `game/fps` the first,
 builds against it: its kernel is built here with the same symbols, and
 the generic disk, the toolchain link, the shims, and discovery are this
 workspace's, while its own output lands in a `.target/` beside it; one
@@ -203,10 +207,10 @@ into the pad port instead, the same pad described in the port's
 header, so the pad's tests run both ways here and the port's way
 there.
 
-The CPU is RVA23, `-cpu rva23s64`, which QEMU carries from 9.2; on an
-older QEMU the tool runs the generic `rv64`, which has what the kernel
-needs, and `JAB_CPU` overrides either with any `-cpu` value.
-`JAB_QEMU_ARGS` appends its words to a run's QEMU line after
+The CPU is RVA23, `-cpu rva23s64,pmp=true`, on every machine: a QEMU
+without the model, any before 9.2, is refused with its version and a
+line saying to link `extern/qemu` to a QEMU 11 install, and nothing
+overrides it. `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,
 such as `-trace alsa_* -D trace.log`; the value is split as a shell
 would split it, quotes grouping a word with spaces and then removed,
