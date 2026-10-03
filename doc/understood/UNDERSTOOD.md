@@ -25,7 +25,12 @@ runs only under QEMU's `virt` machine.
   `crates/`: `disco`, the library `jabdisco` and its binary
   `jabdisco`, which find the gamepad a run attaches and the audio
   output it plays through; `robojab`, the harness that runs a prepared
-  machine and lets an agent play it a move at a time.
+  machine and lets an agent play it a move at a time; and the eye tools,
+  the library `eye_asm` with `eye-asm`, which prints the `.eye` of every
+  source under a `src/` or of one file or directory in it, and
+  `eye-gen-asm`, which writes a `.eye.stub` beside each `.eye` from the
+  code, carrying what the `.eye` says, and with `--done` puts each stub in
+  its `.eye`'s place, refusing unless every source has one.
 - `.target/release/` and `.target/debug/` build output, ignored;
   `extern/` local links, ignored.
 
