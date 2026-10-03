@@ -70,6 +70,7 @@ world_draw:
     sd zero, STAT_SAMPLES(t1)
     sd zero, STAT_TILES_BUILT(t1)
     sd zero, STAT_TILED_PIXELS(t1)
+    sd zero, STAT_TILE_TICKS(t1)
     la t0, tile_budget_frame
     ld t1, 0(t0)
     la t0, tile_budget

@@ -206,6 +206,14 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # input_event records into, else (and with `--pad-port`) the pad port's
 # `pad_pipe_in` pipe, whose header, `pad_header` as hex, the driver writes
 # first. Every stale file of a previous run is removed and the pipes made.
+# The machine is headless unless `--window` puts it in the window a run
+# of the program would open (`window`, `none` without); the sound device
+# records to `sound` with `--sound`, or plays through the host's audio as
+# a run's does with `--live-sound` (`audio`, the backend); and
+# `--host-pad` attaches the host's own gamepad as a run does, on macOS
+# through the bridge `bridge` names, to be started beside QEMU. A
+# recording and the host's audio together are refused, as is the host's
+# pad beside a scripted one.
 export def plan [
     --kernel: path
     --image: path
@@ -218,7 +226,12 @@ export def plan [
     --pad-port
     --no-kbm
     --sound
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string> {
+    --window
+    --live-sound
+    --host-pad
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
+    if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
+    if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
     let out = ($out | path expand)
     mkdir $out
     let log = ($out | path join "serial.log")
@@ -232,16 +245,20 @@ export def plan [
     ^mkfifo ($monitor + ".in") ($monitor + ".out")
     let ws = (workspace-dir ($kernel | path expand) | default (workspace-dir $out))
     let qemu = (qemu-binary (image-home $image) $ws)
+    let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
+    let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws)
-    let ports = (ports (symbols $set) $out $api $pad.port)
+    let ports = (ports (symbols $set) $out $api ($pad.port or $hosted.port))
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" and ($wav | path exists) { rm $wav }
-    let audio = (if $sound { sound-args $"wav,path=($wav)" --streams 1 } else { [] })
-    let args = ((machine-args $qemu) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
+    let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
+    let shown = (if $window { display (image-manifest $image) } else { "none" })
+    let args = ((machine-args $qemu) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
-        "-display" "none" "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
+        "-display" $shown "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
     ] ++ (disks-args (machine-disks $disk $serial true $ws)))
     {
@@ -263,7 +280,17 @@ export def plan [
         pad_header: ($pad.header | encode hex),
         sound: $wav,
         workspace: ($ws | default ""),
+        window: $shown,
+        audio: $backend,
+        bridge: $hosted.bridge,
     }
+}
+
+# The manifest of the program an image was built from (image-home), for
+# the window it names; an empty record when there is none.
+def image-manifest [image: path]: nothing -> record {
+    let manifest = (image-home $image | path join "program.jab.toml")
+    if ($manifest | path exists) { open $manifest } else { {} }
 }
 
 # Run a program on the kernel under QEMU with no window, the UART to
@@ -286,7 +313,13 @@ export def plan [
 # is asked of the process table rather than of /proc, so they happen
 # on every host. The workspace, whose generic disk rides along and
 # whose shim plays a pad, is the one above the kernel ELF, else the
-# one above `out`.
+# one above `out`. `--window`, `--live-sound`, and `--host-pad` put the
+# machine on the host as a run puts it, the window, the host's audio,
+# and the host's own gamepad (plan), with the bridge run beside QEMU
+# where the pad needs one and ended after; the screen and the timed
+# actions go through the monitor and the pipes as headless. The result
+# carries the machine's line, `qemu_binary` and `qemu`, with the
+# `window` and the `audio` backend it ran with.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -304,10 +337,13 @@ export def launch [
     --kbm                      # the keyboard and the tablet on the machine, which is the default
     --no-kbm                   # neither on the machine
     --sound                    # the sound device on the machine, its output recorded to sound.wav in `out`, handed back as `sound`
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string> {
+    --window                   # the window a run of the program opens, in place of none
+    --live-sound               # the sound device over the host's audio as a run discovers it, in place of the --sound recording
+    --host-pad                 # the host's own gamepad as a run attaches it, in place of a --pad table
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
-    let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound)
+    let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad)
     let out = $machine.out
     let log = $machine.serial_log
     let qemu_log = $machine.qemu_log
@@ -321,6 +357,14 @@ export def launch [
     let api_in = $machine.api_in
     let pad_in = $machine.pad_pipe_in
     let gamepad = ($gamepad | merge { port: $machine.pad_port, fifo: $machine.pad_fifo, header: ($machine.pad_header | decode hex), env: $machine.env })
+    let bridge = (if $machine.bridge == null { null } else {
+        let bin = (shim-build $machine.workspace "jabshim_pad" --bin)
+        let b = $machine.bridge
+        let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
+        let product = (if $b.product == null { "" } else { $b.product | into string })
+        let pipe = $pad_in
+        job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
+    })
     let started = (date now)
     job spawn { with-env $gamepad.env { ^timeout ...$disked | complete } | job send 0 }
     mut result: any = null
@@ -369,6 +413,7 @@ export def launch [
             }
         }
     }
+    if $bridge != null { try { job kill $bridge } }
     {
         status: $result.exit_code,
         serial: (if ($log | path exists) { open --raw $log | decode } else { "" }),
@@ -380,6 +425,10 @@ export def launch [
         cpu_seconds: $cpu,
         wall_seconds: (((date now) - $started) / 1sec),
         sound: (if $wav != "" and ($wav | path exists) { $wav } else { "" }),
+        qemu_binary: $machine.qemu_binary,
+        qemu: $machine.qemu,
+        window: $machine.window,
+        audio: $machine.audio,
     }
 }
 

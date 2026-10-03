@@ -15,6 +15,12 @@ sector floors, and the camera last, since its basis writes camera_d for the
 surface mathematics. The frame loop runs the game's phases before the
 drawing's and times each: the game's microseconds cover the pad, the console,
 the camera, the actors, and the ambient; the drawing's cover world_draw alone.
+The frame's whole time is measured too, its critical path from its start to
+the end of its reporting, with the crosshair, the mix, the flip, and the
+reporting timed apart and the await after the path alone; the frame before's
+two records go over the API at a frame's start, once its await has ended, so
+a record carries the await that followed its frame and the path whole
+(render.inc's REPORT_FRAME and REPORT_DRAW, read by test/gauge.nu).
 
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
@@ -47,6 +53,29 @@ screen is cleared and a debug build reports the load.
 
 Under DEBUG the first frame's report goes out, and the first after a console
 placement.
+
+The marks, into frame_clock: the start, which is the await's end; the
+reporting so far, the frame before's records; the game and the drawing as
+before; the crosshair, the mix, and the flip with its status and its end;
+the state report and a debug build's lines added to the reporting; and the
+await's start, which ends the critical path. One register, s9, carries the
+last mark, so each phase starts where the one before ended but for the few
+instructions storing it, which no phase holds: the record's unattributed
+time, a few microseconds a frame (`just test` prints the walk's greatest).
+
+## frame_records
+
+Built from frame_clock and the stats, which world_draw zeroes only when the
+next frame draws, so at a frame's start they still hold the frame before's;
+the loop stores s11, the program's start, as the clock's origin before its
+first frame. Ticks become microseconds by a division a field. The start and
+the flip's end are 64 bits, counted from the program's start, since 32 bits
+of microseconds wrap at 71 minutes, inside a played session. The pair goes
+in one write, the API's write being the one call besides the await that can
+wait, and its cost is the reporting's. An E the console read in the frame
+just recorded set measure_end, and the end marker goes out right after that
+frame's pair, so every record of the measurement precedes it and the frames
+past it are outside.
 
 ## load_report
 

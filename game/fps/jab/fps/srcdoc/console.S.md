@@ -2,8 +2,15 @@
 
 The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
-with the lumels bright or the tiles held off, each reported back as
-REPORT_CONSOLE.
+with the lumels bright or the tiles held off, R the generator seeded, E the
+gauge's measurement closed, each reported back as REPORT_CONSOLE.
+
+R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
+androids draw from, so runs sent one seed before their first frame start
+alike; its answer before the first state record is the proof it came in
+time. E closes the measurement on the frame that reads it: that frame's
+records go out at the next frame's start and the end marker right after
+them (main.S's frame_records), the game going on.
 
 A frame is 64 bytes: a kind byte, three of padding, the rest by the kind, zero
 to the end; a partial frame is kept until the rest arrives. P carries six

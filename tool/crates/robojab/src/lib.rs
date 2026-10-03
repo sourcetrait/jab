@@ -64,3 +64,8 @@ pub(crate) use screen::*;
 pub(crate) use socket::*;
 
 pub use run::run;
+
+#[cfg(test)]
+mod tests {
+    mod driver;
+}

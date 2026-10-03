@@ -35,6 +35,7 @@ use ../../../../../sdk/nu/jab.nu
 use ../../../nu/map.nu
 use ../../../nu/png.nu
 use ./pose.nu
+use ./gauge.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
@@ -53,11 +54,19 @@ const CRACKS = 32
 # actor; its row), 4 the frame struck (the damage; the health), 5 a
 # pickup (the rounds), 6 a trace's answer (0 nothing, 1 a plane, 2 a
 # piece, 3 an android, 4 the player; the distance and the point in
-# millimetres)
+# millimetres); kinds 7 and 8 the frame before's clock and its drawing,
+# sent at each frame's start, and 9 the end of a measurement, which
+# gauge.nu reads (`gauge measure`) and `records` leaves out
 const RECORD = 64
+const CLOCK_KINDS = [7 8 9]
 # A console record carries the command's byte where the state's sector
 # sits; the P frame's
 const CONSOLE_P = 80
+# The clock over the factory walk: the seed sent before the first frame
+# and the E closing the measurement half a second before the capture
+const CLOCK_SEED = 7
+const CLOCK_SEED_AT = 200ms
+const CLOCK_END_AT = 13500ms
 const MET_GEOMETRY = 1
 const MET_ANDROID = 2
 const ROUSED = 1
@@ -666,12 +675,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         { name: "down", at: 5500ms, x: 1.5, y: 3.0, z: 1.6, yaw: 90, pitch: 0, way: [stair_ground down1 down2 down3 down4 down5 down6 garage], ambient: "garage" },
         { name: "ramp", at: 9500ms, x: 34.0, y: 13.0, z: -1.4, yaw: 90, pitch: 0, way: [drive_low drive_ramp], ambient: "yard" },
     ]
-    let walk_sends = ($factory_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
+    let walk_sends = ([{ at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }]
+        | append ($factory_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
+        | append [{ at: $CLOCK_END_AT, bytes: (pose command-frame "E") }]
+        | sort-by at)
     let factory_walk = (jab launch --kernel $kernel --image $image --out ($out | path join "factory_walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_factory.nuon") --disk $factory_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
     assert equal (open --raw $factory_walk.qemu_log) "" "QEMU has no complaint about the guest on the factory walk"
     let walk_lines = ($factory_walk.serial | lines)
     let factory_walk_records = (records $factory_walk.api)
-    let walk_consoles = ($factory_walk_records | enumerate | where {|r| $r.item.kind == 11 } | get index)
+    let walk_consoles = ($factory_walk_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P } | get index)
     assert equal ($walk_consoles | length) ($factory_starts | length) $"a console record a start on the factory walk: ($walk_consoles | length)"
     mut factory_walks = []
     for e in ($factory_starts | enumerate) {
@@ -693,6 +705,27 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     let ramp_end = ($factory_walks | last | get last)
     assert ($ramp_end.y > 27.0) $"the body reached the gate at the ramp's top: ($ramp_end)"
+
+    # the frame's clock over the walk: the seed answered before the first
+    # frame, the E closing the measurement with the end marker after its
+    # final frame's records, every frame from 0 to it with a frame and a
+    # draw record in order at the schema, each frame's phases within its
+    # critical path and the drawing's parts within the drawing, the tiles'
+    # time within the planes' and the walls', the tiled pixels within the
+    # lit, the arena's peak at or past what it holds, and the game going
+    # on past the measurement
+    let walk_clock = (gauge measure $factory_walk.api [{ name: "walk", places: $factory_starts, pad: [] }])
+    assert $walk_clock.seeded "the walk's seed answered before its first frame"
+    assert $walk_clock.complete $"the walk's measurement complete: ($walk_clock.problems)"
+    assert ($walk_clock.past_window > 0) $"the game went on past the measurement: ($walk_clock.past_window) frames"
+    let clock_rows = $walk_clock.rows
+    let outside = ($clock_rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
+    assert ($outside | is-empty) $"every phase within its frame and every part within its drawing: ($outside | first 3)"
+    assert ($clock_rows | all {|r| $r.tiles_us <= ($r.planes_us + $r.walls_us) }) "the tiles' time within the planes' and the walls'"
+    assert ($clock_rows | all {|r| $r.tiled_pixels <= $r.lit_pixels }) "the tiled pixels within the lit"
+    assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile arena's peak at or past what it holds"
+    assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
+    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing"
 
     # the fight: the first android, facing the spawn, rouses and fires;
     # from the placed eye four rounds from the console strike it down to
@@ -1012,21 +1045,25 @@ def release-strings [image: path]: nothing -> nothing {
     assert equal ($release_found | sort) ($EXIT_TEXT | sort) $"every fps: string in the release build is an exit's: ($release_found)"
 }
 
-# The records of an API capture: the kind, the sector, the eye, the
-# angles in degrees, the times, and an event's five fields.
+# The records of an API capture, the clock's kinds left to gauge.nu: the
+# kind, the sector, the eye, the angles in degrees, the times, and an
+# event's five fields.
 def records [api: binary]: nothing -> table<kind: int, sector: int, x: float, y: float, z: float, yaw: float, pitch: float, roll: float, frame_us: int, game_us: int, fields: list<int>> {
     0..<(($api | bytes length) // $RECORD) | each {|i|
         let r = ($api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD))
-        {
-            kind: ($r | bytes at 0..<1 | into int),
-            sector: ($r | bytes at 4..<8 | into int --endian little --signed),
-            x: (map float-at $r 8), y: (map float-at $r 12), z: (map float-at $r 16),
-            yaw: (map float-at $r 20), pitch: (map float-at $r 24), roll: (map float-at $r 28),
-            frame_us: ($r | bytes at 32..<36 | into int --endian little),
-            game_us: ($r | bytes at 36..<40 | into int --endian little),
-            fields: (0..<5 | each {|f| $r | bytes at (40 + $f * 4)..<(44 + $f * 4) | into int --endian little --signed }),
+        let kind = ($r | bytes at 0..<1 | into int)
+        if $kind in $CLOCK_KINDS { null } else {
+            {
+                kind: $kind,
+                sector: ($r | bytes at 4..<8 | into int --endian little --signed),
+                x: (map float-at $r 8), y: (map float-at $r 12), z: (map float-at $r 16),
+                yaw: (map float-at $r 20), pitch: (map float-at $r 24), roll: (map float-at $r 28),
+                frame_us: ($r | bytes at 32..<36 | into int --endian little),
+                game_us: ($r | bytes at 36..<40 | into int --endian little),
+                fields: (0..<5 | each {|f| $r | bytes at (40 + $f * 4)..<(44 + $f * 4) | into int --endian little --signed }),
+            }
         }
-    }
+    } | compact
 }
 
 # Whether the capture is a screen of the display's size with every

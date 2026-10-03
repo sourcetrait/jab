@@ -1,0 +1,127 @@
+# The gauge's route over the factory, normal play with no warmed cache
+# (gauge.nu run). The start: the spawn's view from the load, the cold
+# start, still while the first sight builds. The fight, as the test's
+# fight times it: placed on the bay's east patrol leg facing south while
+# the first android walks north up the leg from its start at (28, 8),
+# sees the eye, and stops to fight on the crosshair; four presses of the
+# right trigger strike it down, then south over the fallen frame and its
+# magazine, and a half turn. Placed later, the eye misses: by then the
+# android has been roused elsewhere and fights where it stands. The
+# spawn: placed again, a half turn right and back, a full turn left, a
+# look up and down, then forward into the bay, its cells partly built by
+# the start and the fight. The yard: walked toward the fence, a quarter
+# turn left, walked on, a full turn right. Up: the up flight from its
+# foot to the office corridor, a quarter turn right toward the window
+# over the bay, a look down. Down: the down flight from its foot into the
+# garage. The ramp: from the garage door up the driveway to the gate.
+# The revisit: the spawn placed again and its turns played again, its
+# cells built in the legs before and the fight's actors as the fight left
+# them. The pressure: the eight far views placed half a second apart
+# under a full turn right, faster than the frame's budget builds their
+# cells. The E at `end` closes the measurement. A leg starts at its first
+# placement, the first at the load. The pad's axes are the reference
+# pad's, 0 to 255 about 127, 0 up on Y: left X 0, left Y 1, right X 2,
+# right Y 5; 313 is the right trigger's button. A full throw turns half a
+# turn a second and looks a quarter turn a second, and walks 4 m a second.
+{
+    map: "factory",
+    end: 56000ms,
+    legs: [
+        { name: "start", places: [], pad: [] },
+        {
+            name: "fight",
+            places: [{ at: 1500ms, x: 28.0, y: 17.0, z: 1.6, yaw: 270, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [3000ms, 1, 313, 1], [3100ms, 1, 313, 0],
+                [3400ms, 1, 313, 1], [3500ms, 1, 313, 0],
+                [3800ms, 1, 313, 1], [3900ms, 1, 313, 0],
+                [4200ms, 1, 313, 1], [4300ms, 1, 313, 0],
+                [5500ms, 3, 1, 0], [9000ms, 3, 1, 127],
+                [9100ms, 3, 2, 255], [10100ms, 3, 2, 127],
+            ],
+        },
+        {
+            name: "spawn",
+            places: [{ at: 10500ms, x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [11000ms, 3, 2, 255], [12000ms, 3, 2, 127],
+                [12100ms, 3, 2, 0], [13100ms, 3, 2, 127],
+                [13200ms, 3, 2, 0], [15200ms, 3, 2, 127],
+                [15300ms, 3, 5, 0], [15800ms, 3, 5, 127],
+                [15900ms, 3, 5, 255], [16900ms, 3, 5, 127],
+                [17000ms, 3, 5, 0], [17500ms, 3, 5, 127],
+                [17600ms, 3, 1, 0], [19100ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "yard",
+            places: [{ at: 20000ms, x: 40.0, y: 6.0, z: 1.6, yaw: 90, pitch: 10 }],
+            pad: [
+                [at, type, code, value];
+                [21000ms, 3, 1, 0], [22500ms, 3, 1, 127],
+                [22600ms, 3, 2, 0], [23100ms, 3, 2, 127],
+                [23200ms, 3, 1, 0], [24200ms, 3, 1, 127],
+                [24300ms, 3, 2, 255], [26300ms, 3, 2, 127],
+            ],
+        },
+        {
+            name: "up",
+            places: [{ at: 26500ms, x: 8.75, y: 3.0, z: 1.6, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [27000ms, 3, 1, 0], [30000ms, 3, 1, 127],
+                [30100ms, 3, 2, 255], [30600ms, 3, 2, 127],
+                [30700ms, 3, 5, 255], [30870ms, 3, 5, 127],
+            ],
+        },
+        {
+            name: "down",
+            places: [{ at: 32000ms, x: 1.5, y: 3.0, z: 1.6, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [32500ms, 3, 1, 0], [35500ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "ramp",
+            places: [{ at: 36000ms, x: 34.0, y: 13.0, z: -1.4, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [36500ms, 3, 1, 0], [40900ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "revisit",
+            places: [{ at: 41500ms, x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [43000ms, 3, 2, 255], [44000ms, 3, 2, 127],
+                [44100ms, 3, 2, 0], [45100ms, 3, 2, 127],
+                [45200ms, 3, 2, 0], [47200ms, 3, 2, 127],
+                [47300ms, 3, 5, 0], [47800ms, 3, 5, 127],
+                [47900ms, 3, 5, 255], [48900ms, 3, 5, 127],
+                [49000ms, 3, 5, 0], [49500ms, 3, 5, 127],
+                [49600ms, 3, 1, 0], [51100ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "pressure",
+            places: [
+                { at: 51500ms, x: 40.0, y: 6.0, z: 1.6, yaw: 90, pitch: 10 },
+                { at: 52000ms, x: 8.75, y: 17.0, z: 4.6, yaw: 0, pitch: -15 },
+                { at: 52500ms, x: 20.0, y: 17.0, z: 1.6, yaw: 180, pitch: 5 },
+                { at: 53000ms, x: 16.0, y: 14.0, z: -1.4, yaw: 0, pitch: 0 },
+                { at: 53500ms, x: 34.0, y: 18.0, z: -0.9, yaw: 90, pitch: 5 },
+                { at: 54000ms, x: 8.75, y: 3.5, z: 1.6, yaw: 90, pitch: 15 },
+                { at: 54500ms, x: 1.5, y: 3.5, z: 1.6, yaw: 90, pitch: -15 },
+                { at: 55000ms, x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 },
+            ],
+            pad: [
+                [at, type, code, value];
+                [51500ms, 3, 2, 255], [55500ms, 3, 2, 127],
+            ],
+        },
+    ],
+}

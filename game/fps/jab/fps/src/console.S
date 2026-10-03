@@ -96,7 +96,7 @@ console_frame:
     j 8f
 5:
     li t1, 'L'
-    bne t0, t1, 8f
+    bne t0, t1, 9f
     lbu t1, 4(s2)
     beqz t1, 6f
     call lumels_bright
@@ -109,6 +109,23 @@ console_frame:
 7:
     la t0, tile_budget_frame
     sd t1, 0(t0)
+    j 8f
+9:
+    li t1, 'R'
+    bne t0, t1, 10f
+    lwu t1, 4(s2)
+    lwu t2, 8(s2)
+    slli t2, t2, 32
+    or t1, t1, t2                   # the seed, bytes 4 to 11
+    la t3, rng
+    jab.rng.seed t3, t1
+    j 8f
+10:
+    li t1, 'E'
+    bne t0, t1, 8f
+    la t1, measure_end
+    li t2, 1
+    sb t2, 0(t1)                    # the frame records close after this frame's
 8:
     la t0, console_record
     li t1, REPORT_CONSOLE
@@ -181,4 +198,6 @@ console_record:
 console_pending:
     .skip 4
 report_pending:
+    .skip 1
+measure_end:
     .skip 1

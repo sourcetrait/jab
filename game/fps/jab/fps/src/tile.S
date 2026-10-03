@@ -36,9 +36,18 @@ tiles_bind:
     add s3, s3, t1
     ld t1, TILE_BASE(s3)
     bnez t1, 2f
+    rdtime t1
+    sd t1, 0(sp)                    # the reservation's start
     mv a0, s3
     mv a1, s2
     call tiles_alloc
+    rdtime t1
+    ld t2, 0(sp)
+    sub t1, t1, t2
+    la t0, stats
+    ld t2, STAT_TILE_TICKS(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_TICKS(t0)
 2:
     ld t1, TILE_BASE(s3)
     bltz t1, 9f
@@ -63,13 +72,21 @@ tiles_bind:
     mv a0, s3
     mv a1, s2
     mv a3, t1
+    rdtime t4
+    sd t4, 0(sp)                    # the build's start
     beqz t1, 32f
     call tile_shrink
     j 33f
 32:
     call tile_build
 33:
+    rdtime t1
+    ld t2, 0(sp)
+    sub t1, t1, t2
     la t0, stats
+    ld t2, STAT_TILE_TICKS(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_TICKS(t0)
     ld t1, STAT_TILES_BUILT(t0)
     addi t1, t1, 1
     sd t1, STAT_TILES_BUILT(t0)
@@ -205,6 +222,12 @@ tiles_alloc:
     j 62b
 63:
     sd t4, 0(t6)
+    la t5, tile_arena
+    sub t5, t4, t5                  # the arena in use
+    la t6, tile_peak
+    ld t1, 0(t6)
+    bgeu t1, t5, 9f
+    sd t5, 0(t6)                    # the most it has held since the load
 9:
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -835,6 +858,8 @@ tile_cursor:
 tile_budget:
     .skip 8
 tile_budget_frame:
+    .skip 8
+tile_peak:
     .skip 8
 tilemaps:
     .skip (LUMAP_COUNT * TILE_SIZE)

@@ -1,12 +1,9 @@
 use crate::*;
 
-/// How much of the API's bytes a frame shows as hex when they are not
-/// cut into records; the rest waits for `api recv` or a record size.
+/// The API bytes a frame shows as hex when they are not cut into records.
 const HEX_SHOWN: usize = 256;
 
-/// How a frame looks at the machine: whether it carries the screen, how
-/// far the screen is reduced and how hard it is compressed, how it is
-/// encoded, and the API's record size when its bytes are records.
+/// How a frame looks: the screen, its reduction and encoding, the record size.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Look {
     pub(crate) screen: bool,
@@ -28,8 +25,7 @@ pub(crate) struct Frame {
     pub(crate) shot: Option<Shot>,
 }
 
-/// The machine driven by commands: started from its plan on the first
-/// one, restarted on request, ended by quit or by the bound.
+/// The machine driven by commands, started on the first, ended by quit.
 pub(crate) struct Driver {
     plan: Plan,
     elf: Option<PathBuf>,
@@ -37,17 +33,17 @@ pub(crate) struct Driver {
     seconds: u64,
     machine: Option<Machine>,
     api_record: usize,
+    api_partial: Vec<u8>,
     frames: u32,
     frame_at: f32,
 }
 
 impl Driver {
     pub(crate) fn new(plan: Plan, elf: Option<PathBuf>, prefix: String, seconds: u64) -> Driver {
-        Driver { plan, elf, prefix, seconds, machine: None, api_record: 0, frames: 0, frame_at: 0.0 }
+        Driver { plan, elf, prefix, seconds, machine: None, api_record: 0, api_partial: Vec::new(), frames: 0, frame_at: 0.0 }
     }
 
-    /// The machine, started when none runs yet; one that ended stays ended
-    /// until restart.
+    /// The machine, started when none runs yet.
     fn machine(&mut self) -> RoboResult<&mut Machine> {
         if self.machine.is_none() {
             self.start()?;
@@ -62,6 +58,7 @@ impl Driver {
         }
         self.machine = Some(Machine::start(self.plan.clone(), self.seconds)?);
         self.api_record = 0;
+        self.api_partial.clear();
         self.frame_at = 0.0;
         Ok(())
     }
@@ -88,8 +85,7 @@ impl Driver {
         }
     }
 
-    /// A line of commands separated by `;`, each answered in order; a
-    /// failing one reports and the rest still run.
+    /// A line of commands separated by `;`, each answered in order.
     pub(crate) fn line(&mut self, line: &str) -> Vec<serde_json::Value> {
         line.split(';')
             .map(str::trim)
@@ -203,13 +199,15 @@ impl Driver {
                 Ok(serde_json::json!({ "sent": sent }))
             }
             ["api", "recv"] => {
-                let bytes = self.machine()?.api_recv()?;
+                let fresh = self.machine()?.api_recv()?;
+                let bytes = self.held(fresh);
                 Ok(serde_json::json!({ "bytes": bytes.len(), "hex": hex(&bytes) }))
             }
             ["api", "records", size] => {
                 let size: usize = size.parse().map_err(|_| RoboError::Command("a record size in bytes".to_owned()))?;
-                let bytes = self.machine()?.api_recv()?;
-                Ok(self.records(&bytes, size)?)
+                let fresh = self.machine()?.api_recv()?;
+                let bytes = self.held(fresh);
+                Ok(self.records(bytes, size)?)
             }
             ["serial"] => {
                 let lines = self.machine()?.serial()?;
@@ -254,10 +252,7 @@ impl Driver {
         }
     }
 
-    /// The frame: whether the machine runs and for how long, its faults
-    /// resolved, what the UART, the debug channel, and the API said since
-    /// the last frame, the sound's level over that span, and the screen,
-    /// kept beside the plan's files as frame_<n>.
+    /// The frame: the machine's state and what it said since the last one.
     pub(crate) fn frame(&mut self, look: &Look) -> RoboResult<Frame> {
         let elf = self.elf.clone();
         let prefix = self.prefix.clone();
@@ -286,13 +281,16 @@ impl Driver {
             .map(|f| serde_json::json!({ "line": f, "routine": Machine::resolve(f, elf.as_deref(), &prefix) }))
             .collect();
         let api = match api_bytes {
-            Some(bytes) => match record_size {
-                Some(size) => self.records(&bytes, size)?,
-                None => {
-                    let shown = bytes.len().min(HEX_SHOWN);
-                    serde_json::json!({ "bytes": bytes.len(), "hex": hex(&bytes[..shown]), "shown": shown })
+            Some(fresh) => {
+                let bytes = self.held(fresh);
+                match record_size {
+                    Some(size) => self.records(bytes, size)?,
+                    None => {
+                        let shown = bytes.len().min(HEX_SHOWN);
+                        serde_json::json!({ "bytes": bytes.len(), "hex": hex(&bytes[..shown]), "shown": shown })
+                    }
                 }
-            },
+            }
             None => serde_json::Value::Null,
         };
         let sound = wav.and_then(|wav| sound_level(&wav, since, now, 97).ok()).unwrap_or(serde_json::Value::Null);
@@ -335,21 +333,28 @@ impl Driver {
             .collect()
     }
 
-    /// Bytes cut into records of a size, each as hex, numbered from the
-    /// first record the machine ever sent; a trailing part is kept back.
-    fn records(&mut self, bytes: &[u8], size: usize) -> RoboResult<serde_json::Value> {
-        if size == 0 {
-            return Err(RoboError::Command("a record size above zero".to_owned()));
-        }
-        let records: Vec<String> = bytes.chunks_exact(size).map(hex).collect();
-        let first = self.api_record;
-        self.api_record += records.len();
-        let remainder = bytes.len() % size;
-        Ok(serde_json::json!({ "bytes": bytes.len(), "first": first, "records": records, "remainder": remainder }))
+    /// The bytes kept from the last read, then the new ones.
+    pub(crate) fn held(&mut self, fresh: Vec<u8>) -> Vec<u8> {
+        let mut bytes = std::mem::take(&mut self.api_partial);
+        bytes.extend(fresh);
+        bytes
     }
 
-    /// Whether QEMU runs, the seconds since the start, and the faults so
-    /// far; the UART is read for faults and its lines kept for `serial`.
+    /// The bytes cut into records, a trailing part kept for the next read.
+    pub(crate) fn records(&mut self, bytes: Vec<u8>, size: usize) -> RoboResult<serde_json::Value> {
+        if size == 0 {
+            self.api_partial = bytes;
+            return Err(RoboError::Command("a record size above zero".to_owned()));
+        }
+        let whole = bytes.len() - bytes.len() % size;
+        let records: Vec<String> = bytes[..whole].chunks_exact(size).map(hex).collect();
+        let first = self.api_record;
+        self.api_record += records.len();
+        self.api_partial = bytes[whole..].to_vec();
+        Ok(serde_json::json!({ "bytes": whole, "first": first, "records": records, "remainder": self.api_partial.len() }))
+    }
+
+    /// Whether QEMU runs, the seconds since the start, and the faults so far.
     fn status(&mut self) -> RoboResult<serde_json::Value> {
         let alive = self.alive();
         if let Some(machine) = &mut self.machine {

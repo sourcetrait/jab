@@ -125,6 +125,10 @@ while the budget holds; a level whole moves the hand to the next. A column
 at the map's width is padding: the cursor moves on to the next row's first
 cell, so no padding tile is built.
 
+The tiles' time is read around the reservation, with any reset it makes,
+and around each cell built or shrunk, so a polygon whose surface is whole
+reads no clock.
+
 ## tiles_alloc
 
 The cells across and down are the map's nodes, not the nodes less one:
@@ -141,7 +145,9 @@ TILE_ATLAS_MAX marks the surface never, the lit loop for good.
 The atlases' bytes are summed over the levels, each a quarter of the last.
 With the arena full it is emptied, every surface forgotten, and this one
 reserved at its start, counted for the frame line; each level's atlas comes
-from the arena's cursor.
+from the arena's cursor. tile_peak takes the cursor after each reservation,
+so it holds the most the arena has held since the load; a reset lowers the
+cursor and leaves the peak.
 
 ## tile_build
 

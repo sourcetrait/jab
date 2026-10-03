@@ -35,7 +35,7 @@ call local row_crossings row f32 > count a0 u64,crossings crossings MAX_EDGES f3
 call local span_bound x f32 > pixel a0 i32 [564:576] :the first pixel whose centre is at or past x, within the screen's columns
 call local row_range > first a0 i32,last a1 i32 [578:596] :the rows the edges cover, within the screen
  last :the row past the last
-call local poly_fill > serial poly_serial u64,records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 21 u64,clobber a0-a7,fa0 [598:676] :the polygon in hand filled by scanlines with the surface in hand, its rows and each span held within the rectangle in hand, each span recorded before it is drawn
+call local poly_fill > serial poly_serial u64,records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7,fa0 [598:676] :the polygon in hand filled by scanlines with the surface in hand, its rows and each span held within the rectangle in hand, each span recorded before it is drawn
 call local span_record first i32,end i32,row i32 > record span_records 16 u8,count span_count u64 [678:700] :the span recorded before it is drawn, its row, its pixels, the mode, the surface, and the polygon's serial, into the frame's table while it has room
  end :the pixel past the last
  record :the entry at the count before, written while the count is under SPAN_RECORDS
@@ -49,7 +49,7 @@ macro lumel_sample u a5 i64,v a6 i64 > bright a5 u64,scratch a0,a6-a7,t3-t4 [751
  bright :the three channels in 16.16 packed CHANNEL_BITS apart
 macro mip_bind level 192(sp) u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64,scratch a5-a7 [816:838] :the texture's level for the block in hand bound for the loops, held under the chain's levels, its texels, masks, and row shift into the texture's registers and u, v, and their steps a pixel shifted to its resolution
  level :the block's level in span_fill's frame
-call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 21 u64,clobber a0-a7 [841:1613] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, the texture read from its chain at each block's level; no float in the loop
+call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [841:1613] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, the texture read from its chain at each block's level; no float in the loop
  end :the pixel past the last
 bss local vert_count u64 [1617:1618] :the polygon in hand's points
 bss local edge_count u64 [1619:1620] :the edge list's edges

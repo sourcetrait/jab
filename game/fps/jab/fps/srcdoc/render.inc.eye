@@ -192,158 +192,189 @@ set STAT_SAMPLES u64 [191] :the lumel samples the lit spans read
 set STAT_TILES_BUILT u64 [192] :the tiles built this frame
 set STAT_TILED_PIXELS u64 [193] :the pixels read from tiles
 set STAT_TILE_RESETS u64 [194] :the tile arena's resets since the load, never zeroed by the frame
-set STAT_SIZE [195] :the stats' bytes
-set REPORT_KIND u32 [196] :a record's kind over the API, a REPORT_*
-set REPORT_SECTOR i32 [197] :the camera's sector, or the console's command byte
-set REPORT_X f32 [198] :the eye's x
-set REPORT_Y f32 [199] :the eye's y
-set REPORT_Z f32 [200] :the eye's z
-set REPORT_YAW f32 [201] :the yaw in degrees
-set REPORT_PITCH f32 [202] :the pitch in degrees
-set REPORT_ROLL f32 [203] :the roll in degrees
-set REPORT_FRAME_US u32 [204] :the last frame's drawing in microseconds
-set REPORT_GAME_US u32 [205] :the last frame's game in microseconds
-set REPORT_FIELD0 i32 [206] :an event's first field
-set REPORT_FIELD1 i32 [207] :an event's second field
-set REPORT_FIELD2 i32 [208] :an event's third field
-set REPORT_FIELD3 i32 [209] :an event's fourth field
-set REPORT_FIELD4 i32 [210] :an event's fifth field
-set REPORT_SIZE [211] :a record's bytes, zero to the end
-set REPORT_STATE u32 [212] :the state, a record a frame
-set REPORT_ROUND u32 [213] :a round of the player's, what it met, the actor, its health after
-set REPORT_ANDROID u32 [214] :an android's event, the event, the actor, its row
-set REPORT_HURT u32 [215] :the player struck, the damage, the health after
-set REPORT_PICKUP u32 [216] :a pickup, the rounds after
-set REPORT_TRACE u32 [217] :a trace's answer, the kind met, the distance and the point in millimetres
-set REPORT_CONSOLE u32 [218] :the console's answer, the command's byte
-set EVENT_ROUSED u32 [219] :an android roused
-set EVENT_FIRED u32 [220] :an android's round fired
-set EVENT_STRUCK u32 [221] :an android struck
-set EVENT_DESTROYED u32 [222] :an android destroyed
-set EVENT_FALLEN u32 [223] :an android fallen, its magazine dropped
-set EVENT_WAYPOINT u32 [224] :an android at its waypoint
-set MAX_ACTORS [226] :the actors in play at most
-set ACTOR_CLASS u32 [227] :an actor's class, an ACTOR_*, ACTOR_NONE free
-set ACTOR_FLAGS u32 [228] :the flags, ACTOR_SOLID, ACTOR_SHOOTABLE, ACTOR_ROUSED, ACTOR_SIGHTED, and ACTOR_FIRST
-set ACTOR_X f64 [229] :the feet's x
-set ACTOR_Y f64 [230] :the feet's y
-set ACTOR_Z f64 [231] :the feet's z
-set ACTOR_YAW f32 [232] :the yaw in radians
-set ACTOR_SECTOR i32 [233] :the sector
-set ACTOR_ROW u32 [234] :the row
-set ACTOR_TIMER f32 [235] :the row's timer in seconds
-set ACTOR_HEALTH i32 [236] :the health
-set ACTOR_TARGET i32 [237] :the target waypoint entity or -1
-set ACTOR_FALL f64 [238] :the fall speed
-set ACTOR_SEEN_X f64 [239] :the last sight's x, the player's feet
-set ACTOR_SEEN_Y f64 [240] :the last sight's y
-set ACTOR_SEEN_Z f64 [241] :the last sight's z
-set ACTOR_BLOCKED f32 [242] :the seconds blocked
-set ACTOR_FRAME u32 [243] :a spark's frame
-set ACTOR_LOST f32 [244] :the seconds since the sight was lost
-set ACTOR_ENTITY u32 [245] :the entity it came from
-set ACTOR_SIZE [246] :an actor's bytes
-set ACTOR_NONE u32 [247] :free
-set ACTOR_ANDROID u32 [248] :an android
-set ACTOR_MAGAZINE u32 [249] :a magazine
-set ACTOR_SPARK u32 [250] :a spark
-set ACTOR_SOLID u32 [251] :a body the others are pushed out of
-set ACTOR_SHOOTABLE u32 [252] :a round can strike it
-set ACTOR_ROUSED u32 [253] :roused
-set ACTOR_SIGHTED u32 [254] :the player sighted
-set ACTOR_FIRST u32 [255] :the first round after rousing, which is certain, the rest by chance
-set FIRE_CHANCE [256] :a round's chance in 256 after the first
-set SET_STAND u32 [257] :the android's standing set
-set SET_WALK1 u32 [258] :its walk's first set
-set SET_WALK2 u32 [259] :its walk's second set
-set SET_WALK3 u32 [260] :its walk's third set
-set SET_WALK4 u32 [261] :its walk's fourth set
-set SET_AIM u32 [262] :its aiming set
-set SET_FIRE u32 [263] :its firing set
-set SET_STRUCK u32 [264] :its struck set
-set SET_FALLEN u32 [265] :the fallen frame, a set of one
-set FRAME_FALLEN [266] :the fallen frame's index, after the eight rotating sets of eight
-set FRAME_SPARK1 [267] :the first of the three sparks' frames
-set FRAME_MAGAZINE [268] :the magazine's frame
-set FRAME_COUNT [269] :the engine's images
-set SPARK_FRAMES [270] :a spark's frames
-set ROW_SET u32 [271] :a row's frame set
-set ROW_MS i32 [272] :the milliseconds it lasts, -1 for a held row
-set ROW_ACTION u32 [273] :the action on entry, an ACT_*
-set ROW_NEXT u32 [274] :the row next
-set ROW_SIZE [275] :a row's bytes
-set ROW_STAND u32 [276] :standing
-set ROW_PATROL1 u32 [277] :a patrol's first step
-set ROW_PATROL2 u32 [278] :a patrol's second step
-set ROW_PATROL3 u32 [279] :a patrol's third step
-set ROW_PATROL4 u32 [280] :a patrol's fourth step
-set ROW_ALERT u32 [281] :alerted
-set ROW_AIM u32 [282] :aiming
-set ROW_FIRE u32 [283] :firing
-set ROW_SEARCH1 u32 [284] :a search's first step
-set ROW_SEARCH2 u32 [285] :a search's second step
-set ROW_SEARCH3 u32 [286] :a search's third step
-set ROW_SEARCH4 u32 [287] :a search's fourth step
-set ROW_STRUCK u32 [288] :struck
-set ROW_DESTROYED u32 [289] :destroyed
-set ROW_FALLEN u32 [290] :fallen, held
-set ACT_NONE u32 [291] :nothing on entry, action_none
-set ACT_LOOK u32 [292] :action_look
-set ACT_WALK u32 [293] :action_walk
-set ACT_ALERT u32 [294] :action_alert
-set ACT_AIM u32 [295] :action_aim
-set ACT_FIRE u32 [296] :action_fire
-set ACT_SEEK u32 [297] :action_seek
-set ACT_STRUCK u32 [298] :action_struck
-set ACT_DESTROY u32 [299] :action_destroy
-set ACT_FALL u32 [300] :action_fall
-set ANDROID_HEALTH i32 [301] :an android's health at the start
-set AIM_OX f64 [302] :the actor's eye's x
-set AIM_OY f64 [303] :the actor's eye's y
-set AIM_OZ f64 [304] :the actor's eye's z
-set AIM_DX f64 [305] :the unit direction's x toward the player's eye
-set AIM_DY f64 [306] :the unit direction's y
-set AIM_DZ f64 [307] :the unit direction's z
-set AIM_DIST f64 [308] :the distance
-set AIM_SIZE [309] :the line's bytes
-set TRACE_NONE u64 [310] :nothing met
-set TRACE_PLANE u64 [311] :a plane met
-set TRACE_PIECE u64 [312] :a wall piece met
-set TRACE_ANDROID u64 [313] :an android met
-set TRACE_PLAYER u64 [314] :the player met
-set TRACE_KIND u64 [315] :what the ray met, a TRACE_*
-set TRACE_DIST f64 [316] :the distance
-set TRACE_PX f64 [317] :the point's x
-set TRACE_PY f64 [318] :the point's y
-set TRACE_PZ f64 [319] :the point's z
-set TRACE_ACTOR addr [320] :the actor met
-set TRACE_SECTOR u64 [321] :the sector the ray ended in
-set TRACE_SIZE [322] :a trace's answer's bytes
-set TRACE_TO_PLAYER u64 [323] :the trace tests the player's capsule too
-set TRIGGER_BIT u32 [324] :the pad's key that fires, the right trigger's button, as its bit in the state record's keys
-set ROUND_DAMAGE i32 [325] :what the G-1's round takes from its target, on either side
-set SOUND_G1_SHOT u64 [326] :the G-1's shot
-set SOUND_G1_RELOAD u64 [327] :the G-1's reload
-set SOUND_G1_EMPTY u64 [328] :the G-1 empty
-set SOUND_G1_BOLT u64 [329] :the G-1's bolt
-set SOUND_FOOTSTEP1 u64 [330] :a footstep
-set SOUND_FOOTSTEP2 u64 [331] :the other footstep
-set SOUND_SERVO u64 [332] :an android's servo
-set SOUND_ALERT u64 [333] :an android's alert
-set SOUND_SPARK u64 [334] :a spark
-set SOUND_STRUCK u64 [335] :an android struck
-set SOUND_DESTROY u64 [336] :an android destroyed
-set SOUND_PICKUP u64 [337] :a pickup
-set SOUND_DOOR_OPEN u64 [338] :a door opening
-set SOUND_DOOR_CLOSE u64 [339] :a door closing
-set SOUND_GATE u64 [340] :a gate
-set SOUND_RESPAWN u64 [341] :a respawn
-set SOUND_COUNT [342] :the engine's stems
-macro owner_pixel colour reg,surface 32(sp) u64 > pixel colour u64 [344:348]
+set STAT_TILE_TICKS u64 [195] :the tiles' ticks, reserving, building, and shrinking, within the planes' and the walls'
+set STAT_SIZE [196] :the stats' bytes
+set REPORT_KIND u32 [197] :a record's kind over the API, a REPORT_*
+set REPORT_SECTOR i32 [198] :the camera's sector, or the console's command byte
+set REPORT_FRAME_NUMBER u32 [199] :a clock record's frame, from 0
+set REPORT_X f32 [200] :the eye's x
+set REPORT_Y f32 [201] :the eye's y
+set REPORT_Z f32 [202] :the eye's z
+set REPORT_YAW f32 [203] :the yaw in degrees
+set REPORT_PITCH f32 [204] :the pitch in degrees
+set REPORT_ROLL f32 [205] :the roll in degrees
+set REPORT_FRAME_US u32 [206] :the last frame's drawing in microseconds
+set REPORT_GAME_US u32 [207] :the last frame's game in microseconds
+set REPORT_FIELD0 i32 [208] :an event's first field
+set REPORT_FIELD1 i32 [209] :an event's second field
+set REPORT_FIELD2 i32 [210] :an event's third field
+set REPORT_FIELD3 i32 [211] :an event's fourth field
+set REPORT_FIELD4 i32 [212] :an event's fifth field
+set REPORT_SCHEMA u32 [213] :a clock record's layout, REPORT_SCHEMA_VERSION
+set REPORT_SIZE [214] :a record's bytes, zero to the end
+set REPORT_STATE u32 [215] :the state, a record a frame
+set REPORT_ROUND u32 [216] :a round of the player's, what it met, the actor, its health after
+set REPORT_ANDROID u32 [217] :an android's event, the event, the actor, its row
+set REPORT_HURT u32 [218] :the player struck, the damage, the health after
+set REPORT_PICKUP u32 [219] :a pickup, the rounds after
+set REPORT_TRACE u32 [220] :a trace's answer, the kind met, the distance and the point in millimetres
+set REPORT_FRAME u32 [221] :the frame before's clock, TIME_* fields, at each frame's start
+set REPORT_DRAW u32 [222] :the frame before's drawing and tile cache, DRAW_* fields, beside it
+set REPORT_END u32 [223] :the measurement's end, its final frame, after that frame's records
+set REPORT_CONSOLE u32 [224] :the console's answer, the command's byte
+set REPORT_SCHEMA_VERSION u32 [225] :the clock records' layout as this source lays them out
+set TIME_START u64 [226] :the frame's start, microseconds since the program's
+set TIME_CRITICAL u32 [227] :its start to the end of its reporting, the await apart
+set TIME_GAME u32 [228] :the game's phases, as REPORT_GAME_US
+set TIME_DRAW u32 [229] :world_draw, as REPORT_FRAME_US
+set TIME_HUD u32 [230] :the crosshair
+set TIME_MIX u32 [231] :mixer_update
+set TIME_FLIP u32 [232] :the flip call, the device's wait in it
+set TIME_REPORT u32 [233] :the reporting, the frame before's records and its own state's
+set TIME_AWAIT u32 [234] :the time inside the await call
+set TIME_FLIP_DONE u64 [235] :the flip's return, microseconds since the program's start
+set TIME_FLIP_STATUS u32 [236] :jab.sys.display.flip's code, 0 presented
+set DRAW_CLEAR u32 [237] :the depth clear
+set DRAW_PORTALS u32 [238] :the flow through the portals
+set DRAW_PLANES u32 [239] :the planes, their tiles' time within
+set DRAW_WALLS u32 [240] :the walls, their tiles' time within
+set DRAW_SPRITES u32 [241] :the sprites and the actors
+set DRAW_TILES u32 [242] :the tiles' time, STAT_TILE_TICKS
+set DRAW_TILES_BUILT u32 [243] :the cells built or shrunk
+set DRAW_TILE_RESETS u32 [244] :the arena's resets since the load
+set DRAW_TILED_PIXELS u32 [245] :the pixels of blocks read from tiles
+set DRAW_LIT_PIXELS u32 [246] :the pixels of lit spans
+set DRAW_TILE_BYTES u32 [247] :the arena in use at the frame's end
+set DRAW_TILE_PEAK u32 [248] :the most the arena has held since the load
+set DRAW_SPANS u32 [249] :the spans drawn, against SPAN_RECORDS
+set EVENT_ROUSED u32 [250] :an android roused
+set EVENT_FIRED u32 [251] :an android's round fired
+set EVENT_STRUCK u32 [252] :an android struck
+set EVENT_DESTROYED u32 [253] :an android destroyed
+set EVENT_FALLEN u32 [254] :an android fallen, its magazine dropped
+set EVENT_WAYPOINT u32 [255] :an android at its waypoint
+set MAX_ACTORS [257] :the actors in play at most
+set ACTOR_CLASS u32 [258] :an actor's class, an ACTOR_*, ACTOR_NONE free
+set ACTOR_FLAGS u32 [259] :the flags, ACTOR_SOLID, ACTOR_SHOOTABLE, ACTOR_ROUSED, ACTOR_SIGHTED, and ACTOR_FIRST
+set ACTOR_X f64 [260] :the feet's x
+set ACTOR_Y f64 [261] :the feet's y
+set ACTOR_Z f64 [262] :the feet's z
+set ACTOR_YAW f32 [263] :the yaw in radians
+set ACTOR_SECTOR i32 [264] :the sector
+set ACTOR_ROW u32 [265] :the row
+set ACTOR_TIMER f32 [266] :the row's timer in seconds
+set ACTOR_HEALTH i32 [267] :the health
+set ACTOR_TARGET i32 [268] :the target waypoint entity or -1
+set ACTOR_FALL f64 [269] :the fall speed
+set ACTOR_SEEN_X f64 [270] :the last sight's x, the player's feet
+set ACTOR_SEEN_Y f64 [271] :the last sight's y
+set ACTOR_SEEN_Z f64 [272] :the last sight's z
+set ACTOR_BLOCKED f32 [273] :the seconds blocked
+set ACTOR_FRAME u32 [274] :a spark's frame
+set ACTOR_LOST f32 [275] :the seconds since the sight was lost
+set ACTOR_ENTITY u32 [276] :the entity it came from
+set ACTOR_SIZE [277] :an actor's bytes
+set ACTOR_NONE u32 [278] :free
+set ACTOR_ANDROID u32 [279] :an android
+set ACTOR_MAGAZINE u32 [280] :a magazine
+set ACTOR_SPARK u32 [281] :a spark
+set ACTOR_SOLID u32 [282] :a body the others are pushed out of
+set ACTOR_SHOOTABLE u32 [283] :a round can strike it
+set ACTOR_ROUSED u32 [284] :roused
+set ACTOR_SIGHTED u32 [285] :the player sighted
+set ACTOR_FIRST u32 [286] :the first round after rousing, which is certain, the rest by chance
+set FIRE_CHANCE [287] :a round's chance in 256 after the first
+set SET_STAND u32 [288] :the android's standing set
+set SET_WALK1 u32 [289] :its walk's first set
+set SET_WALK2 u32 [290] :its walk's second set
+set SET_WALK3 u32 [291] :its walk's third set
+set SET_WALK4 u32 [292] :its walk's fourth set
+set SET_AIM u32 [293] :its aiming set
+set SET_FIRE u32 [294] :its firing set
+set SET_STRUCK u32 [295] :its struck set
+set SET_FALLEN u32 [296] :the fallen frame, a set of one
+set FRAME_FALLEN [297] :the fallen frame's index, after the eight rotating sets of eight
+set FRAME_SPARK1 [298] :the first of the three sparks' frames
+set FRAME_MAGAZINE [299] :the magazine's frame
+set FRAME_COUNT [300] :the engine's images
+set SPARK_FRAMES [301] :a spark's frames
+set ROW_SET u32 [302] :a row's frame set
+set ROW_MS i32 [303] :the milliseconds it lasts, -1 for a held row
+set ROW_ACTION u32 [304] :the action on entry, an ACT_*
+set ROW_NEXT u32 [305] :the row next
+set ROW_SIZE [306] :a row's bytes
+set ROW_STAND u32 [307] :standing
+set ROW_PATROL1 u32 [308] :a patrol's first step
+set ROW_PATROL2 u32 [309] :a patrol's second step
+set ROW_PATROL3 u32 [310] :a patrol's third step
+set ROW_PATROL4 u32 [311] :a patrol's fourth step
+set ROW_ALERT u32 [312] :alerted
+set ROW_AIM u32 [313] :aiming
+set ROW_FIRE u32 [314] :firing
+set ROW_SEARCH1 u32 [315] :a search's first step
+set ROW_SEARCH2 u32 [316] :a search's second step
+set ROW_SEARCH3 u32 [317] :a search's third step
+set ROW_SEARCH4 u32 [318] :a search's fourth step
+set ROW_STRUCK u32 [319] :struck
+set ROW_DESTROYED u32 [320] :destroyed
+set ROW_FALLEN u32 [321] :fallen, held
+set ACT_NONE u32 [322] :nothing on entry, action_none
+set ACT_LOOK u32 [323] :action_look
+set ACT_WALK u32 [324] :action_walk
+set ACT_ALERT u32 [325] :action_alert
+set ACT_AIM u32 [326] :action_aim
+set ACT_FIRE u32 [327] :action_fire
+set ACT_SEEK u32 [328] :action_seek
+set ACT_STRUCK u32 [329] :action_struck
+set ACT_DESTROY u32 [330] :action_destroy
+set ACT_FALL u32 [331] :action_fall
+set ANDROID_HEALTH i32 [332] :an android's health at the start
+set AIM_OX f64 [333] :the actor's eye's x
+set AIM_OY f64 [334] :the actor's eye's y
+set AIM_OZ f64 [335] :the actor's eye's z
+set AIM_DX f64 [336] :the unit direction's x toward the player's eye
+set AIM_DY f64 [337] :the unit direction's y
+set AIM_DZ f64 [338] :the unit direction's z
+set AIM_DIST f64 [339] :the distance
+set AIM_SIZE [340] :the line's bytes
+set TRACE_NONE u64 [341] :nothing met
+set TRACE_PLANE u64 [342] :a plane met
+set TRACE_PIECE u64 [343] :a wall piece met
+set TRACE_ANDROID u64 [344] :an android met
+set TRACE_PLAYER u64 [345] :the player met
+set TRACE_KIND u64 [346] :what the ray met, a TRACE_*
+set TRACE_DIST f64 [347] :the distance
+set TRACE_PX f64 [348] :the point's x
+set TRACE_PY f64 [349] :the point's y
+set TRACE_PZ f64 [350] :the point's z
+set TRACE_ACTOR addr [351] :the actor met
+set TRACE_SECTOR u64 [352] :the sector the ray ended in
+set TRACE_SIZE [353] :a trace's answer's bytes
+set TRACE_TO_PLAYER u64 [354] :the trace tests the player's capsule too
+set TRIGGER_BIT u32 [355] :the pad's key that fires, the right trigger's button, as its bit in the state record's keys
+set ROUND_DAMAGE i32 [356] :what the G-1's round takes from its target, on either side
+set SOUND_G1_SHOT u64 [357] :the G-1's shot
+set SOUND_G1_RELOAD u64 [358] :the G-1's reload
+set SOUND_G1_EMPTY u64 [359] :the G-1 empty
+set SOUND_G1_BOLT u64 [360] :the G-1's bolt
+set SOUND_FOOTSTEP1 u64 [361] :a footstep
+set SOUND_FOOTSTEP2 u64 [362] :the other footstep
+set SOUND_SERVO u64 [363] :an android's servo
+set SOUND_ALERT u64 [364] :an android's alert
+set SOUND_SPARK u64 [365] :a spark
+set SOUND_STRUCK u64 [366] :an android struck
+set SOUND_DESTROY u64 [367] :an android destroyed
+set SOUND_PICKUP u64 [368] :a pickup
+set SOUND_DOOR_OPEN u64 [369] :a door opening
+set SOUND_DOOR_CLOSE u64 [370] :a door closing
+set SOUND_GATE u64 [371] :a gate
+set SOUND_RESPAWN u64 [372] :a respawn
+set SOUND_COUNT [373] :the engine's stems
+macro owner_pixel colour reg,surface 32(sp) u64 > pixel colour u64 [375:379]
  colour :the pixel a loop is about to store
  surface :span_fill's slot holding the polygon's surface index
  pixel :under OWNER the surface's index in place of the colour, else the colour as it was
-macro section_at kind imm,dst reg > section dst addr [350:353]
+macro section_at kind imm,dst reg > section dst addr [381:384]
  kind :a KIND_*
-macro section_count kind imm,dst reg > count dst u64 [355:358]
+macro section_count kind imm,dst reg > count dst u64 [386:389]
  kind :a KIND_*

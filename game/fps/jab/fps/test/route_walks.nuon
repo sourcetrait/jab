@@ -1,0 +1,40 @@
+# The factory's three walks as a gauge route, the test's placed starts
+# and table_factory.nuon's holds (test.nu's factory walk): the up flight
+# from its foot into the office corridor, the down flight into the
+# garage, the driveway from the garage door to the gate. The route the
+# builds since the lumel read are compared over, each from its own
+# source; the E at `end` closes the measurement of a build that sends
+# the clock records, and a build that does not is read from its state
+# records. The frames before the first placement, the spawn's after the
+# load, are their own leg, start.
+{
+    map: "factory",
+    end: 14400ms,
+    legs: [
+        { name: "start", places: [], pad: [] },
+        {
+            name: "up",
+            places: [{ at: 1500ms, x: 8.75, y: 3.0, z: 1.6, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [2000ms, 3, 1, 0], [5000ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "down",
+            places: [{ at: 5500ms, x: 1.5, y: 3.0, z: 1.6, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [6000ms, 3, 1, 0], [9000ms, 3, 1, 127],
+            ],
+        },
+        {
+            name: "ramp",
+            places: [{ at: 9500ms, x: 34.0, y: 13.0, z: -1.4, yaw: 90, pitch: 0 }],
+            pad: [
+                [at, type, code, value];
+                [10000ms, 3, 1, 0], [14400ms, 3, 1, 127],
+            ],
+        },
+    ],
+}

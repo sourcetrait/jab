@@ -24,6 +24,16 @@
 .set US_TICKS, (JAB_TIME_HZ / 1000000)
 .set LOAD_TOO_BIG, 101
 .set LOAD_ARENA_FULL, 102
+.set CLOCK_ORIGIN, 0
+.set CLOCK_START, 8
+.set CLOCK_REPORT, 16
+.set CLOCK_HUD, 24
+.set CLOCK_MIX, 32
+.set CLOCK_FLIP, 40
+.set CLOCK_FLIP_DONE, 48
+.set CLOCK_AWAIT, 56
+.set CLOCK_FLIP_STATUS, 64
+.set CLOCK_SIZE, 72
 
 .section .text
 .global _start
@@ -119,8 +129,20 @@ _start:
 .endif
     li s8, 0                        # the frames drawn
     rdtime s7                       # the frame before's time
+    la t0, frame_clock
+    sd s11, CLOCK_ORIGIN(t0)        # the program's start
 frame:
+    rdtime s9                       # the frame's start, the await's end
+    beqz s8, 1f
+    mv a0, s9
+    addi a1, s8, -1
+    call frame_records              # the frame before's two records
+1:
     rdtime t0
+    la t1, frame_clock
+    sd s9, CLOCK_START(t1)
+    sub t2, t0, s9
+    sd t2, CLOCK_REPORT(t1)         # the records, the reporting so far
     sub t1, t0, s7
     mv s7, t0
     fcvt.s.l fa0, t1
@@ -154,11 +176,29 @@ frame:
     divu t0, s10, t1
     la t1, frame_us
     sw t0, 0(t1)                    # the drawing's microseconds
+    rdtime s9
 .ifndef OWNER
     call hud_draw
 .endif
+    rdtime t0
+    la t1, frame_clock
+    sub t2, t0, s9
+    sd t2, CLOCK_HUD(t1)
+    mv s9, t0
     call mixer_update
+    rdtime t0
+    la t1, frame_clock
+    sub t2, t0, s9
+    sd t2, CLOCK_MIX(t1)
+    mv s9, t0
     jab.sys.display.flip
+    rdtime t0
+    la t1, frame_clock
+    sd a0, CLOCK_FLIP_STATUS(t1)
+    sub t2, t0, s9
+    sd t2, CLOCK_FLIP(t1)
+    sd t0, CLOCK_FLIP_DONE(t1)
+    mv s9, t0
     call state_report
 .ifdef DEBUG
     la t0, report_pending
@@ -171,6 +211,13 @@ frame:
     call sectors_report
 1:
 .endif
+    rdtime t0
+    la t1, frame_clock
+    sub t2, t0, s9
+    ld t3, CLOCK_REPORT(t1)
+    add t3, t3, t2
+    sd t3, CLOCK_REPORT(t1)
+    sd t0, CLOCK_AWAIT(t1)          # the critical path's end, the await's start
     addi s8, s8, 1
     jab.sys.await (JAB_AWAIT_DISPLAY | JAB_AWAIT_PAD)
     j frame
@@ -316,6 +363,114 @@ line_end:
     sb t0, 0(a0)
     sb zero, 1(a0)
     jab.sys.uart.print line
+    ret
+
+frame_records:
+    mv t5, a1                       # the frame's number, past the writes
+    la t0, frame_clock
+    la t1, record_pair
+    li t2, REPORT_FRAME
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    li t6, US_TICKS
+    ld t2, CLOCK_START(t0)
+    ld t3, CLOCK_ORIGIN(t0)
+    sub t4, t2, t3
+    divu t4, t4, t6
+    sd t4, TIME_START(t1)
+    ld t3, CLOCK_AWAIT(t0)
+    sub t4, t3, t2
+    divu t4, t4, t6
+    sw t4, TIME_CRITICAL(t1)
+    sub t4, a0, t3
+    divu t4, t4, t6
+    sw t4, TIME_AWAIT(t1)
+    la t2, game_us
+    lwu t3, 0(t2)
+    sw t3, TIME_GAME(t1)
+    la t2, frame_us
+    lwu t3, 0(t2)
+    sw t3, TIME_DRAW(t1)
+    ld t3, CLOCK_HUD(t0)
+    divu t3, t3, t6
+    sw t3, TIME_HUD(t1)
+    ld t3, CLOCK_MIX(t0)
+    divu t3, t3, t6
+    sw t3, TIME_MIX(t1)
+    ld t3, CLOCK_FLIP(t0)
+    divu t3, t3, t6
+    sw t3, TIME_FLIP(t1)
+    ld t3, CLOCK_REPORT(t0)
+    divu t3, t3, t6
+    sw t3, TIME_REPORT(t1)
+    ld t3, CLOCK_FLIP_DONE(t0)
+    ld t4, CLOCK_ORIGIN(t0)
+    sub t3, t3, t4
+    divu t3, t3, t6
+    sd t3, TIME_FLIP_DONE(t1)
+    ld t3, CLOCK_FLIP_STATUS(t0)
+    sw t3, TIME_FLIP_STATUS(t1)
+    addi t1, t1, REPORT_SIZE        # the draw record
+    li t2, REPORT_DRAW
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    la t0, stats
+    ld t3, STAT_CLEAR_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_CLEAR(t1)
+    ld t3, STAT_PORTAL_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_PORTALS(t1)
+    ld t3, STAT_PLANE_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_PLANES(t1)
+    ld t3, STAT_WALL_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_WALLS(t1)
+    ld t3, STAT_SPRITE_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_SPRITES(t1)
+    ld t3, STAT_TILE_TICKS(t0)
+    divu t3, t3, t6
+    sw t3, DRAW_TILES(t1)
+    ld t3, STAT_TILES_BUILT(t0)
+    sw t3, DRAW_TILES_BUILT(t1)
+    ld t3, STAT_TILE_RESETS(t0)
+    sw t3, DRAW_TILE_RESETS(t1)
+    ld t3, STAT_TILED_PIXELS(t0)
+    sw t3, DRAW_TILED_PIXELS(t1)
+    ld t3, STAT_LIT_PIXELS(t0)
+    sw t3, DRAW_LIT_PIXELS(t1)
+    ld t3, STAT_SPANS(t0)
+    sw t3, DRAW_SPANS(t1)
+    la t2, tile_cursor
+    ld t3, 0(t2)
+    la t2, tile_arena
+    sub t3, t3, t2
+    sw t3, DRAW_TILE_BYTES(t1)
+    la t2, tile_peak
+    ld t3, 0(t2)
+    sw t3, DRAW_TILE_PEAK(t1)
+    la t0, record_pair
+    li t1, (REPORT_SIZE * 2)
+    jab.sys.api.write t0, t1
+    la t0, measure_end
+    lbu t1, 0(t0)
+    beqz t1, 9f
+    sb zero, 0(t0)
+    la t0, end_record               # the measurement closed on this frame
+    li t1, REPORT_END
+    sw t1, REPORT_KIND(t0)
+    sw t5, REPORT_FRAME_NUMBER(t0)
+    li t1, REPORT_SCHEMA_VERSION
+    sw t1, REPORT_SCHEMA(t0)
+    li t1, REPORT_SIZE
+    jab.sys.api.write t0, t1
+9:
     ret
 
 .ifdef DEBUG
@@ -759,6 +914,13 @@ game_us:
     .skip 4
 frame_seconds:
     .skip 4
+.balign 8
+frame_clock:
+    .skip CLOCK_SIZE
+record_pair:
+    .skip (REPORT_SIZE * 2)
+end_record:
+    .skip REPORT_SIZE
 .balign 8
 material_record:
     .skip (MAX_MATERIALS * 8)

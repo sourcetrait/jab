@@ -243,12 +243,33 @@ The stats record grew its span, pixel, and light-tick fields for the light's
 instrument, then the rejected-pixel count, then the lumel samples; a field is
 added by extending the record, zeroed in world_draw, and printed by
 frame_report, with the test's frame template extended to match, since the
-template names every field.
+template names every field. STAT_TILE_TICKS is the tiles' time inside the
+planes' and the walls' phases, a reservation with any reset it makes and
+each cell built or shrunk, and is never added to them.
 
 ## .set REPORT_KIND
 
 The records over the API are 64 bytes each. An event carries the state's
 fields and its own from REPORT_FIELD0.
+
+The clock records, REPORT_FRAME and REPORT_DRAW, and the end marker,
+REPORT_END, put the frame's number where the state puts its sector and the
+schema's version in the last word, so a reader refuses a layout it does not
+know; the state record keeps its layout and meanings. The frame record's
+start and flip's end are 64 bits on 8-byte boundaries and every other field
+32. Its phases are exclusive, the game, the drawing, the crosshair, the mix,
+the flip, and the reporting, and the critical path less their sum is time no
+phase holds; the drawing's parts are exclusive within the drawing, the
+clear, the portals, the planes, the walls, and the sprites, with DRAW_TILES
+inside the planes and the walls. The await is the time inside the call,
+whatever the kernel does there. The pixel counts are candidates before the
+depth test and the masked pass: DRAW_TILED_PIXELS the blocks read from
+tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
+fallback loop took, which holds blocks off the tile grid as well as cells
+not yet built. DRAW_TILE_BYTES is the arena in use at the frame's end and
+DRAW_TILE_PEAK the most it has held since the load, which a reset lowers
+the first and never the second. DRAW_SPANS counts every span, recorded or
+not past SPAN_RECORDS.
 
 ## .set SET_STAND
 
