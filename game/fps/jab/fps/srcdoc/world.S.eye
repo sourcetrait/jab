@@ -8,7 +8,7 @@ call local world_flow > rects sector_rect MAX_SECTORS*4 i32,order walk_fifo MAX_
 call local flow_screen sector u32 > rect sector_rect 4 i32,queue flow_ring FLOW_RING u32,tail flow_tail u64,pending flow_pending MAX_SECTORS u8 [207:216] :a sector's rectangle set to the whole screen and the sector queued, falling into flow_queue
  rect :the sector's entry
 call local flow_queue sector u32 > queue flow_ring FLOW_RING u32,tail flow_tail u64,pending flow_pending MAX_SECTORS u8 [218:235] :a sector queued for the flow, unless it waits already
-call local rect_grow x0 i32,x1 i32,y0 i32,y1 i32,sector u32 > rect sector_rect 4 i32,queue flow_ring FLOW_RING u32,clobber a0 [237:268] :a sector's rectangle grown by one, and the sector queued when it grew; a rectangle inside it already changes nothing
+call local rect_grow x0 i32,x1 i32,y0 i32,y1 i32,sector u32 > rect sector_rect 4 i32,queue flow_ring FLOW_RING u32,tail flow_tail u64,pending flow_pending MAX_SECTORS u8,clobber a0 [237:268] :a sector's rectangle grown by one, and the sector queued when it grew; a rectangle inside it already changes nothing
  x1 :the column past the last, with y1 the row past the last
  rect :the sector's entry
 call local sector_flow sector u32 > rects sector_rect MAX_SECTORS*4 i32,queue flow_ring FLOW_RING u32,openings STAT_OPENINGS(stats) u64,clobber a0-a4,fa0-fa3 [270:462] :a sector's portals flowed, for each wall facing the camera each portal's opening cut and projected, its rectangle intersected with the sector's, and the neighbour's rectangle grown by it; the eye within the flow's near distance of the wall hands the neighbour the sector's own rectangle
