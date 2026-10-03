@@ -26,7 +26,7 @@
 .set JAB_DISPLAY_PITCH, (JAB_DISPLAY_WIDTH * 4)
 .set JAB_DISPLAY_SIZE, (JAB_DISPLAY_PITCH * JAB_DISPLAY_HEIGHT)
 .set JAB_DISPLAY_FPS_TARGET, 30
-.set JAB_DISPLAY_FPS_CAP, 60
+.set JAB_DISPLAY_FPS_CAP, 30
 
 # The time counter: `rdtime` reads it, JAB_TIME_HZ ticks a second. A
 # program moves things by time, never by frames: it reads the counter
