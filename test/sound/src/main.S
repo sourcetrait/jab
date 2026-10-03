@@ -1,14 +1,7 @@
-# sound: the kernel's sound device under test. Opens the stream and
-# plays a second of a 440 Hz square wave at AMPLITUDE either side of
-# silence, one period at a time, waiting whenever the ring is full,
-# then exits, which plays the ring out; the host records what played
-# and the test measures it. With no sound device it says so and
-# exits 2.
 .include "jab.inc"
 
 .set PERIODS_TO_PLAY, 50
 .set AMPLITUDE, 16000
-# 440 Hz as a phase step in 1/2^32 cycles a frame at 48 kHz
 .set STEP, 39370534
 
 .section .text
@@ -20,7 +13,6 @@ _start:
     li s1, 0                    # the phase, 32 bits
 next:
     beqz s0, done
-    # one period of the wave
     la t0, period
     li t1, JAB_SOUND_PERIOD
 1:
@@ -39,7 +31,6 @@ next:
     srli s1, s1, 32
     addi t1, t1, -1
     bnez t1, 1b
-    # into the stream, whole, waiting for room as needed
     la s2, period
     li s3, JAB_SOUND_PERIOD
 3:

@@ -1,4 +1,3 @@
-# exitstatus: exits with a nonzero status, which `just test` must return.
 .include "jab.inc"
 
 .section .text

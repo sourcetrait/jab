@@ -1,29 +1,16 @@
-# bounce: a ball bouncing around the display, Jab's display example.
-# Opens the display, black as the framebuffer starts, then each frame
-# waits for the tick, reads the clock, erases the ball, moves it by its
-# speed over the time since the frame before, draws it, and flips the
-# one rectangle holding where it was and where it is. The ball moves
-# by time, never by frames, so the frame cap and a late frame change
-# when it is seen and never where it is. Runs until the window closes.
 .include "jab.inc"
 
 .set RADIUS, 90
 .set BACKGROUND, 0x00000000
-# LowKick's own colour, the logo's
 .set BALL, 0x008f00ff
-# Where the centre may go, keeping the whole ball on the screen
 .set LEFT, RADIUS
 .set RIGHT, (JAB_DISPLAY_WIDTH - 1 - RADIUS)
 .set TOP, RADIUS
 .set BOTTOM, (JAB_DISPLAY_HEIGHT - 1 - RADIUS)
-# Positions in 256ths of a pixel, and speeds in 256ths of a pixel a
-# second: 210 across and 150 down
 .set FIX, 8
 .set ONE, (1 << FIX)
 .set SPEED_X, (210 * ONE)
 .set SPEED_Y, (150 * ONE)
-# A frame's time is held to a tenth of a second, so a stall moves the
-# ball no further than that
 .set DT_MAX, (JAB_TIME_HZ / 10)
 
 .section .text
@@ -31,7 +18,6 @@
 _start:
     jab.sys.display.open
     bnez a0, no_display
-    # the ball's centre and its speed
     li s0, 200 * ONE
     li s1, 200 * ONE
     li s2, SPEED_X
@@ -42,14 +28,12 @@ _start:
 frame:
     jab.sys.display.await
     call elapsed
-    # where it was, in pixels, erased
     srai s4, s0, FIX
     srai s5, s1, FIX
     mv a0, s4
     mv a1, s5
     li a2, BACKGROUND
     call fill_square
-    # on by its speed over the frame's time
     mv a0, s0
     mv a1, s2
     call advance
@@ -58,7 +42,6 @@ frame:
     mv a1, s3
     call advance
     mv s1, a0
-    # off the walls
     srai t1, s0, FIX
     li t0, LEFT
     bge t1, t0, 1f
@@ -84,8 +67,6 @@ frame:
     srai a0, s0, FIX
     srai a1, s1, FIX
     call draw_ball
-    # the rectangle holding the old square and the new: from the lesser
-    # centre less the radius to the greater plus it, inclusive
     srai t4, s0, FIX
     srai t5, s1, FIX
     mv a0, t4
@@ -117,8 +98,6 @@ no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
 
-# elapsed: the clock's ticks since the last frame into dt, held to
-# DT_MAX, and the clock noted for the next frame.
 elapsed:
     rdtime t0
     la t1, last_time
@@ -133,8 +112,6 @@ elapsed:
     sd t0, 0(t1)
     ret
 
-# advance: a0 becomes a0 plus a1, a rate a second, over the frame's
-# time: a1 times dt over JAB_TIME_HZ. Clobbers t0 to t2.
 advance:
     la t0, dt
     ld t0, 0(t0)
@@ -144,8 +121,6 @@ advance:
     add a0, a0, t1
     ret
 
-# fill_square: the square of side 2 * RADIUS + 1 around (a0, a1) in the
-# colour a2.
 fill_square:
     li t0, -RADIUS
     li t6, RADIUS
@@ -168,7 +143,6 @@ fill_square:
     ble t0, t6, 1b
     ret
 
-# draw_ball: the disc of RADIUS around (a0, a1) in BALL.
 draw_ball:
     li t0, -RADIUS
     li t6, RADIUS

@@ -1,13 +1,7 @@
-# techno: technojab.mid, the piece shipped on the program's romfs,
-# played through the kernel's synthesizer on its own, with TECHNOJAB in
-# the middle of the screen while it plays; when the piece ends, so does
-# the program, its last release played out by the exit.
 .include "jab.inc"
 
 .set DISK, 1
 .set PIECE_BYTES, 98304
-# The title: bold at four times the console's cell, centred on the
-# screen; bold adds a pixel to the width
 .set TITLE_CELLS, 9
 .set TITLE_SCALE, (JAB_TEXT_SCALE_ONE * 4)
 .set TITLE_WIDTH, (JAB_TEXT_WIDTH * 4 * TITLE_CELLS + 1)
@@ -62,8 +56,6 @@ refused:
     jab.sys.uart.print msg_refused
     jab.sys.exit 4
 
-# read_piece: the piece off the romfs into memory, its length kept; a
-# missing file leaves the length 0.
 read_piece:
     addi sp, sp, -16
     sd ra, 8(sp)

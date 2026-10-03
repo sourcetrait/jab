@@ -1,15 +1,3 @@
-# png: the decoder. Reads a set of PNG files out of the romfs disk and,
-# for each row of its table, asks jab.sys.png.size and reports `s <code>
-# <width> <height>`, then decodes the file into a sprite of that many
-# frames with that much buffer and reports `p <code> <frame width>
-# <height> <frames>`, or `p <code>` when the decode failed; a decoded
-# sprite's pixels follow as hex, 64 bytes to a line as `x <hex>`, then
-# its span table as `y <hex>` and its flags as `f <n>`, for the test to
-# hold against what it put in. Then, for each row of a
-# second table, loads a sprite from a directory of frames straight off
-# the disk and reports `l <code> <frame width> <height> <frames>` the
-# same way. The frames and the capacity come from the tables at run
-# time, so the plain ecall is used where the macro would want constants.
 .include "jab.inc"
 
 .set DISK, 1
@@ -26,7 +14,6 @@ _start:
     beqz s1, 8f
     ld s10, 8(s0)               # the frames
     ld s11, 16(s0)              # the capacity
-    # the file, out of romfs and into memory
     mv a3, s1
     la a0, rec
     li a1, DISK
@@ -52,7 +39,6 @@ _start:
     mv s3, a1
     bnez s3, 2b
 3:
-    # what the header says
     la t0, pngbuf
     mv t1, s4
     jab.sys.png.size t0, t1
@@ -74,7 +60,6 @@ _start:
     call line_dec
     call line_nl
     jab.sys.uart.print line
-    # the decode, with the table's frames and capacity
     la a0, sprite
     la a1, pngbuf
     mv a2, s4
@@ -87,7 +72,6 @@ _start:
     addi s0, s0, 24
     j 1b
 8:
-    # the directories, straight off the disk
     la s0, loads
 4:
     ld s1, 0(s0)
@@ -110,8 +94,6 @@ _start:
     jab.sys.uart.print msg_missing
     jab.sys.exit 1
 
-# report: a0 is a sprite call's code and a1 the word that opens the
-# line. The line, and on success the sprite's pixels as hex.
 report:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -142,7 +124,6 @@ report:
     call line_nl
     jab.sys.uart.print line
     bnez s8, 4f
-    # the pixels, byte by byte
     la t0, sprite
     lwu t1, JAB_SPRITE_WIDTH(t0)
     lwu t2, JAB_SPRITE_HEIGHT(t0)
@@ -175,8 +156,6 @@ report:
     j 2b
 4:
     bnez s8, 6f
-    # the span table after the pixels, four bytes a row of every frame,
-    # as `y <hex>` lines, and the flags as `f <n>`
     la t0, sprite
     lwu t1, JAB_SPRITE_HEIGHT(t0)
     lwu t3, JAB_SPRITE_FRAMES(t0)
@@ -234,7 +213,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: end the line and terminate it where it ends.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)
@@ -315,9 +293,6 @@ line_hex:
 
 .section .rodata
 .balign 8
-# the path, the frames, and the capacity of each decode; the last two
-# rows ask for frames the height does not divide by and for a buffer
-# too small, on a file the rows before decoded
 table:
     .quad path_rgba8, 1, SPRITEBUF
     .quad path_rgb8, 1, SPRITEBUF
@@ -346,10 +321,6 @@ table:
     .quad path_rgba8, 1, 100
     .quad 0, 0, 0
 
-# the directory and the capacity of each load: four frames, then a
-# directory whose second frame is another size, one with no 0.png, one
-# that is not there, a file where a directory should be, and the four
-# frames with too small a buffer
 loads:
     .quad dir_walker, SPRITEBUF
     .quad dir_mixed, SPRITEBUF

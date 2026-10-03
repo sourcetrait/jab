@@ -1,6 +1,3 @@
-# keys: the keyboard. Waits for key events and reports each on the
-# UART as `key <code> <value>`, three digits and one, until the space
-# bar is released, then exits 0.
 .include "jab.inc"
 
 .section .text
@@ -14,7 +11,6 @@ next:
     beqz a0, wait
     mv s0, a0
     mv s1, a1
-    # the code, three digits
     la t0, code_digits
     li t1, 100
     divu t2, s0, t1
@@ -28,7 +24,6 @@ next:
     addi t3, t3, '0'
     sb t2, 1(t0)
     sb t3, 2(t0)
-    # the value, one digit
     la t0, value_digit
     addi t1, s1, '0'
     sb t1, 0(t0)

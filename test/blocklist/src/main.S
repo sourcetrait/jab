@@ -1,8 +1,3 @@
-# blocklist: what disks the machine carries. Lists them and reports each
-# on the UART as `disk <id> kind <k> sectors <n> serial <s>`, then the
-# page's own answer as `count <n> next <n>`, then tries to write a
-# sector of the first disk, an asset image the tool attached read-only,
-# and reports the code as `write <c>`, and exits 0.
 .include "jab.inc"
 
 .section .text
@@ -51,7 +46,6 @@ _start:
     call line_dec
     call line_nl
     jab.sys.uart.print line
-    # a sector written to the first disk, which is read-only
     la t0, sector
     li t1, 1
     li t2, 0
@@ -67,7 +61,6 @@ _start:
     jab.sys.uart.print line
     jab.sys.exit 0
 
-# The line being built: reset it, add to it, then print it.
 line_reset:
     la t0, line
     la t1, lineptr
@@ -82,8 +75,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: end the line, and terminate it where it ends, so a short line
-# never shows the tail of a longer one before it.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)
@@ -94,7 +85,6 @@ line_nl:
     sd t0, 0(t1)
     ret
 
-# line_str: a0 is a NUL-terminated string.
 line_str:
     mv t2, a0
     la t1, lineptr
@@ -110,7 +100,6 @@ line_str:
     sd t0, 0(t1)
     ret
 
-# line_dec: a0 is an unsigned value, written in decimal.
 line_dec:
     mv t2, a0
     la t1, lineptr

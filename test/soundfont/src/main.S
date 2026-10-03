@@ -1,14 +1,3 @@
-# soundfont: the kernel's SoundFont reader and its sampled voices under
-# test. With a disk of serial `tone` on the machine it loads the
-# one-sample font there, a sine at 24 kHz rooted at the A above middle
-# C, plays that A for a second at full velocity and volume, releases
-# it, and spins for half a second more; then it loads FluidR3 GM off
-# the mix disk, says what the file holds, plays a piano's middle C for
-# most of a second, releases it, and exits. The host records what
-# played and the test measures it. A step it cannot take says so on
-# the UART and exits with its own code; the tone font alone is
-# skipped when its disk is not there, so a run outside the test plays
-# the piano.
 .include "jab.inc"
 
 .set CHANNEL, 0
@@ -32,7 +21,6 @@
 _start:
     jab.sys.sound.open
     bnez a0, no_sound
-    # the tone font, when its disk is there
     jab.sys.block.find serial_tone
     beqz a0, fluid
     mv s0, a0
@@ -64,7 +52,6 @@ _start:
     li a0, TAIL
     call spin
 fluid:
-    # FluidR3 GM off the mix disk, the piano's middle C through it
     jab.sys.block.find serial_mix
     beqz a0, no_mix
     mv s0, a0
@@ -124,9 +111,6 @@ fluid_refused:
     call print_code
     jab.sys.exit 7
 
-# read_file: the file at the path a3 on disk a2, from its root, into
-# the buffer a0 of a1 bytes, a page at a time; a0 becomes the bytes
-# read, 0 when the file is not there.
 read_file:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -181,9 +165,6 @@ read_file:
     addi sp, sp, 64
     ret
 
-# print_counts: the label at a0 then the presets, instruments, and
-# samples in a1 to a3 as `presets=P instruments=I samples=S` on the
-# UART.
 print_counts:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -213,7 +194,6 @@ print_counts:
     addi sp, sp, 48
     ret
 
-# print_code: the message at a0 then the code in s1 on the UART.
 print_code:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -230,8 +210,6 @@ print_code:
     addi sp, sp, 16
     ret
 
-# append_str: the NUL-terminated string at a1 copied to a0, which moves
-# past it. Clobbers t0.
 append_str:
 1:
     lbu t0, 0(a1)
@@ -243,8 +221,6 @@ append_str:
 2:
     ret
 
-# append_dec: a1, unsigned, written in decimal at a0, which moves past
-# the digits. Clobbers t0 to t3.
 append_dec:
     la t0, digits
     addi t0, t0, DIGITS_BYTES
@@ -266,7 +242,6 @@ append_dec:
     bltu t0, t3, 2b
     ret
 
-# spin: a0 ticks of the clock go by with the hart busy the whole time.
 spin:
     rdtime t0
     add t1, t0, a0

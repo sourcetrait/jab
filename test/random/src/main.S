@@ -1,8 +1,3 @@
-# random: the kernel's entropy call under test. Asks jab.sys.random for 64
-# bytes twice, into two buffers, and prints each answer as `bytes
-# <given>` and then the bytes in decimal on one line, so the test can
-# see that they came, that the two draws differ, and that they look
-# like entropy. A machine with no rng device says so and exits 2.
 .include "jab.inc"
 
 .set BYTES, 64
@@ -22,7 +17,6 @@ no_rng:
     jab.sys.uart.print msg_no_rng
     jab.sys.exit 2
 
-# draw: fill the buffer at s0 from the device and print it.
 draw:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -53,14 +47,11 @@ draw:
     addi sp, sp, 16
     ret
 
-# The line: begun empty, strings and signed decimals appended, ended
-# with a newline and sent to the UART.
 line_begin:
     la t0, line_len
     sd zero, 0(t0)
     ret
 
-# line_str: a0 is a NUL-terminated string.
 line_str:
     la t0, line_len
     ld t1, 0(t0)
@@ -77,7 +68,6 @@ line_str:
     sd t1, 0(t0)
     ret
 
-# line_int: a0 is a signed value, appended in decimal.
 line_int:
     la t0, line_len
     ld t1, 0(t0)
@@ -113,7 +103,6 @@ line_int:
     sd t1, 0(t0)
     ret
 
-# line_end: the newline and the terminator, then the line to the UART.
 line_end:
     la t0, line_len
     ld t1, 0(t0)

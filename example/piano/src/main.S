@@ -1,8 +1,3 @@
-# piano: the kernel's synthesizer on the keyboard. One octave from
-# middle C is drawn as twelve keys across the screen, every one white,
-# C4 to B4 a semitone apart, and each carries the key that plays it: A
-# S D F G H J K L ; V N, the home row and then V and N. A key pressed
-# starts its note on the piano and letting go releases it.
 .include "jab.inc"
 
 .set CHANNEL, 0
@@ -10,7 +5,6 @@
 .set VELOCITY, 100
 .set KEYS, 12
 .set NOTE_FIRST, 60
-# The keys: KEY_WIDTH by KEY_HEIGHT, KEY_GAP apart, the row centred
 .set KEY_WIDTH, 140
 .set KEY_HEIGHT, 560
 .set KEY_GAP, 8
@@ -19,8 +13,6 @@
 .set ROW_X, ((JAB_DISPLAY_WIDTH - ROW_WIDTH) / 2)
 .set ROW_Y, ((JAB_DISPLAY_HEIGHT - KEY_HEIGHT) / 2)
 .set KEY_COLOR, 0x00ffffff
-# The labels: bold black at three times the console's cell, centred
-# in the key; bold adds a pixel to the width
 .set LABEL_SCALE, (JAB_TEXT_SCALE_ONE * 3)
 .set LABEL_WIDTH, (JAB_TEXT_WIDTH * 3 + 1)
 .set LABEL_HEIGHT, (JAB_TEXT_HEIGHT * 3)
@@ -58,7 +50,6 @@ no_sound:
     jab.sys.uart.print msg_no_sound
     jab.sys.exit 2
 
-# draw_keys: every key a white rectangle with its label in it.
 draw_keys:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -69,7 +60,6 @@ draw_keys:
     li t0, KEY_STRIDE
     mul s1, s0, t0
     addi s1, s1, ROW_X          # its left
-    # the rectangle, a row at a time
     li t0, JAB_DISPLAY_BASE + ROW_Y * JAB_DISPLAY_PITCH
     slli t1, s1, 2
     add t0, t0, t1              # its first pixel
@@ -87,7 +77,6 @@ draw_keys:
     add t0, t0, t3
     addi t2, t2, -1
     bnez t2, 2b
-    # the label, its address computed, so the plain call
     la a0, labels
     slli t0, s0, 1
     add a0, a0, t0
@@ -107,15 +96,12 @@ draw_keys:
     addi sp, sp, 32
     ret
 
-# apply_key: a0 is a key's code and a1 its value; a repeat is ignored,
-# a press starts the key's note and a release ends it.
 apply_key:
     addi sp, sp, -16
     sd ra, 8(sp)
     li t0, JAB_KEY_HELD
     beq a1, t0, 9f
     mv t3, a1
-    # the key's place in the table, or none
     la t0, key_codes
     li t1, 0
 1:
@@ -142,11 +128,9 @@ apply_key:
     ret
 
 .section .rodata
-# The keys that play, C4 up a semitone each
 key_codes:
     .byte JAB_KEY_A, JAB_KEY_S, JAB_KEY_D, JAB_KEY_F, JAB_KEY_G, JAB_KEY_H
     .byte JAB_KEY_J, JAB_KEY_K, JAB_KEY_L, JAB_KEY_SEMICOLON, JAB_KEY_V, JAB_KEY_N
-# Each key's label, LABEL_ENTRY bytes, terminated
 labels:
     .byte 'A', 0, 'S', 0, 'D', 0, 'F', 0, 'G', 0, 'H', 0
     .byte 'J', 0, 'K', 0, 'L', 0, ';', 0, 'V', 0, 'N', 0

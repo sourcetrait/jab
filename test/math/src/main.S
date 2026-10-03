@@ -1,11 +1,8 @@
-# The type libraries under test: every macro over fixed inputs, each result
-# to the UART as its bit pattern, decoded and checked on the host.
 .include "jab.inc"
 .include "jab_f32.inc"
 .include "jab_f64.inc"
 .include "jab_rng.inc"
 
-# sin and cos over SWEEP_POINTS angles from k_start, k_step apart
 .set SWEEP_POINTS, 1601
 .set ATAN_PAIRS, 24
 .set ANGLE_COUNT, 11
@@ -31,7 +28,6 @@ _start:
     call trapped
     jab.sys.exit 0
 
-# `sin <x> <y>` and `cos <x> <y>` lines for every angle of the sweep.
 sweep:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -63,7 +59,6 @@ sweep:
     addi sp, sp, 32
     ret
 
-# `atan2 <y> <x> <r>` lines, one a pair of atan_pairs.
 atan_cases:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -105,7 +100,6 @@ atan_cases:
     addi sp, sp, 48
     ret
 
-# `rad <x> <r>`, `deg <x> <r>`, and `roundtrip <x> <r>` lines, one each an angle.
 angle_cases:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -140,7 +134,6 @@ angle_cases:
     addi sp, sp, 48
     ret
 
-# `const <name> <macro> <assembled>` lines for the six constants.
 const_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -182,7 +175,6 @@ const_cases:
     addi sp, sp, 32
     ret
 
-# `f64.vec3.dot`, `len`, `sqrlen`, `norm`, and `norm.aliased` lines, one a pair.
 vec3_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -234,10 +226,6 @@ vec3_cases:
     addi sp, sp, 32
     ret
 
-# The line `<word> <the vec3 at s3> <fs0>`.
-# a0 address The word, NUL-terminated.
-# s3 address The vec3.
-# fs0 f64 The result.
 vec3_result_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -258,9 +246,6 @@ vec3_result_line:
     addi sp, sp, 16
     ret
 
-# The line `<word> <the vec3 at s3> <the vec3 at norm_out>`.
-# a0 address The word, NUL-terminated.
-# s3 address The vec3.
 vec3_norm_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -282,7 +267,6 @@ vec3_norm_line:
     addi sp, sp, 16
     ret
 
-# `f64.vec2.len <a> <r>` and `f64.vec2.sqrlen <a> <r>` lines, one a vec2.
 vec2_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -308,10 +292,6 @@ vec2_cases:
     addi sp, sp, 32
     ret
 
-# The line `<word> <the vec2 at s3> <fs0>`.
-# a0 address The word, NUL-terminated.
-# s3 address The vec2.
-# fs0 f64 The result.
 vec2_result_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -332,7 +312,6 @@ vec2_result_line:
     addi sp, sp, 16
     ret
 
-# `f32.vec3.dot <a> <b> <r>` lines, one a pair of f32_pairs.
 f32_vec_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -364,9 +343,6 @@ f32_vec_cases:
     addi sp, sp, 32
     ret
 
-# The register forms: `f32.vec3.reg.dot <a> <b> <r>`, `f32.vec3.reg.sqrlen
-# <a> <r>`, `len`, `norm <a> <n>`, and the vec2 forms over each pair's first
-# two singles, over f32_pairs; the f64 forms over vec3_pairs and vec2s.
 reg_cases:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -509,11 +485,6 @@ reg_cases:
     addi sp, sp, 32
     ret
 
-# The line `<word> <a1 singles at s3> <fs0>`.
-# a0 address The word, NUL-terminated.
-# a1 int How many singles.
-# s3 address The singles.
-# fs0 f32 The result.
 f32_vec_line:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -537,7 +508,6 @@ f32_vec_line:
     addi sp, sp, 32
     ret
 
-# `rng` lines for a fixed seed and a zero seed, then `rngsys` from jab.sys.random.
 rng_cases:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -570,10 +540,6 @@ rng_cases:
     addi sp, sp, 16
     ret
 
-# The line `<word> <seed> <state> <RNG_BYTES bytes>`, the bytes drawn from s3.
-# a0 u64 The seed as given.
-# a1 address The word, NUL-terminated.
-# s3 address The state word.
 rng_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -606,7 +572,6 @@ rng_report:
     addi sp, sp, 32
     ret
 
-# Every macro expanded once on a page of its own, with no kernel call.
 .balign 4096
 expand_all:
     la t3, angles
@@ -660,14 +625,11 @@ expand_all:
     jab.rng.byte t4, t3
     ret
 
-# One kernel call on a page of its own.
 .balign 4096
 trapped:
     jab.sys.kernel.flags
     ret
 
-# The line `<word> <fs0> <fs1>`, singles.
-# a0 address The word, NUL-terminated.
 pair_line:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -689,8 +651,6 @@ pair_line:
     addi sp, sp, 16
     ret
 
-# The line `<word> <fs0> <fs1>`, doubles.
-# a0 address The word, NUL-terminated.
 pair_line64:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -712,15 +672,12 @@ pair_line64:
     addi sp, sp, 16
     ret
 
-# Empties the line.
 line_reset:
     la t0, line
     la t1, lineptr
     sd t0, 0(t1)
     ret
 
-# Appends a byte.
-# a0 u8
 line_char:
     la t1, lineptr
     ld t0, 0(t1)
@@ -729,7 +686,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# Ends the line: a newline, then NUL.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)
@@ -740,8 +696,6 @@ line_nl:
     sd t0, 0(t1)
     ret
 
-# Appends a string.
-# a0 address NUL-terminated.
 line_str:
     mv t2, a0
     la t1, lineptr
@@ -757,8 +711,6 @@ line_str:
     sd t0, 0(t1)
     ret
 
-# Appends a byte as two hex digits.
-# a0 u8
 line_hex:
     mv t2, a0
     la t1, lineptr
@@ -786,8 +738,6 @@ line_hex:
     sd t0, 0(t1)
     ret
 
-# Appends the low 32 bits as eight hex digits, highest first.
-# a0 u32
 line_hex32:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -807,8 +757,6 @@ line_hex32:
     addi sp, sp, 32
     ret
 
-# Appends sixteen hex digits, highest first.
-# a0 u64
 line_hex64:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -828,9 +776,6 @@ line_hex64:
     addi sp, sp, 32
     ret
 
-# Appends doubles, each sixteen hex digits and a space.
-# a0 address The doubles.
-# a1 count How many.
 line_doubles:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -854,9 +799,6 @@ line_doubles:
     addi sp, sp, 32
     ret
 
-# Appends singles, each eight hex digits and a space.
-# a0 address The singles.
-# a1 count How many.
 line_floats:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -886,7 +828,6 @@ k_step:
     .float 0.025
 k_start:
     .float -20.0
-# the constants the macros must match, as the assembler rounds them
 k_pi_f:
     .float 3.14159265358979323846
 k_tau_f:
@@ -900,8 +841,6 @@ k_tau_d:
     .double 6.28318530717958647692
 k_half_pi_d:
     .double 1.57079632679489661923
-# y, x: both zero, the axes, the diagonals, every octant, a point far
-# along each axis
 atan_pairs:
     .float 0.0, 0.0
     .float 1.0, 0.0
@@ -930,7 +869,6 @@ atan_pairs:
 angles:
     .float 0.0, 1.0, 30.0, 45.0, 90.0, 180.0, 360.0, -90.0, 720.0, 0.5, 10000.0
 .balign 8
-# a and b, three doubles each
 vec3_pairs:
     .double 1.0, 2.0, 3.0, 4.0, -5.0, 6.0
     .double 0.5, -0.25, 8.0, -1.5, 2.0, 0.125
@@ -942,7 +880,6 @@ vec2s:
     .double 0.0, 0.0
     .double 0.001, 0.001
 .balign 4
-# a and b, three singles each
 f32_pairs:
     .float 1.0, 2.0, 3.0, 4.0, -5.0, 6.0
     .float 0.5, -0.25, 8.0, -1.5, 2.0, 0.125

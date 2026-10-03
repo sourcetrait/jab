@@ -1,10 +1,3 @@
-# pad: the kernel's pad driver under test. Prints the pad's name as
-# the device reports it, its own range for X, GAS, and HAT0X and for
-# an axis this pad lacks, then reports
-# every pad event as `pad <type> <code> <value>` and, after each, the
-# state as `state <keys> <x> <y> <hat0x> <gas>`, the keys as a mask and
-# the axes normalised, until BTN_SOUTH is released. With no pad on the
-# machine it says so and exits.
 .include "jab.inc"
 
 .set LINE_BYTES, 160
@@ -45,8 +38,6 @@ no_pad:
     jab.sys.uart.print msg_no_pad
     jab.sys.exit 2
 
-# print_axis: s0 is an axis code; one line, `axis <code> <min> <max>
-# <fuzz> <flat> <res>`, or `axis <code> none`.
 print_axis:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -81,8 +72,6 @@ print_axis:
     addi sp, sp, 16
     ret
 
-# read_pad: take every pad event waiting, reporting each and the state
-# after it; BTN_SOUTH released marks the end.
 read_pad:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -122,7 +111,6 @@ read_pad:
     addi sp, sp, 16
     ret
 
-# print_state: `state <keys> <x> <y> <hat0x> <gas>` from a fresh read.
 print_state:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -147,7 +135,6 @@ print_state:
     addi sp, sp, 16
     ret
 
-# print_axis_value: a space and the state record's value for axis s1.
 print_axis_value:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -162,14 +149,11 @@ print_axis_value:
     addi sp, sp, 16
     ret
 
-# The line: begun empty, strings and signed decimals appended, ended
-# with a newline and sent to the UART.
 line_begin:
     la t0, line_len
     sd zero, 0(t0)
     ret
 
-# line_str: a0 is a NUL-terminated string.
 line_str:
     la t0, line_len
     ld t1, 0(t0)
@@ -186,7 +170,6 @@ line_str:
     sd t1, 0(t0)
     ret
 
-# line_int: a0 is a signed value, appended in decimal.
 line_int:
     la t0, line_len
     ld t1, 0(t0)
@@ -222,7 +205,6 @@ line_int:
     sd t1, 0(t0)
     ret
 
-# line_end: the newline and the terminator, then the line to the UART.
 line_end:
     la t0, line_len
     ld t1, 0(t0)

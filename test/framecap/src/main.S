@@ -1,12 +1,3 @@
-# framecap: the frame cap. Sixty-four flips in a row with no waiting:
-# the first goes through and the rest come too early, which the kernel
-# refuses without showing them. Then sixty-four frames the proper way,
-# await then flip, half of them whole and half a rectangle, which take
-# sixty-four periods of the cap while the hart halts between them.
-# Then a rectangle reaching past the screen's edge, which the kernel
-# must refuse; then a list of two rectangles as one flip, a list with
-# one past the edge, and a list of none; then what the kernel was built
-# with. Reports on the UART.
 .include "jab.inc"
 
 .set FLIPS, 64
@@ -26,12 +17,10 @@ _start:
 2:
     addi s1, s1, -1
     bnez s1, 1b
-    # refused=NN
     mv a0, s0
     la a1, refused_digits
     call two_digits
     jab.sys.uart.print refused
-    # thirty-two whole frames, awaited
     li s1, FLIPS / 2
 3:
     jab.sys.display.await
@@ -39,7 +28,6 @@ _start:
     bnez a0, flip_failed
     addi s1, s1, -1
     bnez s1, 3b
-    # thirty-two rectangles, awaited
     li s1, FLIPS / 2
 4:
     jab.sys.display.await
@@ -51,7 +39,6 @@ _start:
     bnez a0, flip_failed
     addi s1, s1, -1
     bnez s1, 4b
-    # a rectangle past the right edge: badrect=N
     jab.sys.display.await
     li a0, 1900
     li a1, 0
@@ -61,8 +48,6 @@ _start:
     la a1, badrect_digits
     call two_digits
     jab.sys.uart.print badrect
-    # a list of two rectangles as one flip, then a list holding one
-    # past the edge and a list of none: rects=N badrects=N norects=N
     jab.sys.display.await
     la t0, two_rects
     li t1, 2
@@ -83,7 +68,6 @@ _start:
     la a1, norects_digits
     call two_digits
     jab.sys.uart.print norects
-    # what the kernel was built with: flags=N
     jab.sys.kernel.flags
     la a1, flags_digits
     call two_digits
@@ -99,7 +83,6 @@ flip_failed:
     jab.sys.uart.print msg_flip_failed
     jab.sys.exit 2
 
-# two_digits: write a0, under a hundred, as two decimal digits at a1.
 two_digits:
     li t1, 10
     divu t2, a0, t1
@@ -138,8 +121,6 @@ flags_digits:
 
 .section .rodata
 .balign 4
-# two rectangles apart on the screen, and two of which the second
-# reaches past the bottom
 two_rects:
     .word 100, 100, 50, 50
     .word 1000, 800, 200, 100

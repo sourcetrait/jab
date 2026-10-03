@@ -1,62 +1,24 @@
-# wasd: a sphere you drive and a sphere that bounces, Jab's input
-# example with simple physics. W, A, S, and D push your sphere, harder
-# the longer a key is held, up to three times the bouncing sphere's
-# speed; with no key held it slows to a stop; the space bar stops it
-# at once; the walls bounce it back at the speed it hit them, and so
-# does the other sphere. The other sphere starts somewhere and bounces
-# off the walls as in bounce, and off your sphere too. The two never
-# overlap. Positions and speeds carry FIX fractional bits, and the
-# physics runs on the clock: each frame reads the time since the frame
-# before and moves and pushes by that, never by a count of frames, so
-# the frame cap and a late frame change when a sphere is seen and not
-# where it is.
-#
-# Over the API, records both ways, little-endian, each field at its own
-# width. The host drives with key events of CMD_SIZE bytes, the shape
-# the keyboard delivers (a JAB_KEY_* code, then pressed or released),
-# which go through the same held-flag path as the keys. wasd reports in
-# records of REPORT_SIZE bytes: a velocity record for a sphere when its
-# velocity changes, an acceleration record when the drive vector the
-# held keys apply changes, and a hit record per sphere per collision
-# with the contact point, a wall or the other sphere. Values are the
-# program's own fixed point. With no API port on the machine (`just run
-# example wasd` without `--api`) the reads find nothing and the writes
-# are refused, and the example runs on the keyboard alone.
 .include "jab.inc"
 
 .set RADIUS, 90
 .set BACKGROUND, 0x00000000
 .set PLAYER, 0x00ff5533
-# LowKick's own colour, the logo's
 .set BALL, 0x008f00ff
-# Where a centre may go, keeping the whole sphere on the screen
 .set LEFT, RADIUS
 .set RIGHT, (JAB_DISPLAY_WIDTH - 1 - RADIUS)
 .set TOP, RADIUS
 .set BOTTOM, (JAB_DISPLAY_HEIGHT - 1 - RADIUS)
 .set FIX, 8
 .set ONE, (1 << FIX)
-# Speeds in pixels a second: the bouncing sphere's, bounce's; the
-# driven sphere's top speed nearly four times that on each axis; how
-# much a held key adds a second, in pixels a second squared, and how
-# much a free axis loses a second
 .set BALL_VX, (210 * ONE)
 .set BALL_VY, (150 * ONE)
 .set TOP_SPEED, (780 * ONE)
 .set ACCEL, (720 * ONE)
 .set DECEL, (450 * ONE)
-# A frame's time is held to a tenth of a second, so a stall moves
-# nothing further than that
 .set DT_MAX, (JAB_TIME_HZ / 10)
-# The spheres have met when their centres are this close in pixels,
-# squared, and are then set this far apart: two more than touching, so
-# the drawn discs, at whole pixels, never share one
 .set TOUCH_SQ, ((2 * RADIUS + 2) * (2 * RADIUS + 2))
 .set APART, ((2 * RADIUS + 3) * ONE)
 
-# The API's records. A command in: code u16, value u16. A report out:
-# kind u8, sphere u8, against u8 (a hit's other party), a pad byte,
-# then x i32 and y i32 in fixed point.
 .set CMD_SIZE, 4
 .set CMD_CODE, 0
 .set CMD_VALUE, 2
@@ -73,8 +35,6 @@
 .set SPHERE_PLAYER, 1
 .set SPHERE_BALL, 2
 .set AGAINST_WALL, 0
-# Reports a frame at most: two velocities, an acceleration, and a hit
-# on each axis and with the other sphere for each of the two
 .set REPORT_MAX, 9
 
 .section .text
@@ -82,15 +42,12 @@
 _start:
     jab.sys.display.open
     bnez a0, no_display
-    # your sphere at the centre, still, on the black the framebuffer
-    # starts with
     li t0, (JAB_DISPLAY_WIDTH / 2) * ONE
     la t1, player_x
     sd t0, 0(t1)
     li t0, (JAB_DISPLAY_HEIGHT / 2) * ONE
     la t1, player_y
     sd t0, 0(t1)
-    # the other somewhere, from the clock
     rdtime t0
     li t1, JAB_DISPLAY_WIDTH - 2 * RADIUS
     remu t2, t0, t1
@@ -136,8 +93,6 @@ no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
 
-# elapsed: the clock's ticks since the last frame into dt, held to
-# DT_MAX, and the clock noted for the next frame.
 elapsed:
     rdtime t0
     la t1, last_time
@@ -152,8 +107,6 @@ elapsed:
     sd t0, 0(t1)
     ret
 
-# advance: a0 becomes a0 plus a1, a rate a second, over the frame's
-# time: a1 times dt over JAB_TIME_HZ. Clobbers t0 to t2.
 advance:
     la t0, dt
     ld t0, 0(t0)
@@ -163,8 +116,6 @@ advance:
     add a0, a0, t1
     ret
 
-# read_keys: take every key event waiting from the keyboard and apply
-# it.
 read_keys:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -178,9 +129,6 @@ read_keys:
     addi sp, sp, 16
     ret
 
-# read_api: take every key event the host has sent over the API and
-# apply it. Bytes arrive as a stream, so a record may come in two
-# pieces; the piece in hand waits in cmd_partial for the rest.
 read_api:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -209,7 +157,6 @@ read_api:
     sd t4, 0(t3)
     li t5, CMD_SIZE
     bne t4, t5, 2b
-    # a whole record
     sd zero, 0(t3)
     la t5, cmd_partial
     lhu a0, CMD_CODE(t5)
@@ -221,8 +168,6 @@ read_api:
     addi sp, sp, 48
     ret
 
-# apply_key: a0 is a key's code and a1 its value. W, A, S, D set and
-# clear their held flags; the space bar, pressed, stops your sphere.
 apply_key:
     li t0, JAB_KEY_SPACE
     bne a0, t0, 2f
@@ -260,11 +205,6 @@ apply_key:
 9:
     ret
 
-# drive: a0 is a speed, a1 whether the key that adds to it is held, a2
-# whether the key that takes from it is; a0 becomes the speed after
-# the frame's time: pushed at ACCEL a second, both keys held pushing
-# nothing, or with no key slowed toward a stop at DECEL a second and
-# not past it, and held under TOP_SPEED.
 drive:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -307,10 +247,6 @@ drive:
     addi sp, sp, 32
     ret
 
-# wall: a0 is a position, a1 its speed, a2 the least centre, a3 the
-# greatest, in pixels; a0 and a1 become the position after the frame's
-# time and the speed, reversed when a wall was hit, and a2 becomes 1
-# when one was, else 0.
 wall:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -340,8 +276,6 @@ wall:
     addi sp, sp, 32
     ret
 
-# clamp: a0 is a position, a1 the least centre and a2 the greatest in
-# pixels; a0 becomes the position kept between them.
 clamp:
     srai t0, a0, FIX
     bge t0, a1, 1f
@@ -353,7 +287,6 @@ clamp:
 2:
     ret
 
-# isqrt: a0 becomes the whole square root of a0, rounded down.
 isqrt:
     beqz a0, 3f
     mv t0, a0
@@ -369,8 +302,6 @@ isqrt:
 3:
     ret
 
-# move_player: your sphere's speed from the keys, then its position,
-# noting a wall hit on either axis.
 move_player:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -416,7 +347,6 @@ move_player:
     addi sp, sp, 16
     ret
 
-# move_ball: the other sphere on, and off the walls, noting a hit.
 move_ball:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -450,11 +380,6 @@ move_ball:
     addi sp, sp, 16
     ret
 
-# collide: when the spheres have met, each one closing on the other
-# has its speed reflected about the line between the centres, as off a
-# wall, and the two are set apart along that line so they never
-# overlap, kept on the screen. The meeting is noted with its point,
-# midway between the centres.
 collide:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -472,7 +397,6 @@ collide:
     ld s4, 0(t0)
     la t0, ball_y
     ld s5, 0(t0)
-    # from your centre to the other: dx, dy, and the distance squared
     sub s6, s4, s2
     sub s7, s5, s3
     mul a5, s6, s6
@@ -481,7 +405,6 @@ collide:
     li t0, TOUCH_SQ
     slli t0, t0, 2 * FIX
     bgt a5, t0, 9f
-    # a meeting, and where: midway between the centres
     add t0, s2, s4
     srai t0, t0, 1
     la t1, meet_x
@@ -494,8 +417,6 @@ collide:
     la t1, met
     sb t0, 0(t1)
     beqz a5, 3f
-    # the other sphere, if closing: its speed's part along the line,
-    # taken away twice
     la t0, ball_vx
     ld t5, 0(t0)
     la t0, ball_vy
@@ -516,7 +437,6 @@ collide:
     la t0, ball_vy
     sd t6, 0(t0)
 1:
-    # yours, if closing, the same way
     la t0, player_vx
     ld t5, 0(t0)
     la t0, player_vy
@@ -537,13 +457,11 @@ collide:
     la t0, player_vy
     sd t6, 0(t0)
 2:
-    # apart: half the shortfall each, along the line
     mv a0, a5
     call isqrt
     mv a4, a0
     j 4f
 3:
-    # centres together: apart along x
     li s6, ONE
     li s7, 0
     li a4, ONE
@@ -595,16 +513,11 @@ collide:
     addi sp, sp, 64
     ret
 
-# report: what changed this frame, as records into the report buffer,
-# sent to the host in one write: each sphere's velocity when it differs
-# from last frame's, the drive vector when it differs, and a hit record
-# per wall hit and per sphere of a meeting; then the notes are cleared.
 report:
     addi sp, sp, -16
     sd ra, 8(sp)
     la t0, report_count
     sd zero, 0(t0)
-    # your velocity
     la t0, player_vx
     ld a3, 0(t0)
     la t0, player_vy
@@ -627,7 +540,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 2:
-    # the other's velocity
     la t0, ball_vx
     ld a3, 0(t0)
     la t0, ball_vy
@@ -650,7 +562,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 4:
-    # the drive vector the held keys apply
     la t0, held_d
     lbu a3, 0(t0)
     la t0, held_a
@@ -682,8 +593,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 6:
-    # wall hits: the contact point is the centre moved a radius toward
-    # the wall it is against
     la t0, player_hit_x
     lbu t0, 0(t0)
     beqz t0, 7f
@@ -736,7 +645,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 10:
-    # a meeting: one record for each, with the same point
     la t0, met
     lbu t0, 0(t0)
     beqz t0, 12f
@@ -779,8 +687,6 @@ report:
     addi sp, sp, 16
     ret
 
-# toward_side: a3, a4 are a centre against the left or right wall; a3
-# becomes the contact point's x, a radius toward that wall.
 toward_side:
     li t0, LEFT * ONE
     li t1, RADIUS * ONE
@@ -791,8 +697,6 @@ toward_side:
     add a3, a3, t1
     ret
 
-# toward_edge: a3, a4 are a centre against the top or bottom wall; a4
-# becomes the contact point's y, a radius toward that wall.
 toward_edge:
     li t0, TOP * ONE
     li t1, RADIUS * ONE
@@ -803,9 +707,6 @@ toward_edge:
     add a4, a4, t1
     ret
 
-# append_report: a record of kind a0 about sphere a1, against a2, with
-# a3 and a4 as x and y, into the report buffer after those already
-# there; one more than REPORT_MAX is dropped.
 append_report:
     la t0, report_count
     ld t1, 0(t0)
@@ -826,8 +727,6 @@ append_report:
 1:
     ret
 
-# render: erase both spheres where they were, draw them where they are,
-# and flip the one rectangle holding all four squares.
 render:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -859,8 +758,6 @@ render:
     srai a1, a1, FIX
     li a2, PLAYER
     call draw_disc
-    # the rectangle: the least and greatest centres, less and plus the
-    # radius
     la t0, old_player_x
     ld a0, 0(t0)
     la t0, old_ball_x
@@ -901,8 +798,6 @@ render:
     addi sp, sp, 16
     ret
 
-# least_greatest: a0 becomes the least of a0, t1, t2, t3 and a2 the
-# greatest of a2, t1, t2, t3.
 least_greatest:
     bge t1, a0, 1f
     mv a0, t1
@@ -924,7 +819,6 @@ least_greatest:
 6:
     ret
 
-# remember: where the spheres are now, in pixels, to erase next frame.
 remember:
     la t0, player_x
     ld t1, 0(t0)
@@ -948,8 +842,6 @@ remember:
     sd t1, 0(t0)
     ret
 
-# fill_square: the square of side 2 * RADIUS + 1 around (a0, a1) in the
-# colour a2.
 fill_square:
     li t0, -RADIUS
     li t6, RADIUS
@@ -972,7 +864,6 @@ fill_square:
     ble t0, t6, 1b
     ret
 
-# draw_disc: the disc of RADIUS around (a0, a1) in the colour a2.
 draw_disc:
     li t0, -RADIUS
     li t6, RADIUS

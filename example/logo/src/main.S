@@ -1,14 +1,6 @@
-# logo: a PNG straight from GIMP 3, drawn in the middle of the screen.
-# The repository's logo directory ships as this program's romfs; the
-# program finds the PNG on it by name, reads it into memory, decodes it
-# into a sprite of one frame, opens the display, draws the sprite
-# centred, flips, and idles until the window closes.
 .include "jab.inc"
 
 .set DISK, 1
-# the file: 480 by 640, so the sprite is that at four bytes a pixel and
-# four bytes a row past the header, the rule for one frame, and the PNG
-# itself is under 32 KiB
 .set WIDTH, 480
 .set HEIGHT, 640
 .set SPRITE_BYTES, (JAB_SPRITE_PIXELS + HEIGHT * (WIDTH * 4 + 4))
@@ -19,7 +11,6 @@
 .section .text
 .global _start
 _start:
-    # the PNG, out of the romfs and into memory
     la t0, rec
     li t1, DISK
     li t2, JAB_ROMFS_ROOT
@@ -43,7 +34,6 @@ _start:
     mv s1, a1
     bnez s1, 1b
 2:
-    # the sprite, decoded in place
     la t0, sprite
     la t1, png
     mv t2, s2

@@ -1,8 +1,3 @@
-# checksum: SHA3-256. Takes the digest of four things and writes each
-# out as hex, `d <64 hex digits>`: nothing at all, the three bytes the
-# standard's own vector uses, a short ramp, and a long one that runs to
-# many blocks. The test holds the first two against the published
-# answers and the others against what the host computes.
 .include "jab.inc"
 
 .set RAMP, 200
@@ -11,7 +6,6 @@
 .section .text
 .global _start
 _start:
-    # the ramps, before anything is taken of them
     la t0, ramp
     li t1, 0
 1:
@@ -48,7 +42,6 @@ _start:
     call digest
     jab.sys.exit 0
 
-# digest: t0 is the bytes and t1 how many; writes the answer out as hex.
 digest:
     addi sp, sp, -16
     sd ra, 8(sp)

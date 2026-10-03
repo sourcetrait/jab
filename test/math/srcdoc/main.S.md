@@ -1,5 +1,8 @@
 # main.S
 
+The type libraries under test: every macro over fixed inputs, each result
+to the UART as its bit pattern, decoded and checked on the host.
+
 Results leave the guest as bit patterns, one case a line, so the guest formats
 no float and the host decodes exactly what the macro produced: test/test.nu
 rebuilds each value from its pattern and holds it against nushell's own sine,
@@ -23,6 +26,49 @@ still the table's and the host decodes the same values; a vector is
 reloaded before every macro, since a `uart.print` between two macros could
 not be trusted to leave the argument registers alone. The f32 table gained
 the zero vector for the register norm's zero case.
+
+## sweep
+
+Its lines are `sin <x> <y>` and `cos <x> <y>`.
+
+## atan_cases
+
+Its lines are `atan2 <y> <x> <r>`, one a pair.
+
+## angle_cases
+
+Its lines are `rad <x> <r>`, `deg <x> <r>`, and `roundtrip <x> <r>`, one
+each an angle.
+
+## const_cases
+
+Its lines are `const <name> <macro> <assembled>`.
+
+## vec3_cases
+
+Its lines are `f64.vec3.dot`, `len`, `sqrlen`, `norm`, and `norm.aliased`,
+one a pair. The aliased norm copies the vector to norm_out and normalises it
+there in place.
+
+## vec2_cases
+
+Its lines are `f64.vec2.len <a> <r>` and `f64.vec2.sqrlen <a> <r>`, one a
+vec2.
+
+## f32_vec_cases
+
+Its lines are `f32.vec3.dot <a> <b> <r>`, one a pair of f32_pairs.
+
+## reg_cases
+
+The register forms: `f32.vec3.reg.dot <a> <b> <r>`, `f32.vec3.reg.sqrlen
+<a> <r>`, `len`, `norm <a> <n>`, and the vec2 forms over each pair's first
+two singles, over f32_pairs; the f64 forms over vec3_pairs and vec2s.
+
+## rng_report
+
+The line is `<word> <seed> <state> <RNG_BYTES bytes>`, the bytes drawn from
+the state.
 
 ## expand_all
 ## trapped

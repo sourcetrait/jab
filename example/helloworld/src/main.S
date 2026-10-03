@@ -1,4 +1,3 @@
-# helloworld: the first Jab program. Prints a line and exits.
 .include "jab.inc"
 
 .section .text

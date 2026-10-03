@@ -1,8 +1,3 @@
-# tar: an archive the program holds itself. Reads /foo.tar out of the
-# romfs disk into memory, then reports what the kernel makes of it: each
-# entry as `t <type> <size> <data> <name>`, then a find as
-# `f <code> <size> <name>`, then one for a name that is not there. The
-# test is the judge.
 .include "jab.inc"
 
 .set DISK, 1
@@ -11,7 +6,6 @@
 .section .text
 .global _start
 _start:
-    # the archive, out of romfs and into the program's own memory
     la t0, rec
     li t1, DISK
     jab.sys.romfs.find t0, t1, zero, path_tar
@@ -44,7 +38,6 @@ _start:
     call line_nl
     jab.sys.uart.print line
 
-    # every entry, a page at a time
     li s3, 0                    # the cursor
 3:
     la t0, recs
@@ -84,7 +77,6 @@ _start:
 5:
     bnez s3, 3b
 
-    # a name that is there, and one that is not
     la a0, path_note
     call find_one
     la a0, path_missing
@@ -93,8 +85,6 @@ _start:
 9:
     jab.sys.exit 1
 
-# find_one: a0 is a path; reports the code, and the size and name when
-# it is there.
 find_one:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -147,7 +137,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: end the line and terminate it where it ends.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)

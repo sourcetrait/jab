@@ -1,11 +1,3 @@
-# romfs: the filesystem. Reports what the kernel makes of a fixture
-# image the test built, and lets the test be the judge of all of it:
-# every path it was told to look for, as `f <code> <type> <size>
-# <name>`; the whole of a binary file, read in pages that never line up
-# with a sector and written out as hex, 64 bytes to a line as `x <hex>`,
-# then `png bytes <n>`; an empty file, as `empty <bytes> <next>`; and
-# the entries of a directory holding a name longer than a record can
-# carry, as `over <type> <name>`.
 .include "jab.inc"
 
 .set DISK, 1
@@ -51,8 +43,6 @@ _start:
     j 1b
 
 2:
-    # the binary file, in pages that never line up with a sector, every
-    # byte of it written out for the test to hold against the original
     la a0, path_png
     call find_one
     bnez a0, 9f
@@ -104,7 +94,6 @@ _start:
     call line_nl
     jab.sys.uart.print line
 
-    # the empty file: no bytes, and no offset to go on from
     la a0, path_empty
     call find_one
     bnez a0, 9f
@@ -130,7 +119,6 @@ _start:
     call line_nl
     jab.sys.uart.print line
 
-    # the directory holding a name longer than a record carries
     la a0, path_over_dir
     call find_one
     bnez a0, 9f
@@ -165,9 +153,6 @@ _start:
 9:
     jab.sys.exit 1
 
-# find_one: a0 is a path. The SDK's macro takes a label, which is what a
-# program writing one out does; walking a table of them reaches the same
-# call the macro does, an ecall with the arguments in place.
 find_one:
     mv a3, a0
     la a0, rec
@@ -191,8 +176,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: end the line, and terminate it where it ends, so a short line
-# never shows the tail of a longer one before it.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)
@@ -203,7 +186,6 @@ line_nl:
     sd t0, 0(t1)
     ret
 
-# line_str: a0 is a NUL-terminated string.
 line_str:
     mv t2, a0
     la t1, lineptr
@@ -219,7 +201,6 @@ line_str:
     sd t0, 0(t1)
     ret
 
-# line_dec: a0 is an unsigned value, written in decimal.
 line_dec:
     mv t2, a0
     la t1, lineptr
@@ -246,7 +227,6 @@ line_dec:
     sd t0, 0(t1)
     ret
 
-# line_hex: a0 is a byte, written as two hex digits.
 line_hex:
     mv t2, a0
     la t1, lineptr
@@ -314,14 +294,12 @@ path_socket:
     .asciz "/mode/socket/sock"
 path_folder:
     .asciz "/mode/directory/folder"
-# 127 characters, the most a record carries and a linux mount reads
 path_max:
     .ascii "/name/max/one/two/three/four/five/"
     .ascii "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
     .ascii "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
     .ascii "mmmmmmmmmmmmmmmmmm"
     .asciz ".max.name"
-# 165 characters, which is past both
 path_over:
     .ascii "/name/overflow/one/two/three/"
     .ascii "oooooooooooooooooooooooooooooooooooooooooooooooooo"

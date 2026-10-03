@@ -1,10 +1,3 @@
-# gz: the decompressor. Reads a set of .gz files out of the romfs disk,
-# asks each how long its contents will be, inflates it in one call, and
-# reports `g <code> <bytes> <said>` for each: the code the call gave,
-# the bytes that came out, and the length the trailer promised. The
-# kernel checks the CRC-32 itself, so JAB_GZ_OK already means the bytes
-# are the bytes that went in; the first file is also written out as hex
-# so the test can see that for itself once.
 .include "jab.inc"
 
 .set DISK, 1
@@ -19,7 +12,6 @@ _start:
 1:
     ld s1, 0(s0)
     beqz s1, 8f
-    # the compressed file, out of romfs and into memory
     mv a3, s1
     la a0, rec
     li a1, DISK
@@ -45,7 +37,6 @@ _start:
     mv s3, a1
     bnez s3, 2b
 3:
-    # how long the contents will be, then all of them at once
     la t0, gzbuf
     mv t1, s4
     jab.sys.gz.size t0, t1
@@ -77,7 +68,6 @@ _start:
     call line_dec
     call line_nl
     jab.sys.uart.print line
-    # the first file, byte by byte, so the test sees one whole answer
     la t0, paths
     bne s0, t0, 7f
     li s9, 0
@@ -124,7 +114,6 @@ line_char:
     sd t0, 0(t1)
     ret
 
-# line_nl: end the line and terminate it where it ends.
 line_nl:
     la t1, lineptr
     ld t0, 0(t1)

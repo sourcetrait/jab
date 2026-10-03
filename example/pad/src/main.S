@@ -1,85 +1,24 @@
-# pad: wasd on a gamepad. A sphere you drive and a sphere that bounces,
-# the graphics of bounce with simple physics; the left stick pushes
-# your sphere in any direction, harder the further it is pushed and
-# the longer it is held, up to three times the bouncing sphere's speed;
-# the dpad pushes at full strength along its eight directions; either
-# stick pressed in, THUMBL or THUMBR, stops it at once, as the space
-# bar does; W, A, S, D, and the space bar still work. Every other
-# button of the pad is given a colour of its own at startup, drawn at
-# random, and pressing it paints your sphere that colour. The buttons
-# announce themselves too: the button's evdev name, NORTH and the
-# rest, centred at the top of the screen in bold off-white at one and
-# a half times the console's font, staying while the button is held
-# and three seconds after it is released, or until another button
-# takes its place; at startup the pad's own name, as the device
-# reports it, shows there for three seconds. The stick and the dpad
-# show themselves by moving the sphere and say nothing. The right
-# stick paints your sphere a colour made from its exact position, red
-# from its x, green from its y, blue from how far it is pushed, so the
-# stick's precision is seen, and it drives the sphere too, in its own
-# direction at a strength by thirds of its throw past the dead zone:
-# a quarter of ACCEL, ACCEL, and twice it. With no push the sphere
-# slows to a stop; the walls bounce it back at the speed it hit them,
-# and so does the other sphere. The other sphere starts somewhere and
-# bounces off the walls as in bounce, and off your sphere too. The two
-# never overlap. Positions and speeds carry FIX fractional bits.
-#
-# The pad is read as a state each tick: the sticks' axes come
-# normalised to -JAB_PAD_FULL through JAB_PAD_FULL, 0 at rest, and the
-# left stick's drive is ACCEL scaled by each over full scale; the hat's
-# axes at full scale add ACCEL outright. The stop is an event, THUMBL
-# or THUMBR pressed, taken from jab.sys.pad.input. With no pad on the machine the
-# state reads zero and the example runs on the keyboard alone.
-#
-# Over the API, wasd's records both ways, little-endian, each field at
-# its own width. The host drives with key events of CMD_SIZE bytes, the
-# shape the keyboard delivers (a JAB_KEY_* code, then pressed or
-# released), which go through the same held-flag path as the keys. The
-# reports are wasd's: a velocity record for a sphere when its velocity
-# changes, an acceleration record when the drive vector changes, from
-# the keys, the stick, and the hat together, and a hit record per
-# sphere per collision with the contact point, a wall or the other
-# sphere; and one of this example's own, a colour record when a button
-# paints your sphere, its x the colour and its y the button's code.
-# Values are the program's own fixed point. With no API port on the
-# machine (`just run example pad` without `--api`) the reads find
-# nothing and the writes are refused.
 .include "jab.inc"
 
 .set RADIUS, 90
 .set BACKGROUND, 0x00000000
 .set PLAYER, 0x00ff5533
-# LowKick's own colour, the logo's
 .set BALL, 0x008f00ff
-# Where a centre may go, keeping the whole sphere on the screen
 .set LEFT, RADIUS
 .set RIGHT, (JAB_DISPLAY_WIDTH - 1 - RADIUS)
 .set TOP, RADIUS
 .set BOTTOM, (JAB_DISPLAY_HEIGHT - 1 - RADIUS)
 .set FIX, 8
 .set ONE, (1 << FIX)
-# Speeds in pixels a second: the bouncing sphere's, bounce's; the
-# driven sphere's top speed nearly four times that on each axis; how
-# much a full push adds a second, in pixels a second squared, and how
-# much a free axis loses a second. The physics runs on the clock, by
-# the time since the frame before, never by a count of frames.
 .set BALL_VX, (210 * ONE)
 .set BALL_VY, (150 * ONE)
 .set TOP_SPEED, (780 * ONE)
 .set ACCEL, (720 * ONE)
 .set DECEL, (450 * ONE)
-# A frame's time is held to a tenth of a second, so a stall moves
-# nothing further than that
 .set DT_MAX, (JAB_TIME_HZ / 10)
-# The spheres have met when their centres are this close in pixels,
-# squared, and are then set this far apart: two more than touching, so
-# the drawn discs, at whole pixels, never share one
 .set TOUCH_SQ, ((2 * RADIUS + 2) * (2 * RADIUS + 2))
 .set APART, ((2 * RADIUS + 3) * ONE)
 
-# The API's records. A command in: code u16, value u16. A report out:
-# kind u8, sphere u8, against u8 (a hit's other party), a pad byte,
-# then x i32 and y i32 in fixed point.
 .set CMD_SIZE, 4
 .set CMD_CODE, 0
 .set CMD_VALUE, 2
@@ -97,18 +36,10 @@
 .set SPHERE_PLAYER, 1
 .set SPHERE_BALL, 2
 .set AGAINST_WALL, 0
-# Reports a frame at most: two velocities, an acceleration, a hit on
-# each axis and with the other sphere for each of the two, and a colour
 .set REPORT_MAX, 10
-# The pad's buttons, one colour each from JAB_BTN_GAMEPAD, drawn with
-# every channel at least COLOR_FLOOR so it shows on black
 .set BUTTONS, 32
 .set COLOR_FLOOR, 64
 .set COLOR_SPAN, 192
-# The label at the top of the screen: a strip the screen's width,
-# cleared before each name, the name centred in it in off-white at one
-# and a half times the font, bold; it stays LABEL_TIME after the
-# button is released, three seconds of the clock
 .set LABEL_SCALE, 384
 .set LABEL_CELL, (JAB_TEXT_WIDTH * LABEL_SCALE / 256)
 .set LABEL_HEIGHT, (JAB_TEXT_HEIGHT * LABEL_SCALE / 256)
@@ -117,8 +48,6 @@
 .set LABEL_TIME, (3 * JAB_TIME_HZ)
 .set NAMED_BUTTONS, 16
 .set NO_BUTTON, -1
-# The right stick drives by thirds of its throw, in quarters of
-# ACCEL, so the strongest push is ACCEL_MAX, which nothing exceeds
 .set ACCEL_MAX, (ACCEL * 2)
 .set BAND, (JAB_PAD_FULL / 3)
 
@@ -127,14 +56,9 @@
 _start:
     jab.sys.display.open
     bnez a0, no_display
-    # your sphere's colour, and a colour for every button from the
-    # clock's randomness
     li t0, PLAYER
     la t1, player_color
     sw t0, 0(t1)
-    # the colours' seed from the machine's entropy, the clock only on
-    # a machine with no rng device, and never zero, which xorshift
-    # cannot leave
     la t0, rand_state
     li t1, 8
     jab.sys.random t0, t1
@@ -150,8 +74,6 @@ _start:
     sd t0, 0(t1)
 5:
     call assign_colors
-    # the pad's own name at the top for three seconds, when there is
-    # one
     la t0, pad_name
     jab.sys.pad.name t0
     bnez a0, 2f
@@ -168,8 +90,6 @@ _start:
     li t0, 1
     sb t0, 0(t1)
 2:
-    # the right stick: Z and RZ on this pad, RX and RY on one laid out
-    # the other way, as byte offsets into the state
     li t0, JAB_PAD_AXES + 2 * JAB_ABS_Z
     la t1, right_x
     sd t0, 0(t1)
@@ -187,15 +107,12 @@ _start:
     la t1, right_y
     sd t0, 0(t1)
 3:
-    # your sphere at the centre, still, on the black the framebuffer
-    # starts with
     li t0, (JAB_DISPLAY_WIDTH / 2) * ONE
     la t1, player_x
     sd t0, 0(t1)
     li t0, (JAB_DISPLAY_HEIGHT / 2) * ONE
     la t1, player_y
     sd t0, 0(t1)
-    # the other somewhere, from the clock
     rdtime t0
     li t1, JAB_DISPLAY_WIDTH - 2 * RADIUS
     remu t2, t0, t1
@@ -246,8 +163,6 @@ no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
 
-# read_keys: take every key event waiting from the keyboard and apply
-# it.
 read_keys:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -261,9 +176,6 @@ read_keys:
     addi sp, sp, 16
     ret
 
-# read_api: take every key event the host has sent over the API and
-# apply it. Bytes arrive as a stream, so a record may come in two
-# pieces; the piece in hand waits in cmd_partial for the rest.
 read_api:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -292,7 +204,6 @@ read_api:
     sd t4, 0(t3)
     li t5, CMD_SIZE
     bne t4, t5, 2b
-    # a whole record
     sd zero, 0(t3)
     la t5, cmd_partial
     lhu a0, CMD_CODE(t5)
@@ -304,10 +215,6 @@ read_api:
     addi sp, sp, 48
     ret
 
-# read_pad: take every pad event waiting; a button pressed announces
-# itself, THUMBL or THUMBR stopping your sphere and any other painting
-# it that button's colour; the announced button released starts its
-# name's three seconds; the axes are read as state each tick.
 read_pad:
 1:
     jab.sys.pad.input
@@ -320,7 +227,6 @@ read_pad:
     li t1, JAB_KEY_PRESSED
     beq a2, t1, 3f
     bnez a2, 1b                 # held: nothing new
-    # released: the announced button's name starts to go
     la t1, label_code
     ld t1, 0(t1)
     bne a1, t1, 1b
@@ -329,7 +235,6 @@ read_pad:
     sd t1, 0(t2)
     j 1b
 3:
-    # pressed: its name, staying while it is held
     la t1, label_code
     sd a1, 0(t1)
     la t1, label_left
@@ -373,8 +278,6 @@ read_pad:
 9:
     ret
 
-# label_tick: the frame's time off the name's three seconds, once they
-# have started; at their end the strip is cleared.
 label_tick:
     la t0, label_left
     ld t1, 0(t0)
@@ -398,8 +301,6 @@ label_tick:
 9:
     ret
 
-# elapsed: the clock's ticks since the last frame into dt, held to
-# DT_MAX, and the clock noted for the next frame.
 elapsed:
     rdtime t0
     la t1, last_time
@@ -414,8 +315,6 @@ elapsed:
     sd t0, 0(t1)
     ret
 
-# advance: a0 becomes a0 plus a1, a rate a second, over the frame's
-# time: a1 times dt over JAB_TIME_HZ. Clobbers t0 to t2.
 advance:
     la t0, dt
     ld t0, 0(t0)
@@ -425,9 +324,6 @@ advance:
     add a0, a0, t1
     ret
 
-# right_stick: with the right stick off its rest, your sphere's colour
-# from its exact position: red from x, green from y, each across the
-# stick's whole travel, and blue from how far it is pushed.
 right_stick:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -467,8 +363,6 @@ right_stick:
     addi sp, sp, 32
     ret
 
-# right_axes: the right stick's axes from the state, a0 across and a1
-# down, normalised. Clobbers t0 and t1 only.
 right_axes:
     la t0, pad_state
     la t1, right_x
@@ -481,7 +375,6 @@ right_axes:
     lh a1, 0(t1)
     ret
 
-# assign_colors: a colour for every button, at random.
 assign_colors:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -497,8 +390,6 @@ assign_colors:
     addi sp, sp, 16
     ret
 
-# random_color: a0 becomes a colour, 0x00RRGGBB, each channel from
-# COLOR_FLOOR up so it shows on black.
 random_color:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -522,7 +413,6 @@ random_color:
     addi sp, sp, 16
     ret
 
-# random: a0 becomes the next value of an xorshift over rand_state.
 random:
     la t0, rand_state
     ld t1, 0(t0)
@@ -536,8 +426,6 @@ random:
     mv a0, t1
     ret
 
-# apply_key: a0 is a key's code and a1 its value. W, A, S, D set and
-# clear their held flags; the space bar, pressed, stops your sphere.
 apply_key:
     li t0, JAB_KEY_SPACE
     bne a0, t0, 2f
@@ -575,12 +463,6 @@ apply_key:
 9:
     ret
 
-# drive_vector: the acceleration, a second, a0 along x and a1 along y
-# in fixed point: the held keys at ACCEL each way, the left stick's
-# axes at ACCEL scaled by each over full scale, the hat's at ACCEL
-# outright, and the right stick's along its own direction at a quarter
-# of ACCEL, ACCEL, or twice it by thirds of its throw, the sum held
-# within ACCEL_MAX either way.
 drive_vector:
     addi sp, sp, -48
     sd ra, 40(sp)
@@ -597,7 +479,6 @@ drive_vector:
     lbu t2, 0(t0)
     sub a1, a1, t2
     mul a1, a1, t1
-    # the stick
     la t0, pad_state
     lh t2, (JAB_PAD_AXES + 2 * JAB_ABS_X)(t0)
     mul t2, t2, t1
@@ -608,7 +489,6 @@ drive_vector:
     mul t2, t2, t1
     div t2, t2, t3
     add a1, a1, t2
-    # the hat
     lh t2, (JAB_PAD_AXES + 2 * JAB_ABS_HAT0X)(t0)
     beqz t2, 1f
     bltz t2, 11f
@@ -625,8 +505,6 @@ drive_vector:
 21:
     sub a1, a1, t1
 2:
-    # the right stick: how far it is pushed, which third of the way
-    # that is, and that strength along its direction
     sd a0, 0(sp)
     sd a1, 8(sp)
     call right_axes
@@ -670,7 +548,6 @@ drive_vector:
     ld a0, 0(sp)
     ld a1, 8(sp)
 8:
-    # held within ACCEL_MAX
     li t1, ACCEL_MAX
     ble a0, t1, 3f
     mv a0, t1
@@ -689,10 +566,6 @@ drive_vector:
     addi sp, sp, 48
     ret
 
-# drive: a0 is a speed and a1 the acceleration on it, a second; a0
-# becomes the speed after the frame's time: pushed, or with no push
-# slowed toward a stop at DECEL a second and not past it, and held
-# under TOP_SPEED.
 drive:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -726,10 +599,6 @@ drive:
     addi sp, sp, 16
     ret
 
-# wall: a0 is a position, a1 its speed, a2 the least centre, a3 the
-# greatest, in pixels; a0 and a1 become the position after the frame's
-# time and the speed, reversed when a wall was hit, and a2 becomes 1
-# when one was, else 0.
 wall:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -759,8 +628,6 @@ wall:
     addi sp, sp, 32
     ret
 
-# clamp: a0 is a position, a1 the least centre and a2 the greatest in
-# pixels; a0 becomes the position kept between them.
 clamp:
     srai t0, a0, FIX
     bge t0, a1, 1f
@@ -772,7 +639,6 @@ clamp:
 2:
     ret
 
-# isqrt: a0 becomes the whole square root of a0, rounded down.
 isqrt:
     beqz a0, 3f
     mv t0, a0
@@ -788,9 +654,6 @@ isqrt:
 3:
     ret
 
-# move_player: the drive vector from the keys, the stick, and the hat,
-# then your sphere's speed and position, noting a wall hit on either
-# axis.
 move_player:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -837,7 +700,6 @@ move_player:
     addi sp, sp, 16
     ret
 
-# move_ball: the other sphere on, and off the walls, noting a hit.
 move_ball:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -871,11 +733,6 @@ move_ball:
     addi sp, sp, 16
     ret
 
-# collide: when the spheres have met, each one closing on the other
-# has its speed reflected about the line between the centres, as off a
-# wall, and the two are set apart along that line so they never
-# overlap, kept on the screen. The meeting is noted with its point,
-# midway between the centres.
 collide:
     addi sp, sp, -64
     sd ra, 56(sp)
@@ -893,7 +750,6 @@ collide:
     ld s4, 0(t0)
     la t0, ball_y
     ld s5, 0(t0)
-    # from your centre to the other: dx, dy, and the distance squared
     sub s6, s4, s2
     sub s7, s5, s3
     mul a5, s6, s6
@@ -902,7 +758,6 @@ collide:
     li t0, TOUCH_SQ
     slli t0, t0, 2 * FIX
     bgt a5, t0, 9f
-    # a meeting, and where: midway between the centres
     add t0, s2, s4
     srai t0, t0, 1
     la t1, meet_x
@@ -915,8 +770,6 @@ collide:
     la t1, met
     sb t0, 0(t1)
     beqz a5, 3f
-    # the other sphere, if closing: its speed's part along the line,
-    # taken away twice
     la t0, ball_vx
     ld t5, 0(t0)
     la t0, ball_vy
@@ -937,7 +790,6 @@ collide:
     la t0, ball_vy
     sd t6, 0(t0)
 1:
-    # yours, if closing, the same way
     la t0, player_vx
     ld t5, 0(t0)
     la t0, player_vy
@@ -958,13 +810,11 @@ collide:
     la t0, player_vy
     sd t6, 0(t0)
 2:
-    # apart: half the shortfall each, along the line
     mv a0, a5
     call isqrt
     mv a4, a0
     j 4f
 3:
-    # centres together: apart along x
     li s6, ONE
     li s7, 0
     li a4, ONE
@@ -1016,16 +866,11 @@ collide:
     addi sp, sp, 64
     ret
 
-# report: what changed this frame, as records into the report buffer,
-# sent to the host in one write: each sphere's velocity when it differs
-# from last frame's, the drive vector when it differs, and a hit record
-# per wall hit and per sphere of a meeting; then the notes are cleared.
 report:
     addi sp, sp, -16
     sd ra, 8(sp)
     la t0, report_count
     sd zero, 0(t0)
-    # your velocity
     la t0, player_vx
     ld a3, 0(t0)
     la t0, player_vy
@@ -1048,7 +893,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 2:
-    # the other's velocity
     la t0, ball_vx
     ld a3, 0(t0)
     la t0, ball_vy
@@ -1071,7 +915,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 4:
-    # the drive vector the keys, the stick, and the hat apply
     la t0, drive_x
     ld a3, 0(t0)
     la t0, drive_y
@@ -1094,8 +937,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 6:
-    # wall hits: the contact point is the centre moved a radius toward
-    # the wall it is against
     la t0, player_hit_x
     lbu t0, 0(t0)
     beqz t0, 7f
@@ -1148,7 +989,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 10:
-    # a button's colour, once
     la t0, color_changed
     lbu t1, 0(t0)
     beqz t1, 14f
@@ -1162,7 +1002,6 @@ report:
     li a2, AGAINST_WALL
     call append_report
 14:
-    # a meeting: one record for each, with the same point
     la t0, met
     lbu t0, 0(t0)
     beqz t0, 12f
@@ -1205,8 +1044,6 @@ report:
     addi sp, sp, 16
     ret
 
-# toward_side: a3, a4 are a centre against the left or right wall; a3
-# becomes the contact point's x, a radius toward that wall.
 toward_side:
     li t0, LEFT * ONE
     li t1, RADIUS * ONE
@@ -1217,8 +1054,6 @@ toward_side:
     add a3, a3, t1
     ret
 
-# toward_edge: a3, a4 are a centre against the top or bottom wall; a4
-# becomes the contact point's y, a radius toward that wall.
 toward_edge:
     li t0, TOP * ONE
     li t1, RADIUS * ONE
@@ -1229,9 +1064,6 @@ toward_edge:
     add a4, a4, t1
     ret
 
-# append_report: a record of kind a0 about sphere a1, against a2, with
-# a3 and a4 as x and y, into the report buffer after those already
-# there; one more than REPORT_MAX is dropped.
 append_report:
     la t0, report_count
     ld t1, 0(t0)
@@ -1252,8 +1084,6 @@ append_report:
 1:
     ret
 
-# render: erase both spheres where they were, draw them where they are,
-# and flip the one rectangle holding all four squares.
 render:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1286,8 +1116,6 @@ render:
     la t0, player_color
     lwu a2, 0(t0)
     call draw_disc
-    # the rectangle: the least and greatest centres, less and plus the
-    # radius
     la t0, old_player_x
     ld a0, 0(t0)
     la t0, old_ball_x
@@ -1322,8 +1150,6 @@ render:
     sub a3, a3, a1
     mv a0, s2
     mv a2, s3
-    # a button to announce: its name into the strip, and both
-    # rectangles flipped as one
     la t0, label_changed
     lbu t1, 0(t0)
     beqz t1, 5f
@@ -1353,9 +1179,6 @@ render:
     addi sp, sp, 16
     ret
 
-# draw_label: the strip cleared across the screen, then the label's
-# text centred in it, bold off-white at the label's scale; an empty
-# text leaves it clear.
 draw_label:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1367,7 +1190,6 @@ draw_label:
     call fill_rect
     la t0, label_text
     ld a0, 0(t0)
-    # its width: a cell a character, and the bold strike
     mv t1, a0
     li t2, 0
 1:
@@ -1395,7 +1217,6 @@ draw_label:
     addi sp, sp, 16
     ret
 
-# fill_rect: the rectangle at a0, a1 of a2 by a3 in the colour a4.
 fill_rect:
     li t0, JAB_DISPLAY_PITCH
     mul t0, t0, a1
@@ -1418,8 +1239,6 @@ fill_rect:
     bnez t2, 1b
     ret
 
-# least_greatest: a0 becomes the least of a0, t1, t2, t3 and a2 the
-# greatest of a2, t1, t2, t3.
 least_greatest:
     bge t1, a0, 1f
     mv a0, t1
@@ -1441,7 +1260,6 @@ least_greatest:
 6:
     ret
 
-# remember: where the spheres are now, in pixels, to erase next frame.
 remember:
     la t0, player_x
     ld t1, 0(t0)
@@ -1465,8 +1283,6 @@ remember:
     sd t1, 0(t0)
     ret
 
-# fill_square: the square of side 2 * RADIUS + 1 around (a0, a1) in the
-# colour a2.
 fill_square:
     li t0, -RADIUS
     li t6, RADIUS
@@ -1489,7 +1305,6 @@ fill_square:
     ble t0, t6, 1b
     ret
 
-# draw_disc: the disc of RADIUS around (a0, a1) in the colour a2.
 draw_disc:
     li t0, -RADIUS
     li t6, RADIUS
@@ -1631,8 +1446,6 @@ met:
 .section .rodata
 msg_no_display:
     .asciz "pad: no display\n"
-# The buttons' names, evdev's, from JAB_BTN_GAMEPAD; the last is for a
-# button with none
 name_south:
     .asciz "SOUTH"
 name_east:
