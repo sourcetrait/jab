@@ -220,6 +220,16 @@ the near blocks' share, the far and edge ones staying on the lit loop
 (tile.S). The tile arena is reset after the bake, since a map's maps are
 the tiles' frame.
 
+## count_report
+
+A COUNT build's line after each reported frame's: `fps: count {divides}
+divides, {avoided} avoided; blocks {shifted} shifted, {short} short;
+negative steps off sixteen {u} in u, {v} in v; flat spans {flat};
+mismatches {mismatches}`, from count_stats (raster.S). The divides
+span_fill made before a change are the made plus the avoided; every
+avoided one was recomputed from its original operands and compared, a
+difference counted a mismatch.
+
 ## clear_screen
 
 Falls into fill_screen with the colour 0.
@@ -444,7 +454,9 @@ Falls into fill_screen with the colour 0.
 
 `14 u8`.
 
-The debug lines' text, from here to word_resets, is in a debug build alone.
+The debug lines' text, from here to word_resets, is in a debug build alone,
+and the count line's after it, msg_count to word_count_mismatches, in a
+COUNT build alone.
 
 ## word_space
 
@@ -581,6 +593,38 @@ The debug lines' text, from here to word_resets, is in a debug build alone.
 ## word_resets
 
 `10 u8`.
+
+## msg_count
+
+`12 u8`.
+
+## word_count_avoided
+
+`11 u8`.
+
+## word_count_shifted
+
+`18 u8`.
+
+## word_count_short
+
+`11 u8`.
+
+## word_count_negative_u
+
+`36 u8`.
+
+## word_count_negative_v
+
+`8 u8`.
+
+## word_count_flat
+
+`19 u8`.
+
+## word_count_mismatches
+
+`14 u8`.
 
 ## k_seconds_a_tick
 

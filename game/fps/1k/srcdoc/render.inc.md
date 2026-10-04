@@ -983,6 +983,47 @@ each cell built or shrunk, and is never added to them.
 
 The stats' bytes.
 
+## .set COUNT_DIVIDES
+
+`u64`: on a COUNT build, the divides span_fill made this frame.
+
+The count record, count_stats in raster.S, the instrument of MapperDivides'
+proof: zeroed in world_draw beside the stats, raised by count_add, and
+printed by count_report after the frame line, on a COUNT build alone. The
+divides span_fill made before a change are the made plus the avoided.
+
+## .set COUNT_AVOIDED
+
+`u64`: the divides a change avoided, each recomputed for its comparison.
+
+## .set COUNT_SHIFTED
+
+`u64`: the full blocks whose steps were shifted.
+
+## .set COUNT_SHORT
+
+`u64`: the short last blocks, which divide.
+
+## .set COUNT_NEGATIVE_U
+
+`u64`: the full blocks whose u difference was negative and not a multiple of 16.
+
+## .set COUNT_NEGATIVE_V
+
+`u64`: the same for v.
+
+## .set COUNT_FLAT
+
+`u64`: the spans whose 1/z held along the row, POLY_IZA zero.
+
+## .set COUNT_MISMATCHES
+
+`u64`: the results that differed from their references, which must stay 0.
+
+## .set COUNT_SIZE
+
+The count record's bytes.
+
 ## .set REPORT_KIND
 
 `u32`: a record's kind over the API, a REPORT_*.

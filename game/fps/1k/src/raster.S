@@ -830,6 +830,15 @@ poly_rect:
     addi s5, a5, 16                 # a coordinate to its texel at the level
 .endm
 
+.ifdef COUNT
+.macro count_add field, scratch, base, n=1
+    la \base, count_stats
+    ld \scratch, \field(\base)
+    addi \scratch, \scratch, \n
+    sd \scratch, \field(\base)
+.endm
+.endif
+
 .balign CODE_PAGE
 span_fill:
     addi sp, sp, -232
@@ -920,6 +929,9 @@ span_fill:
     bge t3, t4, 1f
     mv t3, t4
 1:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z, 48.16
@@ -936,6 +948,9 @@ span_fill:
     bge t3, t4, 21f
     mv t3, t4
 21:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z at the end
@@ -955,6 +970,9 @@ span_fill:
     bge a6, t4, 23f
     mv a6, t4
 23:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a7, t4
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, a6                  # z a row below the start
@@ -984,6 +1002,9 @@ span_fill:
     bge a7, t4, 25f
     mv a7, t4
 25:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a6, t4
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, a7                  # z a row below the end
@@ -1014,6 +1035,9 @@ span_fill:
 26:
     ld a7, 208(sp)
     sub t3, a6, a7
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a6, a7
+.endif
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
     ld t3, 16(sp)
@@ -1079,6 +1103,9 @@ span_fill:
     bge t3, t4, 33f
     mv t3, t4
 33:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z at the end
@@ -1090,6 +1117,9 @@ span_fill:
     add t5, t5, s5                  # v/z at the end
     mul t5, t5, t4
     srai t5, t5, 16                 # v at the end
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6, 2
+.endif
     sub t6, t5, s9
     div t6, t6, s11                 # dv a pixel
     sub t4, t3, s8
@@ -1184,6 +1214,9 @@ span_fill:
     bge t3, t4, 444f
     mv t3, t4
 444:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6
+.endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z there
@@ -1231,6 +1264,9 @@ span_fill:
     sub s0, a5, a6                  # the step a pixel
     j 449f
 448:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a7, t4, 3
+.endif
     li a0, ((1 << CHANNEL_BITS) - 1)
     and a6, a5, a0
     and t4, t3, a0
@@ -1532,6 +1568,9 @@ span_fill:
     bgtz s10, 30b
     j 90f
 70:
+.ifdef COUNT
+    count_add COUNT_DIVIDES, a5, a6, 2
+.endif
     la t3, poly
     lwu t4, POLY_TEXWI(t3)
     slli t3, t4, 16
@@ -1607,6 +1646,10 @@ span_fill:
 
 .section .bss
 .balign 8
+.ifdef COUNT
+count_stats:
+    .skip COUNT_SIZE
+.endif
 vert_count:
     .skip 8
 edge_count:

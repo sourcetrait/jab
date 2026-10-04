@@ -71,6 +71,17 @@ world_draw:
     sd zero, STAT_TILES_BUILT(t1)
     sd zero, STAT_TILED_PIXELS(t1)
     sd zero, STAT_TILE_TICKS(t1)
+.ifdef COUNT
+    la t1, count_stats
+    sd zero, COUNT_DIVIDES(t1)
+    sd zero, COUNT_AVOIDED(t1)
+    sd zero, COUNT_SHIFTED(t1)
+    sd zero, COUNT_SHORT(t1)
+    sd zero, COUNT_NEGATIVE_U(t1)
+    sd zero, COUNT_NEGATIVE_V(t1)
+    sd zero, COUNT_FLAT(t1)
+    sd zero, COUNT_MISMATCHES(t1)
+.endif
     la t0, tile_budget_frame
     ld t1, 0(t0)
     la t0, tile_budget

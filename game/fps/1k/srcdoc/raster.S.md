@@ -230,6 +230,15 @@ The shift by a register costs what the shift by 16 did; s5, v/z, rides 40(sp)
 for the block, as the tile loop spills it, and the block's end takes it
 back for every path.
 
+## .macro count_add
+
+The COUNT build's one instrument, MapperDivides' proof: a counter in
+count_stats raised where span_fill divides, avoids a divide, or meets a
+case the proof must see exercised. The two registers it takes are the
+ones the site has free, each site's read off the code that follows it,
+since a count must change nothing the drawing reads; no build but COUNT
+assembles a line of it.
+
 ## span_fill
 
 span_fill holds no float: a float helper under TCG costs about 5 ns, and the
@@ -276,6 +285,14 @@ beside, and the lumel samples it reads, into the frame's stats for the frame
 line, which reads the overdraw as pixels entered against the screen's and
 the cadence as samples against blocks; the light's microseconds on that
 line are the sprites' evaluations alone.
+
+A COUNT build (`--set debug,count`) counts every divide span_fill makes,
+site by site, into count_stats, which count_report prints after the frame
+line. It is the instrument of MapperDivides' proof and is never timed: its
+counters move the code after them, and the linker then shortens loads
+differently, hud.S's code 542 bytes shorter on the first such build, the
+images otherwise alike; without COUNT the release and debug images are
+byte for byte the build's before the instrument.
 
 span_fill is page-aligned and kept under a page: QEMU's translator ends a
 block at a page boundary and chains blocks within a page only, so a loop
@@ -520,6 +537,10 @@ the store, where the colour register is dead. The instrument is the
 acceptance measure of a change to what is drawn where: two builds posed
 on the same views must own every pixel alike, which the colour captures
 cannot say once a span's blocks shift.
+
+## count_stats
+
+`COUNT_SIZE u8`: on a COUNT build alone, the frame's counts of span_fill's divides, the COUNT_* fields (render.inc).
 
 ## vert_count
 

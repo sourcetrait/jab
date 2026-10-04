@@ -208,6 +208,9 @@ frame:
     beqz t1, 1f
 2:
     call frame_report
+.ifdef COUNT
+    call count_report
+.endif
     call sectors_report
 1:
 .endif
@@ -680,6 +683,57 @@ frame_report:
     addi sp, sp, 16
     ret
 
+.ifdef COUNT
+count_report:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, line
+    la a1, msg_count
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_DIVIDES(t0)
+    call append_dec
+    la a1, word_count_avoided
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_AVOIDED(t0)
+    call append_dec
+    la a1, word_count_shifted
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_SHIFTED(t0)
+    call append_dec
+    la a1, word_count_short
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_SHORT(t0)
+    call append_dec
+    la a1, word_count_negative_u
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_NEGATIVE_U(t0)
+    call append_dec
+    la a1, word_count_negative_v
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_NEGATIVE_V(t0)
+    call append_dec
+    la a1, word_count_flat
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_FLAT(t0)
+    call append_dec
+    la a1, word_count_mismatches
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_MISMATCHES(t0)
+    call append_dec
+    call line_end
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.endif
+
 sectors_report:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -1068,6 +1122,24 @@ word_tiled:
     .asciz ", tiled "
 word_resets:
     .asciz ", resets "
+.ifdef COUNT
+msg_count:
+    .asciz "fps: count "
+word_count_avoided:
+    .asciz " divides, "
+word_count_shifted:
+    .asciz " avoided; blocks "
+word_count_short:
+    .asciz " shifted, "
+word_count_negative_u:
+    .asciz " short; negative steps off sixteen "
+word_count_negative_v:
+    .asciz " in u, "
+word_count_flat:
+    .asciz " in v; flat spans "
+word_count_mismatches:
+    .asciz "; mismatches "
+.endif
 .endif
 
 .balign 4

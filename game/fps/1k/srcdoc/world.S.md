@@ -31,7 +31,8 @@ right before its fill (tiles_bind, tile.S): after the mode and the map's
 bind, since the tiled flag rides the lit one, and after the loops'
 projection, which is why the plane's bind sits at the end of its loop
 rather than beside the map's. The frame's tile budget is set beside the
-stats' zeroing, so the first polygons drawn build first.
+stats' zeroing, so the first polygons drawn build first; a COUNT build
+zeroes its count_stats there too (raster.S).
 
 ## k_near_sq_d
 
