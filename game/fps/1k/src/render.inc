@@ -168,7 +168,8 @@
 .set PLANED_SIZE, 112
 .set DEPTH_BITS, 26
 .set Z_SHIFT, (DEPTH_BITS + 16)
-.set BLOCK, 16
+.set BLOCK_SHIFT, 4
+.set BLOCK, (1 << BLOCK_SHIFT)
 .set IZ_MIN, 4096
 .set SKY_DEPTH, 1
 .set STAT_SECTORS, 0

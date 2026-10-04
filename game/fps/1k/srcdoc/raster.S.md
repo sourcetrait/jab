@@ -246,7 +246,8 @@ probe measured the float span at 12 to 14 ms a megapixel against 5.4 for the
 integer one. 1/z, u/z, and v/z at the span's first pixel are a multiply and
 an add each; blocks of 16 pixels, at whose end one divide gives z as 2^42
 over 1/z, clamped to IZ_MIN for it, and two multiplies give u and v exact
-there, the steps within by two divides; a pixel is a depth load and a skip
+there, the steps within by a shift for a full block and by two divides for
+a short last one; a pixel is a depth load and a skip
 when the buffer's 1/z is at or past the surface's, else the texel at (v &
 vmask) << wshift + (u & umask) << 2 and the pixel and the depth stored. The
 lit modes unpack each channel of the stepped brightness to 8.8 by two shifts
@@ -285,6 +286,14 @@ beside, and the lumel samples it reads, into the frame's stats for the frame
 line, which reads the overdraw as pixels entered against the screen's and
 the cadence as samples against blocks; the light's microseconds on that
 line are the sprites' evaluations alone.
+
+A full block's steps are a shift by BLOCK_SHIFT, not a divide. RISC-V's
+div rounds toward zero and an arithmetic shift rounds down, so a negative
+difference takes BLOCK - 1 first, (d + ((d >> 63) & 15)) >> 4, which is d /
+16 for every 64-bit d, the signed extremes included; a short last block
+divides by its length. Quake shifts the full step bare (WinQuake
+`d_scan.c`), a rounding that would move texels here, so the pictures stay
+the divide's to the byte.
 
 A COUNT build (`--set debug,count`) counts every divide span_fill makes,
 site by site, into count_stats, which count_report prints after the frame

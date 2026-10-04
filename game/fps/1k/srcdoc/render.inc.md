@@ -869,6 +869,10 @@ plane_d's bytes, at twice the plane's offsets.
 
 Z as 2^Z_SHIFT over 1/z, 48.16.
 
+## .set BLOCK_SHIFT
+
+BLOCK's power of two: a full block's steps are shifted by it.
+
 ## .set BLOCK
 
 A span block's pixels.

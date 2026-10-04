@@ -1117,13 +1117,51 @@ span_fill:
     add t5, t5, s5                  # v/z at the end
     mul t5, t5, t4
     srai t5, t5, 16                 # v at the end
-.ifdef COUNT
-    count_add COUNT_DIVIDES, a5, a6, 2
-.endif
     sub t6, t5, s9
-    div t6, t6, s11                 # dv a pixel
     sub t4, t3, s8
+    li a5, BLOCK
+    bne s11, a5, 36f
+.ifdef COUNT
+    div a6, t6, s11                 # dv's reference, the divide the shift replaces
+    div a7, t4, s11                 # du's
+    bgez t6, 3601f
+    andi a0, t6, (BLOCK - 1)
+    beqz a0, 3601f
+    count_add COUNT_NEGATIVE_V, a0, t2
+3601:
+    bgez t4, 3602f
+    andi a0, t4, (BLOCK - 1)
+    beqz a0, 3602f
+    count_add COUNT_NEGATIVE_U, a0, t2
+3602:
+.endif
+    srai a5, t6, 63
+    andi a5, a5, (BLOCK - 1)
+    add t6, t6, a5
+    srai t6, t6, BLOCK_SHIFT        # dv a pixel, rounded toward zero as a divide
+    srai a5, t4, 63
+    andi a5, a5, (BLOCK - 1)
+    add t4, t4, a5
+    srai t4, t4, BLOCK_SHIFT        # du a pixel
+.ifdef COUNT
+    count_add COUNT_SHIFTED, a0, t2
+    count_add COUNT_AVOIDED, a0, t2, 2
+    beq a6, t6, 3603f
+    count_add COUNT_MISMATCHES, a0, t2
+3603:
+    beq a7, t4, 3604f
+    count_add COUNT_MISMATCHES, a0, t2
+3604:
+.endif
+    j 37f
+36:
+.ifdef COUNT
+    count_add COUNT_SHORT, a0, t2
+    count_add COUNT_DIVIDES, a0, t2, 2
+.endif
+    div t6, t6, s11                 # dv a pixel
     div t4, t4, s11                 # du a pixel
+37:
     sd t3, 0(sp)
     sd t5, 8(sp)
     mv t5, t4
