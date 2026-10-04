@@ -33,7 +33,16 @@
 .set CLOCK_FLIP_DONE, 48
 .set CLOCK_AWAIT, 56
 .set CLOCK_FLIP_STATUS, 64
-.set CLOCK_SIZE, 72
+.set CLOCK_SIMULATION, 72
+.set CLOCK_WAIT, 80
+.set CLOCK_PACING, 88
+.set CLOCK_WAKES, 96
+.set CLOCK_PRESSES, 104
+.set CLOCK_ATTEMPTS, 112
+.set CLOCK_REFUSALS, 120
+.set CLOCK_SIZE, 128
+.set FLIP_EARLY, 1
+.set FLIP_NONE, 255
 
 .section .text
 .global _start
@@ -143,6 +152,15 @@ frame:
     sd s9, CLOCK_START(t1)
     sub t2, t0, s9
     sd t2, CLOCK_REPORT(t1)         # the records, the reporting so far
+    sd zero, CLOCK_WAIT(t1)
+    sd zero, CLOCK_PACING(t1)
+    sd zero, CLOCK_FLIP(t1)
+    sd zero, CLOCK_WAKES(t1)
+    sd zero, CLOCK_PRESSES(t1)
+    sd zero, CLOCK_ATTEMPTS(t1)
+    sd zero, CLOCK_REFUSALS(t1)
+    li t2, FLIP_NONE
+    sd t2, CLOCK_FLIP_STATUS(t1)    # kept by a frame that reaches no flip
     sub t1, t0, s7
     mv s7, t0
     fcvt.s.l fa0, t1
@@ -168,6 +186,8 @@ frame:
     divu t0, t0, t1
     la t1, game_us
     sw t0, 0(t1)                    # the game's microseconds
+    la t1, frame_clock
+    sd s9, CLOCK_SIMULATION(t1)     # the simulation's time, camera_look's start
     rdtime s9
     call world_draw
     rdtime t0
@@ -196,8 +216,19 @@ frame:
     la t1, frame_clock
     sd a0, CLOCK_FLIP_STATUS(t1)
     sub t2, t0, s9
-    sd t2, CLOCK_FLIP(t1)
+    ld t3, CLOCK_FLIP(t1)
+    add t3, t3, t2
+    sd t3, CLOCK_FLIP(t1)           # every attempt's call
     sd t0, CLOCK_FLIP_DONE(t1)
+    ld t3, CLOCK_ATTEMPTS(t1)
+    addi t3, t3, 1
+    sd t3, CLOCK_ATTEMPTS(t1)
+    li t2, FLIP_EARLY
+    bne a0, t2, 3f
+    ld t3, CLOCK_REFUSALS(t1)
+    addi t3, t3, 1
+    sd t3, CLOCK_REFUSALS(t1)       # an attempt answered as early
+3:
     mv s9, t0
     call state_report
 .ifdef DEBUG
@@ -371,7 +402,7 @@ line_end:
 frame_records:
     mv t5, a1                       # the frame's number, past the writes
     la t0, frame_clock
-    la t1, record_pair
+    la t1, clock_records
     li t2, REPORT_FRAME
     sw t2, REPORT_KIND(t1)
     sw t5, REPORT_FRAME_NUMBER(t1)
@@ -385,6 +416,8 @@ frame_records:
     sd t4, TIME_START(t1)
     ld t3, CLOCK_AWAIT(t0)
     sub t4, t3, t2
+    ld t2, CLOCK_WAIT(t0)
+    sub t4, t4, t2                  # the wait apart
     divu t4, t4, t6
     sw t4, TIME_CRITICAL(t1)
     sub t4, a0, t3
@@ -458,8 +491,39 @@ frame_records:
     la t2, tile_peak
     ld t3, 0(t2)
     sw t3, DRAW_TILE_PEAK(t1)
-    la t0, record_pair
-    li t1, (REPORT_SIZE * 2)
+    addi t1, t1, REPORT_SIZE        # the presentation record
+    la t0, frame_clock
+    li t2, REPORT_PRESENT
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    ld t2, CLOCK_SIMULATION(t0)
+    ld t3, CLOCK_ORIGIN(t0)
+    sub t4, t2, t3
+    divu t4, t4, t6
+    sd t4, PRESENT_SIMULATION(t1)
+    sub t4, a0, t3
+    divu t4, t4, t6
+    sd t4, PRESENT_NEXT_START(t1)   # the next frame's start, as it was read
+    ld t2, CLOCK_WAIT(t0)
+    divu t2, t2, t6
+    sw t2, PRESENT_WAIT(t1)
+    ld t2, CLOCK_PACING(t0)
+    divu t2, t2, t6
+    sw t2, PRESENT_PACING(t1)
+    ld t2, CLOCK_WAKES(t0)
+    sw t2, PRESENT_WAKES(t1)
+    ld t2, CLOCK_PRESSES(t0)
+    sw t2, PRESENT_WAIT_PRESSES(t1)
+    ld t2, CLOCK_ATTEMPTS(t0)
+    sw t2, PRESENT_FLIP_ATTEMPTS(t1)
+    ld t2, CLOCK_REFUSALS(t0)
+    sw t2, PRESENT_REFUSALS(t1)
+    li t2, CADENCE_AFTER_FLIP
+    sw t2, PRESENT_CADENCE(t1)
+    la t0, clock_records
+    li t1, (REPORT_SIZE * 3)
     jab.sys.api.write t0, t1
     la t0, measure_end
     lbu t1, 0(t0)
@@ -971,8 +1035,8 @@ frame_seconds:
 .balign 8
 frame_clock:
     .skip CLOCK_SIZE
-record_pair:
-    .skip (REPORT_SIZE * 2)
+clock_records:
+    .skip (REPORT_SIZE * 3)
 end_record:
     .skip REPORT_SIZE
 .balign 8

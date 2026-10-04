@@ -63,19 +63,28 @@ const CRACKS = 32
 # actor; its row), 4 the frame struck (the damage; the health), 5 a
 # pickup (the rounds), 6 a trace's answer (0 nothing, 1 a plane, 2 a
 # piece, 3 an android, 4 the player; the distance and the point in
-# millimetres); kinds 7 and 8 the frame before's clock and its drawing,
-# sent at each frame's start, and 9 the end of a measurement, which
-# gauge.nu reads (`gauge measure`) and `records` leaves out
+# millimetres); kinds 7, 8, and 10 the frame before's clock, its
+# drawing, and its presentation, sent at each frame's start, and 9 the
+# end of a measurement, which gauge.nu reads (`gauge measure`) and
+# `records` leaves out
 const RECORD = 64
-const CLOCK_KINDS = [7 8 9]
+const CLOCK_KINDS = [7 8 9 10]
 # A console record carries the command's byte where the state's sector
 # sits; the P frame's
 const CONSOLE_P = 80
-# The clock over the factory walk: the seed sent before the first frame
-# and the E closing the measurement half a second before the capture
+# The clock over the factory walk: the seed and the cadence sent before
+# the first frame, the E closing the measurement half a second before
+# the capture, and the records' schema; a frame's next start less its
+# start less its critical path, wait, and await, the microseconds the
+# conversions drop, at most CLOCK_RESIDUAL
 const CLOCK_SEED = 7
+const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
+const CLOCK_SCHEMA = 2
+const CLOCK_RESIDUAL = 4
+# A synthetic capture's frames start this many microseconds apart
+const FX_PERIOD = 20000
 const MET_GEOMETRY = 1
 const MET_ANDROID = 2
 const ROUSED = 1
@@ -726,7 +735,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         { name: "down", at: 5500ms, x: 1.5, y: 3.0, z: 1.6, yaw: 90, pitch: 0, way: [stair_ground down1 down2 down3 down4 down5 down6 garage], ambient: "garage" },
         { name: "ramp", at: 9500ms, x: 34.0, y: 13.0, z: -1.4, yaw: 90, pitch: 0, way: [drive_low drive_ramp], ambient: "yard" },
     ]
-    let walk_sends = ([{ at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }]
+    let walk_sends = ([{ at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }, { at: $CLOCK_SEED_AT, bytes: (gauge cadence-frame $CLOCK_CADENCE) }]
         | append ($factory_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
         | append [{ at: $CLOCK_END_AT, bytes: (pose command-frame "E") }]
         | sort-by at)
@@ -757,27 +766,40 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let ramp_end = ($factory_walks | last | get last)
     assert ($ramp_end.y > 27.0) $"the body reached the gate at the ramp's top: ($ramp_end)"
 
-    # the frame's clock over the walk: the seed answered before the first
-    # frame, the E closing the measurement with the end marker after its
-    # final frame's records, every frame from 0 to it with a frame and a
-    # draw record in order at the schema, each frame's phases within its
+    # the frame's clock over the walk: the seed and the cadence answered
+    # before the first frame, the E closing the measurement with the end
+    # marker after its final frame's records, every frame from 0 to it
+    # with a frame, a draw, and a presentation record in order at the
+    # schema, each at cadence 0, awaiting after its flip: no wait and no
+    # pacing, one flip attempt, a refusal only when it came early; each
+    # frame's start, critical path, wait, and await adding up to its next
+    # start, the next frame's start; each frame's phases within its
     # critical path and the drawing's parts within the drawing, the tiles'
     # time within the planes' and the walls', the tiled pixels within the
     # lit, the arena's peak at or past what it holds, and the game going
     # on past the measurement
     let walk_clock = (gauge measure $factory_walk.api [{ name: "walk", places: $factory_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
+    assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
     assert $walk_clock.complete $"the walk's measurement complete: ($walk_clock.problems)"
+    assert equal $walk_clock.schema $CLOCK_SCHEMA $"the walk's clock records at schema ($CLOCK_SCHEMA)"
+    let clock_rows = $walk_clock.rows
+    assert ($clock_rows | all {|r| $r.cadence == $CLOCK_CADENCE }) $"every frame of the walk presented at cadence ($CLOCK_CADENCE): ($walk_clock.cadences)"
+    let unbalanced = ($clock_rows | where {|r| $r.residual_us < 0 or $r.residual_us > $CLOCK_RESIDUAL })
+    assert ($unbalanced | is-empty) $"every frame's start, critical path, wait, and await add up to its next start: ($unbalanced | select frame start_us critical_us wait_us await_us next_start_us residual_us | first 3)"
+    let broken = ($clock_rows | window 2 | where {|w| $w.0.next_start_us != $w.1.start_us })
+    assert ($broken | is-empty) $"each frame's next start is the next frame's start: ($broken | first 3)"
+    let waited = ($clock_rows | where {|r| $r.wait_us != 0 or $r.pacing_us != 0 or $r.flip_attempts != 1 or $r.refusals != (if $r.flip_status == 1 { 1 } else { 0 }) })
+    assert ($waited | is-empty) $"each frame awaits after one flip attempt, no wait or pacing before it: ($waited | first 3)"
     assert $walk_clock.valid $"the walk's measurement valid: ($walk_clock.invalid)"
     assert ($walk_clock.past_window > 0) $"the game went on past the measurement: ($walk_clock.past_window) frames"
-    let clock_rows = $walk_clock.rows
     let outside = ($clock_rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
     assert ($outside | is-empty) $"every phase within its frame and every part within its drawing: ($outside | first 3)"
     assert ($clock_rows | all {|r| $r.tiles_us <= ($r.planes_us + $r.walls_us) }) "the tiles' time within the planes' and the walls'"
     assert ($clock_rows | all {|r| $r.tiled_pixels <= $r.lit_pixels }) "the tiled pixels within the lit"
     assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile arena's peak at or past what it holds"
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
-    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing"
+    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early"
 
     # the fight: the first android, facing the spawn, rouses and fires;
     # from the placed eye four rounds from the console strike it down to
@@ -1852,12 +1874,27 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # run, whatever frame count its measurement records, an unclassified one,
 # and an unusable one, a field whose values are null though its name is
 # the states', and a clock field on a clockless run; it names every run
-# it refuses; it admits a clockless run marked; and it refuses a run
-# missing a leg another run holds, one batch of a build or a whole
-# build, naming the run and its missing legs, and under --diagnostic
-# keeps that build's row for the leg with the batches missing it and no
-# value, the build's other legs valued as before.
-def gauge-rules [dir: path]: nothing -> nothing {
+# it refuses; it refuses a clockless run as unpaired and admits it marked
+# under --diagnostic; and it refuses a run missing a leg another run
+# holds, one batch of a build or a whole build, naming the run and its
+# missing legs, and under --diagnostic keeps that build's row for the leg
+# with the batches missing it and no value, the build's other legs valued
+# as before. At schema 2: a frame without its presentation record and a
+# capture of mixed schemas are incomplete; under cadence 1 a wait apart
+# from the critical path balances and a critical path holding it does
+# not; a flip refused as early is valid under cadence 0 and invalid under
+# 1; under cadence 0 a wait and a second attempt are invalid; attempts
+# past the refusals and the final one, a cadence outside 0 to 2, and a
+# next start apart from the next frame's start are invalid; a one-frame
+# capture closes through its next start alone, and one whose next start
+# does not close is invalid. A comparison refuses as unpaired a run whose
+# seed or cadence went unanswered, came late, or came early and again
+# late, whose identity asks a cadence outside 0 to 2 or none, or with a
+# frame at another cadence than asked, each named with its reason and
+# admitted marked under --diagnostic; it refuses two cadences under one
+# name and one build under two names, and keeps one image's two cadences
+# apart as two builds.
+export def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
     let good = (fx-items 3)
@@ -1926,7 +1963,7 @@ def gauge-rules [dir: path]: nothing -> nothing {
     }
     let clocked_rows = (do $rows_of true)
     let clockless_rows = (do $rows_of false)
-    let checked = { clocked: true, complete: true, problems: [], valid: true, invalid: [] }
+    let checked = { clocked: true, complete: true, problems: [], valid: true, invalid: [], seeded: true, late_seed: false }
     let stateless = { clocked: false, complete: false, problems: [], valid: false, invalid: [] }
     let never_shown = ["1 flips at status 2, never shown"]
     let never_closed = ["no end marker: the measurement never closed"]
@@ -1962,9 +1999,11 @@ def gauge-rules [dir: path]: nothing -> nothing {
         assert (not ($admitted.runs | where build == $name | get 0.reasons | is-empty)) $"the ($name) run keeps its reasons"
         assert equal ($admitted.table | where build == $name | get 0.standings) [$name] $"the ($name) build's row names its standing"
     }
-    let compared = (gauge compare [$valid_file (do $file_of "clockless")] "draw_us" 50)
-    let clockless_standings = ($compared.table | where build == "clockless" | get 0.standings)
-    assert equal $clockless_standings ["clockless"] "a clockless run is admitted and marked"
+    let clockless_file = (do $file_of "clockless")
+    let clockless = (try { gauge compare [$valid_file $clockless_file] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($clockless | str contains $"($clockless_file) run 1, unpaired: clockless") $"a clockless run is refused unpaired: ($clockless)"
+    let compared = (gauge compare [$valid_file $clockless_file] "draw_us" 50 --diagnostic)
+    assert equal ($compared.table | where build == "clockless" | get 0.standings) ["unpaired"] "--diagnostic admits a clockless run marked unpaired"
     assert equal ($compared.table | where build == "valid" | get 0.standings) ["valid"] "a valid run stands valid"
     let stopped = [
         { fixture: "empty", field: "draw_us", standing: "empty" }
@@ -2032,45 +2071,195 @@ def gauge-rules [dir: path]: nothing -> nothing {
     let build_admitted = (gauge compare [$whole_file $short_file] "draw_us" 50 --diagnostic)
     let short_ramp = ($build_admitted.table | where build == "short" and leg == "ramp")
     assert (($short_ramp | length) == 1 and ($short_ramp | get 0.value_us) == null and ($short_ramp | get 0.missing) == 1) $"under --diagnostic a build missing a leg keeps the leg's row, missing: ($build_admitted.table)"
+
+    # schema 2: every frame's presentation, one schema a capture
+    let good2 = (fx-items 3 --schema 2)
+    let m2 = (do $measure $good2)
+    assert ($m2.complete and $m2.valid and $m2.passes and $m2.seeded and $m2.cadence_set) $"a well-formed capture at schema 2: ($m2.problems) ($m2.invalid)"
+    assert equal [$m2.schema $m2.cadences $m2.final $m2.frames] [2 [0] 2 3] "schema 2, cadence 0, frames 0 to 2"
+    let unpresented = (do $measure ($good2 | where {|i| not ($i.kind == "present" and $i.frame == 1) }))
+    let without_record = $"a frame without its presentation record leaves the window incomplete: ($unpresented.problems)"
+    assert ((not $unpresented.complete) and ($unpresented.problems | any {|p| $p =~ "presentation records" })) $without_record
+    let mixed = (do $measure (fx-set $good2 "draw" 1 { schema: 1 }))
+    let mixed_says = $"a capture of mixed schemas is incomplete: ($mixed.problems)"
+    assert ((not $mixed.complete) and ($mixed.problems | any {|p| $p =~ "at schemas 1 in a capture at schema 2" })) $mixed_says
+
+    # cadence 1 waits before its flip: a wait apart from the critical path
+    # balances, a critical path holding it does not
+    let early = (fx-items 3 --schema 2 --cadence 1)
+    let waited = (fx-set (fx-set $early "present" 1 { wait: 500 }) "frame" 1 { await: ($FX_PERIOD - 1800 - 500) })
+    let apart = (do $measure $waited)
+    assert ($apart.complete and $apart.valid) $"a wait apart from the critical path balances under cadence 1: ($apart.invalid)"
+    let holding = (do $measure (fx-set $waited "frame" 1 { critical: 2300 }))
+    let holding_says = $"a critical path holding the wait breaks the frame's sum: ($holding.invalid)"
+    assert ((not $holding.valid) and ($holding.invalid | any {|r| $r =~ "not their critical path, wait, and await" })) $holding_says
+
+    # a flip refused as early: valid under cadence 0, which awaits after
+    # it, invalid under 1, which flips again until it presents
+    let refused_after = (do $measure (fx-set (fx-set $good2 "frame" 1 { status: 1 }) "present" 1 { refusals: 1 }))
+    assert ($refused_after.complete and $refused_after.valid) $"a flip refused as early is valid under cadence 0: ($refused_after.invalid)"
+    let refused_early = (do $measure (fx-set (fx-set $early "frame" 1 { status: 1 }) "present" 1 { refusals: 1 }))
+    let refused_says = $"a final flip refused as early is invalid under cadence 1: ($refused_early.invalid)"
+    assert ((not $refused_early.valid) and ($refused_early.invalid | any {|r| $r =~ "final flip was not presented" })) $refused_says
+
+    # cadence 0 waits nothing before its flip and flips once; attempts are
+    # the refusals and the final one; a cadence is 0 to 2
+    let waited_after = (do $measure (fx-set (fx-set $good2 "present" 1 { wait: 500 }) "frame" 1 { await: ($FX_PERIOD - 1800 - 500) }))
+    let waited_says = $"a wait under cadence 0 is invalid: ($waited_after.invalid)"
+    assert ((not $waited_after.valid) and ($waited_after.invalid | any {|r| $r =~ "under cadence 0 with a wait or a pacing" })) $waited_says
+    let twice_after = (do $measure (fx-set $good2 "present" 1 { attempts: 2, refusals: 1 }))
+    let twice_says = $"a second flip attempt under cadence 0 is invalid: ($twice_after.invalid)"
+    assert ((not $twice_after.valid) and ($twice_after.invalid | any {|r| $r =~ "attempted other than once" })) $twice_says
+    let miscounted = (do $measure (fx-set $early "present" 1 { attempts: 3, refusals: 1 }))
+    let miscounted_says = $"attempts past the refusals and the final one are invalid: ($miscounted.invalid)"
+    assert ((not $miscounted.valid) and ($miscounted.invalid | any {|r| $r =~ "not their refusals and their final attempt" })) $miscounted_says
+    let outside = (do $measure (fx-set $good2 "present" 1 { cadence: 5 }))
+    let outside_says = $"a cadence outside 0 to 2 is invalid: ($outside.invalid)"
+    assert ((not $outside.valid) and ($outside.invalid | any {|r| $r =~ "cadence outside 0 to 2" })) $outside_says
+
+    # a frame's next start is the next frame's start, its own sum balanced
+    # or not; a one-frame capture closes through its next start alone
+    let moved = (do $measure (fx-set (fx-set $good2 "present" 0 { next: ($FX_PERIOD + 100) }) "frame" 0 { await: ($FX_PERIOD + 100 - 1800) }))
+    let moved_apart = ($moved.invalid | any {|r| $r =~ "not the next frame's start" })
+    let moved_balanced = (not ($moved.invalid | any {|r| $r =~ "critical path, wait, and await" }))
+    assert ((not $moved.valid) and $moved_apart and $moved_balanced) $"a next start apart from the next frame's start is invalid, its sum balanced: ($moved.invalid)"
+    let one = (fx-items 1 --schema 2)
+    let closed = (do $measure $one)
+    assert ($closed.complete and $closed.valid and $closed.frames == 1) $"a one-frame capture closes through its next start: ($closed.problems) ($closed.invalid)"
+    let unclosed = (do $measure (fx-set $one "present" 0 { next: ($FX_PERIOD + 5000) }))
+    let unclosed_says = $"a one-frame capture whose next start does not close is invalid: ($unclosed.invalid)"
+    assert ((not $unclosed.valid) and ($unclosed.invalid | any {|r| $r =~ "critical path, wait, and await" })) $unclosed_says
+
+    # pairing: a seed or a cadence unanswered, answered late, or answered
+    # early and again late, an identity asking a cadence outside 0 to 2 or
+    # none, and a frame at another cadence than asked each leave a run
+    # unpaired, refused unless --diagnostic admits it marked
+    let paired = (fx-gauge $dir "paired" "paired" "paired" 0 $good2)
+    let without = {|kind: string| $good2 | where {|i| $i.kind != $kind } }
+    let unpaired = [
+        { name: "seed_unanswered", items: (do $without "ack"), cadence: 0, reason: "unseeded: no seed answered" }
+        { name: "seed_late", items: (fx-late (do $without "ack") { kind: "ack" }), cadence: 0, reason: "a seed answered after the first frame" }
+        { name: "seed_again", items: (fx-late $good2 { kind: "ack" }), cadence: 0, reason: "a seed answered after the first frame" }
+        { name: "cadence_unanswered", items: (do $without "cack"), cadence: 0, reason: "no cadence asked before the first frame" }
+        { name: "cadence_late", items: (fx-late (do $without "cack") { kind: "cack" }), cadence: 0, reason: "a cadence asked after the first frame" }
+        { name: "cadence_again", items: (fx-late $good2 { kind: "cack" }), cadence: 0, reason: "a cadence asked after the first frame" }
+        { name: "asked_outside", items: $good2, cadence: 3, reason: "asks cadence 3, outside 0 to 2" }
+        { name: "asked_none", items: $good2, cadence: null, reason: "the identity asks no cadence" }
+        { name: "asked_other", items: $good2, cadence: 1, reason: "frames at cadence 0 where the identity asked 1" }
+    ]
+    for u in $unpaired {
+        let file = (fx-gauge $dir $u.name $u.name $u.name $u.cadence $u.items)
+        let refused = (try { gauge compare [$paired $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        assert ($refused | str contains $"($file) run 1, unpaired: ") $"the ($u.name) run is refused unpaired: ($refused)"
+        assert ($refused | str contains $u.reason) $"the ($u.name) run's reason, ($u.reason): ($refused)"
+        assert (not ($refused | str contains $"($paired) run")) $"the paired run is not named beside ($u.name): ($refused)"
+        let admitted = (gauge compare [$paired $file] "draw_us" 50 --diagnostic)
+        assert equal ($admitted.table | where build == $u.name | get 0.standings) ["unpaired"] $"--diagnostic admits the ($u.name) run marked unpaired"
+    }
+
+    # grouping: a build is an image at a cadence, one name a build and one
+    # build a name
+    let split = (try {
+        gauge compare [(fx-gauge $dir "split_0" "split_1" "one_image" 0 $good2) (fx-gauge $dir "split_1" "split_2" "one_image" 1 $early)] "draw_us" 50
+        ""
+    } catch {|e| $e.msg })
+    assert ($split | str contains "come from 2 builds") $"two cadences under one name refuse the comparison: ($split)"
+    let kept_apart = (gauge compare [(fx-gauge $dir "apart_0" "after" "one_image" 0 $good2) (fx-gauge $dir "apart_1" "early" "one_image" 1 $early)] "draw_us" 50)
+    assert equal ($kept_apart.table | get build | uniq | sort) [after early] $"one image's two cadences are two builds: ($kept_apart.table)"
+    let renamed = (try {
+        gauge compare [(fx-gauge $dir "named_0" "one" "same_image" 0 $good2) (fx-gauge $dir "named_1" "two" "same_image" 0 $good2)] "draw_us" 50
+        ""
+    } catch {|e| $e.msg })
+    assert ($renamed | str contains "a build has one name") $"one build under two names refuses the comparison: ($renamed)"
 }
 
 # A synthetic capture's records as the program sends them over `frames`
-# frames: the seed's answer, frame 0's state, then at each frame's top
-# the frame before's clock and drawing, the end marker after the final
-# frame's, and the frame's state, two frames' states past the window.
-def fx-items [frames: int]: nothing -> list<any> {
+# frames: the seed's answer and at schema 2 the cadence's, frame 0's
+# state, then at each frame's top the frame before's clock, drawing, and
+# at schema 2 presentation, the end marker after the final frame's, and
+# the frame's state, two frames' states past the window.
+def fx-items [frames: int, --schema: int = 1, --cadence: int = 0]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
-        [(fx-frame ($n - 1)) { kind: "draw", frame: ($n - 1), schema: 1 }]
-        | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: 1 }] } else { [] })
+        [(fx-frame ($n - 1) $schema) { kind: "draw", frame: ($n - 1), schema: $schema }]
+        | append (if $schema == 2 { [(fx-present ($n - 1) $cadence)] } else { [] })
+        | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
-    [{ kind: "ack" } { kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+    let answers = (if $schema == 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
+    $answers | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
 }
 
 # A frame record's fields for a synthetic capture: its phases 1.72 ms of
-# a critical path of 1.8, the drawing 1 ms, presented.
-def fx-frame [frame: int]: nothing -> record {
-    { kind: "frame", frame: $frame, critical: 1800, game: 100, draw: 1000, status: 0, schema: 1 }
+# a critical path of 1.8, the drawing 1 ms, presented, frames FX_PERIOD
+# apart; at schema 2 the await the rest of the period, so the frame's
+# start, critical path, wait, and await add up to the next frame's start.
+def fx-frame [frame: int, schema: int = 1]: nothing -> record {
+    let await = (if $schema == 2 { $FX_PERIOD - 1800 } else { 16000 })
+    { kind: "frame", frame: $frame, critical: 1800, game: 100, draw: 1000, status: 0, schema: $schema, await: $await }
+}
+
+# A presentation record's fields for a synthetic capture: the simulation
+# 50 us into the frame, the next start the next frame's, no wait, pacing,
+# wakes, or presses, one attempt, presented.
+def fx-present [frame: int, cadence: int]: nothing -> record {
+    {
+        kind: "present", frame: $frame, simulation: ($frame * $FX_PERIOD + 50), next: (($frame + 1) * $FX_PERIOD),
+        wait: 0, pacing: 0, wakes: 0, presses: 0, attempts: 1, refusals: 0, cadence: $cadence, schema: 2,
+    }
+}
+
+# A synthetic capture with the item of a kind and frame changed.
+def fx-set [items: list<any>, kind: string, frame: int, changes: record]: nothing -> list<any> {
+    $items | each {|i| if $i.kind == $kind and ($i.frame? == $frame) { $i | merge $changes } else { $i } }
+}
+
+# A synthetic capture with an item put right after its first state.
+def fx-late [items: list<any>, item: record]: nothing -> list<any> {
+    let first = ($items | enumerate | where {|e| $e.item.kind == "state" } | get 0.index)
+    $items | insert ($first + 1) $item
+}
+
+# A gauge.nuon for a comparison, as `run` writes one, from a synthetic
+# capture measured: its label, an identity of the image and the cadence
+# asked, none when null, the run's measurement, and its rows.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>]: nothing -> string {
+    let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
+    let mode = (if $cadence == null { {} } else { { cadence: $cadence } })
+    let file = ($dir | path join $"pair_($name).nuon")
+    {
+        label: $label,
+        identity: { build: { image_sha256: $image }, mode: $mode },
+        runs: [{ run: 1, measured: ($m | reject rows) }],
+        rows: ($m.rows | each {|r| $r | insert run 1 }),
+    } | to nuon | save --raw -f $file
+    $file | path expand
 }
 
 # A synthetic capture's records as bytes, 64 each in render.inc's
-# layouts: the console's answer to R; a state, its drawing and game
-# microseconds at 32 and 36, 1000 and 100 unless given; a frame's clock,
-# the crosshair and the mix 10 us each, the flip 500, the reporting 100,
-# the await 16 ms; a drawing whose parts take 0.95 ms, its tiles 0.1;
-# and the end marker's frame and schema.
+# layouts: the console's answers to R and to C; a state, its drawing and
+# game microseconds at 32 and 36, 1000 and 100 unless given; a frame's
+# clock, the crosshair and the mix 10 us each, the flip 500, the
+# reporting 100, its await; a drawing whose parts take 0.95 ms, its tiles
+# 0.1; a presentation; and the end marker's frame and schema.
 def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
             "ack" => (fx-pad ([0x[0b 00 00 00] 0x[52]] | bytes collect)),
+            "cack" => (fx-pad ([0x[0b 00 00 00] 0x[43]] | bytes collect)),
             "state" => (fx-pad ([0x[01 00 00 00] (fx-zeros 28) (fx-u32 ($i.draw? | default 1000)) (fx-u32 ($i.game? | default 100))] | bytes collect)),
             "frame" => ([
-                0x[07 00 00 00] (fx-u32 $i.frame) (fx-u64 ($i.frame * 20000)) (fx-u32 $i.critical) (fx-u32 $i.game) (fx-u32 $i.draw)
-                (fx-u32 10) (fx-u32 10) (fx-u32 500) (fx-u32 100) (fx-u32 16000) (fx-u64 ($i.frame * 20000 + 1700)) (fx-u32 $i.status) (fx-u32 $i.schema)
+                0x[07 00 00 00] (fx-u32 $i.frame) (fx-u64 ($i.frame * $FX_PERIOD)) (fx-u32 $i.critical) (fx-u32 $i.game) (fx-u32 $i.draw)
+                (fx-u32 10) (fx-u32 10) (fx-u32 500) (fx-u32 100) (fx-u32 ($i.await? | default 16000)) (fx-u64 ($i.frame * $FX_PERIOD + 1700))
+                (fx-u32 $i.status) (fx-u32 $i.schema)
             ] | bytes collect),
             "draw" => ([
                 0x[08 00 00 00] (fx-u32 $i.frame) (fx-u32 100) (fx-u32 100) (fx-u32 300) (fx-u32 400) (fx-u32 50) (fx-u32 100)
                 (fx-u32 2) (fx-u32 0) (fx-u32 10) (fx-u32 20) (fx-u32 50) (fx-u32 100) (fx-u32 5) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "present" => ([
+                0x[0a 00 00 00] (fx-u32 $i.frame) (fx-u64 $i.simulation) (fx-u64 $i.next) (fx-u32 $i.wait) (fx-u32 $i.pacing)
+                (fx-u32 $i.wakes) (fx-u32 $i.presses) (fx-u32 $i.attempts) (fx-u32 $i.refusals) (fx-u32 $i.cadence) (fx-zeros 8)
+                (fx-u32 $i.schema)
             ] | bytes collect),
             "end" => ([0x[09 00 00 00] (fx-u32 $i.frame) (fx-zeros 52) (fx-u32 $i.schema)] | bytes collect),
         }

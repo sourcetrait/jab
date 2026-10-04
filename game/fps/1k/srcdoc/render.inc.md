@@ -1035,17 +1035,34 @@ The count record's bytes.
 The records over the API are 64 bytes each. An event carries the state's
 fields and its own from REPORT_FIELD0.
 
-The clock records, REPORT_FRAME and REPORT_DRAW, and the end marker,
-REPORT_END, put the frame's number where the state puts its sector and the
-schema's version in the last word, so a reader refuses a layout it does not
-know; the state record keeps its layout and meanings. The frame record's
-start and flip's end are 64 bits on 8-byte boundaries and every other field
-32. Its phases are exclusive, the game, the drawing, the crosshair, the mix,
-the flip, and the reporting, and the critical path less their sum is time no
-phase holds; the drawing's parts are exclusive within the drawing, the
-clear, the portals, the planes, the walls, and the sprites, with DRAW_TILES
-inside the planes and the walls. The await is the time inside the call,
-whatever the kernel does there. The pixel counts are candidates before the
+The clock records, REPORT_FRAME, REPORT_DRAW, and REPORT_PRESENT, and the
+end marker, REPORT_END, put the frame's number where the state puts its
+sector and the schema's version in the last word, so a reader refuses a
+layout it does not know; the state record keeps its layout and meanings. The
+three clock records of a frame go out in one write at the next frame's
+start. The frame record's start and flip's end are 64 bits on 8-byte
+boundaries and every other field 32. Its critical path runs from the frame's
+start to its reporting's end less the wait, the time a frame waits before
+its flip so it presents no earlier than the cap allows. Its phases are
+exclusive, the game, the drawing, the crosshair, the mix, the flip, and the
+reporting, with the presentation record's pacing beside them, and the
+critical path less their sum is time no phase holds; the flip is every
+attempt's call and its status the final attempt's, FLIP_NONE when the frame
+reached no flip (main.S). The drawing's parts are exclusive within the
+drawing, the clear, the portals, the planes, the walls, and the sprites,
+with DRAW_TILES inside the planes and the walls. The await runs from the
+reporting's end to the next frame's start, the time inside the call
+whatever the kernel does there. So the next start less the start is the
+critical path, the wait, and the await, to the microseconds each
+conversion drops. The presentation record carries what presenting the
+frame took: the simulation's time, camera_look's start, and the next
+frame's start as frame_records was handed it, both 64 bits from the
+program's start; the wait and the pacing, each converted once from its
+ticks; the pad's wakes during the wait and the presses they drained; the
+flip's attempts and the refusals among them; and the frame's cadence. Under
+CADENCE_AFTER_FLIP the frame awaits after its flip, so its wait, pacing,
+wakes, and presses are 0 and its attempts 1, a refusal among them when the
+flip came early. The pixel counts are candidates before the
 depth test and the masked pass: DRAW_TILED_PIXELS the blocks read from
 tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
 fallback loop took, which holds blocks off the tile grid as well as cells
@@ -1158,6 +1175,10 @@ A record's bytes, zero to the end.
 
 `u32`: the measurement's end, its final frame, after that frame's records.
 
+## .set REPORT_PRESENT
+
+`u32`: the frame before's presentation, PRESENT_* fields, beside its clock.
+
 ## .set REPORT_CONSOLE
 
 `u32`: the console's answer, the command's byte.
@@ -1172,7 +1193,7 @@ A record's bytes, zero to the end.
 
 ## .set TIME_CRITICAL
 
-`u32`: its start to the end of its reporting, the await apart.
+`u32`: its start to the end of its reporting, the wait and the await apart.
 
 ## .set TIME_GAME
 
@@ -1192,7 +1213,7 @@ A record's bytes, zero to the end.
 
 ## .set TIME_FLIP
 
-`u32`: the flip call, the device's wait in it.
+`u32`: every flip attempt's call, the device's wait in each.
 
 ## .set TIME_REPORT
 
@@ -1200,7 +1221,7 @@ A record's bytes, zero to the end.
 
 ## .set TIME_AWAIT
 
-`u32`: the time inside the await call.
+`u32`: the reporting's end to the next frame's start, the await call.
 
 ## .set TIME_FLIP_DONE
 
@@ -1208,7 +1229,7 @@ A record's bytes, zero to the end.
 
 ## .set TIME_FLIP_STATUS
 
-`u32`: jab.sys.display.flip's code, 0 presented.
+`u32`: the final attempt's jab.sys.display.flip code, 0 presented, FLIP_NONE with no attempt.
 
 ## .set DRAW_CLEAR
 
@@ -1261,6 +1282,46 @@ A record's bytes, zero to the end.
 ## .set DRAW_SPANS
 
 `u32`: the spans drawn, against SPAN_RECORDS.
+
+## .set PRESENT_SIMULATION
+
+`u64`: the simulation's time, camera_look's start, microseconds since the program's start.
+
+## .set PRESENT_NEXT_START
+
+`u64`: the next frame's start, the tick frame_records was handed, microseconds since the program's start.
+
+## .set PRESENT_WAIT
+
+`u32`: the time the frame waited before its flip, apart from its critical path.
+
+## .set PRESENT_PACING
+
+`u32`: the work around that wait, a phase of the critical path.
+
+## .set PRESENT_WAKES
+
+`u32`: the pad's wakes during the wait.
+
+## .set PRESENT_WAIT_PRESSES
+
+`u32`: the gamepad presses those wakes drained.
+
+## .set PRESENT_FLIP_ATTEMPTS
+
+`u32`: the flip's attempts.
+
+## .set PRESENT_REFUSALS
+
+`u32`: the attempts answered as early, FLIP_EARLY.
+
+## .set PRESENT_CADENCE
+
+`u32`: the frame's cadence, a CADENCE_*.
+
+## .set CADENCE_AFTER_FLIP
+
+`u32`: the cadence awaiting the display's tick or the pad after each flip.
 
 ## .set EVENT_ROUSED
 

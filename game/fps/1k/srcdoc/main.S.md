@@ -16,11 +16,14 @@ surface mathematics. The frame loop runs the game's phases before the
 drawing's and times each: the game's microseconds cover the pad, the console,
 the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The frame's whole time is measured too, its critical path from its start to
-the end of its reporting, with the crosshair, the mix, the flip, and the
-reporting timed apart and the await after the path alone; the frame before's
-two records go over the API at a frame's start, once its await has ended, so
-a record carries the await that followed its frame and the path whole
-(render.inc's REPORT_FRAME and REPORT_DRAW, read by test/gauge.nu).
+the end of its reporting less any wait before the flip, with the crosshair,
+the mix, the flip, and the reporting timed apart and the await after the path
+alone; the frame before's three records go over the API at a frame's start,
+once its await has ended, so a record carries the await that followed its
+frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW, and
+REPORT_PRESENT, read by test/gauge.nu). The frame awaits after its flip,
+render.inc's CADENCE_AFTER_FLIP, so it waits nothing before the flip and
+flips once.
 
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
@@ -138,7 +141,7 @@ The time ticks a microsecond.
 
 ## .set CLOCK_FLIP
 
-`u64`: the flip call's ticks.
+`u64`: the flip calls' ticks, every attempt's.
 
 ## .set CLOCK_FLIP_DONE
 
@@ -150,11 +153,47 @@ The time ticks a microsecond.
 
 ## .set CLOCK_FLIP_STATUS
 
-`u64`: the flip's status, jab.sys.display.flip's code.
+`u64`: the final flip attempt's status, jab.sys.display.flip's code, FLIP_NONE until one.
+
+## .set CLOCK_SIMULATION
+
+`u64`: the tick camera_look started, the simulation's time.
+
+## .set CLOCK_WAIT
+
+`u64`: the ticks the frame waited before its flip, apart from the critical path.
+
+## .set CLOCK_PACING
+
+`u64`: the ticks of the work around that wait, a phase.
+
+## .set CLOCK_WAKES
+
+`u64`: the pad's wakes during the wait.
+
+## .set CLOCK_PRESSES
+
+`u64`: the gamepad presses those wakes drained.
+
+## .set CLOCK_ATTEMPTS
+
+`u64`: the flip's attempts.
+
+## .set CLOCK_REFUSALS
+
+`u64`: the attempts answered as early.
 
 ## .set CLOCK_SIZE
 
 frame_clock's bytes.
+
+## .set FLIP_EARLY
+
+`u64`: jab.sys.display.flip's code for an attempt before the tick, nothing shown.
+
+## .set FLIP_NONE
+
+`u64`: the status a frame starts with, which it keeps when it reaches no flip; no code the kernel gives.
 
 ## _start
 
@@ -170,26 +209,37 @@ placement.
 
 The marks, into frame_clock: the start, which is the await's end; the
 reporting so far, the frame before's records; the game and the drawing as
-before; the crosshair, the mix, and the flip with its status and its end;
-the state report and a debug build's lines added to the reporting; and the
-await's start, which ends the critical path. One register, s9, carries the
-last mark, so each phase starts where the one before ended but for the few
-instructions storing it, which no phase holds: the record's unattributed
-time, a few microseconds a frame (`just test` prints the walk's greatest).
+before, the game's start kept as the simulation's time; the crosshair, the
+mix, and the flip with its status and its end; the state report and a debug
+build's lines added to the reporting; and the await's start, which ends the
+critical path. One register, s9, carries the last mark, so each phase starts
+where the one before ended but for the few instructions storing it, which no
+phase holds: the record's unattributed time, a few microseconds a frame
+(`just test` prints the walk's greatest). At its start, once the frame
+before's records are out, a frame zeroes its accumulators, the wait, the
+pacing, the flip's ticks, the wakes, the presses, the attempts, and the
+refusals, and presets the flip's status to FLIP_NONE, so a frame that
+reached no flip says so; each flip attempt adds its call's ticks and counts
+itself, a refusal when it came early, and the ticks convert to microseconds
+once, in frame_records.
 
 ## frame_records
 
 Built from frame_clock and the stats, which world_draw zeroes only when the
 next frame draws, so at a frame's start they still hold the frame before's;
 the loop stores s11, the program's start, as the clock's origin before its
-first frame. Ticks become microseconds by a division a field. The start and
-the flip's end are 64 bits, counted from the program's start, since 32 bits
-of microseconds wrap at 71 minutes, inside a played session. The pair goes
-in one write, the API's write being the one call besides the await that can
-wait, and its cost is the reporting's. An E the console read in the frame
-just recorded set measure_end, and the end marker goes out right after that
-frame's pair, so every record of the measurement precedes it and the frames
-past it are outside.
+first frame. Ticks become microseconds by a division a field. The start,
+the flip's end, the simulation's time, and the next start are 64 bits,
+counted from the program's start, since 32 bits of microseconds wrap at 71
+minutes, inside a played session. The critical path is the start to the
+await's start less the wait, both in ticks before the one division. The next
+start is the tick the loop read at the next frame's entry and handed in, so
+the presentation record's next start is the next frame record's start, read
+once. The three records go in one write, the API's write being the one call
+besides the await that can wait, and its cost is the reporting's. An E the
+console read in the frame just recorded set measure_end, and the end marker
+goes out right after that frame's records, so every record of the
+measurement precedes it and the frames past it are outside.
 
 ## load_report
 
@@ -304,11 +354,11 @@ Falls into fill_screen with the colour 0.
 
 ## frame_clock
 
-`9 u64`: the frame's marks and phases in ticks, CLOCK_* fields.
+`16 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
 
-## record_pair
+## clock_records
 
-`128 u8`: the frame and draw records, written as one.
+`192 u8`: the frame's clock, drawing, and presentation records, written as one.
 
 ## end_record
 
