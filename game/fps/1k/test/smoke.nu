@@ -5,7 +5,7 @@
 # line on the UART, which is resolved to its routine from the ELF's
 # symbols and printed, since a fixed pose never finds what ten seconds of
 # play does. `nu smoke.nu --kernel <jab.elf> --image <fps.jab> --out <dir>
-# --seeds [1 2 3] --seconds 60`; `just smoke [seeds] [seconds]` builds and
+# --seeds "[1 2 3]" --seconds 60`; `just smoke [seeds] [seconds]` builds and
 # runs it. Every seed is one launch of a debug build with the factory's
 # tree; the table it played is kept beside the run as pad.nuon, so a
 # seed that faults is replayed by its number.
@@ -30,7 +30,11 @@ const FIRE_IN = 8
 const STATES_A_SECOND = 10
 const WALKED = 5.0
 
-def main [--kernel: path, --image: path, --out: path, --seeds: list<int> = [1], --seconds: int = 60, --set: string = "DEBUG"] {
+def main [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", --seconds: int = 60, --set: string = "DEBUG"] {
+    # A list from the command line arrives as its text, quoted when it
+    # holds a space, so the seeds are NUON read here
+    let seeds = (try { $seeds | from nuon } catch { null })
+    if ($seeds | describe) != "list<int>" { error make { msg: $"--seeds takes a NUON list of whole numbers, \"[1 2 3]\": ($seeds | to nuon)" } }
     let game = ($env.FILE_PWD | path join ".." | path expand)
     let tree = ($game | path join ".target" "asset" "factory")
     let elf = ($image | path dirname | path join "fps.elf")
@@ -54,8 +58,11 @@ def main [--kernel: path, --image: path, --out: path, --seeds: list<int> = [1], 
             $states | window 2 | each {|w| (($w.1.x - $w.0.x) ** 2 + ($w.1.y - $w.0.y) ** 2) | math sqrt } | math sum
         })
         let sectors = ($states | get sector | uniq)
-        let last = ($states | last)
-        print $"smoke: seed ($seed): status ($run.status), ($states | length) states over ($run.wall_seconds) s, ($walked | math round --precision 1) m walked through ($sectors | length) sectors, ending at ($last.x | math round --precision 2), ($last.y | math round --precision 2) in ($last.sector); ($table | length) pad events"
+        let ending = (if ($states | is-empty) { "no state read" } else {
+            let last = ($states | last)
+            $"ending at ($last.x | math round --precision 2), ($last.y | math round --precision 2) in ($last.sector)"
+        })
+        print $"smoke: seed ($seed): status ($run.status), ($states | length) states over ($run.wall_seconds | math round --precision 1) s, ($walked | math round --precision 1) m walked through ($sectors | length) sectors, ($ending); ($table | length) pad events"
         if $fault != null {
             let where = (resolve $elf $fault)
             print $"smoke: seed ($seed) FAULTED: ($fault)"
@@ -82,10 +89,11 @@ export def play-table [seed: int, seconds: int]: nothing -> table<at: duration, 
     mut at = $FIRST
     let end = (($seconds * 1000 - 1000) * 1ms)
     while $at < $end {
-        let draws = (0..4 | each {|i|
+        mut draws = []
+        for i in 0..4 {
             $state = (($state * 1103515245 + 12345) mod 2147483648)
-            $state
-        })
+            $draws = ($draws | append $state)
+        }
         let wanted = {
             0: ($LEFT_X | get (($draws.0 // 7) mod ($LEFT_X | length))),
             1: ($LEFT_Y | get (($draws.1 // 7) mod ($LEFT_Y | length))),
@@ -139,7 +147,7 @@ def resolve [elf: path, fault: string]: nothing -> string {
     if $epc == null { return "no epc on the line" }
     let flags = ($elf | path dirname | path join "flags")
     if not ($flags | path exists) { return $"no flags beside ($elf)" }
-    let prefix = (open --raw $flags | decode | lines | get 0 | split row " " | last)
+    let prefix = (open --raw $flags | into binary | decode | lines | get 0 | split row " " | last)
     let symbols = (^$"($prefix)nm" -n $elf | lines | parse --regex '^(?P<addr>[0-9a-f]+) [tT] (?P<name>\S+)$' | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
     let at = ($epc | str substring 2.. | into int --radix 16)
     let below = ($symbols | where addr <= $at | last)
