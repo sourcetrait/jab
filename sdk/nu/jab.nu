@@ -438,9 +438,11 @@ export def launch [
         if (not $captured) and ($elapsed >= $capture) {
             $captured = true
             if $alive {
-                monitor-send $monitor $"screendump ($screen)"
+                monitor-send $monitor $"screendump (hmp-quoted $screen)"
                 wait-for-file $screen
-                monitor-send $monitor "quit"
+                # QEMU can end while the screen is awaited, its bound
+                # passing, and a pipe no one reads holds its writer forever
+                if (process-alive $pid) { monitor-send $monitor "quit" }
             }
         }
     }
@@ -938,6 +940,14 @@ def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
 # Give the QEMU monitor a command through its pipe.
 def monitor-send [monitor: path, command: string]: nothing -> nothing {
     $"($command)\n" | save --raw --append ($monitor + ".in")
+}
+
+# A word for the QEMU monitor's command line, which splits on spaces: in
+# double quotes, a backslash and a double quote inside escaped, so a
+# path with spaces in it stays one argument.
+def hmp-quoted [text: string]: nothing -> string {
+    let escaped = ($text | str replace --all '\' '\\' | str replace --all '"' '\"')
+    $"\"($escaped)\""
 }
 
 # Wait for a file QEMU writes whole to appear and stop growing.

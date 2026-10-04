@@ -3,6 +3,13 @@ use crate::*;
 /// Linux's non-blocking open flag, for a fifo that may have no reader.
 const O_NONBLOCK: i32 = 0o4000;
 
+/// A word for the QEMU monitor's command line, which splits on spaces: in
+/// double quotes, a backslash and a double quote inside escaped, so a path
+/// with spaces in it stays one argument.
+pub(crate) fn hmp_quoted(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 /// A file read from where the last read left off.
 pub(crate) struct Tail {
     path: PathBuf,
@@ -202,7 +209,7 @@ impl Machine {
         self.shots += 1;
         let path = self.plan.out.join(format!("shot_{}.ppm", self.shots));
         retire(&path, &self.plan.target()?)?;
-        self.monitor(&format!("screendump {}", path.display()))?;
+        self.monitor(&format!("screendump {}", hmp_quoted(&path.display().to_string())))?;
         let mut last = 0u64;
         for _ in 0..200 {
             thread::sleep(Duration::from_millis(50));
