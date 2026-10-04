@@ -205,30 +205,30 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 }
 
 # A headless machine prepared and not run: everything a launch sets up
-# before QEMU starts, handed back for whoever runs and drives it, the SDK's
-# own `launch` or a harness that plays interactively. `qemu_binary` is the
-# QEMU it runs on (qemu-binary, beside the program the image came from and
-# then in the workspace, as a run's), `qemu` the whole argument vector
-# after it, `env` what the
-# process runs under (the evdev shim preloaded when a gamepad rides the
-# fifo), and the
-# rest the paths: the UART's log, QEMU's guest-error log, the screen a
-# screendump lands in, the pid file, the monitor's pipe pair (`<monitor>.in`
-# and `.out`), the debug channel's log under DEBUG, the API's `api_in` pipe
-# and `api_out` file with `--api`, and the pad: with `--gamepad`, on Linux
-# the fifo QEMU reads as the pad, which the driver writes 24-byte
-# input_event records into, else (and with `--pad-port`) the pad port's
-# `pad_pipe_in` pipe, whose header, `pad_header` as hex, the driver writes
-# first. Every stale file of a previous run is removed and the pipes made.
-# The machine is headless unless `--window` puts it in the window a run
-# of the program would open (`window`, `none` without); the sound device
+# before QEMU starts, handed back for whoever runs and drives it, the
+# SDK's own `launch` or a harness that plays interactively. `qemu_binary`
+# is the QEMU it runs on (qemu-binary, beside the program the image came
+# from and then in the workspace, as a run's), `qemu` the whole argument
+# vector after it, `env` what the process runs under (the evdev shim
+# preloaded when a gamepad rides the fifo), and the rest the paths: the
+# UART's log, QEMU's guest-error log, the screen a screendump lands in,
+# the pid file, the monitor's pipe pair (`<monitor>.in` and `.out`), the
+# debug channel's log under DEBUG, the API's `api_in` pipe and `api_out`
+# file with `--api`, and the pad: with `--gamepad`, on Linux the fifo
+# QEMU reads as the pad, which the driver writes 24-byte input_event
+# records into, else (and with `--pad-port`) the pad port's `pad_pipe_in`
+# pipe, whose header, `pad_header` as hex, the driver writes first, the
+# pipes made. The machine is headless unless `--window` puts it in the
+# window a run of the program would open (`window`, `none` without); the sound device
 # records to `sound` with `--sound`, or plays through the host's audio as
 # a run's does with `--live-sound` (`audio`, the backend); and
 # `--host-pad` attaches the host's own gamepad as a run does, on macOS
 # through the bridge `bridge` names, to be started beside QEMU. A
 # recording and the host's audio together are refused, as is the host's
-# pad beside a scripted one. A previous run's files in `out` are retired,
-# its pipes kept.
+# pad beside a scripted one. A previous run's files in `out` are retired
+# into the retire home of `target`, the workspace's target or else the
+# program's, wherever `out` lies (retire), its pipes kept; `target` is
+# handed back for a harness that clears away files of its own.
 export def plan [
     --kernel: path
     --image: path
@@ -244,28 +244,29 @@ export def plan [
     --window
     --live-sound
     --host-pad
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
     let out = ($out | path expand)
     mkdir $out
+    let ws = (launch-workspace $kernel $image $out)
+    let root = (target-root (if $ws != null { $ws } else { image-home $image }))
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
     let pidfile = ($out | path join "qemu.pid")
     let monitor = ($out | path join "monitor")
-    for f in [$log $qemu_log $screen $pidfile] { retire $f }
-    fifo-at ($monitor + ".in")
-    fifo-at ($monitor + ".out")
-    let ws = (launch-workspace $kernel $image $out)
+    for f in [$log $qemu_log $screen $pidfile] { retire $f $root }
+    fifo-at ($monitor + ".in") $root
+    fifo-at ($monitor + ".out") $root
     let qemu = (qemu-binary (image-home $image) $ws)
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
-    let pad = (pad-attach $gamepad $out $pad_port $ws)
-    let ports = (ports (symbols $set) $out $api ($pad.port or $hosted.port))
+    let pad = (pad-attach $gamepad $out $pad_port $ws $root)
+    let ports = (ports (symbols $set) $out $api ($pad.port or $hosted.port) $root)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
-    if $wav != "" { retire $wav }
+    if $wav != "" { retire $wav $root }
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
     let shown = (if $window { display (image-manifest $image) } else { "none" })
@@ -294,6 +295,7 @@ export def plan [
         pad_header: ($pad.header | encode hex),
         sound: $wav,
         workspace: ($ws | default ""),
+        target: $root,
         window: $shown,
         audio: $backend,
         bridge: $hosted.bridge,
@@ -638,7 +640,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     let flags = (build-id ($manifest | to nuon) $inputs)
     if ($image | path exists) and (not (stale $image $inputs $flags $stamp)) { return $image }
     let stage = ($target | path join "generic")
-    retire $stage
+    retire $stage $target
     mkdir $stage
     for f in (files-under [$generic]) {
         let relative = ($f | path relative-to $generic)
@@ -650,7 +652,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     for entry in $manifest {
         let archive = (fetched $target $entry.url $entry.sha256)
         let unpack = ($target | path join "fetch" "unpack")
-        retire $unpack
+        retire $unpack $target
         mkdir $unpack
         ^tar -xzf $archive -C $unpack ...($entry.members | get from)
         for m in $entry.members {
@@ -658,7 +660,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
             mkdir ($dest | path dirname)
             mv ($unpack | path join $m.from) $dest
         }
-        retire $unpack
+        retire $unpack $target
     }
     assets-names $stage
     ^genromfs -d $stage -f $image -V (volume-name "mix")
@@ -694,20 +696,21 @@ def fetched [target: path, url: string, sha256: string]: nothing -> string {
 # and events into (doc/padport.md). Nothing at all with none, so the
 # machine carries no serial device. The console keeps the UART in
 # every build, since a fault line has to reach the host when a port has
-# not come up. A previous run's debug.log is retired.
-def ports [names: list<string>, out: path, api: bool, pad_port: bool]: nothing -> record<args: list<string>, debug_log: string, api_pipe: string, pad_pipe: string> {
+# not come up. A previous run's debug.log is retired into `root`'s
+# retire home (retire).
+def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path]: nothing -> record<args: list<string>, debug_log: string, api_pipe: string, pad_pipe: string> {
     mkdir $out
     let debug = (if "DEBUG" in $names {
         let log = ($out | path join "debug.log")
-        retire $log
+        retire $log $root
         { args: ["-chardev" $"file,id=jabdebug,path=($log)" "-device" "virtserialport,chardev=jabdebug,nr=1,name=jab.debug"], log: $log }
     } else { { args: [], log: "" } })
     let port = (if $api {
-        let pipe = (pipe-pair ($out | path join "api"))
+        let pipe = (pipe-pair ($out | path join "api") $root)
         { args: ["-chardev" $"pipe,id=jabapi,path=($pipe)" "-device" "virtserialport,chardev=jabapi,nr=2,name=jab.api"], pipe: $pipe }
     } else { { args: [], pipe: "" } })
     let pad = (if $pad_port {
-        let pipe = (pipe-pair ($out | path join "padport"))
+        let pipe = (pipe-pair ($out | path join "padport") $root)
         { args: ["-chardev" $"pipe,id=jabpad,path=($pipe)" "-device" "virtserialport,chardev=jabpad,nr=3,name=jab.pad"], pipe: $pipe }
     } else { { args: [], pipe: "" } })
     let device = (if ($debug.args | is-empty) and ($port.args | is-empty) and ($pad.args | is-empty) { [] } else { ["-device" "virtio-serial-device"] })
@@ -716,21 +719,22 @@ def ports [names: list<string>, out: path, api: bool, pad_port: bool]: nothing -
 
 # What QEMU's pipe chardev opens at `pipe`: `<pipe>.in`, a named pipe
 # the host writes into (fifo-at), and `<pipe>.out`, a plain file made
-# empty, where the guest's bytes land, a previous run's retired first.
-def pipe-pair [pipe: path]: nothing -> string {
-    fifo-at ($pipe + ".in")
+# empty, where the guest's bytes land, a previous run's retired first
+# into `root`'s retire home (retire).
+def pipe-pair [pipe: path, root: path]: nothing -> string {
+    fifo-at ($pipe + ".in") $root
     let outward = ($pipe + ".out")
-    retire $outward
+    retire $outward $root
     "" | save $outward
     $pipe
 }
 
 # A named pipe at `path`: one already there is kept, since a pipe holds
 # nothing once every end has closed, and anything else there is retired
-# before a fresh pipe is made.
-def fifo-at [path: path]: nothing -> nothing {
+# into `root`'s retire home (retire) before a fresh pipe is made.
+def fifo-at [path: path, root: path]: nothing -> nothing {
     if ($path | path type) == "pipe" { return }
-    retire $path
+    retire $path $root
     ^mkfifo $path
 }
 
@@ -741,8 +745,9 @@ def fifo-at [path: path]: nothing -> nothing {
 # and environment for that; on every other host, and on Linux with
 # `port`, the pad port instead, the same reference pad described by the
 # header the driver writes first. The shim is one of the workspace's,
-# `ws`, the kernel's or the one above `out`.
-def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>]: nothing -> record<args: list<string>, env: record, fifo: string, port: bool, header: binary> {
+# `ws`, the kernel's or the one above `out`; anything at the fifo's path
+# is retired into `root`'s retire home (fifo-at).
+def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>, root: path]: nothing -> record<args: list<string>, env: record, fifo: string, port: bool, header: binary> {
     let none = { args: [], env: {}, fifo: "", port: false, header: 0x[] }
     if not $wanted { return $none }
     if $port or $nu.os-info.name != "linux" {
@@ -751,7 +756,7 @@ def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>]
     if $ws == null { error make {msg: "a gamepad needs a workspace, above the kernel or the output directory, which holds shim/crates/evdev"} }
     let shim = (shim-build $ws "jabshim_evdev")
     let fifo = ($out | path join "pad")
-    fifo-at $fifo
+    fifo-at $fifo $root
     {
         args: ["-device" $"virtio-input-host-device,evdev=($fifo)"],
         env: { LD_PRELOAD: $shim, EVDEV_SHIM_FIFO: $fifo },
@@ -1035,7 +1040,7 @@ def "main watch" [ws: path, --skip: float = 5.0] {
     let pid = ($pids | first)
     let file = (watch-file $ws)
     mkdir ($file | path dirname)
-    retire $file
+    retire $file (target-root $ws)
     let started = (date now)
     let run = (watch-header $pid $started)
     ({ run: $run } | to nuon) + (char nl) | save --raw $file
@@ -1446,7 +1451,7 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
         ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
         $obj
     })
-    for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray }
+    for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray $c.root }
     ^$ld -T $m.link -nostdlib ...$objects -o $elf
     ^$objdump -d $elf | save -f ($c.out | path join "jab.disas")
     $id | save -f $stamp
@@ -1534,7 +1539,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let shown = (if $window == null { display $c.manifest } else { $window })
     let found = (if (discovery-wanted $pad $sound) { discover $c.workspace } else { { gamepad: null, audio: null } })
     let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
-    let ports = (ports $c.symbols $c.out $api $gamepad.port)
+    let ports = (ports $c.symbols $c.out $api $gamepad.port $c.root)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { sound-args (audio-plan ($found | get -o audio)) } else { [] })
     let args = ($machine ++ (name-args $c.manifest.name) ++ $memory ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
@@ -1742,8 +1747,8 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
     let out = ($line.context.out | path join "probe")
     mkdir $out
     let log = ($out | path join "sdl.log")
-    retire $log
-    let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
+    retire $log $line.context.root
+    let server =(($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
     let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
@@ -2213,9 +2218,10 @@ def bench-save-state [file: path, state: record]: nothing -> nothing {
 # the report. A run is a stamped directory in the program's bench shard
 # of the target, its bench.nuon recording every step's outcome as it
 # lands, and state.nuon beside the stamps says what the run is doing,
-# for `just watch bench`. `--only` runs the steps its comma-separated
-# labels name; with no bench, the list. Nothing is deleted: a run writes
-# its own directory and the state.
+# for `just watch bench`. A run with a failed step or a failed report
+# exits 1 once everything is recorded, reported, and said. `--only` runs
+# the steps its comma-separated labels name; with no bench, the list.
+# Nothing is deleted: a run writes its own directory and the state.
 def "main bench" [ws: path, name?: string, --only: string = ""] {
     let ws = ($ws | path expand)
     if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
@@ -2297,12 +2303,25 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     let failures = (if ($failed | is-empty) { "" } else { $"; failed: ($failed | str join ', ')" })
     let unreported = (if $reported == null or $reported == 0 { "" } else { $"; the report failed with exit ($reported)" })
     print $"jab bench: ($b.name) ($final), ($total) steps($failures)($unreported); everything in ($dir)"
+    if $final != "done" { exit 1 }
 }
 
 # The QEMUs of a bench's run: those whose command lines name its
 # directory.
 def bench-qemus [run: path]: nothing -> list<int> {
     ps -l | where {|p| ((command-binary $p.command | path basename) == (exe-name $qemu_name)) and ($p.command | str contains $run) } | get pid
+}
+
+# The step a QEMU of a bench's run belongs to, from its own command
+# line: the step directory under the run's directory its pid file and
+# its logs sit in, every step writing under `<run>/<label>/`; null when
+# the line names none of the bench's steps.
+def bench-step-of [pid: int, run: path, labels: list<string>]: nothing -> oneof<string, nothing> {
+    let command = (ps -l | where pid == $pid | get -o 0.command | default "")
+    let parts = ($command | split row $"($run)/")
+    if ($parts | length) < 2 { return null }
+    let named = ($parts | get 1 | split row "/" | first)
+    if $named in $labels { $named } else { null }
 }
 
 # The busiest threads of a watch report as one short line.
@@ -2328,8 +2347,9 @@ def watch-rates [file: path, span: int]: nothing -> string {
 # Record every QEMU of a bench's run, `just watch bench
 # <program>/<bench>` in a second terminal: it waits for the bench's next
 # run, or takes up one under way, then records each QEMU of the run per
-# thread once a second, under the step running when it started, to
-# watch/<step>-<n>.nuonl in the run's directory, a line printed as each
+# thread once a second, under the step its own command line names
+# (bench-step-of), to watch/<step>-<n>.nuonl in the run's directory, a
+# line printed as each
 # starts and ends and the rates every five seconds. When the bench has
 # finished and no QEMU of it is left, it prints the bench's report and
 # its own per QEMU, the steady CPU seconds a second after the first
@@ -2353,6 +2373,8 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     }
     let run = $state.dir
     let stamp = $state.stamp
+    let root = (target-root $ws)
+    let labels = ($b.def.steps | get label)
     let watch_dir = ($run | path join "watch")
     mkdir $watch_dir
     print $"jab watch: recording ($b.name)'s run ($stamp), ($state.total) steps, into ($watch_dir)"
@@ -2364,14 +2386,14 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         let current = (if $read != null and $read.stamp == $stamp { $read } else { $state })
         if $current.label != "" and $current.label != $label { print $"jab watch: step ($current.step) of ($current.total), ($current.label)" }
         $label = $current.label
-        let step = $label
         let pids = (bench-qemus $run)
         let known = ($seen | each {|e| $e.pid })
         for pid in ($pids | where {|p| $p not-in $known }) {
+            let step = (bench-step-of $pid $run $labels | default $label)
             let n = (($seen | where {|e| $e.label == $step } | length) + 1)
             let file = ($watch_dir | path join $"($step)-($n).nuonl")
             let started = (date now)
-            retire $file
+            retire $file $root
             ({ run: (watch-header $pid $started) } | to nuon) + (char nl) | save --raw $file
             $seen = ($seen | append { pid: $pid, label: $step, n: $n, file: $file, started: $started, ended: false })
             print $"jab watch: ($step), QEMU ($n), ($pid)"
@@ -2420,7 +2442,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         watch: $per,
     }
     let out = ($run | path join "watch.nuon")
-    retire $out
+    retire $out $root
     $whole | to nuon --indent 2 | save --raw $out
     print $"jab watch: ($out)"
 }

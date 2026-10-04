@@ -18,6 +18,7 @@ pub(crate) struct Plan {
     pub(crate) pad_port: bool,
     pub(crate) pad_header: Vec<u8>,
     pub(crate) sound: Option<PathBuf>,
+    pub(crate) target: Option<PathBuf>,
 }
 
 impl Plan {
@@ -64,13 +65,18 @@ impl Plan {
             pad_port: field("pad_port")?.as_bool().unwrap_or(false),
             pad_header,
             sound: path_field("sound")?,
+            target: value.get("target").and_then(|v| v.as_str()).filter(|t| !t.is_empty()).map(PathBuf::from),
         })
     }
 
-    /// The target the plan's files lie in, where a run retires what it
-    /// clears away (retire).
+    /// The target a run retires what it clears away into (retire): the one
+    /// the plan names, the workspace's or else the program's, wherever its
+    /// files lie, else for a plan that names none the one its files lie in.
     pub(crate) fn target(&self) -> RoboResult<PathBuf> {
-        target_of(&self.out).ok_or_else(|| RoboError::Plan(format!("{} lies in no target, so a run has nowhere to retire what it clears away", self.out.display())))
+        if let Some(target) = &self.target {
+            return Ok(target.clone());
+        }
+        target_of(&self.out).ok_or_else(|| RoboError::Plan(format!("the plan names no target and {} lies in none, so a run has nowhere to retire what it clears away", self.out.display())))
     }
 }
 

@@ -192,15 +192,19 @@ built in the bench's tree, then each step runs in order, a script of the
 program's with its arguments and its own output directory; a step a
 person attends is announced and counted down first, and a step that
 fails is recorded and the rest run. The bench's report then reads every
-step. Each run of a bench is a stamped directory in the program's
-`bench/` shard of the target, with `bench.nuon` recording each step's
-outcome, and a state file beside the stamps says what runs. `just watch
-bench <program>/<bench>`, in a second terminal before the bench starts
-or while it runs, records every QEMU of the run per thread under its
-step; when the bench has finished it prints the bench's report and its
-own per QEMU, and writes them together as `watch.nuon` in the run.
-`just bench` alone lists the benches, and `--only` runs the steps its
-comma-separated labels name.
+step, and a bench with a failed step or a failed report exits 1 once
+all of it is recorded. The cadence bench's report, `gauge.nu
+bench-report`, pools only the runs a comparison would take as valid
+and lists every other run apart, as a diagnostic with its reasons. Each
+run of a bench is a stamped directory in the program's `bench/` shard
+of the target, with `bench.nuon` recording each step's outcome, and a
+state file beside the stamps says what runs. `just watch bench
+<program>/<bench>`, in a second terminal before the bench starts or
+while it runs, records every QEMU of the run per thread under the step
+its own command line names; when the bench has finished it prints the
+bench's report and its own per QEMU, and writes them together as
+`watch.nuon` in the run. `just bench` alone lists the benches, and
+`--only` runs the steps its comma-separated labels name.
 
 `just adv probe sdl example/walk` looks at the window itself: it runs
 the program under SDL with OpenGL for twelve seconds (`--seconds N`)

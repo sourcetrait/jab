@@ -17,6 +17,7 @@ fn plan() -> Plan {
         pad_port: false,
         pad_header: Vec::new(),
         sound: None,
+        target: None,
     }
 }
 

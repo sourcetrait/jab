@@ -1229,20 +1229,32 @@ def "main compare" [
     print $"gauge: ($target)"
 }
 
-# A run's frames in order, each with the interval from the presented
-# flip before it to its own, both read at the presenting call's start,
-# the flip's end less the call, null for a frame not presented and for
-# the first, and with whether the frame before it ran past the period;
-# the clocked frames alone.
+# A run's frames in order, each with the interval from the presenting
+# call before it to its own, both read at the call's start, the flip's
+# end less the call: null for a frame not presented and for the first
+# presented; null with `call_unknown` set for a frame presented after a
+# retried flip, whose `flip_us` sums every attempt so its call's start
+# is unknown, and for the next frame presented after it; and with
+# whether the frame before it ran past the period. The clocked frames
+# alone.
 def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
     mut previous: any = null
+    mut known = false
+    mut seen = false
     mut late = false
     mut out = []
     for r in ($rows | where {|x| $x.critical_us != null }) {
-        let start = (if $r.flip_status == $FLIP_PRESENTED { $r.flip_done_us - $r.flip_us } else { null })
-        let interval = (if $start == null or $previous == null { null } else { $start - $previous })
-        $out = ($out | append ($r | insert call_interval_us $interval | insert after_late $late))
-        if $start != null { $previous = $start }
+        let presented = ($r.flip_status == $FLIP_PRESENTED)
+        let single = (($r | get -o flip_attempts | default 1) <= 1)
+        let start = (if $presented and $single { $r.flip_done_us - $r.flip_us } else { null })
+        let interval = (if $start != null and $known { $start - $previous } else { null })
+        let unknown = ($presented and $seen and $interval == null)
+        $out = ($out | append ($r | insert call_interval_us $interval | insert call_unknown $unknown | insert after_late $late))
+        if $presented {
+            $seen = true
+            $known = ($start != null)
+            $previous = $start
+        }
         $late = ($r.critical_us >= $period)
     }
     $out
@@ -1251,12 +1263,13 @@ def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
 # Frames pooled: the counts; the presented interval, the interval
 # between presenting calls, the submission age, the critical path, the
 # drawing, the wait, the pacing, and the await by nearest rank (stats);
-# the presenting calls' intervals on the tick grid, within a millisecond
-# of a whole number of periods, counted by that number, and the rest
-# off it; the wakes, attempts, and refusals; the flips early and failed;
-# the frames over the ceiling; the fast frames, under the period, and
-# those of them that waited; and the catch-up intervals, under half a
-# period after a frame past it.
+# the presenting calls' known intervals on the tick grid, within a
+# millisecond of a whole number of periods, counted by that number, the
+# rest off it, and the intervals unknown after a retried flip apart
+# (presented-calls); the wakes, attempts, and refusals; the flips early
+# and failed; the frames at or over the ceiling; the fast frames, under
+# the period, and those of them that waited; and the catch-up intervals,
+# under half a period after a frame past it, of the known.
 def bench-frames [rows: list<any>, period: number]: nothing -> record {
     if ($rows | is-empty) { return { frames: 0 } }
     let calls = ($rows | get call_interval_us | compact)
@@ -1271,6 +1284,7 @@ def bench-frames [rows: list<any>, period: number]: nothing -> record {
         call_interval: (stats $calls),
         grid: ($multiples | uniq --count | sort-by value | each {|c| { periods: $c.value, intervals: $c.count } }),
         off_grid: (($calls | length) - ($multiples | length)),
+        unknown_calls: ($rows | where {|r| $r.call_unknown } | length),
         submission_age: (stats ($rows | get submission_age_us)),
         critical: (stats ($rows | get critical_us)),
         draw: (stats ($rows | get draw_us)),
@@ -1291,45 +1305,55 @@ def bench-frames [rows: list<any>, period: number]: nothing -> record {
 
 # One step of a bench's run as its gauge.nuon holds it: a play when its
 # identity names the host's own pad, else a batch of the route; its
-# cadence and period; and every run with its standing, CPU seconds over
-# wall seconds, outcomes, and frames (presented-calls). A step with no
-# gauge.nuon holds no runs.
+# cadence and period; and every run with its standing and reasons as a
+# comparison classifies it (standing-of), its CPU seconds over wall
+# seconds, its outcomes, and its frames (presented-calls). A step with
+# no gauge.nuon holds no runs.
 def bench-step [dir: path, label: string, state: any]: nothing -> record {
     let file = ($dir | path join $label "gauge.nuon")
     if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, file: null, runs: [] } }
     let g = (open $file)
     let period = (1000000 / ($g.identity | get -o cap | default $CAP))
+    let requested = ($g.identity | get -o mode.cadence)
+    let all_rows = ($g.rows? | default [])
     let runs = ($g.runs | each {|r|
-        let m = $r.measured
+        let m = ($r | get -o measured)
+        let rows = ($all_rows | where run == $r.run)
+        let standing = (standing-of $m $rows "critical_us" $requested)
         let wall = ($r.ran | get -o wall_seconds | default 0)
         {
             run: $r.run,
             seed: $r.seed,
-            standing: { complete: ($m | get -o complete), valid: ($m | get -o valid), seeded: ($m | get -o seeded), cadences: ($m | get -o cadences) },
+            standing: $standing.standing,
+            reasons: $standing.reasons,
             cpu_over_wall: (if $wall == 0 or ($r.ran | get -o cpu_seconds) == null { null } else { $r.ran.cpu_seconds / $wall }),
             outcomes: ($m | get -o outcomes),
-            rows: (presented-calls ($g.rows | where run == $r.run) $period),
+            rows: (presented-calls $rows $period),
         }
     })
-    { label: $label, state: $state, kind: (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" }), cadence: ($g.identity | get -o mode.cadence), period_us: $period, file: $file, runs: $runs }
+    { label: $label, state: $state, kind: (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" }), cadence: $requested, period_us: $period, file: $file, runs: $runs }
 }
 
-# A cadence's steps of one kind pooled: the steps, the runs, those
-# complete, valid, seeded, and at the cadence asked, each run's
-# standing, CPU seconds over wall seconds, and outcomes, and the frames
-# of every run (bench-frames).
+# A cadence's steps of one kind: the valid runs (standing-of) pooled,
+# their CPU seconds over wall seconds and their frames (bench-frames);
+# every other run kept apart with its standing, its reasons, and its own
+# frames, a diagnostic outside the pool; and each run's standing and
+# outcomes.
 def bench-cadence [steps: list<any>, cadence: any]: nothing -> record {
     let runs = ($steps | each {|s| $s.runs | each {|r| $r | insert label $s.label } } | flatten)
     let period = ($steps | first | get period_us)
+    let pooled = ($runs | where standing == "valid")
+    let apart = ($runs | where standing != "valid")
     {
         cadence: $cadence,
         steps: ($steps | get label),
         runs: ($runs | length),
-        valid: ($runs | where {|r| $r.standing.complete == true and $r.standing.valid == true and $r.standing.seeded == true and $r.standing.cadences == [$cadence] } | length),
-        standings: ($runs | each {|r| { label: $r.label, run: $r.run } | merge $r.standing }),
-        cpu_over_wall: ($runs | each {|r| $r.cpu_over_wall }),
+        valid: ($pooled | length),
+        standings: ($runs | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reasons: $r.reasons } }),
+        cpu_over_wall: ($pooled | each {|r| $r.cpu_over_wall }),
         outcomes: ($runs | each {|r| { label: $r.label, run: $r.run, outcomes: $r.outcomes } }),
-        frames: (bench-frames ($runs | each {|r| $r.rows } | flatten) $period),
+        frames: (bench-frames ($pooled | each {|r| $r.rows } | flatten) $period),
+        apart: ($apart | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reasons: $r.reasons, cpu_over_wall: $r.cpu_over_wall, frames: (bench-frames $r.rows $period) } }),
     }
 }
 
@@ -1339,8 +1363,12 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let f = $c.frames
     let cpu = ($c.cpu_over_wall | compact)
     let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
-    let head = $"  cadence ($c.cadence), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) complete, valid, seeded, and at the cadence; the process at ($core) of a core"
-    if $f.frames == 0 { return [$head "    no frames"] }
+    let head = $"  cadence ($c.cadence), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
+    let apart = ($c.apart | each {|a|
+        let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, presented every (ms $a.frames.interval.median) ms at the median" })
+        $"    left out of the pool, a diagnostic: ($a.label) run ($a.run), ($a.standing): ($a.reasons | str join '; '); ($seen)"
+    })
+    if $f.frames == 0 { return ([$head "    no valid run to pool"] ++ $apart) }
     let grid = (if ($f.grid | is-empty) { "none" } else { $f.grid | each {|g| $"($g.intervals) at ($g.periods)P" } | str join ", " })
     [
         $head
@@ -1348,9 +1376,9 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
         $"    submission age (spread $f.submission_age)"
         $"    critical path (spread $f.critical); drawing (spread $f.draw)"
         $"    wait (spread $f.wait); pacing (ms $f.pacing.median) and await (ms $f.await.median) at the median"
-        $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.catch_up) catch-up"
+        $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.unknown_calls) unknown after a retried flip; ($f.catch_up) catch-up"
         $"    ($f.fast) fast, ($f.fast_waited) of them waited; ($f.over) at or over 15 ms; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
-    ]
+    ] ++ $apart
 }
 
 # A bench's report as text: the steps, each kind's cadences, then the
@@ -1366,10 +1394,18 @@ def bench-text [doc: record]: nothing -> string {
         [$"($title), per cadence, ms as least / median / 95th / 99th / greatest:"] ++ ($g.cadences | each {|c| bench-cadence-text $c } | flatten)
     } | flatten)
     let compared = ($doc.compared | each {|c|
-        if ($c | get -o error) != null { [$"the route at 50 cm on ($c.field): refused, ($c.error | lines | first)"] } else {
-            [$"the route at 50 cm, ($c.field) by leg, ms with the half spread:"] ++ ($c.table | get build | uniq | each {|b|
-                let legs = ($c.table | where build == $b | each {|t| if $t.value_us == null { $"($t.leg) -" } else { $"($t.leg) (ms $t.value_us) \((ms $t.half_spread_us)\)" } })
-                $"  ($b): ($legs | str join ', ')"
+        if ($c | get -o error) != null { [$"the route at 50 cm on ($c.field): refused even as a diagnostic, ($c.error | lines | first)"] } else {
+            let title = (if $c.diagnostic {
+                [$"the route at 50 cm, ($c.field) by leg, a diagnostic admitting the runs a comparison refuses: ($c.refused | lines | first)"]
+            } else {
+                [$"the route at 50 cm, ($c.field) by leg, ms with the half spread:"]
+            })
+            $title ++ ($c.table | get build | uniq | each {|b|
+                let rows = ($c.table | where build == $b)
+                let legs = ($rows | each {|t| if $t.value_us == null { $"($t.leg) -" } else { $"($t.leg) (ms $t.value_us) \((ms $t.half_spread_us)\)" } })
+                let marks = ($rows | get standings | flatten | uniq | where {|s| $s != "valid" })
+                let marked = (if ($marks | is-empty) { "" } else { $"; admits ($marks | str join ', ')" })
+                $"  ($b): ($legs | str join ', ')($marked)"
             })
         }
     } | flatten)
@@ -1380,10 +1416,12 @@ def bench-text [doc: record]: nothing -> string {
 # run of the bench wrote in `dir`, each a directory holding its
 # gauge.nuon, in the order bench.nuon lists them, else every directory's
 # by name: the plays, each on the host's own pad, and the route's
-# batches apart, each per cadence with every run pooled, untrimmed
-# (bench-cadence); then the route's batches compared at 50 cm on
-# critical_us and draw_us, a build a cadence, its batches its steps
-# (compare). report.nuon and report.txt are written in `dir`, any there
+# batches apart, each per cadence with its valid runs pooled, untrimmed,
+# and every other run kept apart as a diagnostic (bench-cadence); then
+# the route's batches compared at 50 cm on critical_us and draw_us, a
+# build a cadence, its batches its steps (compare), and when the
+# comparison refuses a run, compared again as a diagnostic admitting
+# it, marked. report.nuon and report.txt are written in `dir`, any there
 # before retired, and the text printed.
 def "main bench-report" [dir: path] {
     let dir = ($dir | path expand)
@@ -1401,7 +1439,9 @@ def "main bench-report" [dir: path] {
     let files = ($steps | where kind == "route" | get file)
     let compared = (if ($files | is-empty) { [] } else {
         ["critical_us" "draw_us"] | each {|field|
-            try { { field: $field, table: (compare $files $field 50 | get table) } } catch {|e| { field: $field, error: $e.msg } }
+            try { { field: $field, diagnostic: false, table: (compare $files $field 50 | get table) } } catch {|refusal|
+                try { { field: $field, diagnostic: true, refused: $refusal.msg, table: (compare $files $field 50 --diagnostic | get table) } } catch {|e| { field: $field, error: $e.msg } }
+            }
         }
     })
     let doc = {
