@@ -55,6 +55,13 @@ tiles_bind:
     ld t1, TILE_READY(s3)
     ld t2, TILE_LEVELS(s3)
     bgeu t1, t2, 5f
+.ifdef DEBUG
+    la t0, tile_level_cap
+    ld t3, 0(t0)
+    beqz t3, 36f
+    bgeu t1, t3, 5f                 # the console's cap on the levels built
+36:
+.endif
     la t0, tile_budget
     ld t2, 0(t0)
     ld t5, LUMAP_K(s2)
@@ -299,39 +306,50 @@ tile_build:
     li s7, 0                        # the row
 10:
     bgeu s7, s8, 90f
-    slli t0, s7, 8
-    srl t0, t0, s9                  # the fraction
+    slli t0, s7, 1
+    addi t0, t0, 1
+    slli t0, t0, 7
+    srl t0, t0, s9                  # the fraction at the row's centre
     li t1, 256
     sub t1, t1, t0
     ld t4, 0(sp)
     mul t4, t4, t1
     ld t5, 16(sp)
     mul t5, t5, t0
-    add t3, t4, t5                  # the start
+    add t3, t4, t5                  # the start, at the cell's edge
     ld t4, 8(sp)
     mul t4, t4, t1
     ld t5, 24(sp)
     mul t5, t5, t0
     add t4, t4, t5                  # the end
+    slli t2, s8, 1                  # the half texels across the cell
     li a0, ((1 << CHANNEL_BITS) - 1)
     and a5, t3, a0
     and a6, t4, a0
     sub a6, a6, a5
     div s10, a6, s8
+    div a7, a6, t2
     srli a5, t3, CHANNEL_BITS
     and a5, a5, a0
     srli a6, t4, CHANNEL_BITS
     and a6, a6, a0
     sub a6, a6, a5
-    div a6, a6, s8
-    slli a6, a6, CHANNEL_BITS
-    add s10, s10, a6
+    div t6, a6, s8
+    slli t6, t6, CHANNEL_BITS
+    add s10, s10, t6
+    div t6, a6, t2
+    slli t6, t6, CHANNEL_BITS
+    add a7, a7, t6
     srli a5, t3, (2 * CHANNEL_BITS)
     srli a6, t4, (2 * CHANNEL_BITS)
     sub a6, a6, a5
-    div a6, a6, s8
-    slli a6, a6, (2 * CHANNEL_BITS)
-    add s10, s10, a6
+    div t6, a6, s8
+    slli t6, t6, (2 * CHANNEL_BITS)
+    add s10, s10, t6
+    div t6, a6, t2
+    slli t6, t6, (2 * CHANNEL_BITS)
+    add a7, a7, t6
+    add t3, t3, a7                  # at the first texel's centre
     la t0, poly
     ld a1, POLY_TEX(t0)
     ld a2, POLY_VMASK(t0)
@@ -509,12 +527,11 @@ alphas_measure:
     beqz s5, 8f
     lwu s6, JAB_SPRITE_WIDTH(s5)
     lwu s7, JAB_SPRITE_HEIGHT(s5)
-    li t0, 8
-    bltu s6, t0, 8f
-    bltu s7, t0, 8f
     mv a0, s6
     mv a1, s7
     call mip_levels
+    li t0, 1
+    bleu a0, t0, 8f                 # a chain with no level past 0: one, no line
     la t0, alpha_chain_levels
     sd a0, 0(t0)                    # the chain's levels, the scales to find
     mul s8, s6, s7                  # the texels
@@ -542,9 +559,12 @@ alphas_measure:
     mul t2, s9, t1
     divu t2, t2, s8
     sd t2, 0(t0)
-    sd zero, 8(t0)
-    sd zero, 16(t0)
-    sd zero, 24(t0)
+    addi t3, t0, 8
+    addi t4, t0, (MIP_LEVELS * 8)
+6:
+    sd zero, 0(t3)                  # every coarser level's share, none yet
+    addi t3, t3, 8
+    bltu t3, t4, 6b
     beq s9, s8, 8f                  # full at every level: one, no line
     beqz s9, 7f                     # empty at every level: one
     addi s10, s5, (JAB_SPRITE_PIXELS + 3)
@@ -639,36 +659,36 @@ alphas_measure:
 72:
     la a1, word_coverage
     call append_str
+    la t0, alpha_chain_levels
+    ld s11, 0(t0)                   # the levels the line carries
+    li s10, 0
+73:
+    beqz s10, 74f
+    la a1, word_space
+    call append_str
+74:
     la t0, alpha_cover
+    slli t1, s10, 3
+    add t0, t0, t1
     ld a1, 0(t0)
     call append_dec
-    la a1, word_space
-    call append_str
-    la t0, alpha_cover
-    ld a1, 8(t0)
-    call append_dec
-    la a1, word_space
-    call append_str
-    la t0, alpha_cover
-    ld a1, 16(t0)
-    call append_dec
-    la a1, word_space
-    call append_str
-    la t0, alpha_cover
-    ld a1, 24(t0)
-    call append_dec
+    addi s10, s10, 1
+    bltu s10, s11, 73b
     la a1, word_of_share
     call append_str
-    lwu a1, 4(s4)
-    call append_dec
+    li s10, 1
+75:
+    li t0, 1
+    beq s10, t0, 76f
     la a1, word_space
     call append_str
-    lwu a1, 8(s4)
+76:
+    slli t0, s10, 2
+    add t0, t0, s4
+    lwu a1, 0(t0)
     call append_dec
-    la a1, word_space
-    call append_str
-    lwu a1, 12(s4)
-    call append_dec
+    addi s10, s10, 1
+    bltu s10, s11, 75b
     la a1, word_of_scale
     call append_str
     call line_end
@@ -861,6 +881,10 @@ tile_budget_frame:
     .skip 8
 tile_peak:
     .skip 8
+.ifdef DEBUG
+tile_level_cap:
+    .skip 8
+.endif
 tilemaps:
     .skip (LUMAP_COUNT * TILE_SIZE)
 material_alpha:

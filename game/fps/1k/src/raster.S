@@ -814,13 +814,8 @@ poly_rect:
 .endm
 
 .macro mip_bind
-    ld a5, 192(sp)                  # the block's level
+    ld a5, 192(sp)                  # the block's level, the chain's last at most
     la a6, poly
-    ld a7, POLY_MIP_COUNT(a6)
-    addi a7, a7, -1
-    ble a5, a7, .Lmip_held\@
-    mv a5, a7                       # held under the chain's levels
-.Lmip_held\@:
     ld a1, POLY_MIPS(a6)
     slli a7, a5, 3
     add a1, a1, a7
@@ -831,10 +826,8 @@ poly_rect:
     srl a3, a3, a5
     ld a4, POLY_WSHIFT(a6)
     sub a4, a4, a5
-    sra s8, s8, a5
-    sra s9, s9, a5
-    sra t5, t5, a5
-    sra t6, t6, a5
+    sd s5, 40(sp)
+    addi s5, a5, 16                 # a coordinate to its texel at the level
 .endm
 
 .balign CODE_PAGE
@@ -1050,6 +1043,9 @@ span_fill:
     sd t3, 200(sp)
 29:
     la a0, poly
+    ld t3, POLY_MIP_COUNT(a0)
+    addi t3, t3, -1
+    sd t3, 224(sp)                  # the chain's last level, every block's bound
     ld a1, POLY_TEX(a0)
     ld a2, POLY_VMASK(a0)
     ld a3, POLY_UMASK(a0)
@@ -1121,10 +1117,10 @@ span_fill:
     add a6, a6, a0
     sd a6, 208(sp)                  # and at the next block
     srli a7, a7, 17
+    ld a0, 224(sp)                  # the chain's last level
     li a6, 0
 434:
     beqz a7, 435f
-    li a0, (MIP_LEVELS - 1)
     bge a6, a0, 435f
     addi a6, a6, 1
     srli a7, a7, 1
@@ -1142,10 +1138,7 @@ span_fill:
     ld a5, 200(sp)
     bltz a5, 4300f
     ld a6, 192(sp)
-    ble a6, a5, 436f
-    mv a6, a5                       # held under the levels whole
-436:
-    sd a6, 192(sp)
+    bgt a6, a5, 4300f               # the level not whole in the tiles: the chain's at it
     j 80f
 4300:
     ld t3, 160(sp)
@@ -1272,10 +1265,10 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 46f
     addi t4, t4, 1
-    srli a5, s9, 16
+    srl a5, s9, s5
     and a5, a5, a2
     sll a5, a5, a4
-    srli a6, s8, 16
+    srl a6, s8, s5
     and a6, a6, a3
     slli a6, a6, 2
     add a5, a5, a6
@@ -1322,10 +1315,10 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 56f
     addi t4, t4, 1
-    srli a5, s9, 16
+    srl a5, s9, s5
     and a5, a5, a2
     sll a5, a5, a4
-    srli a6, s8, 16
+    srl a6, s8, s5
     and a6, a6, a3
     slli a6, a6, 2
     add a5, a5, a6
@@ -1464,7 +1457,6 @@ span_fill:
     ld a6, STAT_TILED_PIXELS(a5)
     add a6, a6, s11
     sd a6, STAT_TILED_PIXELS(a5)
-    ld s5, 40(sp)
     sd zero, 152(sp)
     li a5, -1
     sd a5, 160(sp)
@@ -1475,10 +1467,10 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 41f
     addi t4, t4, 1
-    srli a5, s9, 16
+    srl a5, s9, s5
     and a5, a5, a2
     sll a5, a5, a4
-    srli a6, s8, 16
+    srl a6, s8, s5
     and a6, a6, a3
     slli a6, a6, 2
     add a5, a5, a6
@@ -1502,10 +1494,10 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 51f
     addi t4, t4, 1
-    srli a5, s9, 16
+    srl a5, s9, s5
     and a5, a5, a2
     sll a5, a5, a4
-    srli a6, s8, 16
+    srl a6, s8, s5
     and a6, a6, a3
     slli a6, a6, 2
     add a5, a5, a6
@@ -1525,6 +1517,7 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 50b
 60:
+    ld s5, 40(sp)                   # v/z back from the block's spill
     sub t3, s11, t4
     ld t5, 144(sp)
     add t5, t5, t3

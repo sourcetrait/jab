@@ -10,9 +10,10 @@
 # person to play and closes the measurement after `--seconds`; `read`
 # reads a capture either made; `compare` sets builds' captures side by
 # side, a walked leg per stretch of its path, refusing a run measured
-# incomplete, invalid, or before validity was recorded unless
-# `--diagnostic` admits it, and a run with nothing to compare in it
-# outright, every run's standing kept. Each run keeps the route
+# incomplete, invalid, or before validity was recorded, or one missing a
+# leg another run holds, unless `--diagnostic` admits it, and a run with
+# nothing to compare in it outright, every run's standing and missing
+# legs kept. Each run keeps the route
 # it played and its identity beside its capture, then gauge.nuon and the
 # summary. The measurement is the capture read in order through the
 # first end marker; what follows it counts for nothing. A frame passes
@@ -68,7 +69,8 @@ const FLIP_VALID = [0 1]
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 const MET = [nothing geometry android]
 # the standings a comparison refuses unless admitted as a diagnostic, and
-# those it refuses even then, holding nothing a comparison can read
+# those it refuses even then, holding nothing a comparison can read; a
+# run missing a leg is refused unless admitted too, whatever its standing
 const REFUSED = [incomplete invalid unchecked]
 const REJECTED = [empty unclassified unusable]
 
@@ -752,10 +754,14 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # Every run is classified before any leg is measured (standing-of): one
 # measured incomplete, invalid, or unchecked is refused unless
 # `diagnostic` admits it, and one empty, unclassified, or unusable is
-# refused even then, the comparison failing with every such run's file,
-# run, and reasons. The method, the bins, every run's standing and bins
+# refused even then. A run's expected legs are every leg any compared
+# run holds, and one missing any is refused unless `diagnostic` admits
+# it, its missing legs then an explicit missing result in its run and in
+# its build's row in place of a value, never a mean over fewer batches.
+# The comparison fails with every refused run's file, run, and reasons.
+# The method, the bins, every run's standing, missing legs, and bins
 # with their medians, and the table, each row naming its batches'
-# standings, come back together.
+# standings and the batches missing its leg, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let g = (open ($f | path expand))
@@ -768,60 +774,74 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             {
                 file: ($f | path expand), label: $g.label, build: $build, image: $image, run: $r.run,
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
+                held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
             }
         }
     } | flatten)
-    let stopped = ($classified | where {|r|
-        ($r.standing in $REJECTED) or ((not $diagnostic) and ($r.standing in $REFUSED))
-    })
+    let expected = ($classified | get held | flatten | uniq)
+    let covered = ($classified | each {|r| $r | insert missing ($expected | where {|leg| $leg not-in $r.held }) })
+    let stopped = ($covered | each {|r|
+        let standing = (if ($r.standing in $REJECTED) or ((not $diagnostic) and ($r.standing in $REFUSED)) {
+            $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')"
+        } else { null })
+        let partial = (if $diagnostic or ($r.missing | is-empty) or ($r.standing in $REJECTED) { null } else {
+            $"($r.file) run ($r.run), partial: missing the legs ($r.missing | str join ', ')"
+        })
+        if $standing == null and $partial == null { null } else { { causes: ([$standing $partial] | compact) } }
+    } | compact)
     if not ($stopped | is-empty) {
         let head = ([
             $"the comparison refuses ($stopped | length) runs: an empty, unclassified, or unusable run always,"
-            "an incomplete, invalid, or unchecked one unless --diagnostic admits it, marked"
+            "an incomplete, invalid, or unchecked one, or one missing a leg another run holds, unless"
+            "--diagnostic admits it, marked"
         ] | str join " ")
-        let named = ($stopped | each {|r| $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')" })
+        let named = ($stopped | get causes | flatten)
         error make { msg: ([$head] | append $named | str join "\n  ") }
     }
-    let runs = ($classified | each {|r|
-        let legs = ($r.rows | get leg | uniq | each {|leg|
+    let runs = ($covered | each {|r|
+        let legs = ($r.held | each {|leg|
             leg-measure ($r.rows | where leg == $leg) $leg $field $bin_cm
         })
-        $r | reject rows | insert legs $legs
+        let absent = ($r.missing | each {|leg| { leg: $leg, kind: "missing", frames: 0, path_m: null, median: null, bins: [] } })
+        $r | reject rows held | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
     for b in $builds {
         let images = ($runs | where build == $b | get image | uniq)
         if ($images | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($images | length) images; a build's batches are one build" } }
     }
-    let names = ($runs | each {|r| $r.legs | get leg } | flatten | uniq)
-    let common = ($names | each {|leg|
-        let measured = ($runs | each {|r| $r.legs | where leg == $leg | get -o 0 } | compact)
+    let common = ($expected | each {|leg|
+        let measured = ($runs | each {|r| $r.legs | where {|l| $l.leg == $leg and $l.kind != "missing" } | get -o 0 } | compact)
         let kinds = ($measured | get kind | uniq)
         if ($kinds | length) > 1 { error make { msg: $"the leg ($leg) is walked in some runs and stands in others" } }
         let bins = (if ($kinds | first) == "path" {
             let sets = ($measured | each {|m| $m.bins | get bin })
             $sets | reduce --fold ($sets | first) {|s, acc| $acc | where {|x| $x in $s } }
         } else { [] })
-        { leg: $leg, kind: ($kinds | first), runs: ($measured | length), bins: $bins }
+        { leg: $leg, kind: ($kinds | first), runs: ($measured | length), missing: (($runs | length) - ($measured | length)), bins: $bins }
     })
     let valued = ($runs | each {|r|
         $r | merge { legs: ($r.legs | each {|l|
             let c = ($common | where leg == $l.leg | first)
             let picked = ($l.bins | where {|b| $b.bin in $c.bins })
-            let value = (if $l.kind == "frames" { $l.median } else if ($picked | is-empty) { null } else { $picked | get median | math avg })
+            let value = (if $l.kind == "missing" { null } else if $l.kind == "frames" { $l.median } else if ($picked | is-empty) { null } else { $picked | get median | math avg })
             $l | insert value $value
         }) }
     })
     let table = ($builds | each {|b|
-        $names | each {|leg|
-            let values = ($valued | where build == $b | each {|r| $r.legs | where leg == $leg | get -o 0.value } | compact)
-            if ($values | is-empty) { null } else {
-                {
-                    build: $b, leg: $leg, value_us: ($values | math avg), half_spread_us: ((($values | math max) - ($values | math min)) / 2),
-                    batches: ($values | length), standings: ($valued | where build == $b | get standing | uniq),
-                }
+        let batches = ($valued | where build == $b)
+        $expected | each {|leg|
+            let entries = ($batches | each {|r| $r.legs | where leg == $leg | get 0 })
+            let missing = ($entries | where {|l| $l.kind == "missing" } | length)
+            let values = ($entries | get value | compact)
+            let whole = ($missing == 0 and (not ($values | is-empty)))
+            {
+                build: $b, leg: $leg,
+                value_us: (if $whole { $values | math avg } else { null }),
+                half_spread_us: (if $whole { (($values | math max) - ($values | math min)) / 2 } else { null }),
+                batches: ($batches | length), missing: $missing, standings: ($batches | get standing | uniq),
             }
-        } | compact
+        }
     } | flatten)
     {
         method: {
@@ -833,7 +853,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             leg_value: "a walked leg's value is the mean of its bin values over the bins every run in the comparison reached; a standing leg's is its frames' median by nearest rank",
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: "a capture's label less a trailing _<n> names its build, whose runs are its batches and share the image's SHA-256",
-            table: "a build's value for a leg is the mean of its runs' values; the half spread is half their range",
+            table: ([
+                "a build's value for a leg is the mean of its runs' values and the half spread is half their range,"
+                "both null when a batch is missing the leg or no bin was reached by every run; a row a build and leg"
+            ] | str join " "),
             standing: ([
                 "a run stands as its measurement and its own rows record it, classified before any leg is measured:"
                 "unclassified, its measurement recording no clocked; empty, no rows; unusable, a value of the field"
@@ -841,6 +864,11 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "clockless, a build older than the clock records read from its states alone; incomplete, invalid, or"
                 "unchecked (complete but measured before validity was recorded), refused unless --diagnostic admits"
                 "it; or valid; each table row names its batches' standings"
+            ] | str join " "),
+            coverage: ([
+                "a run's expected legs are every leg any compared run holds; a run missing one is refused unless"
+                "--diagnostic admits it, and then each leg it misses is an explicit missing result in its run and"
+                "its build's row is missing in place of a value, never a mean over fewer batches"
             ] | str join " "),
             admitted: $diagnostic,
         },
@@ -923,17 +951,19 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
 # Set builds' captures side by side (compare): every leg's value of
 # `--field` a run, a build's mean and half spread a leg, printed, marked
 # with its runs' standings other than valid; a run measured incomplete,
-# invalid, or before validity was recorded refused unless `--diagnostic`
-# admits it, and one with nothing to compare refused even then, each
-# named with its file, its run, and the reasons; the method, the bins
-# every run reached, each run's standing and bins with their medians, and
-# the table go to `--out`.
+# invalid, or before validity was recorded, or missing a leg another run
+# holds, refused unless `--diagnostic` admits it, and one with nothing to
+# compare refused even then, each named with its file, its run, and the
+# reasons; under `--diagnostic` a leg some batch of a build is missing
+# prints as missing in place of a value; the method, the bins every run
+# reached, each run's standing, missing legs, and bins with their
+# medians, and the table go to `--out`.
 def "main compare" [
     ...files: string                 # the gauge.nuon files compared
     --field: string = "draw_us"      # the row's column compared
     --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
     --out: string = ""               # where the comparison lands, the program's .target/compare.nuon unless given
-    --diagnostic                     # admit runs measured incomplete, invalid, or unchecked, marked
+    --diagnostic                     # admit runs measured incomplete, invalid, or unchecked, or missing a leg, marked
 ] {
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { $env.FILE_PWD | path join ".." ".target" "compare.nuon" | path expand } else { $out | path expand })
@@ -942,7 +972,14 @@ def "main compare" [
     for t in $result.table {
         let marks = ($t.standings | where {|s| $s != "valid" })
         let marked = (if ($marks | is-empty) { "" } else { $"; ($marks | str join ', ')" })
-        print $"gauge: ($t.build) ($t.leg): (ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches($marked)"
+        let value = (if $t.missing > 0 {
+            $"missing in ($t.missing) of ($t.batches) batches"
+        } else if $t.value_us == null {
+            $"no value, no bin reached by every run, ($t.batches) batches"
+        } else {
+            $"(ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches"
+        })
+        print $"gauge: ($t.build) ($t.leg): ($value)($marked)"
     }
     print $"gauge: ($target)"
 }

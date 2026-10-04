@@ -300,7 +300,7 @@ The atlases sit eight bytes apart, one a level.
 
 ## .set POLY_TILE_READY
 
-`u64`: the levels built whole, which a span's levels stay under.
+`u64`: the levels built whole; a block reads its tile only at one of them, else the chain at its level.
 
 ## .set POLY_TILE_COLS_SHIFT
 
@@ -613,21 +613,19 @@ texels read, and a span reads tiles only from the levels built whole, so no
 cell is ever checked; until level 0 is whole the surface draws on the lit
 loop. A block takes its own level from its texel step a pixel, the largest of
 the steps along the span and down a row on each axis, 16.16, level m where
-the step is under 2^(m + 1) texels, the last level for any step beyond, held
-under the levels whole alone, so a block reads about a texel a pixel and the
-spans a row apart read the same lines; a span whose ends lie past the map's
+the step is under 2^(m + 1) texels, held under the chain's last, so a block
+reads about a texel a pixel and the spans a row apart read the same lines;
+it reads its tile where that level is built whole and the chain at that
+level otherwise, never a sharper tile; a span whose ends lie past the map's
 edge keeps the lit loop, which clamps. The records' and the polygon's level
 fields sit eight bytes apart.
 
-The tile record and the polygon's six tile fields carry what the span's
-block judgement and its tile loop need beyond the map's word: the atlas, the
-column shift, the cells across and down that a block's box must lie within,
-and the two bit maps, built and wanted, which the span reads and marks per
-block (tile.S). The arena's size, the largest atlas, the frame's build
-budget, and the near step are one constant each, the budget in texels so a
-carpet's 128-texel cell counts four of a brick's, the step in 16.16 texels a
-pixel at two, where a block's pixels start to lie a texel apart and the
-texture's cache line serves them better than a tile's. The budget's first
+The tile record and the polygon's tile fields carry what the span's
+judgement and its tile loop need beyond the map's word: the atlases a level,
+the levels whole, the column shift, and the cells across and down that a
+span's ends must lie within (tile.S). The arena's size, the largest atlas,
+and the frame's build budget are one constant each, the budget in texels so
+a carpet's 128-texel cell counts four of a brick's. The budget's first
 reading on the whole-surface cut, 48 cells of 64 texels, cost about three
 milliseconds on the spawn's first frame, 26.7 against 23 ms.
 
@@ -691,8 +689,10 @@ A material's mip chain: the texels of each level from 1, level 0 the
 record's own, each level half a side of the one before, built at load by the
 tile shrink's rule under the level's alpha scale (mip.S), so a lit or unlit
 span reads the level a block's footprint asks for and the lit loop and a tile
-at one level hold the same texel; MIP_LEVELS deep at most, a level while both
-sides stay two texels or more and the arena holds it.
+at one level hold the same texel. A level is added while both sides of the
+one before are two texels or more and the arena holds it, so a side can end
+at one texel, the fence's 1 by 4 at level 8; MIP_LEVELS is a cap of its own
+apart from that limit.
 
 The mip constants: MIP_LEVELS is the chain's depth at most, ten taking a
 512-texel side to one; the entry is a level's texels eight bytes a level; the

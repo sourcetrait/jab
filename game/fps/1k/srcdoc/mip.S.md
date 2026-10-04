@@ -54,9 +54,10 @@ the level's factor and capped.
 
 ## mip_levels
 
-A level while both sides stay two texels or more, so a 256-by-1024 fence
-reaches 1 by 4 at level 8 and stops; MIP_LEVELS caps a 1024-texel square
-at level 9, two by two.
+A level is added while both sides of the one before are two texels or more,
+so a side can end at one texel: the 256-by-1024 fence reaches 1 by 4 at
+level 8 and stops there. MIP_LEVELS is a cap of its own, a policy apart from
+that limit, which holds a 1024-texel square at level 9, two by two.
 
 ## mips_build
 
@@ -67,7 +68,8 @@ images for the same reason and runs over every record. Each level is
 built from the one before, the finer row pair walked two texels at a
 time, the output written straight into the arena from a bump cursor; a
 chain the arena cannot finish stops at the level in hand and the
-material's count says so, the span holding its level under the count.
+material's count says so, span_fill holding every block's level under the
+count before it chooses the tiles or the chain.
 Nothing is freed: the chain is a property of the load, as the lumel maps
 are. The arena is bss, free until touched, and a chain is a third of its
 texture, so the factory's chains take about six megabytes of the thirty-two.

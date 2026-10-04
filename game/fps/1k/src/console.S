@@ -109,6 +109,11 @@ console_frame:
 7:
     la t0, tile_budget_frame
     sd t1, 0(t0)
+.ifdef DEBUG
+    lbu t1, 6(s2)
+    la t0, tile_level_cap
+    sd t1, 0(t0)                    # the levels a surface builds, 0 for all
+.endif
     j 8f
 9:
     li t1, 'R'

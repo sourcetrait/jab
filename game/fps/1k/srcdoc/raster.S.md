@@ -213,7 +213,22 @@ evaluation had on the views that enter the most pixels.
 ## .macro mip_bind
 
 The lumel map has been sampled at level 0 before the bind; the block's end
-reloads level 0's exact coordinates for the next.
+reloads level 0's exact coordinates for the next. The level arrives held
+under the chain's last: span_fill holds it once where it computes it, so the
+tiles and the chain read one level and the bind holds nothing of its own.
+
+The coordinates and their steps stay at level 0 and each pixel shifts its
+coordinate by the level plus 16, in s5, the address the tile loop computes
+for the same point, so a tile and the chain at one level read the same
+texel at every pixel: one coordinate rule for the cache and the chain. The
+bind shifted u, v, and their steps by the level before and the loops
+stepped the shifted values, which drops the step's low bits every pixel; the
+tile loop steps the full value, so near a texel's edge the two read
+neighbouring texels, which the still factory's spawn view read as 33 pixels
+of 2.07 million differing under the full-bright frame, by up to 49 of 255.
+The shift by a register costs what the shift by 16 did; s5, v/z, rides 40(sp)
+for the block, as the tile loop spills it, and the block's end takes it
+back for every path.
 
 ## span_fill
 
@@ -283,12 +298,14 @@ starting at the first block.
 The block: its length, its end's u and v, the steps. The block's level by
 its footprint: the largest of its texel steps along the span and down a row,
 the row's interpolated along the span; level m where the step is under 2^(m
-+ 1) texels, the chain's last at most, which the tiles and the loops each
-hold under what they have. Lit: a span judged for its tiles (the prologue)
-takes them block by block at the block's level held under the levels the
-surface has whole; a block read from tiles pays no sample, no interval, and
-no brightness carry. A span with no tiles takes the lit loop at the chain's
-level. The texel step a pixel, the larger of |du| and |dv|, against the
++ 1) texels, held once under the chain's last, which the prologue keeps in
+slot 224. One level a block, chosen before the cache or the chain: lit, a
+span judged for its tiles (the prologue) reads a block's tile only where the
+block's level is built whole, and any other block takes the lit loop through
+the chain at that same level, so a block never reads a sharper level than it
+asks, while the cache builds or past its four levels; a block read from
+tiles pays no sample, no interval, and no brightness carry. A span with no
+tiles takes the lit loop at the chain's level. The texel step a pixel, the larger of |du| and |dv|, against the
 lumel's 2^k texels: four blocks when they stay within half a lumel over 64
 pixels, two when within it over 32, else one, so a lumel spans at least two
 samples wherever one block allows it. The end's u and v: the block's own
@@ -371,22 +388,27 @@ gradients, and the row step's change a pixel, four divides a span where
 the tiled spans alone paid them before. Every block then takes its level
 from its own step along the span and the row step interpolated along the
 span, the step's octave, under two texels level 0, under four 1, under
-eight 2, and so on to the chain's last, about twenty-five ops a block; a
-tiled span holds it under the levels the surface has whole and reads the
-tile, any other span holds it under the material's chain and reads the
-texture's level through mip_bind: the level's texels from the table the
-bind named, the masks and the row shift shifted by the level, and u, v,
-and their steps a pixel shifted to the level's resolution, so the pixel
-loops are unchanged and the block's end reloads level 0's exact
-coordinates for the next. The bind comes after the lumel sample, which
-reads level 0 coordinates, and before the loop. So a block reads about a
-texel a pixel at any distance, a far floor stops touching a cache line a
-pixel, and the lit loop and a tile at one level hold the same texel under
-one brightness, which the alpha fixture holds identical over the opening
-at levels 0, 1, and 2 and which TilePool's handoff between the loop and
-the cache rests on. The unlit loops pay the prologue's divides and the
-level for the same picture; the sky reads its texture at level 0 by
-screen position, under a texel a pixel.
+eight 2, and so on, held under the chain's last, about twenty-five ops a
+block; a tiled span reads the tile where the level is built whole, and
+every other block reads the texture's level through mip_bind: the level's
+texels from the table the bind named, the masks and the row shift shifted
+by the level, and the shift from a 16.16 coordinate to its texel at the
+level, the coordinates themselves staying at level 0 as the tile loop reads
+them, so the two address one texel at every pixel and the block's end
+reloads level 0's exact coordinates for the next. The bind comes after the
+lumel sample, which reads level 0 coordinates, and before the loop. So a block
+reads about a texel a pixel at any distance, a far floor stops touching a
+cache line a pixel, and the lit loop and a tile at one level hold the same
+texel under one brightness, which the alpha fixture holds identical over
+the opening at levels 0, 1, and 2, and with level 0 alone built at the mid
+pose's level 1, and which TilePool's handoff between the loop and the
+cache rests on. The level was chosen after the path before: a tiled span
+held its blocks under the levels whole, so a block asking level 2 read
+the chain at 2 before the cache arrived, then tile 0, 1, and 2, and a
+block past the cache's four levels read tile 3 where the chain read
+deeper. The unlit loops pay the prologue's divides and the level for the
+same picture; the sky reads its texture at level 0 by screen position,
+under a texel a pixel.
 
 ### The tiled modes
 
@@ -399,17 +421,18 @@ surface is built whole a level at a time (tile.S): the second to sixth
 cuts checked cells, per block or per span, and the measured cost of
 that judgement was 3 to 6 ms a view, more than the lighting's whole,
 with the per-span box of a diagonal line quadratic at a coarse level. A
-block then takes the footprint's level held under the levels whole,
-and its level's atlas, shifts, and
-mask ride the texture's four registers, the brightness's two, and one
-spilled saved register, since a hit needs no brightness: the cell shift
-k + 16 and the texel shift m + 16 from a 16.16 coordinate. The seventh
-cut held the block's level between two levels taken at the span's ends
-as well, each the larger of the row step there and the step along the
-span averaged over the whole span, which cost two divides a span and
+block whose level is built whole then reads that level's atlas, its
+shifts and mask riding the texture's four registers, the brightness's
+two, and one spilled saved register, since a hit needs no brightness: the
+cell shift k + 16 and the texel shift m + 16 from a 16.16 coordinate; a
+block asking a level the tiles do not hold whole, one still building or
+past the four, takes the lit loop at the chain's level instead. The
+seventh cut held the block's level between two levels taken at the span's
+ends as well, each the larger of the row step there and the step along
+the span averaged over the whole span, which cost two divides a span and
 clamped every block of a receding wall to the average's level wherever
-the row steps sat under it (tile.S); the stack slots those bounds rode,
-32 and 224, are free.
+the row steps sat under it (tile.S); of the stack slots those bounds
+rode, 32 holds the owner build's surface and 224 the chain's last level.
 
 A hit pays nothing of the lighting: no sample, no interval, no brightness
 carry. The tile loop ends by marking the interval over and the brightness
@@ -446,22 +469,21 @@ the levels consistent with it; an antialiased edge thins by up to half
 a texel. A sign-extended load puts copies of that bit above it, which a
 logical shift by 31 leaves nonzero either way.
 
-A plane's tiles are in blocks of four by four texels (tile.S), and its
-block takes the swizzled pair of loops by the mode's flag: the tile as
-above, then the texel's block row by a shift of k plus four, its block
-along the row by a shift of six, and its row and place in the block from
-the low two bits of each coordinate; ten more ops a pixel and a second
-spilled saved register for the block row's shift. The third cut, with
-every tile row-major, read the walls gaining 2.5 to 4.7 ms and the planes
-losing 5 to 10 in their phase on every view but the yard, whose floor at
-yaw 90 walks along the rows; the lit setup's reload of the texture's
-four registers is skipped for a polygon with no tiles, since every lit
-block of every polygon took it before. The fourth cut, blocks for
+Every surface's tiles are row-major. The fourth cut laid a plane's tiles in
+blocks of four by four texels with a swizzled pair of loops, the texel's
+block row by a shift of k plus four, its block along the row by a shift of
+six, and its row and place in the block from the low two bits of each
+coordinate, ten more ops a pixel and a second spilled saved register. The
+third cut, with every tile row-major, read the walls gaining 2.5 to 4.7 ms
+and the planes losing 5 to 10 in their phase on every view but the yard,
+whose floor at yaw 90 walks along the rows; the lit setup's reload of the
+texture's four registers is skipped for a polygon with no tiles, since
+every lit block of every polygon took it before. The fourth cut, blocks for
 planes, measured against a build with no binds in the same batch: walls
 level to the microsecond, planes 8 to 12 ms worse, the blocks no better
-than rows; and with every tile read pinned to one cache-hot tile, the
-judgement and the address work kept, the frame reads level with no
-binds on every view, so the hit path's own work costs exactly what the
+than rows, so they went; and with every tile read pinned to one cache-hot
+tile, the judgement and the address work kept, the frame reads level with
+no binds on every view, so the hit path's own work costs exactly what the
 hit saves, and the tile data costs the rest. The combined ceiling, the
 multiplies and the sampling both cut on a no-bind build, measures the
 lighting's whole at 0 to 4.5 ms a view.

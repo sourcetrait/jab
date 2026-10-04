@@ -25,7 +25,12 @@
 # exact colour where the oracle's scaled means pass, the weighted mean
 # of the shrink among those colours, and the solid backdrop behind
 # where they do not, the lit loop's picture from the same build
-# agreeing at every level; the flow's three fixtures, a sprite straddling a
+# agreeing at every level, and with level 0 alone built the mid pose's
+# blocks taking the chain at their own level and agreeing too, the same
+# poses under the room's own light reported, tiled against lit; one
+# level a block, the still factory's spawn view with every level built
+# against the tiles held off, identical over the screen with the far
+# floor's blocks past the tiles' levels; the flow's three fixtures, a sprite straddling a
 # doorway drawn whole beside it, the eye on the line two sectors share
 # reaching the sector behind it, and a map where a hall's rectangle
 # grows through a later path before the room beyond it can be reached;
@@ -132,26 +137,37 @@ const STRADDLE_FLAGS = 4
 # materials beside the sprite's: the sprite's halves; a uniform alpha
 # over the pass, which the engine leaves at one and names no line for;
 # a uniform alpha under it; a checkerboard of opaque and transparent
-# texels, whose coarser levels go uniform; and an 8 by 8 texture with
-# one opaque 2 by 2 block, whose coarsest level is one texel. The
-# engine's line for a material under full coverage, its share of texels
-# at or above the pass a level in 10000ths and its scales in 65536ths;
-# the slack each coarser level of the fence and the grate as authored
-# may sit from level 0, stated from the measured lines: the fence's
-# levels read 606, 947, and 922 against 733, and the grate's 6093,
-# 6093, and 5000 against 6093, its coarsest level a step the search
-# cannot reach nearer
+# texels, whose coarser levels go uniform; an 8 by 8 texture with one
+# opaque 2 by 2 block, whose coarsest level is one texel; and a 4 by 4
+# whose every 2 by 2 holds three alphas at the pass and one a step
+# under it, three quarters passing, whose means of 127 vanish at level
+# 1 unless the search lifts them back over the pass. The engine's line
+# for a material under full coverage, its share of texels at or above
+# the pass at every level of its chain in 10000ths and every coarser
+# level's scale in 65536ths; the slack each of the first three coarser
+# levels of the fence and the grate as authored may sit from level 0,
+# stated from the measured lines: the fence's levels read 606, 947, and
+# 922 against 733, and the grate's 6093, 6093, and 5000 against 6093,
+# its third a step the search cannot reach nearer; the deeper levels of
+# a texture a few texels a side move in steps too coarse to hold, and
+# the oracle holds them exactly instead
 const ALPHA_CASES = [
     { name: "sprite/test", w: 64, h: 64, kind: "halves", alpha: 255 },
     { name: "test/opaque", w: 64, h: 64, kind: "uniform", alpha: 200 },
     { name: "test/faint", w: 64, h: 64, kind: "uniform", alpha: 100 },
     { name: "test/checker", w: 64, h: 64, kind: "checker", alpha: 255 },
     { name: "test/small", w: 8, h: 8, kind: "block", alpha: 255 },
+    { name: "test/edge", w: 4, h: 4, kind: "edge", alpha: 128 },
 ]
-const ALPHA_LINE = "fps: alpha {name}: coverage {c0} {c1} {c2} {c3} of 10000, scale {s1} {s2} {s3} of 65536"
+const ALPHA_LINE = "fps: alpha {name}: coverage {coverage} of 10000, scale {scale} of 65536"
 const MIPS_LINE = "fps: mips {chains} chains, {levels} levels, {texels} texels in {ms} ms"
 const ALPHA_PASS = 128
 const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
+# The chain's levels at most and the scratch a level's alphas take at
+# the search, past which a texture keeps a scale of one (render.inc's
+# MIP_LEVELS and ALPHA_PLANE_BYTES)
+const MIP_LEVELS = 10
+const ALPHA_PLANE_BYTES = 262144
 # The alpha policy rendered: the proof map's grate wall given a texture
 # of the test's own, 256 square at two repeats a metre so a lumel cell
 # is one repeat, in patches of 64 texels of one kind each, a kind a 2
@@ -187,10 +203,13 @@ const FIXTURE_KINDS = {
 }
 const FIXTURE_GRID = [[A, B, A, D], [C, A, E, D], [A, F, A, G], [D, E, C, F]]
 const FIXTURE_REPEATS = [[1, 1], [2, 2]]
+# The mid pose is run a third time with level 0 alone built (the L
+# frame's byte 6), its blocks asking level 1: they take the chain at
+# level 1, never a sharper tile, so its picture is the lit loop's
 const FIXTURE_POSES = [
-    { name: "near", distance: 2.0, level: 0, lit: true },
-    { name: "mid", distance: 5.5, level: 1, lit: true },
-    { name: "far", distance: 10.0, level: 2, lit: true },
+    { name: "near", distance: 2.0, level: 0, capped: false },
+    { name: "mid", distance: 5.5, level: 1, capped: true },
+    { name: "far", distance: 10.0, level: 2, capped: false },
 ]
 const FIXTURE_INSET = 8
 # The radius a sample must lie outside of about the screen's centre,
@@ -301,6 +320,10 @@ const VIEW_POINTS = [[26.0, 6.0], [15.0, 6.0], [18.0, 4.0], [22.0, 8.0], [20.0, 
 const VIEW_EYE = { x: 29.0, y: 2.5, z: 1.6 }
 const VIEW_YAWS = [170, 130]
 const VIEW_SLACK = 4
+# The factory's spawn view, the spawn's eye and yaw, for one level a
+# block: the bay's floor runs to some twenty metres from it, where a
+# block asks a level past the tiles' four
+const SPAWN_POSE = { name: "spawn", x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 }
 
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
     assert (($assets | path exists)) "the sdk built the assets image"
@@ -416,9 +439,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let line = ($alpha_lines | where {|l| $l starts-with $"fps: alpha ($c.name): " })
         if $want.line {
             assert equal ($line | length) 1 $"one alpha line for ($c.name): ($alpha_lines)"
-            let got = ($line | get 0 | parse $ALPHA_LINE | get 0)
-            assert equal ([$got.c0 $got.c1 $got.c2 $got.c3] | each {|v| $v | into int }) $want.coverage $"($c.name)'s coverage by level as the rule gives it: ($line | get 0)"
-            assert equal ([$got.s1 $got.s2 $got.s3] | each {|v| $v | into int }) $want.scale $"($c.name)'s scales by level as the rule gives them: ($line | get 0)"
+            let got = (alpha-line ($line | get 0))
+            assert equal $got.coverage $want.coverage $"($c.name)'s coverage at every level of its chain as the rule gives it: ($line | get 0)"
+            assert equal $got.scale $want.scale $"($c.name)'s scales at every coarser level as the rule gives them: ($line | get 0)"
         } else {
             assert ($line | is-empty) $"no alpha line for ($c.name), full at the pass: ($line)"
         }
@@ -772,9 +795,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     for yaw in $VIEW_YAWS {
         let view_pose = { name: $"view($yaw)", x: $VIEW_EYE.x, y: $VIEW_EYE.y, z: $VIEW_EYE.z, yaw: $yaw, pitch: 0 }
         mut captures = {}
-        for v in [{ name: "still", bright: 0 }, { name: "bright", bright: 1 }] {
-            let level = ([("L" | into binary), 0x[00 00 00], ($v.bright | into binary | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect)
-            let view_sends = [{ at: 1400ms, bytes: $level }, { at: 1500ms, bytes: (pose pose-frame $view_pose) }]
+        for v in [{ name: "still", bright: false }, { name: "bright", bright: true }] {
+            let view_sends = [{ at: 1400ms, bytes: (level-frame $v.bright false 0) }, { at: 1500ms, bytes: (pose pose-frame $view_pose) }]
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $view_still ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the ($v.name) view at yaw ($yaw)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -805,6 +827,29 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         $view_spread = ($view_spread | append { point: $key, spread: $spread, light: ($rs | get light) })
     }
     assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
+
+    # one level a block: the still factory's spawn view under the bright
+    # frame with every level of the tiles built against the tiles held
+    # off, identical over the whole screen; the bay's far floor asks
+    # levels past the tiles' four, which take the chain at their own
+    # level whether the tiles are built or not, and every nearer block
+    # reads its level from the tiles or the chain alike
+    mut spawn_captures = {}
+    for v in [{ name: "tiled", held: false }, { name: "held", held: true }] {
+        let sends = [{ at: 1400ms, bytes: (level-frame true $v.held 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_($v.name)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the spawn view with the tiles ($v.name)"
+        let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 2 $"the first frame and the pose's reported on the spawn view with the tiles ($v.name): ($run.serial)"
+        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        assert ($frame.uncovered < $CRACKS) $"the spawn view with the tiles ($v.name) has no pixel uncovered: ($frame)"
+        assert ($run.screen != "") $"a screen was taken on the spawn view with the tiles ($v.name)"
+        $spawn_captures = ($spawn_captures | insert $v.name { bytes: (open --raw $run.screen | into binary), frame: $frame })
+    }
+    assert ($spawn_captures.tiled.frame.tiled > 0) $"the spawn view read its tiles: ($spawn_captures.tiled.frame)"
+    assert ($spawn_captures.held.frame.tiles_built == 0 and $spawn_captures.held.frame.tiled == 0) $"no tile built or read with the tiles held off: ($spawn_captures.held.frame)"
+    let spawn_rows = (rows-differ $spawn_captures.tiled.bytes $spawn_captures.held.bytes [0 0 1920 1080])
+    assert ($spawn_rows | is-empty) $"the spawn view the same whether its tiles are built or held off: rows ($spawn_rows | first 5) differ, ($spawn_rows | length) in all"
 
     # the alpha policy rendered: a copy of the proof map with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -843,9 +888,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert equal $level $fp.level $"the ($fp.name) pose reads level ($fp.level) by the block's rule at ($step) texels a pixel"
         let eye = { x: ($wall_a.x - $fp.distance), y: (($wall_a.y + $wall_b.y) / 2), z: $EYE_HEIGHT }
         let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
-        for mode in (if $fp.lit { [tiled, lit] } else { [tiled] }) {
-            let frame = ([("L" | into binary), 0x[00 00 00 01], (if $mode == "lit" { 0x[01] } else { 0x[00] }), (0..<58 | each {|i| 0x[00] } | bytes collect)] | bytes collect)
-            let sends = [{ at: 1400ms, bytes: $frame }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
+        for mode in ([tiled lit] | append (if $fp.capped { [capped] } else { [] })) {
+            let level_send = (level-frame true ($mode == "lit") (if $mode == "capped" { 1 } else { 0 }))
+            let sends = [{ at: 1400ms, bytes: $level_send }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
@@ -857,9 +902,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert equal $load.textures $fixture_expected.materials $"the fixture's materials all textures on ($label): ($loads | get 0)"
             let alpha_line = ($lines | where {|l| $l starts-with $"fps: alpha ($ALPHA_FIXTURE.name): " })
             assert equal ($alpha_line | length) 1 $"one alpha line for the fixture on ($label): ($lines | where {|l| $l starts-with 'fps: alpha' })"
-            let got = ($alpha_line | get 0 | parse $ALPHA_LINE | get 0)
-            assert equal ([$got.c0 $got.c1 $got.c2 $got.c3] | each {|v| $v | into int }) $fixture_levels.coverage $"the fixture's coverage by level as the rule gives it: ($alpha_line | get 0)"
-            assert equal ([$got.s1 $got.s2 $got.s3] | each {|v| $v | into int }) $fixture_levels.scale $"the fixture's scales by level as the rule gives them: ($alpha_line | get 0)"
+            let got = (alpha-line ($alpha_line | get 0))
+            assert equal $got.coverage $fixture_levels.coverage $"the fixture's coverage at every level as the rule gives it: ($alpha_line | get 0)"
+            assert equal $got.scale $fixture_levels.scale $"the fixture's scales at every coarser level as the rule gives them: ($alpha_line | get 0)"
             let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
             assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
             let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
@@ -867,6 +912,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert equal $frame.resets 0 $"the arena holds on ($label): ($frame)"
             if $mode == "tiled" {
                 assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+            } else if $mode == "capped" {
+                assert ($frame.tiles_built > 0) $"the view built its level 0 tiles on ($label): ($frame)"
             } else {
                 assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
             }
@@ -898,10 +945,45 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let opening = (fixture-opening $fixture_read $fixture_wall $tiled.eye)
         let differing = (rows-differ $tiled.bytes $lit.bytes $opening)
         assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level ($fp.level): rows ($differing | first 5) differ, ($differing | length) in all"
+        if $fp.capped {
+            # level 0 alone built: a block asking level 1 takes the chain
+            # at level 1, so the picture is the lit loop's
+            let capped = ($fixture_runs | get $"($fp.name)_capped")
+            let partial = (rows-differ $capped.bytes $lit.bytes $opening)
+            assert ($partial | is-empty) $"with level 0 alone built the ($fp.name) pose's blocks take the chain at level ($fp.level), the lit picture over the opening ($opening): rows ($partial | first 5) differ, ($partial | length) in all"
+        }
         $openings = ($openings | append [$opening])
     }
     let level_pairs = ($fixture_runs.near_tiled.read | zip $fixture_runs.mid_tiled.read | where {|p| $p.0.uniform })
     assert (($level_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
+    # the same poses under the room's own light, the spotlight's
+    # gradient across the wall, tiled against the lit loop over the
+    # opening: a tile holds lit texels filtered where the loop lights a
+    # filtered texel at the pixel's own coordinate, so the two differ by
+    # their rounding and the light's change across a texel; reported, the
+    # pixels that differ and the largest difference in a channel
+    mut light_report = []
+    for fp in $FIXTURE_POSES {
+        let eye = ($fixture_runs | get $"($fp.name)_tiled" | get eye)
+        let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
+        mut lit_captures = {}
+        for mode in [tiled lit] {
+            let sends = [{ at: 1400ms, bytes: (level-frame false ($mode == "lit") 0) }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_light_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let label = $"the ($fp.name) pose under the room's light with the tiles ($mode)"
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+            let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+            assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+            let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+            assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
+            assert ($run.screen != "") $"a screen was taken on ($label)"
+            $lit_captures = ($lit_captures | insert $mode (open --raw $run.screen | into binary))
+        }
+        let opening = (fixture-opening $fixture_read $fixture_wall $eye)
+        let delta = (region-delta $lit_captures.tiled $lit_captures.lit $opening)
+        $light_report = ($light_report | append ($delta | insert pose $fp.name | insert level $fp.level))
+    }
+    print $"fps: the alpha poses under the room's light, tiled against lit over the opening: ($light_report | each {|r| $'($r.pose) at level ($r.level), ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most' } | str join '; ')"
 
     # the flow's growth on the growth map: the far room is reached only
     # once the hall's rectangle has grown through the side room's path
@@ -1125,31 +1207,99 @@ def sprite-tree [tree: path, out: path]: nothing -> string {
 # green, blue, alpha, and its alpha. The halves: the left transparent, the
 # right opaque red. Uniform: one colour at the case's alpha. The checker:
 # opaque red and transparent texels alternating on both axes. The block:
-# transparent but for an opaque white 2 by 2 at the top left.
+# transparent but for an opaque white 2 by 2 at the top left. The edge:
+# one colour at the case's alpha, the pass, but a step under it where
+# both coordinates are odd, one texel of every 2 by 2.
 def case-texel [c: record, x: int, y: int]: nothing -> record<bytes: binary, alpha: int> {
     let clear = { bytes: 0x[00 00 00 00], alpha: 0 }
     let red = { bytes: 0x[ff 00 00 ff], alpha: 255 }
     let white = { bytes: 0x[ff ff ff ff], alpha: 255 }
+    let tinted = {|alpha: int| { bytes: ([0x[40 80 c0], ($alpha | into binary | bytes at 0..<1)] | bytes collect), alpha: $alpha } }
     match $c.kind {
         "halves" => (if $x < ($c.w // 2) { $clear } else { $red }),
-        "uniform" => ({ bytes: ([0x[40 80 c0], ($c.alpha | into binary | bytes at 0..<1)] | bytes collect), alpha: $c.alpha }),
+        "uniform" => (do $tinted $c.alpha),
         "checker" => (if (($x + $y) mod 2) == 0 { $red } else { $clear }),
         "block" => (if $x < 2 and $y < 2 { $white } else { $clear }),
+        "edge" => (if ($x mod 2) == 1 and ($y mod 2) == 1 { do $tinted ($c.alpha - 1) } else { do $tinted $c.alpha }),
         _ => (error make { msg: $"no alpha case of kind ($c.kind)" }),
     }
 }
 
-# A material's alpha line among a run's, its coarser levels' shares of
-# texels at or above the pass each within the material's slack of level
-# 0's.
+# A material's alpha line among a run's, its first three coarser levels'
+# shares of texels at or above the pass each within the material's slack
+# of level 0's.
 def alpha-held [lines: list<string>, name: string]: nothing -> nothing {
     let line = ($lines | where {|l| $l starts-with $"fps: alpha ($name): " })
     assert equal ($line | length) 1 $"one alpha line for ($name): ($lines | where {|l| $l starts-with 'fps: alpha' })"
-    let got = ($line | get 0 | parse $ALPHA_LINE | get 0 | update cells --columns [c0 c1 c2 c3 s1 s2 s3] {|v| $v | into int })
+    let got = (alpha-line ($line | get 0))
     let slack = ($ALPHA_SLACKS | get $name)
-    for c in [$got.c1 $got.c2 $got.c3] {
-        assert ((($c - $got.c0) | math abs) <= $slack) $"($name)'s coverage holds by level within ($slack) of 10000: ($line | get 0)"
+    let c0 = ($got.coverage | get 0)
+    for c in ($got.coverage | slice 1..3) {
+        assert ((($c - $c0) | math abs) <= $slack) $"($name)'s coverage holds by level within ($slack) of 10000: ($line | get 0)"
     }
+}
+
+# An alpha line read: its material, its share of texels at or above the
+# pass at every level of the chain in 10000ths, and every coarser
+# level's scale in 65536ths.
+def alpha-line [line: string]: nothing -> record<name: string, coverage: list<int>, scale: list<int>> {
+    let got = ($line | parse $ALPHA_LINE | get 0)
+    {
+        name: $got.name,
+        coverage: ($got.coverage | split row " " | each {|v| $v | into int }),
+        scale: ($got.scale | split row " " | each {|v| $v | into int }),
+    }
+}
+
+# The levels a texture's mip chain has, as the engine builds it: one,
+# and one more for every halving while both sides are two texels or
+# more, MIP_LEVELS at most, so a side can end at one texel.
+def chain-levels [w: int, h: int]: nothing -> int {
+    mut levels = 1
+    mut pw = $w
+    mut ph = $h
+    while $levels < $MIP_LEVELS and $pw >= 2 and $ph >= 2 {
+        $pw = $pw // 2
+        $ph = $ph // 2
+        $levels += 1
+    }
+    $levels
+}
+
+# The console's L frame: every tile forgotten, every lumel set full
+# bright first when `bright`, the build budget held at zero when `held`
+# so every span takes the lit loop, else lifted, and on a debug build the
+# levels a surface builds capped at `cap`, 0 for every level.
+def level-frame [bright: bool, held: bool, cap: int]: nothing -> binary {
+    let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
+    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (0..<57 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# How two captures differ over a rectangle, [x0, y0, x1, y1] with the
+# pixel past the last: its pixels, the pixels whose colours differ, and
+# the largest difference in any channel, of 255.
+def region-delta [p: binary, q: binary, rect: list<int>]: nothing -> record<pixels: int, differing: int, largest: int> {
+    let hp = (ppm-head $p)
+    let hq = (ppm-head $q)
+    let y0 = $rect.1
+    let y1 = $rect.3
+    let rows = ($y0..<$y1 | each {|y|
+        let from = ((($y * 1920) + $rect.0) * 3)
+        let to = ((($y * 1920) + $rect.2) * 3)
+        let a = ($p | bytes at ($hp + $from)..<($hp + $to))
+        let b = ($q | bytes at ($hq + $from)..<($hq + $to))
+        if $a == $b { { differing: 0, largest: 0 } } else {
+            let deltas = ($a | chunks 3 | zip ($b | chunks 3) | where {|c| $c.0 != $c.1 } | each {|c|
+                let u = ($c.0 | into int --endian little)
+                let v = ($c.1 | into int --endian little)
+                [((($u bit-and 255) - ($v bit-and 255)) | math abs) (((($u bit-shr 8) bit-and 255) - (($v bit-shr 8) bit-and 255)) | math abs) ((($u bit-shr 16) - ($v bit-shr 16)) | math abs)] | math max
+            })
+            { differing: ($deltas | length), largest: (if ($deltas | is-empty) { 0 } else { $deltas | math max }) }
+        }
+    })
+    let pixels = (($rect.2 - $rect.0) * ($rect.3 - $rect.1))
+    if ($rows | is-empty) { return { pixels: $pixels, differing: 0, largest: 0 } }
+    { pixels: $pixels, differing: ($rows | get differing | math sum), largest: ($rows | get largest | math max) }
 }
 
 # The chains' line among a run's: the materials with a level past 0, the
@@ -1167,26 +1317,29 @@ def mips-built [lines: list<string>]: nothing -> record<chains: int, levels: int
 
 # The alpha policy as the engine applies it at load, over a texture's
 # alphas in row order: the share of texels at or above the pass at level
-# 0 in 10000ths, the target; then each coarser level's alphas as the
-# integer means of the two by two under them in the level before, the
-# threshold whose share at or above it lies nearest the target (the least
-# error, a tie to the lower share, equal shares to the threshold nearest
-# the pass), the level's scale ceil(2^23 / T), and the level scaled by it
-# and capped at 255 for the level after; whether the engine names a line
-# for the texture, which it does under full coverage at level 0; and the
-# planes by level, level 0 the alphas given and each coarser level's
-# scaled alphas in row order at half the width, which the tiles hold.
+# 0 in 10000ths, the target; then each coarser level of the chain, its
+# alphas as the integer means of the two by two under them in the level
+# before, the threshold whose share at or above it lies nearest the
+# target (the least error, a tie to the lower share, equal shares to the
+# threshold nearest the pass), the level's scale ceil(2^23 / T), and the
+# level scaled by it and capped at 255 for the level after; whether the
+# engine names a line for the texture, which it does under full coverage
+# at level 0 for a chain with a level past 0 whose level 1 fits the
+# search's scratch; and the planes by level, level 0 the alphas given and
+# each coarser level's scaled alphas in row order at half the width,
+# which the tiles and the chain hold.
 export def alpha-levels [alphas: list<int>, w: int, h: int]: nothing -> record<line: bool, coverage: list<int>, scale: list<int>, planes: list<list<int>>> {
     let n0 = ($w * $h)
+    let levels = (chain-levels $w $h)
     let c0 = ($alphas | where {|a| $a >= $ALPHA_PASS } | length)
-    if $c0 == $n0 { return { line: false, coverage: [], scale: [], planes: [] } }
+    if $levels <= 1 or ($n0 // 4) > $ALPHA_PLANE_BYTES or $c0 == $n0 { return { line: false, coverage: [], scale: [], planes: [] } }
     mut coverage = [(($c0 * 10000) // $n0)]
     mut scale = []
     mut planes = [$alphas]
     mut plane = $alphas
     mut pw = $w
     mut ph = $h
-    for level in 1..3 {
+    for level in 1..<$levels {
         let sw = $pw
         let lw = ($pw // 2)
         let lh = ($ph // 2)
@@ -1505,7 +1658,11 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # run, whatever frame count its measurement records, an unclassified one,
 # and an unusable one, a field whose values are null though its name is
 # the states', and a clock field on a clockless run; it names every run
-# it refuses; and it admits a clockless run marked.
+# it refuses; it admits a clockless run marked; and it refuses a run
+# missing a leg another run holds, one batch of a build or a whole
+# build, naming the run and its missing legs, and under --diagnostic
+# keeps that build's row for the leg with the batches missing it and no
+# value, the build's other legs valued as before.
 def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -1638,6 +1795,49 @@ def gauge-rules [dir: path]: nothing -> nothing {
     let names_invalid = ($every | str contains $"($invalid_file) run 1, invalid: ")
     let names_empty = ($every | str contains $"($empty_file) run 1, empty: ")
     assert ($names_invalid and $names_empty) $"every run refused is named, none left out: ($every)"
+
+    # coverage: a run's expected legs are every leg any compared run
+    # holds; a build of two batches, the second missing the ramp, and a
+    # build of one batch missing it
+    let legged = {|legs: list<string>|
+        $legs | enumerate | each {|l|
+            0..<3 | each {|n| { run: 1, frame: ($l.index * 3 + $n), leg: $l.item, entry: ($n == 0), x: 1.0, y: 1.0, draw_us: (1000 + $l.index * 100), critical_us: 1800 } }
+        } | flatten
+    }
+    let covers = [
+        { name: "whole", label: "whole", legs: [walk ramp] }
+        { name: "partial_1", label: "partial_1", legs: [walk ramp] }
+        { name: "partial_2", label: "partial_2", legs: [walk] }
+        { name: "short", label: "short", legs: [walk] }
+    ]
+    let cover_files = ($covers | each {|x|
+        let file = ($dir | path join $"cover_($x.name).nuon")
+        let image = ($x.label | str replace --regex '_\d+$' '')
+        let doc = { label: $x.label, identity: { build: { image_sha256: $image } }, runs: [{ run: 1, measured: $checked }], rows: (do $legged $x.legs) }
+        $doc | to nuon | save --raw -f $file
+        { name: $x.name, file: ($file | path expand) }
+    })
+    let cover_of = {|name: string| $cover_files | where name == $name | get 0.file }
+    let whole_file = (do $cover_of "whole")
+    let partial_files = [(do $cover_of "partial_1") (do $cover_of "partial_2")]
+    let full = (gauge compare [$whole_file (do $cover_of "partial_1")] "draw_us" 50)
+    assert ($full.table | all {|t| $t.missing == 0 and $t.value_us != null }) $"full coverage compares with every row valued: ($full.table)"
+    let batch_short = (try { gauge compare ([$whole_file] | append $partial_files) "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($batch_short | str contains $"($partial_files.1) run 1, partial: missing the legs ramp") $"a batch missing a leg is refused, named with the leg: ($batch_short)"
+    assert (not ($batch_short | str contains $"($partial_files.0) run")) $"the batch holding every leg is not named: ($batch_short)"
+    let batch_admitted = (gauge compare ([$whole_file] | append $partial_files) "draw_us" 50 --diagnostic)
+    let partial_ramp = ($batch_admitted.table | where build == "partial" and leg == "ramp" | get 0)
+    assert ($partial_ramp.value_us == null and $partial_ramp.missing == 1 and $partial_ramp.batches == 2) $"under --diagnostic the build's ramp is missing in one of two batches, no value: ($partial_ramp)"
+    let partial_walk = ($batch_admitted.table | where build == "partial" and leg == "walk" | get 0)
+    assert ($partial_walk.value_us != null and $partial_walk.missing == 0) $"the build's walk, in both batches, is valued: ($partial_walk)"
+    let missing_leg = ($batch_admitted.runs | where label == "partial_2" | get 0.legs | where leg == "ramp" | get 0)
+    assert ($missing_leg.kind == "missing" and $missing_leg.value == null) $"the batch's own missing leg is explicit: ($missing_leg)"
+    let short_file = (do $cover_of "short")
+    let build_short = (try { gauge compare [$whole_file $short_file] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($build_short | str contains $"($short_file) run 1, partial: missing the legs ramp") $"a build missing a leg is refused, named with the leg: ($build_short)"
+    let build_admitted = (gauge compare [$whole_file $short_file] "draw_us" 50 --diagnostic)
+    let short_ramp = ($build_admitted.table | where build == "short" and leg == "ramp")
+    assert (($short_ramp | length) == 1 and ($short_ramp | get 0.value_us) == null and ($short_ramp | get 0.missing) == 1) $"under --diagnostic a build missing a leg keeps the leg's row, missing: ($build_admitted.table)"
 }
 
 # A synthetic capture's records as the program sends them over `frames`

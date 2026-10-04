@@ -129,6 +129,11 @@ The tiles' time is read around the reservation, with any reset it makes,
 and around each cell built or shrunk, so a polygon whose surface is whole
 reads no clock.
 
+On a debug build the console's L frame caps the levels a surface builds
+(its byte 6, tile_level_cap), so a fixture can hold a surface at level 0
+alone while its blocks ask level 1, and read that they take the chain at
+level 1 rather than a sharper tile; a release build carries none of it.
+
 ## tiles_alloc
 
 The cells across and down are the map's nodes, not the nodes less one:
@@ -151,20 +156,34 @@ cursor and leaves the peak.
 
 ## tile_build
 
-A row's brightness is the two side nodes weighted by the row's fraction,
-the lanes whole as in lumel_sample, and steps along the row by each
-lane's change over the cell's texels, divided toward zero so no lane runs
-past its end into a negative value, which would borrow from the lane
-above; a shift would floor a negative change and overshoot. The texel is
-scaled as the lit loop scales one, the same two shifts a channel, so the
-tile holds the same bytes the loop would have stored, the brightness at
-the texel's own position rather than the block's step. Page-aligned and
-under a page, since its inner loop runs a texel, which the test holds.
+Each texel is lit at its centre. A row's brightness is the two side nodes
+weighted by the fraction at the row's centre, (2 row + 1) 128 over the
+cell's texels in 256ths, truncated as lumel_sample truncates its fraction,
+the lanes whole as in lumel_sample; it steps along the row by each lane's
+change over the cell's texels, and starts half a step in, each lane's
+change over twice the texels, both divided toward zero so no lane runs past
+its end into a negative value, which would borrow from the lane above; a
+shift would floor a negative change and overshoot. The texel is scaled as
+the lit loop scales one, the same two shifts a channel, so under one
+brightness the tile holds the bytes the loop would store. The lit loop
+lights a pixel's own coordinate, the half pixel in it, which lies within
+half a texel of its texel's centre, and where the two points meet they
+differ by their rounding alone: the bilinear read's eight-bit fraction and
+the interval's stepped lanes against the row's stepped lanes here. A tile
+lights its texel once for every pixel that reads it, where the loop's
+light moves across the texel; at a coarser level the tile averages lit
+texels where the loop lights an averaged one. Under the full-bright frame
+every node is one and the two agree exactly, which the alpha fixture
+holds; under real light the test reports how far they part. The build lit
+each texel at the cell's corner before, half a texel off the loop's point
+across every surface. Page-aligned and under a page, since its inner loop
+runs a texel, which the test holds.
 
 The four nodes are read first, the far ones the greatest at the map's end;
 the tile is found by its index, with the cell's first texel; then each row's
-brightness at its start and end, the nodes weighted by the row's fraction in
-256ths, the lanes whole, its step a texel, and the texture's row.
+brightness at its start and end, the nodes weighted by the fraction at the
+row's centre in 256ths, the lanes whole, its step a texel and half a step
+in, and the texture's row.
 
 ## tile_shrink
 
@@ -217,8 +236,8 @@ becomes the level's scale, ceil(2^23 / T), so the scaled means pass exactly
 where the raw ones reach T. The least error wins, a tie goes to the lower
 share, and among equal shares to the T nearest the pass, so a texture whose
 levels pass as the texture does keeps one. A texture full or empty at the
-pass stays so at every level and keeps one, as does one under eight a side
-or past the scratch planes.
+pass stays so at every level and keeps one, as does one whose chain has no
+level past 0 or whose level 1 is past the scratch planes.
 
 The coverage policy is coverage-preserving alpha scaling, the technique
 of NVIDIA Texture Tools, a best effort and not a guarantee, from outside
@@ -269,13 +288,17 @@ two points from the target, as the fence's coarser levels do. The far
 fence in the yard view keeps its mesh where the seventh cut thinned it.
 
 The two scratch planes bound a level at a quarter of a megabyte, a
-1024-texel-square texture's level 1; a texture past that or under eight
-a side keeps one. The analysis runs once at load over every record, the
-map's materials and the engine's images, after the images load, for the
-chain's levels of each (mip_levels): the sprites' chains need the policy
-at their silhouettes as the fence does, where before the images never
-tiled and were left out. The line prints the first four levels, the
-deeper scales following the same search unprinted; an image's line
+1024-texel-square texture's level 1; a texture past that keeps one, as
+does a chain with no level past 0. A texture under eight a side was left at
+one before, which a 4 by 4 of three alphas at the pass and one a step under
+in every 2 by 2 showed wrong: its level 1 means read 127 and vanish under
+the pass unless the search lifts them, as it does, to 128. The analysis
+runs once at load over every record, the map's materials and the engine's
+images, after the images load, for the chain's levels of each
+(mip_levels): the sprites' chains need the policy at their silhouettes as
+the fence does, where before the images never tiled and were left out. The
+line prints every level of the chain, the coverage of each and the scale
+of each past 0, which the test's oracle holds to the digit; an image's line
 names it by its frame.
 
 Every scale starts at one. Level 0 counts its texels at or above the pass;
@@ -331,6 +354,10 @@ texture's.
 ## tile_peak
 
 `u64`: the most the arena has held since the load, in bytes.
+
+## tile_level_cap
+
+`u64`: on a debug build alone, the levels a surface builds, the console's L frame's byte 6, 0 for every level.
 
 ## tilemaps
 

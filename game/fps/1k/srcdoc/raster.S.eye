@@ -25,14 +25,16 @@ call local span_record first i32,end i32,row i32 > record span_records 16 u8,cou
  end :the pixel past the last
  record :the entry at the count before, written while the count is under SPAN_RECORDS
  count :running on past the table, which a reader takes as the frame's records being incomplete
-call local poly_rect count u64 > x0 a0 i32,x1 a1 i32,y0 a2 i32,y1 a3 i32 [702:840] :the screen rectangle of the projected polygon in hand, a pixel of slack each side, held within the screen
+call local poly_rect count u64 > x0 a0 i32,x1 a1 i32,y0 a2 i32,y1 a3 i32 [702:833] :the screen rectangle of the projected polygon in hand, a pixel of slack each side, held within the screen
  count :the projected point count
  x1 :the column past the last, with y1 the row past the last
 macro lumel_sample u a5 i64,v a6 i64 > bright a5 u64,scratch a0,a6-a7,t3-t4 [751:814] :the brightness at a texel coordinate of the surface in hand from its lumel map, the coordinate held within the map, the four lumels about it summed under weights adding to 256
  u :16.16 texels from the map's origin
  v :16.16 texels from the map's origin
  bright :the three channels in 16.16 packed CHANNEL_BITS apart
-macro mip_bind level 192(sp) u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64,scratch a5-a7 [816:838] :the texture's level for the block in hand bound for the loops, held under the chain's levels, its texels, masks, and row shift into the texture's registers and u, v, and their steps a pixel shifted to its resolution
- level :the block's level in span_fill's frame
-call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [841:1613] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, the texture read from its chain at each block's level; no float in the loop
+macro mip_bind level 192(sp) u64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,shift s5 u64,spill 40(sp) u64,scratch a5-a7 [816:831] :the texture's level for the block in hand bound for the loops, its texels, masks, and row shift into the texture's registers and the shift from a 16.16 coordinate to its texel at the level, u, v, and their steps left at level 0 as the tiles read them
+ level :the block's level in span_fill's frame, the chain's last at most
+ shift :the level plus 16
+ spill :s5 as it was, v/z, which the block's end takes back
+call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [834:1606] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, each block at one level from its footprint held under the chain's last, read from the tiles where that level is built whole, else from the chain; no float in the loop
  end :the pixel past the last
