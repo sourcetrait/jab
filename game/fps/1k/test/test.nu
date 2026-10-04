@@ -1820,11 +1820,14 @@ def gauge-rules [dir: path]: nothing -> nothing {
     let cover_of = {|name: string| $cover_files | where name == $name | get 0.file }
     let whole_file = (do $cover_of "whole")
     let partial_files = [(do $cover_of "partial_1") (do $cover_of "partial_2")]
-    let full = (gauge compare [$whole_file (do $cover_of "partial_1")] "draw_us" 50)
-    assert ($full.table | all {|t| $t.missing == 0 and $t.value_us != null }) $"full coverage compares with every row valued: ($full.table)"
     let batch_short = (try { gauge compare ([$whole_file] | append $partial_files) "draw_us" 50; "" } catch {|e| $e.msg })
     assert ($batch_short | str contains $"($partial_files.1) run 1, partial: missing the legs ramp") $"a batch missing a leg is refused, named with the leg: ($batch_short)"
     assert (not ($batch_short | str contains $"($partial_files.0) run")) $"the batch holding every leg is not named: ($batch_short)"
+    let short_file = (do $cover_of "short")
+    let build_short = (try { gauge compare [$whole_file $short_file] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($build_short | str contains $"($short_file) run 1, partial: missing the legs ramp") $"a build missing a leg is refused, named with the leg: ($build_short)"
+    let full = (gauge compare [$whole_file (do $cover_of "partial_1")] "draw_us" 50)
+    assert ($full.table | all {|t| $t.missing == 0 and $t.value_us != null }) $"full coverage compares with every row valued: ($full.table)"
     let batch_admitted = (gauge compare ([$whole_file] | append $partial_files) "draw_us" 50 --diagnostic)
     let partial_ramp = ($batch_admitted.table | where build == "partial" and leg == "ramp" | get 0)
     assert ($partial_ramp.value_us == null and $partial_ramp.missing == 1 and $partial_ramp.batches == 2) $"under --diagnostic the build's ramp is missing in one of two batches, no value: ($partial_ramp)"
@@ -1832,9 +1835,6 @@ def gauge-rules [dir: path]: nothing -> nothing {
     assert ($partial_walk.value_us != null and $partial_walk.missing == 0) $"the build's walk, in both batches, is valued: ($partial_walk)"
     let missing_leg = ($batch_admitted.runs | where label == "partial_2" | get 0.legs | where leg == "ramp" | get 0)
     assert ($missing_leg.kind == "missing" and $missing_leg.value == null) $"the batch's own missing leg is explicit: ($missing_leg)"
-    let short_file = (do $cover_of "short")
-    let build_short = (try { gauge compare [$whole_file $short_file] "draw_us" 50; "" } catch {|e| $e.msg })
-    assert ($build_short | str contains $"($short_file) run 1, partial: missing the legs ramp") $"a build missing a leg is refused, named with the leg: ($build_short)"
     let build_admitted = (gauge compare [$whole_file $short_file] "draw_us" 50 --diagnostic)
     let short_ramp = ($build_admitted.table | where build == "short" and leg == "ramp")
     assert (($short_ramp | length) == 1 and ($short_ramp | get 0.value_us) == null and ($short_ramp | get 0.missing) == 1) $"under --diagnostic a build missing a leg keeps the leg's row, missing: ($build_admitted.table)"
