@@ -3,7 +3,9 @@
 ## fn generate
 
 The whole source directory is scanned even for one file, since whether a
-label is called, and what a nested macro writes, come from every source.
+label is called, and what a nested macro writes, come from every source. A
+linker script gives no entry, its symbols being data, so its .eye is empty
+and the listing names the file alone.
 
 ## fn read_if_present
 

@@ -24,15 +24,6 @@ call block_record index u64 > record a0 addr [174:181]
 call block_count_of > count a0 u64 [182:187]
  count :the disks the machine carries, once probed
 call block_probe > count block_count u64,records block_records,clobber a0-a6 [188:314] :scans the PCI bus and brings every virtio-blk disk up, once, in slot order, filling its record
-rodata local msg_disk_pci 23 u8 [238:239] :the debug line naming a disk's PCI slot, under DEBUG only
 call block_request record addr,virtqueue addr,type u32,sector u64,buffer addr,length u32,flags u16 > status a0 u8,last VQ_LAST_USED(virtqueue) u64,clobber a1 [315:370] :runs one request on the disk, the hart halted until the device answers
  flags :VIRTQ_DESC_F_WRITE when the device writes the buffer, 0 when it reads it
  status :the device's status byte, VIRTIO_BLK_S_OK for success
-bss local block_queues [374:376] :the disks' virtqueue records, VQ_STRIDE apart
-bss local block_records [377:378] :the disks' JAB_BLOCK_* records, the program-facing list
-bss local block_bases 8 addr [379:380] :each disk's PCI device record
-bss local block_count u64 [381:382] :the disks found
-bss local block_probed u64 [383:384] :1 once the probe has run
-bss local block_header [385:386] :the request header the device reads
-bss local block_status u8 [387:390] :the status byte the device writes
-bss block_bounce 512 u8 [391:392] :a sector the kernel reads through

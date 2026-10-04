@@ -1,13 +1,3 @@
-rodata local k_lumel_d f64 [3:4] :half a metre, a lumel's aim along u
-rodata local k_sqrt2_mantissa u64 [5:7] :root two's mantissa, past which k rounds up
-rodata local k_light_ambient f32 [8:9] :the ambient in each channel
-rodata local k_light_none f32 [10:11] :a point light's spread cosine, under -1
-rodata local k_light_minus_one f32 [12:13]
-rodata local k_depth_scale f32 [14:16] :2^26, one in 6.26
-rodata local msg_lumels 17 u8 [17:18]
-rodata local word_baked_in 11 u8 [19:20]
-rodata local word_lumels 10 u8 [21:22]
-rodata local word_unmapped 10 u8 [23:25]
 call local lights_gather > lights lights MAX_LIGHTS*12 f32,count light_count u32,entities entity_light MAX_ENTITIES i32,lists sector_lights MAX_SECTORS*SECTOR_LIGHTS_SIZE u8,clobber a0,fa0-fa1 [29:166] :the light entities into the light table, then each sector's list of light indices from the file's
 call local verts_bounds > xmin fa0 f32,xmax fa1 f32,ymin fa2 f32,ymax fa3 f32,zmin fa4 f32,zmax fa5 f32 [168:193] :the world box of the polygon in hand's points
 call local plane_box sector addr,plane addr > xmin fa0 f32,xmax fa1 f32,ymin fa2 f32,ymax fa3 f32,zmin fa4 f32,zmax fa5 f32 [195:221] :the world box of a sector's plane, its bounds in the plan and the plane's height at their corners
@@ -30,14 +20,3 @@ call local lumap_frame record addr,umin f64,umax f64,vmin f64,vmax f64,texels f6
  frame :LUMAP_W, LUMAP_H, LUMAP_U0, LUMAP_V0, and LUMAP_K
 call local lumap_fill record addr > lumels lumel_arena LUMEL_ARENA_BYTES u8,base LUMAP_BASE(record) addr,cursor lumel_cursor addr,clobber a0,fa0-fa7 [931:1032] :a map's lumels baked over bake_grid into the arena from the cursor, each node's point under the normal over the polygon's list through point_light; the record's base, or none when the arena is full, which counts the map unmapped
  record :the record, its frame set
-bss local light_count u32 [1036:1038] :the lights in the table
-bss local lights MAX_LIGHTS*12 f32 [1039:1040] :the light table, LIGHT_* fields
-bss local sector_lights MAX_SECTORS*SECTOR_LIGHTS_SIZE u8 [1041:1042] :each sector's list, a count byte then that many light indices
-bss local entity_light MAX_ENTITIES i32 [1043:1045] :each entity's light index, -1 for an entity that is no light
-bss local lumel_cursor addr [1046:1047] :the arena's next free lumel
-bss local lumap_count u64 [1048:1049] :the maps baked
-bss local lumel_count u64 [1050:1051] :the lumels in them
-bss local lumap_missing u64 [1052:1053] :the textured surfaces left without a map
-bss local bake_grid GRID_SIZE u8 [1054:1056] :the frame the map in hand is baked over, GRID_* fields
-bss local lumaps LUMAP_COUNT*6 u64 [1057:1059] :every surface's map, LUMAP_* fields
-bss local lumel_arena LUMEL_ARENA_BYTES u8 [1060:1061] :every map's lumels

@@ -19,6 +19,14 @@ takes its own through wfi: the PLIC is serviced, which is where the sound
 stream is refilled on the device's clock (sound.S), and the program resumes
 where it was.
 
+## .set SYSCALL_LAST
+
+`u64`: the highest system call number syscall_table holds.
+
+## .set UART_PRINT_TICK
+
+`u64`: bytes sys_uart_print writes between looks at the sound stream.
+
 ## sys_uart_print
 
 The UART is polled, so a long message looks at the sound stream every
@@ -38,6 +46,10 @@ The sound stream, if live, plays out first (sound.S); then QEMU ends with
 the status, since no launcher exists yet to return to; with DEBUG the status
 is also reported on the debug channel.
 
+## msg_exit
+
+`11 u8`: the exit line's prefix on the debug channel, under DEBUG only.
+
 ## kernel_trap
 
 The swap at the entry found 0 in sscratch, so the trap is the kernel's own,
@@ -51,3 +63,31 @@ supervisor mode.
 The program resumes at the instruction the interrupt came before, not past
 it. The program's sp goes back into sscratch first, so the swap out hands it
 over and leaves the kernel stack top behind for the next entry.
+
+## syscall_table
+
+`51 addr`: each system call's handler by its number, bad_syscall at 0.
+
+## msg_bad_syscall
+
+`26 u8`: the unknown call line's prefix.
+
+## msg_bad_address
+
+`34 u8`: the bad address line.
+
+## msg_program_fault
+
+`27 u8`: the program fault line's prefix.
+
+## msg_kernel_fault
+
+`26 u8`: the kernel fault line's prefix.
+
+## msg_epc
+
+`6 u8`: a fault line's pc field.
+
+## msg_tval
+
+`7 u8`: a fault line's tval field.

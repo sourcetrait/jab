@@ -1,18 +1,3 @@
-set DISPLAY_RESOURCE u32 [6] :the one resource's id
-set GPU_CMD_BYTES u64 [7] :bytes a command buffer holds
-set GPU_RESP_BYTES u64 [8] :bytes a batch response buffer holds
-set GPU_TRANSFERS_PER_BATCH u64 [9] :the transfers a batch holds, the last batch carrying the flush beside them
-set FONT_WIDTH u64 [11] :a console cell's width in pixels
-set FONT_HEIGHT u64 [12] :its height
-set FONT_ROW_BYTES u64 [13] :bytes in a glyph's row
-set FONT_GLYPH_BYTES u64 [14] :bytes in a glyph
-set FONT_FIRST u8 [15] :the first character the font draws
-set FONT_LAST u8 [16] :the last
-set CONSOLE_COLUMNS u64 [17] :the cells across the screen
-set CONSOLE_ROWS u64 [18] :the lines down it
-set CONSOLE_LINE_BYTES u64 [19] :framebuffer bytes in a line of cells
-set CONSOLE_FG u32 [20] :the console's text, white
-set CONSOLE_BG u32 [21] :its ground, black
 ecall sys_display_open > status a0 u64 [26:31]
  status :display_open's
 ecall sys_display_ready > ready a0 bool [32:37]
@@ -54,29 +39,15 @@ call local text_pixel color u32,column i64,row i64 > clobber a7 [605:622] :the c
  color :in a3, column in a5, row in a6
 call display_open > status a0 u64,state display_state u64,base gpu_base addr,clobber a1-a3 [623:694] :brings the GPU up and shows the framebuffer
  status :0, 1 with no virtio-gpu, 2 when the device refuses the features or its control queue is short, 3 when a command fails; 0 at once when open
-rodata local msg_gpu_at 13 u8 [648:649] :the debug line naming the GPU's transport, under DEBUG only
 call display_present_rect x u32,y u32,width u32,height u32 > failed a0 bool,clobber a1-a3 [695:743] :transfers the rectangle of the framebuffer to the host and flushes it to the screen
  failed :1 when a command fails
 call local gpu_get_display_info > failed a0 bool,clobber a1-a3 [745:783] :asks what the display is
-rodata local msg_display 14 u8 [774:775] :the debug line on the display's first mode, under DEBUG only
-rodata local msg_enabled 10 u8 [776:777] :that line's enabled field
 call local gpu_create_resource > failed a0 bool,clobber a1-a3 [785:804] :creates the one 2D resource, the framebuffer's size and format
 call local gpu_attach_backing > failed a0 bool,clobber a1-a3 [806:825] :the framebuffer, one contiguous entry, backs the resource
 call local gpu_set_scanout > failed a0 bool,clobber a1-a3 [827:844] :scanout 0 shows the whole resource
 call local gpu_command type u32 > command gpu_cmd [846:857] :zeroes the request buffer and sets its type
 call local gpu_submit length u32,expected u32 > failed a0 bool,response gpu_resp,clobber a1-a3 [859:933] :runs the request in gpu_cmd as a batch of one chain
  failed :0 when the device answered with the expected type, else 1
-rodata local msg_gpu_cmd 14 u8 [916:917] :the debug line on a command, under DEBUG only
-rodata local msg_gpu_resp 7 u8 [918:919] :that line's response field
 call console_write bytes addr,end addr > column console_col u64,row console_row u64,clobber a0-a4 [934:1022] :draws the bytes up to the terminator or the end at the cursor, then shows the rows touched
 call local console_glyph character u8,column u64,row u64 > clobber a3-a4 [1024:1062] :draws the glyph in that cell, white on black
 call local console_scroll [1064:1078] :moves every line up by one and clears the last
-bss local gpu_queue [1082:1084] :the GPU's control queue record
-bss local gpu_cmd 64 u8 [1085:1086] :the single command's buffer
-bss local gpu_resp 408 u8 [1087:1089] :the single command's response
-bss local gpu_batch_cmds 2048 u8 [1090:1091] :a batch's command buffers, GPU_CMD_BYTES each
-bss local gpu_batch_resps 768 u8 [1092:1093] :a batch's response buffers, GPU_RESP_BYTES each
-bss local gpu_base addr [1094:1095] :the GPU's transport
-bss local display_state u64 [1096:1097] :1 once open
-bss local console_col u64 [1098:1099] :the cursor's column
-bss local console_row u64 [1100:1101] :the cursor's line

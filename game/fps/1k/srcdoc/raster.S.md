@@ -9,12 +9,70 @@ meet without a crack. Walking by rows matters under TCG: a column walk
 touches a new cache line of each 8 MB buffer per pixel and measured 180 ms
 for a million pixels against 16 by rows.
 
+## k_half_d
+
+`f64`.
+
+## k_one_d
+
+`f64`.
+
+## k_depth_scale_d
+
+`f64`: 2^26, 1/z into 6.26.
+
+## k_uv_scale_d
+
+`f64`: 2^16, u/z and v/z into 48.16.
+
+## k_hx_d
+
+`f64`: the projection's centre column.
+
+## k_hy_d
+
+`f64`: the projection's centre row.
+
+## k_hz_d
+
+`f64`: the focal length in pixels.
+
 ## k_lane_bias
+
+`u64`: a brightness word's three lanes each biased past zero for the interval step.
 
 The bias and the masks step a brightness word's three lanes at once by 16,
 32, or 64 pixels: the end less the start, each lane biased past zero, its low
 4, 5, or 6 bits cleared by the shift's mask so none spill into the lane
 below, the word shifted, and the bias's share taken back.
+
+## k_lane_masks
+
+`3 u64`: each lane's low 4, 5, or 6 bits cleared, for a step over 16, 32, or 64 pixels.
+
+## k_near
+
+`f32`: the near plane's depth.
+
+## k_hx
+
+`f32`: the projection's centre column.
+
+## k_hy
+
+`f32`: the projection's centre row.
+
+## k_hz
+
+`f32`: the focal length in pixels.
+
+## k_half
+
+`f32`.
+
+## k_big
+
+`f32`: a row past any edge's, an empty list's bound.
 
 ## poly_project
 
@@ -440,3 +498,79 @@ the store, where the colour register is dead. The instrument is the
 acceptance measure of a change to what is drawn where: two builds posed
 on the same views must own every pixel alike, which the colour captures
 cannot say once a span's blocks shift.
+
+## vert_count
+
+`u64`: the polygon in hand's points.
+
+## edge_count
+
+`u64`: the edge list's edges.
+
+## edge_ymin
+
+`f32`: the edges' top.
+
+## edge_ymax
+
+`f32`: the edges' bottom.
+
+## sky_uoff
+
+`i64`: the sky's u offset from the camera's yaw, texture repeats in 16.16.
+
+## sky_voff
+
+`i64`: the sky's v offset from the camera's pitch, texture repeats in 16.16.
+
+## poly
+
+`POLY_SIZE u8`: the polygon in hand, POLY_* fields.
+
+## plane
+
+`14 f32`: the plane in hand, PLANE_* fields.
+
+## plane_d
+
+`14 f64`: the plane in hand as doubles, PLANED_* fields.
+
+## verts
+
+`MAX_VERTS*3 f32`: the polygon in hand's world points.
+
+## vview
+
+`MAX_VERTS*3 f32`: its points in the camera's basis.
+
+## cverts
+
+`MAX_CLIPPED*3 f32`: its points clipped to the near plane.
+
+## pverts
+
+`MAX_CLIPPED*2 f32`: its points projected.
+
+## edges
+
+`MAX_EDGES*4 f32`: the edge list, EDGE_* fields.
+
+## crossings
+
+`MAX_EDGES f32`: a row's crossings' x, ascending.
+
+## span_records
+
+`SPAN_RECORDS*SPAN_RECORD_SIZE u8`: the frame's spans as the fill emitted them.
+
+## span_count
+
+`u64`: the frame's spans, running on past the table.
+
+## poly_serial
+
+`u64`: the polygons submitted so far this frame, the serial a record carries.
+
+## zbuf
+
+`SCREEN_W*SCREEN_H u32`: the depth buffer, 1/z in 6.26 a pixel.

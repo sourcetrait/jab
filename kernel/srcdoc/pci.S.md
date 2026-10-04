@@ -23,3 +23,19 @@ device. The INTx pin is left enabled.
 The BAR is sized by writing ones and reading the mask back. The size is the
 low word's address bits and the high word together, inverted and one more;
 a 32-bit BAR's size stays within a word.
+
+## pci_devices
+
+The PCI_DEV_* records, PCI_DEV_MAX of them.
+
+## pci_count
+
+`u64`: the records filled.
+
+## pci_scanned
+
+`u64`: 1 once the scan has run.
+
+## pci_next_base
+
+`addr`: the next free byte of the PCI MMIO window.

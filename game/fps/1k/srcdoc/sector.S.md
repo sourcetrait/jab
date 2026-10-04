@@ -9,6 +9,10 @@ point's y when the wall's x at that y lies past the point's, the same sense
 as the host's reader, so the host's sector for a point is the guest's; the
 thousandth's slack between the planes is the host's rule too.
 
+## k_hold_slack_d
+
+`f64`: a point's slack about its sector's planes.
+
 ## sector_holds_plan
 
 The wall's x at y past the point's: (y - ay)(bx - ax) against (x - ax)(by -
@@ -25,3 +29,11 @@ A sector before past the count searches every sector from the top. The walk
 starts with nothing seen but the start and the fifo empty; every portal of
 every wall of the sector in hand has its sector queued, and the next sector
 is the fifo's, else one not yet reached.
+
+## sector_fifo
+
+`MAX_SECTORS u32`: sector_find's walk's queue.
+
+## sector_seen
+
+`MAX_SECTORS u8`: sector_find's sectors reached.

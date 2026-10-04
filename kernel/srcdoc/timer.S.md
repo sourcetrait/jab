@@ -11,7 +11,13 @@ an input and comes back after the tick loses nothing; the wait moves a
 passed tick itself only when it reported that tick already and no flip has
 answered it (frame_reported).
 
+## .set TICK
+
+`u64`: a frame period in time ticks.
+
 ## .set SOUND_POLL
+
+`u64`: how often a sound-only wait looks for a stall.
 
 A device that stops returning raises no line (sound.S), so a wait on the
 sound stream alone wakes on this timer to look.
@@ -52,3 +58,11 @@ The display's tick, once reported, is moved on by the next wait unless a
 flip answers it first. The external lines stay enabled while the sound
 stream is live, so its interrupt keeps reaching the vector as the program
 runs.
+
+## frame_tick
+
+`u64`: the time of the next tick.
+
+## frame_reported
+
+`u64`: 1 once a wait reported the tick, 0 once a flip answered it.

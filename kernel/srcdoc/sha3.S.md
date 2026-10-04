@@ -15,6 +15,26 @@ loops over two small tables rather than unrolled: pi says where each lane
 goes and rho how far it turns, and between them they are the only part that
 is not arithmetic on neighbours.
 
+## .set SHA3_LANES
+
+`u64`: the state's 64-bit lanes.
+
+## .set SHA3_RATE
+
+`u64`: bytes in a block.
+
+## .set SHA3_ROUNDS
+
+`u64`: the permutation's rounds.
+
+## .set SHA3_PAD
+
+`u8`: the padding byte where the message ends.
+
+## .set SHA3_LAST
+
+`u8`: the padding bit in a block's last byte.
+
 ## sha3_256
 
 A fresh state, then whole blocks straight out of the message, the sound
@@ -34,3 +54,43 @@ one lane, then every lane in a column turned by its neighbours,
 d = c[x - 1] ^ rotl(c[x + 1], 1). Rho and pi together: every lane turned and
 moved at once. Chi: each lane against the two after it in its row. Iota:
 this round's constant into the first lane.
+
+## sha3_pi
+
+`25 u8`: where each lane goes in rho and pi.
+
+## sha3_rho
+
+`25 u8`: how far each lane turns on its way there.
+
+## sha3_next
+
+`5 u8`: the column after each.
+
+## sha3_next2
+
+`5 u8`: the column two after each.
+
+## sha3_prev
+
+`5 u8`: the column before each.
+
+## sha3_rc
+
+`24 u64`: each round's iota constant.
+
+## sha3_a
+
+`25 u64`: the state.
+
+## sha3_b
+
+`25 u64`: the lanes after rho and pi.
+
+## sha3_c
+
+`5 u64`: theta's column folds.
+
+## sha3_block
+
+`136 u8`: the last block, padded.

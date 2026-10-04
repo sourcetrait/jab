@@ -28,20 +28,66 @@ and jab.sys.await watches. With no port on the machine the calls say so.
 The pad's port carries bytes from the host alone, which pad.S reads out of
 the offered buffers as a stream and parses itself (doc/padport.md).
 
+## .set SERIAL_API_PORT
+
+`u32`: the API's port.
+
+## .set SERIAL_API_RX_QUEUE
+
+`u32`: its receive queue.
+
+## .set SERIAL_API_TX_QUEUE
+
+`u32`: its transmit queue.
+
 ## .set API_BUFFER_BYTES
+
+`u64`: bytes in a buffer offered for the API's receive queue.
 
 What the host sends lands in these buffers, offered to the device in
 advance, and moves into a ring the program reads from; what arrives beyond
 the ring waits with the device.
 
+## .set API_RING_BYTES
+
+`u64`: bytes the API's ring holds, as much as the buffers do.
+
+## .set SERIAL_CONTROL_BYTES
+
+`u64`: a control message buffer, a port's name included.
+
 ## .set SERIAL_PAD_PORT
+
+`u32`: the pad's port, jab.pad.
 
 A host process writes a pad's header and its events into it, and pad.S
 takes it as the pad when the machine carries no virtio-input pad. Its bytes
 land in buffers offered in advance, and pad.S reads them out as a stream
 through serial_pad_read.
 
+## .set SERIAL_PAD_RX_QUEUE
+
+`u32`: its receive queue.
+
+## .set SERIAL_PAD_TX_QUEUE
+
+`u32`: its transmit queue.
+
+## .set PAD_PORT_BUFFER_BYTES
+
+`u64`: bytes in a buffer offered for the pad's receive queue.
+
+## .set SERIAL_DEBUG_PORT
+
+`u32`: the debug channel's port, under DEBUG only.
+
+## .set SERIAL_DEBUG_TX_QUEUE
+
+`u32`: its transmit queue.
+
 ## .set DEBUG_LINE_BYTES
+
+`u64`: the longest debug line gathered before it goes out.
 
 A debug line gathers and goes out whole at its newline, so a line lands in
 the log in one piece.
@@ -80,3 +126,79 @@ DEBUG include.
 The UART stands in when the machine carries no virtio-serial device or the
 device came without the debug port, so a debug kernel on a bare line still
 reports.
+
+## serial_control_rx_queue
+
+The control receive queue's record.
+
+## serial_control_tx_queue
+
+The control transmit queue's record.
+
+## serial_api_rx_queue
+
+The API's receive queue record.
+
+## serial_api_tx_queue
+
+The API's transmit queue record.
+
+## serial_pad_rx_queue
+
+The pad's receive queue record.
+
+## serial_pad_tx_queue
+
+The pad's transmit queue record.
+
+## serial_debug_tx_queue
+
+The debug channel's transmit queue record, under DEBUG only.
+
+## debug_line
+
+`256 u8`: the debug line gathering.
+
+## debug_length
+
+`u64`: its bytes so far.
+
+## serial_api_buffers
+
+`2048 u8`: the API's receive buffers.
+
+## serial_pad_buffers
+
+`2048 u8`: the pad's receive buffers.
+
+## api_ring
+
+`2048 u8`: the bytes from the host the program has not read.
+
+## api_head
+
+`u64`: the count of bytes put in the ring.
+
+## api_tail
+
+`u64`: the count taken from it.
+
+## serial_control_buffers
+
+`512 u8`: the control receive buffers.
+
+## serial_control_message
+
+`8 u8`: a control message the kernel sends.
+
+## serial_base
+
+`addr`: the device's transport.
+
+## serial_state
+
+`u64`: 0 until opened, then serial_open's answer plus 1.
+
+## serial_ports
+
+`u64`: a bit per port the device named and the kernel answered for.

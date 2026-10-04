@@ -10,7 +10,3 @@ call pci_count_of > count a0 u64 [230:235]
  count :the virtio devices the scan found
 call pci_device index u64 > record a0 addr [236:243]
 call pci_service_line line u64 [244:260] :reads the ISR of every device on the PLIC line, which drops the level
-bss local pci_devices [264:265] :the PCI_DEV_* records, PCI_DEV_MAX of them
-bss local pci_count u64 [266:267] :the records filled
-bss local pci_scanned u64 [268:269] :1 once the scan has run
-bss local pci_next_base addr [270:271] :the next free byte of the PCI MMIO window

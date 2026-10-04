@@ -46,8 +46,44 @@ so the field is cleared first. What is on the disk is found by asking each
 format known about the first sector; anything unrecognised is raw sectors
 and nothing more.
 
+## msg_disk_pci
+
+`23 u8`: the debug line naming a disk's PCI slot, under DEBUG only.
+
 ## block_request
 
 Three descriptors are offered as one chain, the chain's head in the next
 slot of the available ring. The status byte is set to 0xff first, so an
 unanswered request cannot read OK.
+
+## block_queues
+
+The disks' virtqueue records, VQ_STRIDE apart.
+
+## block_records
+
+The disks' JAB_BLOCK_* records, the program-facing list.
+
+## block_bases
+
+`8 addr`: each disk's PCI device record.
+
+## block_count
+
+`u64`: the disks found.
+
+## block_probed
+
+`u64`: 1 once the probe has run.
+
+## block_header
+
+The request header the device reads.
+
+## block_status
+
+`u8`: the status byte the device writes.
+
+## block_bounce
+
+`512 u8`: a sector the kernel reads through.

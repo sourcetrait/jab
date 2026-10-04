@@ -295,3 +295,71 @@ lit one does, tile for tile, so the lit over the bright is the light
 alone; a dark copy on the unlit loop point-samples where a tile at a
 level averages, and read 8 of 256 of view dependence that was the
 texture's.
+
+## msg_alpha
+
+`12 u8`.
+
+## word_frame_name
+
+`7 u8`.
+
+## word_coverage
+
+`12 u8`.
+
+## word_of_share
+
+`18 u8`.
+
+## word_of_scale
+
+`10 u8`.
+
+## tile_cursor
+
+`addr`: the arena's next free byte.
+
+## tile_budget
+
+`u64`: the frame's budget left, in texels.
+
+## tile_budget_frame
+
+`u64`: the budget a frame starts with, TILE_BUDGET until the console lifts it.
+
+## tile_peak
+
+`u64`: the most the arena has held since the load, in bytes.
+
+## tilemaps
+
+`LUMAP_COUNT*11 u64`: every surface's tiles at the map's index, TILE_* fields.
+
+## material_alpha
+
+`MAX_MATERIALS*MIP_LEVELS u32`: each material's alpha scale a level, 16.16.
+
+## alpha_hist
+
+`256 u64`: the search's counts of each alpha value.
+
+## alpha_cover
+
+`MIP_LEVELS u64`: the shares by level, for the line.
+
+## alpha_chain_levels
+
+`u64`: the chain's levels of the material in hand, the scales to find.
+
+## alpha_plane_a
+
+`ALPHA_PLANE_BYTES u8`: one of the two planes a level's alphas alternate between.
+
+## alpha_plane_b
+
+`ALPHA_PLANE_BYTES u8`: the other plane.
+
+## tile_arena
+
+`TILE_ARENA_BYTES u8`: the atlases.

@@ -17,33 +17,13 @@ fn merged(made: Gen, old: &Entry) -> Entry {
     if !made.certain && old.syntax.is_code() && entry.syntax.is_code() {
         entry.syntax = old.syntax;
     }
-    entry.shape = match (&made.entry.shape, &old.shape) {
-        (Shape::Line { ty }, Shape::Line { ty: old_ty }) => Shape::Line { ty: line_type(&made, ty.as_ref(), old_ty.as_ref()) },
-        (Shape::Signature { .. }, Shape::Signature { .. }) if entry.syntax == Syntax::Macro => macro_shape(&made, old),
-        (Shape::Signature { .. }, Shape::Signature { args, outs }) => Shape::Signature { args: args.clone(), outs: outs.clone() },
-        (shape, _) => shape.clone(),
-    };
+    (entry.args, entry.outs) =
+        if entry.syntax == Syntax::Macro { macro_shape(&made, old) } else { (old.args.clone(), old.outs.clone()) };
     entry.summary = old.summary.clone();
-    if matches!(entry.shape, Shape::Signature { .. }) {
-        let old_names = old.names();
-        let new_names = entry.names();
-        entry.notes =
-            old.notes.iter().filter(|note| !old_names.contains(&note.name) || new_names.contains(&note.name)).cloned().collect();
-    }
+    let old_names = old.names();
+    let new_names = entry.names();
+    entry.notes = old.notes.iter().filter(|note| !old_names.contains(&note.name) || new_names.contains(&note.name)).cloned().collect();
     entry
-}
-
-/// A data label's type: the .eye's while it fits in what the code reserves,
-/// a narrower type within padding being the .eye's to choose.
-fn line_type(made: &Gen, ty: Option<&String>, old: Option<&String>) -> Option<String> {
-    match (old, made.size) {
-        (Some(old), Some(size)) => match type_bytes(old) {
-            Some(bytes) if bytes > size => ty.cloned().or_else(|| Some("?".to_owned())),
-            _ => Some(old.clone()),
-        },
-        (Some(old), None) => Some(old.clone()),
-        (None, _) => ty.cloned(),
-    }
 }
 
 /// An operand's type: what the code settles, else the .eye's; `?` where the
@@ -60,12 +40,8 @@ fn arg_type(kind: Kind, old: Option<&str>) -> String {
 /// A macro's operands and results: its operands from the code, the inputs
 /// the .eye places in registers or memory kept, the results the .eye names
 /// kept while the code still writes them, and its scratch from the code.
-fn macro_shape(made: &Gen, old: &Entry) -> Shape {
-    let (Shape::Signature { args: gen_args, .. }, Shape::Signature { args: old_args, outs: old_outs }) =
-        (&made.entry.shape, &old.shape)
-    else {
-        return made.entry.shape.clone();
-    };
+fn macro_shape(made: &Gen, old: &Entry) -> (Vec<Arg>, Vec<Out>) {
+    let (gen_args, old_args, old_outs) = (&made.entry.args, &old.args, &old.outs);
     let params: HashSet<&str> = gen_args.iter().map(|arg| arg.name.as_str()).collect();
     let mut args: Vec<Arg> = gen_args
         .iter()
@@ -111,7 +87,7 @@ fn macro_shape(made: &Gen, old: &Entry) -> Shape {
     }
     if !made.complete {
         outs.extend(old_outs.iter().filter(|out| matches!(out, Out::Regs { .. })).cloned());
-        return Shape::Signature { args, outs };
+        return (args, outs);
     }
     let taken: HashSet<&str> = outs
         .iter()
@@ -129,5 +105,5 @@ fn macro_shape(made: &Gen, old: &Entry) -> Shape {
         items.extend(kept_params);
         outs.push(Out::Regs { word: "scratch".to_owned(), regs: items });
     }
-    Shape::Signature { args, outs }
+    (args, outs)
 }

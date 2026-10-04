@@ -8,6 +8,18 @@ reads over anything; the player's G-1 is unseen. The pixel loop is aligned to
 64 bytes inside the function. An OWNER build does not draw it, so the
 capture carries surface indices alone (main.S).
 
+## .set CROSSHAIR_RADIUS
+
+The disc's radius in pixels.
+
+## .set CROSSHAIR_X
+
+The disc's centre column.
+
+## .set CROSSHAIR_Y
+
+The disc's centre row.
+
 ## hud_draw
 
 The row's half width: the greatest w with w * w within the radius's square

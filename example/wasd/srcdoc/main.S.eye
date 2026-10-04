@@ -1,38 +1,3 @@
-set RADIUS i64 [3] :a sphere's radius in pixels
-set BACKGROUND u32 [4] :the screen's colour, black
-set PLAYER u32 [5] :your sphere's colour
-set BALL u32 [6] :the bouncing sphere's colour, the logo's, LowKick's own
-set LEFT i64 [7] :the least a centre may be across, keeping the whole sphere on the screen
-set RIGHT i64 [8] :the most a centre may be across
-set TOP i64 [9] :the least a centre may be down
-set BOTTOM i64 [10] :the most a centre may be down
-set FIX u8 [11] :the fraction bits of a position or a speed
-set ONE i64 [12] :one pixel in fixed point
-set BALL_VX i64 [13] :the bouncing sphere's speed across, bounce's 210 pixels a second
-set BALL_VY i64 [14] :the bouncing sphere's speed down, bounce's 150 pixels a second
-set TOP_SPEED i64 [15] :your sphere's top speed on each axis, 780 pixels a second
-set ACCEL i64 [16] :what a held key adds a second, 720 pixels a second squared
-set DECEL i64 [17] :what a free axis loses a second, 450 pixels a second squared
-set DT_MAX u64 [18] :the most time one frame moves anything, a tenth of a second in ticks
-set TOUCH_SQ i64 [19] :the spheres have met when their centres are this close in pixels, squared
-set APART i64 [20] :how far apart met spheres are set, two pixels more than touching
-set CMD_SIZE u64 [22] :an API command's bytes
-set CMD_CODE u16 [23] :the key's code, a JAB_KEY_*
-set CMD_VALUE u16 [24] :pressed or released, a JAB_KEY_* value
-set CMD_READ_BYTES u64 [25] :the most one API read takes
-set REPORT_SIZE u64 [26] :a report's bytes
-set REPORT_KIND u8 [27] :the kind, REPORT_VELOCITY, REPORT_ACCELERATION, or REPORT_HIT
-set REPORT_SPHERE u8 [28] :the sphere, a SPHERE_*
-set REPORT_AGAINST u8 [29] :a hit's other party, AGAINST_WALL or a SPHERE_*
-set REPORT_X i32 [30] :x in fixed point, after a pad byte
-set REPORT_Y i32 [31] :y in fixed point
-set REPORT_VELOCITY u8 [32] :a sphere's velocity changed
-set REPORT_ACCELERATION u8 [33] :the drive vector the held keys apply changed
-set REPORT_HIT u8 [34] :a collision, at the contact point
-set SPHERE_PLAYER u8 [35] :your sphere
-set SPHERE_BALL u8 [36] :the bouncing sphere
-set AGAINST_WALL u8 [37] :a wall
-set REPORT_MAX u64 [38] :the most reports a frame
 j _start [42:76] :opens the display, places the spheres, and runs until the window closes
 j local frame [77:90] :takes the keys and the API's commands as they come, and on each tick moves, reports, and draws
 j local no_display [92:94] :says so on the UART and exits with 1
@@ -86,40 +51,3 @@ call local fill_square x i64,y i64,colour u32 > square JAB_DISPLAY_BASE u32 [845
  square :the pixels within RADIUS of x, y across and down, set to colour
 call local draw_disc x i64,y i64,colour u32 > disc JAB_DISPLAY_BASE u32,clobber a3-a4 [867:893]
  disc :the pixels within RADIUS of x, y, set to colour
-bss local last_time u64 [897:898] :the clock at the frame before, in ticks
-bss local dt u64 [899:900] :the frame's time in ticks, at most DT_MAX
-bss local player_x i64 [901:902] :your sphere's centre across, in fixed point
-bss local player_y i64 [903:904] :your sphere's centre down, in fixed point
-bss local player_vx i64 [905:906] :your sphere's speed across, in fixed point a second
-bss local player_vy i64 [907:908] :your sphere's speed down, in fixed point a second
-bss local ball_x i64 [909:910] :the other sphere's centre across, in fixed point
-bss local ball_y i64 [911:912] :the other sphere's centre down, in fixed point
-bss local ball_vx i64 [913:914] :the other sphere's speed across, in fixed point a second
-bss local ball_vy i64 [915:916] :the other sphere's speed down, in fixed point a second
-bss local old_player_x i64 [917:918] :your sphere's centre across in pixels, as last drawn
-bss local old_player_y i64 [919:920] :your sphere's centre down in pixels, as last drawn
-bss local old_ball_x i64 [921:922] :the other sphere's centre across in pixels, as last drawn
-bss local old_ball_y i64 [923:924] :the other sphere's centre down in pixels, as last drawn
-bss local last_player_vx i64 [925:926] :your sphere's speed across as last reported
-bss local last_player_vy i64 [927:928] :your sphere's speed down as last reported
-bss local last_ball_vx i64 [929:930] :the other sphere's speed across as last reported
-bss local last_ball_vy i64 [931:932] :the other sphere's speed down as last reported
-bss local last_ax i64 [933:934] :the drive vector across as last reported
-bss local last_ay i64 [935:936] :the drive vector down as last reported
-bss local meet_x i64 [937:938] :where the spheres met across, in fixed point
-bss local meet_y i64 [939:940] :where the spheres met down, in fixed point
-bss local report_count u64 [941:942] :the reports in report_buffer this frame
-bss local cmd_pending u64 [943:944] :the bytes of a command in cmd_partial
-bss local report_buffer 108 u8 [945:946] :this frame's reports
-bss local cmd_read 64 u8 [947:948] :one API read's bytes
-bss local cmd_partial 4 u8 [949:950] :a command arriving in pieces
-bss local held_w bool [951:952] :1 while W is held
-bss local held_a bool [953:954] :1 while A is held
-bss local held_s bool [955:956] :1 while S is held
-bss local held_d bool [957:958] :1 while D is held
-bss local player_hit_x bool [959:960] :your sphere hit a side wall this frame
-bss local player_hit_y bool [961:962] :your sphere hit the top or the bottom this frame
-bss local ball_hit_x bool [963:964] :the other sphere hit a side wall this frame
-bss local ball_hit_y bool [965:966] :the other sphere hit the top or the bottom this frame
-bss local met bool [967:968] :the spheres met this frame
-rodata local msg_no_display 18 u8 [971:972] :the line for a machine with no display

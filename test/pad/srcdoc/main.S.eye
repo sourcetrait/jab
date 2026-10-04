@@ -1,5 +1,3 @@
-set LINE_BYTES u64 [3] :room for a line
-set DIGITS_BYTES u64 [4] :room for a decimal's digits
 j _start [8:27] :prints the pad's name and four axes' ranges, then reports pad events
 j local frame [28:35] :halts for a pad event and reports what came, exiting with 0 once BTN_SOUTH is released
 j local no_pad [37:39] :says so on the UART and exits with 2
@@ -19,18 +17,3 @@ call local line_int value i64 > text line u8,length line_len u64,clobber a0 [173
  text :the value in decimal appended, a minus first when negative
 call local line_end > length line_len u64,clobber a0,a7 [208:218] :the newline and the terminator, then the line to the UART
  length :0, the next line begun
-bss local line_len u64 [222:223] :the line's length so far
-bss local line 160 u8 [224:225] :the line being built
-bss local digits 24 u8 [226:228] :line_int's digits, built backward
-bss local axis_record 5 i32 [229:230] :an axis's range as jab.sys.pad.axis wrote it
-bss local state_record 132 u8 [231:232] :the pad's state as jab.sys.pad.read wrote it
-bss local name_buffer 128 u8 [233:234] :the pad's name
-bss local quit bool [235:236] :set once BTN_SOUTH is released
-rodata local msg_ready 12 u8 [239:240] :the first line
-rodata local msg_no_pad 13 u8 [241:242] :the line for a machine with no pad
-rodata local msg_name 6 u8 [243:244] :the name line's first word
-rodata local msg_axis 6 u8 [245:246] :an axis line's first word
-rodata local msg_none 6 u8 [247:248] :an axis line's end when the pad has no such axis
-rodata local msg_pad 5 u8 [249:250] :an event line's first word
-rodata local msg_state 7 u8 [251:252] :a state line's first word
-rodata local msg_space 2 u8 [253:254] :a space

@@ -27,6 +27,8 @@ may sit anywhere.
 
 ## .set SPRITE_SIDE_MAX
 
+`u64`: the most a record's width, height, and frame count may each be.
+
 The PNG decoder's own limit (png.S), so the products of the sizes fit 64
 bits; a record past it is no sprite the kernel handed out, and ending the
 run keeps every size product inside 64 bits before the bounds see it.
@@ -74,3 +76,87 @@ register.
 ## sprite_trig
 
 From the quarter-wave table, by quadrant.
+
+## sprite_sine
+
+`91 u32`: the sine of 0 to 90 degrees in 16.16 fixed point, rounded.
+
+## sprite_tinted
+
+`u64`: 0 when the tint is white, so nothing is tinted.
+
+## sprite_tint_r
+
+`u64`: the tint's red.
+
+## sprite_tint_g
+
+`u64`: its green.
+
+## sprite_tint_b
+
+`u64`: its blue.
+
+## sprite_flips
+
+`u64`: the pose's flips, 1 across and 2 down.
+
+## sprite_solid
+
+`u64`: nonzero for a solid draw.
+
+## sprite_solid_word
+
+`u64`: the tint a solid draw writes.
+
+## sprite_flags
+
+`u64`: the record's flags.
+
+## sprite_spans_row
+
+`addr`: the frame's rows of the span table.
+
+## sprite_stepabs
+
+`u64`: the column step, 16.16, unsigned.
+
+## sprite_x
+
+`i64`: the draw's x.
+
+## sprite_angle
+
+`u64`: the turn, 0 to 359 degrees.
+
+## sprite_last_col
+
+`u64`: the frame's last column.
+
+## sprite_last_row
+
+`u64`: the frame's last row.
+
+## sprite_hw
+
+`u64`: half the drawn width, 16.16.
+
+## sprite_hh
+
+`u64`: half the drawn height, 16.16.
+
+## sprite_dw16
+
+`u64`: the drawn width, 16.16.
+
+## sprite_dh16
+
+`u64`: the drawn height, 16.16.
+
+## sprite_sin
+
+`i64`: the turn's sine, 16.16.
+
+## sprite_cos
+
+`i64`: its cosine.

@@ -1,10 +1,3 @@
-set ROMFS_MAGIC_LOW u32 [6] :"-rom" as the little-endian word a load sees
-set ROMFS_MAGIC_HIGH u32 [7] :"1fs-" likewise
-set ROMFS_HEADER u64 [8] :bytes in a header before its name
-set ROMFS_BOUNCE_SECTORS u64 [9] :the sectors the bounce holds
-set ROMFS_BOUNCE_BYTES u64 [10]
-set ROMFS_NAME_LIMIT u64 [11] :past this a name is not long but corrupt
-set ROMFS_LINK_LIMIT u64 [12] :the hard links followed before a chain is taken as endless
 ecall sys_romfs_list buffer addr,id u64,directory u64,offset u64,capacity u64 > count a0 u64,next a1 u64 [17:54] :writes a JAB_ROMFS_* record per entry of the directory into the buffer
  buffer :ends the run where a record would be written outside the program's window
  id :ends the run when the machine has no such disk or it carries no romfs
@@ -54,15 +47,3 @@ j local romfs_fault_header offset u64 [699:705] :ends the run with a line naming
 j local romfs_fault_kind offset u64 [707:713] :ends the run with a line naming the header of the wrong kind
 j local romfs_fault_disk [715:718] :ends the run with a line for a disk error
 j local romfs_fault_end [720:724] :ends a fault line and the run with 1
-bss local romfs_bounce 2048 u8 [728:730] :the bounce, sectors as the disk holds them
-bss romfs_scratch [731:732] :the JAB_ROMFS_* record a header is read into
-bss local romfs_roots 8 u64 [733:734] :each disk's root header offset, 0 until read
-bss local romfs_sizes 8 u64 [735:736] :each disk's accessible size
-bss local romfs_bounce_disk u64 [737:738] :the disk the bounce holds, its index plus 1, 0 for none
-bss local romfs_bounce_sector u64 [739:740] :the first sector it holds
-bss local romfs_bounce_count u64 [741:742] :the sectors it holds
-rodata local msg_romfs_disk_id 21 u8 [745:746]
-rodata local msg_romfs_not_romfs 30 u8 [747:748]
-rodata local msg_romfs_header 27 u8 [749:750]
-rodata local msg_romfs_kind 27 u8 [751:752]
-rodata local msg_romfs_disk_error 23 u8 [753:754]

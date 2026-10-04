@@ -16,6 +16,74 @@ its length. The piece ends when every track has. Every read is bounded by
 its track's chunk, so a malformed file ends its track rather than reading
 past it.
 
+## .set TRACKS
+
+`u64`: the tracks a file may hold.
+
+## .set TRACK_AT
+
+`addr`: a track record's next byte to read.
+
+## .set TRACK_END
+
+`addr`: the chunk's end.
+
+## .set TRACK_TICK
+
+`u64`: the next event's absolute tick.
+
+## .set TRACK_STATUS
+
+`u8`: the running status.
+
+## .set TRACK_DONE
+
+`u8`.
+
+## .set TRACK_SIZE
+
+`u64`: bytes in a track record.
+
+## .set HEADER_BYTES
+
+`u64`: bytes in the MThd chunk.
+
+## .set CHUNK_HEADER_BYTES
+
+`u64`: bytes in a chunk's tag and length.
+
+## .set FORMAT_MOST
+
+`u16`: the latest format taken.
+
+## .set META
+
+`u8`: the meta event's status.
+
+## .set SYSEX
+
+`u8`.
+
+## .set SYSEX_ESCAPE
+
+`u8`.
+
+## .set META_TEMPO
+
+`u8`.
+
+## .set META_END
+
+`u8`: the end-of-track meta event.
+
+## .set TEMPO_DEFAULT
+
+`u64`: microseconds a quarter note before a tempo event.
+
+## .set PERIOD_MICROS
+
+`u64`: a period in microseconds.
+
 ## sys_midi_play
 
 A file the player refuses: no MThd header, a format past 1, a SMPTE
@@ -44,3 +112,31 @@ A channel message of two data bytes goes to synth_note_off, synth_note_on
 nothing; one data byte is a program change, or channel pressure, nothing. A
 meta event is its kind, its length, and its bytes; a system exclusive event
 is skipped by its length.
+
+## smf_playing
+
+`u64`: 1 while a piece plays.
+
+## smf_division
+
+`u64`: ticks a quarter note.
+
+## smf_tempo
+
+`u64`: microseconds a quarter note.
+
+## smf_position
+
+`u64`: the piece's position, 32.32 ticks.
+
+## smf_increment
+
+`u64`: the position's step a period.
+
+## smf_track_count
+
+`u64`: the tracks read.
+
+## smf_tracks
+
+The track records.

@@ -1,13 +1,3 @@
-set GZ_MAGIC0 u8 [4] :a gzip's first byte
-set GZ_MAGIC1 u8 [5] :its second
-set GZ_DEFLATE u8 [6] :the compression method byte for DEFLATE
-set GZ_FHCRC u8 [7] :the header's flag for a header CRC
-set GZ_FEXTRA u8 [8] :the flag for an extra field
-set GZ_FNAME u8 [9] :the flag for a name
-set GZ_FCOMMENT u8 [10] :the flag for a comment
-set GZ_HEADER u64 [11] :bytes in the fixed header
-set GZ_TRAILER u64 [12] :bytes in the trailer, the CRC-32 then the length
-set GZ_CRC_TICK u64 [13] :bytes the CRC takes in between looks at the sound stream
 ecall sys_gz_size source addr,length u64 > size a0 u64,status a1 u64 [18:49]
  source :ends the run unless the whole of it lies inside the program's window
  size :the length the contents will be, from the trailer; 0 when not a gzip
@@ -27,5 +17,3 @@ call gz_crc_begin > state a0 u32 [206:215] :a fresh CRC-32's running state, the 
 call gz_crc_update state u32,buffer addr,length u64 > state a0 u32 [216:244] :takes the bytes into the state, looking at the sound stream every GZ_CRC_TICK of them
 call gz_crc_end state u32 > crc a0 u32 [245:249]
 call local gz_crc_table > table gz_crc u32,ready gz_crc_ready u64 [251:279] :builds the reflected CRC-32's 256 entries on first use
-bss local gz_crc_ready u64 [283:285] :1 once the table is built
-bss local gz_crc 256 u32 [286:287] :the reflected CRC-32's table

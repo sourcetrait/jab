@@ -18,9 +18,35 @@ handle that is not a header, a header whose kind is wrong for the call -
 since every handle the kernel hands out is none of those and a program that
 invents one has a bug.
 
+## .set ROMFS_MAGIC_LOW
+
+`u32`: "-rom" as the little-endian word a load sees.
+
+## .set ROMFS_MAGIC_HIGH
+
+`u32`: "1fs-" likewise.
+
+## .set ROMFS_HEADER
+
+`u64`: bytes in a header before its name.
+
+## .set ROMFS_BOUNCE_SECTORS
+
+`u64`: the sectors the bounce holds.
+
+## .set ROMFS_BOUNCE_BYTES
+
+`u64`.
+
 ## .set ROMFS_NAME_LIMIT
 
+`u64`: past this a name is not long but corrupt.
+
 The bounce could not hold a longer name beside its own header.
+
+## .set ROMFS_LINK_LIMIT
+
+`u64`: the hard links followed before a chain is taken as endless.
 
 ## sys_romfs_list
 
@@ -80,3 +106,51 @@ where the record ends.
 
 The bounce remembers what it holds, so a chain walked inside it is read
 once.
+
+## romfs_bounce
+
+`2048 u8`: the bounce, sectors as the disk holds them.
+
+## romfs_scratch
+
+The JAB_ROMFS_* record a header is read into.
+
+## romfs_roots
+
+`8 u64`: each disk's root header offset, 0 until read.
+
+## romfs_sizes
+
+`8 u64`: each disk's accessible size.
+
+## romfs_bounce_disk
+
+`u64`: the disk the bounce holds, its index plus 1, 0 for none.
+
+## romfs_bounce_sector
+
+`u64`: the first sector it holds.
+
+## romfs_bounce_count
+
+`u64`: the sectors it holds.
+
+## msg_romfs_disk_id
+
+`21 u8`.
+
+## msg_romfs_not_romfs
+
+`30 u8`.
+
+## msg_romfs_header
+
+`27 u8`.
+
+## msg_romfs_kind
+
+`27 u8`.
+
+## msg_romfs_disk_error
+
+`23 u8`.

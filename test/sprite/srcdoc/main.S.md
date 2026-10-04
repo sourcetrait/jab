@@ -10,6 +10,14 @@ four ways, and the refusals, a frame past the sprite and a scale
 past the most; each call's code goes to the UART as `draw <code>`.
 Then one flip, and idle for the test to take the screen.
 
+## .set BACKGROUND
+
+`u32`: the painted background's colour.
+
+## .set TINT
+
+`u32`: the tinted draw's colour.
+
 ## _start
 
 The background is painted two pixels a store. The draws, in order, each
@@ -32,7 +40,25 @@ turned an eighth at four times.
 Then the refusals: a frame the sheet does not have, and a scale past the
 most. Last, a draw wholly off the screen: nothing drawn, and no complaint.
 
+## blend
+
+`16 u32`: one frame of 4 by 3, every kind of alpha, no flags, so it is drawn whole.
+
+## sheet
+
+`12 u32`: two frames of 2 by 2, one after the other.
+
 ## thin
+
+`32 u32`: one frame of 6 by 4, mostly clear, its span table of 16-bit columns last.
 
 Its rows: one with nothing, a run, two apart with a clear pixel that carries
 a colour between them, and one at the far edge.
+
+## msg_no_display
+
+`20 u8`: the line for a machine with no display.
+
+## line
+
+`16 u8`: the report line.

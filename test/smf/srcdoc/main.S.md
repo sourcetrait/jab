@@ -8,7 +8,43 @@ plays the stream out; the host records what played and the test
 holds it against the file. With no sound device it says so and exits
 2; with no file, 1; with a file the player refuses, 3.
 
+## .set DISK
+
+`u8`: the romfs disk's id.
+
+## .set PIECE_BYTES
+
+`u64`: room for the piece, 4 KiB.
+
+## .set LINGER
+
+`u64`: the wait after the piece ends, a fifth of a second in ticks.
+
 ## _start
 
 The file comes out of the romfs and into memory, a read at a time from the
 offset the one before returned.
+
+## path
+
+`11 u8`: the piece's path on the romfs.
+
+## msg_no_sound
+
+`15 u8`: the line for a machine with no sound.
+
+## msg_no_file
+
+`35 u8`: the line for a romfs without the piece.
+
+## msg_refused
+
+`35 u8`: the line for a piece the player refused.
+
+## rec
+
+`144 u8`: the piece's romfs record.
+
+## piece
+
+`4096 u8`: the piece, a Standard MIDI File.

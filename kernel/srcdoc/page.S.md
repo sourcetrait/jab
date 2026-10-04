@@ -18,6 +18,98 @@ page's slot in a level 1 table. Assembly stops unless the program's window,
 as the SDK states it, ends where RAM does and begins after the framebuffer,
 and unless the PCI MMIO window is one aligned GiB.
 
+## .set TEST_PTE
+
+`u64`: the PTE, flags clear, of the 2 MiB page holding the test device.
+
+## .set TEST_SLOT
+
+`u64`: that page's slot in a level 1 table, in bytes.
+
+## .set UART_PTE
+
+`u64`: the PTE, flags clear, of the 2 MiB page holding the UART.
+
+## .set UART_SLOT
+
+`u64`: that page's slot in a level 1 table, in bytes.
+
+## .set PLIC_PTE
+
+`u64`: the PTE, flags clear, of the PLIC's first 2 MiB page.
+
+## .set PLIC_SLOT
+
+`u64`: that page's slot in a level 1 table, in bytes.
+
+## .set PLIC_PAGES
+
+`u64`: the 2 MiB pages the PLIC spans.
+
+## .set ECAM_PTE
+
+`u64`: the PTE, flags clear, of the PCI ECAM's first 2 MiB page.
+
+## .set ECAM_SLOT
+
+`u64`: that page's slot in a level 1 table, in bytes.
+
+## .set ECAM_PAGES
+
+`u64`: the 2 MiB pages the PCI ECAM spans.
+
+## .set PCIE_MMIO_PTE
+
+`u64`: the PTE, flags clear, of the PCI MMIO window's GiB leaf.
+
+## .set PCIE_MMIO_ROOT_SLOT
+
+`u64`: that leaf's slot in the root table, in bytes.
+
+## .set KERNEL_PTE
+
+`u64`: the PTE, flags clear, of the kernel's 2 MiB page.
+
+## .set KERNEL_SLOT
+
+`u64`: that page's slot across the RAM tables, in bytes.
+
+## .set DISPLAY_PTE
+
+`u64`: the PTE, flags clear, of the framebuffer's first 2 MiB page.
+
+## .set DISPLAY_SLOT
+
+`u64`: that page's slot across the RAM tables, in bytes.
+
+## .set DISPLAY_PAGES
+
+`u64`: the 2 MiB pages the framebuffer spans.
+
+## .set PROGRAM_PTE
+
+`u64`: the PTE, flags clear, of the program window's first 2 MiB page.
+
+## .set PROGRAM_SLOT
+
+`u64`: that page's slot across the RAM tables, in bytes.
+
+## .set PROGRAM_PAGES
+
+`u64`: the 2 MiB pages of the program's window.
+
+## .set RAM_GIBS
+
+`u64`: the GiBs of RAM, a level 1 table each.
+
+## .set RAM_ROOT_SLOT
+
+`u64`: the first RAM GiB's slot in the root table, in bytes.
+
+## .set PAGE_PTE_STEP
+
+`u64`: how much more PTE the next 2 MiB page is.
+
 ## page_init
 
 The root's entry for the first GiB points to the devices' table, then an
@@ -26,3 +118,15 @@ in the root. The devices and the kernel's page are supervisor only, the
 framebuffer user read-write, and the program's pages user
 read-write-execute to the end of RAM, running on from one GiB's table into
 the next.
+
+## page_root
+
+`512 u64`: the root table.
+
+## page_l1_devices
+
+`512 u64`: the level 1 table for the first GiB, the devices.
+
+## page_l1_ram
+
+`2048 u64`: the level 1 tables for RAM, a GiB each, side by side.

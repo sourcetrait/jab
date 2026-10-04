@@ -27,10 +27,8 @@ pub(crate) enum Section {
 /// What a symbol is, with the statements inference reads of it.
 #[derive(Clone, Debug)]
 pub(crate) enum Def {
-    Constant,
     Macro { params: Vec<Param>, body: Vec<Stmt> },
     Label { section: Section, global: bool, stmts: Vec<Stmt> },
-    Linker,
 }
 
 /// A symbol a source defines and the lines it spans.
@@ -48,7 +46,7 @@ pub(crate) struct Source {
     pub(crate) symbols: Vec<Symbol>,
 }
 
-/// The symbols an assembly source defines, with the lines each spans.
+/// The labels and macros an assembly source defines, with the lines each spans.
 pub(crate) fn scan_asm(text: &str) -> Source {
     let globals = globals(text);
     let mut symbols: Vec<Symbol> = Vec::new();
@@ -101,11 +99,7 @@ pub(crate) fn scan_asm(text: &str) -> Source {
                         skipping = true;
                     }
                 }
-                ".set" | ".equ" | ".equiv" => {
-                    if let Some(name) = stmt.args.first() {
-                        constant(&mut symbols, &mut seen, name, number);
-                    }
-                }
+                ".set" | ".equ" | ".equiv" => {}
                 ".text" | ".data" | ".bss" => section = stmt.op.clone(),
                 ".section" => section = section_name(&stmt),
                 ".pushsection" => {
@@ -118,9 +112,9 @@ pub(crate) fn scan_asm(text: &str) -> Source {
                     }
                 }
                 _ => {
-                    if let Some(name) = assignment(rest) {
-                        constant(&mut symbols, &mut seen, name, number);
-                    } else if let Some(&at) = current.get(&section) {
+                    if assignment(rest).is_none()
+                        && let Some(&at) = current.get(&section)
+                    {
                         symbols[at].last = number;
                         if let Def::Label { stmts, .. } = &mut symbols[at].def {
                             stmts.push(stmt);
@@ -131,44 +125,6 @@ pub(crate) fn scan_asm(text: &str) -> Source {
         }
     }
     Source { symbols }
-}
-
-/// The symbols a linker script assigns, each at the line of its assignment.
-pub(crate) fn scan_linker(text: &str) -> Source {
-    let text = strip_block_comments(text);
-    let mut symbols = Vec::new();
-    let mut seen = HashSet::new();
-    for (index, line) in text.lines().enumerate() {
-        let chars: Vec<char> = line.chars().collect();
-        let mut i = 0;
-        while i < chars.len() {
-            let starts = is_ident_char(chars[i]) && !chars[i].is_ascii_digit() && (i == 0 || !is_ident_char(chars[i - 1]));
-            if !starts {
-                i += 1;
-                continue;
-            }
-            let begin = i;
-            while i < chars.len() && is_ident_char(chars[i]) {
-                i += 1;
-            }
-            let name: String = chars[begin..i].iter().collect();
-            let mut j = i;
-            while j < chars.len() && chars[j].is_whitespace() {
-                j += 1;
-            }
-            let assigns = chars.get(j) == Some(&'=') && chars.get(j + 1) != Some(&'=');
-            if assigns && name != "." && seen.insert(name.clone()) {
-                symbols.push(Symbol { name, def: Def::Linker, first: index + 1, last: index + 1 });
-            }
-        }
-    }
-    Source { symbols }
-}
-
-fn constant(symbols: &mut Vec<Symbol>, seen: &mut HashSet<String>, name: &str, line: usize) {
-    if seen.insert(name.to_owned()) {
-        symbols.push(Symbol { name: name.to_owned(), def: Def::Constant, first: line, last: line });
-    }
 }
 
 fn param(word: &str) -> Param {
@@ -259,20 +215,6 @@ pub(crate) fn strip_comment(line: &str) -> &str {
         }
     }
     line
-}
-
-fn strip_block_comments(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(open) = rest.find("/*") {
-        out.push_str(&rest[..open]);
-        let after = &rest[open + 2..];
-        let close = after.find("*/").map(|at| at + 2).unwrap_or(after.len());
-        out.extend(after[..close].chars().filter(|c| *c == '\n'));
-        rest = &after[close..];
-    }
-    out.push_str(rest);
-    out
 }
 
 /// A line's statements, split at semicolons outside quotes.

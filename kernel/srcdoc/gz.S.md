@@ -13,6 +13,46 @@ may reach back 32 KiB and the Huffman state is built as the stream is read,
 so a resumable cursor would mean the kernel holding decoder state between
 calls - which is the one thing every other call here avoids.
 
+## .set GZ_MAGIC0
+
+`u8`: a gzip's first byte.
+
+## .set GZ_MAGIC1
+
+`u8`: its second.
+
+## .set GZ_DEFLATE
+
+`u8`: the compression method byte for DEFLATE.
+
+## .set GZ_FHCRC
+
+`u8`: the header's flag for a header CRC.
+
+## .set GZ_FEXTRA
+
+`u8`: the flag for an extra field.
+
+## .set GZ_FNAME
+
+`u8`: the flag for a name.
+
+## .set GZ_FCOMMENT
+
+`u8`: the flag for a comment.
+
+## .set GZ_HEADER
+
+`u64`: bytes in the fixed header.
+
+## .set GZ_TRAILER
+
+`u64`: bytes in the trailer, the CRC-32 then the length.
+
+## .set GZ_CRC_TICK
+
+`u64`: bytes the CRC takes in between looks at the sound stream.
+
 ## sys_gz_read
 
 A header that runs off the end, or leaves no compressed bytes before the
@@ -35,3 +75,11 @@ streamed off a disk, sum the same.
 
 Built on first use so nothing sits in the image for a program that never
 asks.
+
+## gz_crc_ready
+
+`u64`: 1 once the table is built.
+
+## gz_crc
+
+`256 u32`: the reflected CRC-32's table.

@@ -10,15 +10,15 @@
 
 ## fn gens
 
-## fn line
-
 ## fn generated
 
 A label's syntax is certain only when something calls it. A label that
 returns is taken for a routine however it is reached, since a tail jump and
 a branch to a shared exit look alike; a label in a table of addresses for a
 system call handler; anything else for a jump target. The uncertain cases
-defer to the existing .eye in the merge.
+defer to the existing .eye in the merge. A data label and a table in text
+give no entry: the .eye is where a reader looks for the flow, and the words
+on data live in the source's `.md`.
 
 ## fn is_data
 
@@ -35,13 +35,11 @@ seeds a new entry: an existing entry's signature always stands.
 
 ## fn result
 
-## fn data_type
+## fn data_bytes
 
-A label's directives give a type when they agree on a width; a mix, a record
-of fields, gives none, its size still feeding the merge.
+What tells a table in text from code: a statement is data when it says its
+bytes, so a reservation sized by a symbol reads as no data.
 
 ## fn number
 
 ## fn string_bytes
-
-## fn type_bytes

@@ -20,14 +20,9 @@ nor joins its statements. A macro defined twice keeps its first definition;
 the second's body is skipped. A label containing a backslash is a
 per-expansion label inside a macro body (`name_\@`), not a symbol; `.L` and
 numeric labels are local by the assembler's own rules. A range runs from the
-definition to the last statement attributed to it, or to `.endm`.
-
-## fn scan_linker
-
-Only `NAME =` assignments are symbols; `==` compares and `.` is the location
-counter. Block comments become their newlines, so line numbers stay true.
-
-## fn constant
+definition to the last statement attributed to it, or to `.endm`. A constant,
+`.set` or a `name = value` assignment, is no symbol and joins no label's
+statements, so it neither extends a range nor turns a table into code.
 
 ## fn param
 
@@ -48,8 +43,6 @@ counter. Block comments become their newlines, so line numbers stay true.
 ## fn assignment
 
 ## fn strip_comment
-
-## fn strip_block_comments
 
 ## fn statements
 

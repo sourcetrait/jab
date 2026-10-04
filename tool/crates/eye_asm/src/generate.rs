@@ -1,17 +1,20 @@
 use crate::*;
 
-/// Writes a .eye.stub beside each source's .eye: every symbol the source
-/// defines but those its .eye.ignore names, generated from the code, with
-/// what an existing .eye says merged.
+/// Writes a .eye.stub beside each source's .eye: every routine, jump target,
+/// and macro the source defines but those its .eye.ignore names, generated
+/// from the code, with what an existing .eye says merged.
 pub fn generate(src_dir: &Path, rel: &Path) -> EyeResult<()> {
     let src_dir = &checked_src_dir(src_dir)?;
     let srcdoc = srcdoc_dir(src_dir);
     let mut scanned: Vec<(PathBuf, Source)> = Vec::new();
     for dir in source_dirs(src_dir, Path::new("."))? {
         for file in dir.files {
-            let path = src_dir.join(&file);
-            let text = fs::read_to_string(&path).map_err(EyeError::io(&path))?;
-            let source = if is_linker(&file) { scan_linker(&text) } else { scan_asm(&text) };
+            let source = if is_linker(&file) {
+                Source::default()
+            } else {
+                let path = src_dir.join(&file);
+                scan_asm(&fs::read_to_string(&path).map_err(EyeError::io(&path))?)
+            };
             scanned.push((file, source));
         }
     }

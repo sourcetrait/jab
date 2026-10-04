@@ -3,6 +3,14 @@
 The sprite entities drawn after the walk, each a flat quad facing the camera,
 fixed along its yaw, or flat on the floor, masked by alpha.
 
+## k_pull_d
+
+`f64`: the quad's share of its distance from the eye after the pull, a hundredth toward it.
+
+## k_tiny_d
+
+`f64`: a level right shorter than this stands on end.
+
 ## sprites_draw
 
 A map sprite's surface index is after every map, by entity.
@@ -80,3 +88,23 @@ The segment's ends a and b are the centre less and plus the half width, its
 run d twice the half width; parallel, a crossing when the segment's start
 lies within the slack of the wall's line, the cross with the run over its
 length.
+
+## k_within_den_d
+
+`f64`: a cross product under which a wall runs parallel to the quad's segment.
+
+## k_within_slack_sq_d
+
+`f64`: a millimetre squared, for a segment's start on such a wall's line.
+
+## k_within_low_d
+
+`f64`: the crossing's shares widened a thousandth under the unit range.
+
+## k_within_high_d
+
+`f64`: the crossing's shares widened a thousandth over the unit range.
+
+## sprite_surface
+
+`u64`: the surface index the next sprite draws as, a map sprite's by its entity or an actor's by its index, named by the caller.

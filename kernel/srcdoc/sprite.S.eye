@@ -1,4 +1,3 @@
-set SPRITE_SIDE_MAX u64 [4] :the most a record's width, height, and frame count may each be
 macro sprite_round255 product reg,tmp reg > quotient product u8,scratch tmp [6:11]
  product :of two bytes, on the way in
  quotient :the product divided by 255 and rounded
@@ -18,24 +17,3 @@ call local sprite_trig angle u64 > sine a0 i64,cosine a1 i64 [588:619]
  angle :0 to 359 degrees
  sine :signed 16.16, as the cosine is
 call local sprite_le32 at addr > word a0 u32 [621:632]
-rodata local sprite_sine 91 u32 [636:649] :the sine of 0 to 90 degrees in 16.16 fixed point, rounded
-bss local sprite_tinted u64 [653:654] :0 when the tint is white, so nothing is tinted
-bss local sprite_tint_r u64 [655:656] :the tint's red
-bss local sprite_tint_g u64 [657:658] :its green
-bss local sprite_tint_b u64 [659:660] :its blue
-bss local sprite_flips u64 [661:662] :the pose's flips, 1 across and 2 down
-bss local sprite_solid u64 [663:664] :nonzero for a solid draw
-bss local sprite_solid_word u64 [665:666] :the tint a solid draw writes
-bss local sprite_flags u64 [667:668] :the record's flags
-bss local sprite_spans_row addr [669:670] :the frame's rows of the span table
-bss local sprite_stepabs u64 [671:672] :the column step, 16.16, unsigned
-bss local sprite_x i64 [673:674] :the draw's x
-bss local sprite_angle u64 [675:676] :the turn, 0 to 359 degrees
-bss local sprite_last_col u64 [677:678] :the frame's last column
-bss local sprite_last_row u64 [679:680] :the frame's last row
-bss local sprite_hw u64 [681:682] :half the drawn width, 16.16
-bss local sprite_hh u64 [683:684] :half the drawn height, 16.16
-bss local sprite_dw16 u64 [685:686] :the drawn width, 16.16
-bss local sprite_dh16 u64 [687:688] :the drawn height, 16.16
-bss local sprite_sin i64 [689:690] :the turn's sine, 16.16
-bss local sprite_cos i64 [691:692] :its cosine

@@ -1,13 +1,8 @@
 use crate::*;
 
-/// The first word of an entry: how the item is entered, or what it is.
+/// The first word of an entry: how the item is entered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Syntax {
-    Set,
-    Bss,
-    Data,
-    Rodata,
-    Ld,
     Call,
     Ecall,
     J,
@@ -17,11 +12,6 @@ pub(crate) enum Syntax {
 impl Syntax {
     pub(crate) fn parse(word: &str) -> Option<Syntax> {
         Some(match word {
-            "set" => Syntax::Set,
-            "bss" => Syntax::Bss,
-            "data" => Syntax::Data,
-            "rodata" => Syntax::Rodata,
-            "ld" => Syntax::Ld,
             "call" => Syntax::Call,
             "ecall" => Syntax::Ecall,
             "j" => Syntax::J,
@@ -32,21 +22,11 @@ impl Syntax {
 
     pub(crate) fn word(self) -> &'static str {
         match self {
-            Syntax::Set => "set",
-            Syntax::Bss => "bss",
-            Syntax::Data => "data",
-            Syntax::Rodata => "rodata",
-            Syntax::Ld => "ld",
             Syntax::Call => "call",
             Syntax::Ecall => "ecall",
             Syntax::J => "j",
             Syntax::Macro => "macro",
         }
-    }
-
-    /// True for the entries that carry arguments and results.
-    pub(crate) fn is_signature(self) -> bool {
-        matches!(self, Syntax::Call | Syntax::Ecall | Syntax::J | Syntax::Macro)
     }
 
     /// True for a label of code.
@@ -72,13 +52,6 @@ pub(crate) enum Out {
     Regs { word: String, regs: Vec<String> },
 }
 
-/// What follows an entry's name on its head line, before its range.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Shape {
-    Line { ty: Option<String> },
-    Signature { args: Vec<Arg>, outs: Vec<Out> },
-}
-
 /// A line under a head: an argument's or a result's name and what its name
 /// and type leave unsaid.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,7 +67,8 @@ pub(crate) struct Entry {
     pub(crate) syntax: Syntax,
     pub(crate) local: bool,
     pub(crate) name: String,
-    pub(crate) shape: Shape,
+    pub(crate) args: Vec<Arg>,
+    pub(crate) outs: Vec<Out>,
     pub(crate) range: Option<(usize, usize)>,
     pub(crate) summary: Option<String>,
     pub(crate) notes: Vec<Note>,
@@ -103,17 +77,14 @@ pub(crate) struct Entry {
 impl Entry {
     /// The names a note may carry: the arguments' and the results'.
     pub(crate) fn names(&self) -> HashSet<String> {
-        match &self.shape {
-            Shape::Line { .. } => HashSet::new(),
-            Shape::Signature { args, outs } => args
-                .iter()
-                .map(|arg| arg.name.clone())
-                .chain(outs.iter().filter_map(|out| match out {
-                    Out::Result { name, .. } => Some(name.clone()),
-                    Out::Regs { .. } => None,
-                }))
-                .collect(),
-        }
+        self.args
+            .iter()
+            .map(|arg| arg.name.clone())
+            .chain(self.outs.iter().filter_map(|out| match out {
+                Out::Result { name, .. } => Some(name.clone()),
+                Out::Regs { .. } => None,
+            }))
+            .collect()
     }
 }
 
@@ -165,13 +136,8 @@ fn parse_head(line: &str) -> Result<Entry, String> {
         name = words.next().ok_or("no name after local")?;
     }
     let rest: Vec<&str> = words.collect();
-    let rest = rest.join(" ");
-    let shape = if syntax.is_signature() {
-        parse_signature(&rest)
-    } else {
-        Shape::Line { ty: (!rest.is_empty()).then_some(rest) }
-    };
-    Ok(Entry { syntax, local, name: name.to_owned(), shape, range, summary, notes: Vec::new() })
+    let (args, outs) = parse_signature(&rest.join(" "));
+    Ok(Entry { syntax, local, name: name.to_owned(), args, outs, range, summary, notes: Vec::new() })
 }
 
 /// A head line without its range, `[first:last]` or a one-liner's `[line]`.
@@ -187,7 +153,7 @@ fn split_range(line: &str) -> (&str, Option<(usize, usize)>) {
     }
 }
 
-fn parse_signature(rest: &str) -> Shape {
+fn parse_signature(rest: &str) -> (Vec<Arg>, Vec<Out>) {
     let rest = rest.trim();
     let (args_text, outs_text) = if let Some(after) = rest.strip_prefix('>') {
         ("", after.trim())
@@ -235,7 +201,7 @@ fn parse_signature(rest: &str) -> Shape {
             [] => {}
         }
     }
-    Shape::Signature { args, outs }
+    (args, outs)
 }
 
 impl fmt::Display for Entry {
@@ -245,41 +211,34 @@ impl fmt::Display for Entry {
             write!(f, " local")?;
         }
         write!(f, " {}", self.name)?;
-        match &self.shape {
-            Shape::Line { ty } => {
-                if let Some(ty) = ty {
-                    write!(f, " {ty}")?;
+        let args: Vec<String> = self
+            .args
+            .iter()
+            .map(|arg| {
+                let head = match &arg.default {
+                    Some(default) => format!("{}={}", arg.name, default),
+                    None => arg.name.clone(),
+                };
+                match &arg.location {
+                    Some(location) => format!("{head} {location} {}", arg.ty),
+                    None => format!("{head} {}", arg.ty),
                 }
-            }
-            Shape::Signature { args, outs } => {
-                let args: Vec<String> = args
-                    .iter()
-                    .map(|arg| {
-                        let head = match &arg.default {
-                            Some(default) => format!("{}={}", arg.name, default),
-                            None => arg.name.clone(),
-                        };
-                        match &arg.location {
-                            Some(location) => format!("{head} {location} {}", arg.ty),
-                            None => format!("{head} {}", arg.ty),
-                        }
-                    })
-                    .collect();
-                if !args.is_empty() {
-                    write!(f, " {}", args.join(","))?;
-                }
-                if !outs.is_empty() {
-                    let outs: Vec<String> = outs
-                        .iter()
-                        .map(|out| match out {
-                            Out::Result { name, location, ty: Some(ty) } => format!("{name} {location} {ty}"),
-                            Out::Result { name, location, ty: None } => format!("{name} {location}"),
-                            Out::Regs { word, regs } => format!("{word} {}", regs.join(",")),
-                        })
-                        .collect();
-                    write!(f, " > {}", outs.join(","))?;
-                }
-            }
+            })
+            .collect();
+        if !args.is_empty() {
+            write!(f, " {}", args.join(","))?;
+        }
+        if !self.outs.is_empty() {
+            let outs: Vec<String> = self
+                .outs
+                .iter()
+                .map(|out| match out {
+                    Out::Result { name, location, ty: Some(ty) } => format!("{name} {location} {ty}"),
+                    Out::Result { name, location, ty: None } => format!("{name} {location}"),
+                    Out::Regs { word, regs } => format!("{word} {}", regs.join(",")),
+                })
+                .collect();
+            write!(f, " > {}", outs.join(","))?;
         }
         match self.range {
             Some((first, last)) if first == last => write!(f, " [{first}]")?,

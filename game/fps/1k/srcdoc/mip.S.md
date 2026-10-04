@@ -15,6 +15,26 @@ surface at its nearest point, which an engine with faces capped at a few
 hundred units can afford, would leave the far end of a twenty-metre floor
 at level 0.
 
+## msg_mips
+
+`11 u8`.
+
+## word_chains
+
+`10 u8`.
+
+## word_levels
+
+`10 u8`.
+
+## word_texels_in
+
+`12 u8`.
+
+## word_ms_end
+
+`4 u8`.
+
 ## .macro texel_shrink
 
 Alike alphas take the plain mean a channel and the alpha as it is; unalike,
@@ -55,3 +75,19 @@ texture, so the factory's chains take about six megabytes of the thirty-two.
 Each level takes its alpha scale from material_alpha; a level built is
 counted and the next builds from it; where the chain ends the count is the
 level in hand.
+
+## material_mips
+
+`MAX_MATERIALS*MIP_LEVELS addr`: each material's chain, the texels of every level, level 0 the record's own.
+
+## material_mip_count
+
+`MAX_MATERIALS u64`: the levels each material has.
+
+## mip_cursor
+
+`addr`: the arena's next free byte.
+
+## mip_arena
+
+`MIP_ARENA_BYTES u8`: the chains' coarser levels.

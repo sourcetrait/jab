@@ -27,20 +27,158 @@ when it cannot; the arguments are read from the frame after that, masked to
 their ranges rather than checked; and the notes a call touches are the
 calls' own (synth_live).
 
+## .set VOICES
+
+`u64`: the chip-tune voices.
+
+## .set CHANNELS
+
+`u64`.
+
+## .set PERCUSSION
+
+`u64`: the percussion channel.
+
 ## .set TOP
+
+`u64`: the envelope's full level, 16.16 with the amplitude in the high half.
 
 The level in 16.16 lets a step a frame be a fraction of an amplitude unit,
 so a duration of many seconds still counts out.
 
+## .set FRAMES_PER_MS
+
+`u64`.
+
+## .set LFO_HZ
+
+`u32`: the LFO's step for one hertz, 2^32 / JAB_SOUND_RATE.
+
 ## .set BEND_SCALE
+
+`u64`: what a full bend of 8192 times the step, shifted down 29, moves it by.
 
 A bend of the full 8192 moves the step by 2^(2/12) - 1 of itself:
 step * bend * BEND_SCALE >> 29.
 
+## .set VOICE_STAGE
+
+`u8`: a voice's fields, 0 free, 1 attack, 2 decay, 3 sustain, 4 release.
+
+## .set VOICE_CHANNEL
+
+`u8`.
+
+## .set VOICE_NOTE
+
+`u8`: the MIDI note, for identity.
+
+## .set VOICE_VELOCITY
+
+`u8`.
+
+## .set VOICE_WAVE
+
+`u8`.
+
+## .set VOICE_DUTY
+
+`u8`.
+
+## .set VOICE_HELD
+
+`u8`: released under the pedal and waiting for it.
+
+## .set VOICE_DEPTH
+
+`u8`: the vibrato's.
+
+## .set VOICE_PHASE
+
+`u32`.
+
+## .set VOICE_STEP
+
+`u32`: the note's own.
+
+## .set VOICE_DECAY
+
+`u32`: a frame, once the top is reached.
+
+## .set VOICE_SUSTAIN
+
+`u32`: the level the decay settles at.
+
+## .set VOICE_RELEASE_MS
+
+`u32`.
+
+## .set VOICE_LFO_PHASE
+
+`u32`.
+
+## .set VOICE_LFO_STEP
+
+`u32`: a frame.
+
+## .set VOICE_AGE
+
+`u32`: from the note-on counter.
+
+## .set VOICE_LFSR
+
+`u32`: the noise.
+
+## .set VOICE_SOURCE
+
+`u8`: whose note, SOURCE_LIVE or SOURCE_FILE.
+
+## .set VOICE_LEVEL
+
+`i64`: 0 to TOP.
+
+## .set VOICE_DELTA
+
+`i64`: a frame.
+
+## .set VOICE_SIZE
+
+`u64`: bytes in a voice.
+
+## .set STAGE_ATTACK
+
+`u8`.
+
+## .set STAGE_DECAY
+
+`u8`.
+
+## .set STAGE_SUSTAIN
+
+`u8`.
+
+## .set STAGE_RELEASE
+
+`u8`.
+
 ## .set DRUM_NOTE
+
+`u8`: a drum spec's own note, in the spare byte.
 
 A drum is an instrument spec with its own note in the spare byte; the map
 covers General MIDI's kit and the rest fall to one drum.
+
+## .set DRUM_FIRST
+
+`u64`: the first note of General MIDI's kit.
+
+## .set DRUM_LAST
+
+`u64`: its last.
+
+## .set DRUM_DEFAULT
+
+`u64`: the drum a note outside the map falls to.
 
 ## synth_init
 
@@ -89,10 +227,14 @@ delta, the stage turning where it reaches the top, the sustain, or silence.
 
 ## synth_octave
 
+`12 u32`: the top octave's steps, notes 120 to 131.
+
 A lower octave is one shift down each. The sine table after it is
 sine.inc's, 256 signed 16-bit samples.
 
 ## synth_defaults
+
+The General MIDI defaults, a spec a program.
 
 A chip-tune reading of each family: 0-7 piano, a narrow square that dies
 away; 8-15 chromatic percussion, a sine that dies away; 16-23 organ, a
@@ -108,5 +250,31 @@ percussive, a short triangle, and 119 reverse cymbal, noise swelling in;
 
 ## synth_drums
 
+The kit's specs.
+
 The kit: kick, snare, closed hat, open hat, low, mid, and high toms, crash,
 ride, clap, click.
+
+## synth_drum_map
+
+`47 u8`: each note of General MIDI's kit to a drum.
+
+## synth_age
+
+`u64`: the note-on counter.
+
+## synth_channels
+
+The channel records.
+
+## synth_voices
+
+The voices.
+
+## synth_instruments
+
+A spec a program.
+
+## synth_source
+
+`u8`: whose notes the next note on, note off, and channel off are.

@@ -13,12 +13,10 @@ frame_tick:
 ";
 
 const OLD: &str = "\
-set TICK u64 :a frame period
-set GONE u64 :a constant no longer there
 macro jab.rng.byte dst reg,state addr,seed u64 > byte dst u8,word 0(state) u64,scratch t0 :the next byte
  byte :bits 24 to 31 of the new word
  seed :the note of an operand the macro no longer takes
-bss local frame_tick u64 :the time of the next tick
+call local gone :a routine no longer there
 ";
 
 fn stub(source: &str, old: &str) -> String {
@@ -33,19 +31,34 @@ fn what_the_eye_says_carries_over_and_the_code_settles_the_rest() {
     assert_eq!(
         stub(SOURCE, OLD),
         "\
-set TICK u64 [1] :a frame period
 macro jab.rng.byte dst reg,state addr > byte dst u8,word 0(state) u64,scratch t0-t1 [2:6] :the next byte
  byte :bits 24 to 31 of the new word
-bss local frame_tick u64 [8:9] :the time of the next tick
 "
     );
 }
 
 #[test]
 fn a_symbol_the_eye_lacks_comes_from_the_code_alone() {
-    let stub = stub(SOURCE, "");
-    assert!(stub.contains("macro jab.rng.byte dst reg,state ? > dst dst ?,scratch t0-t1 [2:6]\n"));
-    assert!(stub.contains("bss local frame_tick 8 u8 [8:9]\n"));
+    assert_eq!(stub(SOURCE, ""), "macro jab.rng.byte dst reg,state ? > dst dst ?,scratch t0-t1 [2:6]\n");
+}
+
+#[test]
+fn constants_data_and_tables_give_no_entry() {
+    let source = "\
+.set N, 4
+.section .bss
+flag:
+    .skip 8
+.section .rodata
+k:
+    .word 1
+.section .text
+table:
+    .quad f
+f:
+    ret
+";
+    assert_eq!(stub(source, ""), "call local f [11:12]\n");
 }
 
 #[test]
@@ -77,15 +90,6 @@ fn inputs_the_eye_places_in_registers_stay_and_an_unchanged_list_keeps_its_order
     assert_eq!(stub(source, old), "macro m left a0 u32,right a7 u32 > sum a2 u32,scratch t0 [1:4]\n left :the left texel\n");
     let source = ".macro m\n    li a0, 1\n    li t3, 2\n.endm\n";
     assert_eq!(stub(source, "macro m > scratch a0,t3\n"), "macro m > scratch a0,t3 [1:4]\n");
-}
-
-#[test]
-fn a_narrow_type_inside_its_reservation_stays() {
-    let source = ".section .bss\nflag:\n    .skip 8\nwide:\n    .skip 4\n";
-    assert_eq!(
-        stub(source, "bss local flag u8 :the flag\nbss local wide u64 :the word\n"),
-        "bss local flag u8 [2:3] :the flag\nbss local wide 4 u8 [4:5] :the word\n"
-    );
 }
 
 #[test]

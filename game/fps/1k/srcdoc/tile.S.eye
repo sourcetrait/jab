@@ -22,20 +22,3 @@ call local alpha_search texels u64,whole s8 u64,target s9 u64 > threshold a0 u64
  target :the texture's count at or above the pass
  count :the count at or above the threshold
 call local lumels_bright > lumels lumel_arena LUMEL_ARENA_BYTES u8 [812:838] :every lumel of every map set to the full brightness, one on each lane in a lumel's 256ths, for a debug build's console
-rodata local msg_alpha 12 u8 [842:843]
-rodata local word_frame_name 7 u8 [844:845]
-rodata local word_coverage 12 u8 [846:847]
-rodata local word_of_share 18 u8 [848:849]
-rodata local word_of_scale 10 u8 [850:852]
-bss local tile_cursor addr [856:857] :the arena's next free byte
-bss local tile_budget u64 [858:859] :the frame's budget left, in texels
-bss local tile_budget_frame u64 [860:861] :the budget a frame starts with, TILE_BUDGET until the console lifts it
-bss local tile_peak u64 [862:863] :the most the arena has held since the load, in bytes
-bss local tilemaps LUMAP_COUNT*11 u64 [864:865] :every surface's tiles at the map's index, TILE_* fields
-bss local material_alpha MAX_MATERIALS*MIP_LEVELS u32 [866:867] :each material's alpha scale a level, 16.16
-bss local alpha_hist 256 u64 [868:869] :the search's counts of each alpha value
-bss local alpha_cover MIP_LEVELS u64 [870:871] :the shares by level, for the line
-bss local alpha_chain_levels u64 [872:873] :the chain's levels of the material in hand, the scales to find
-bss local alpha_plane_a ALPHA_PLANE_BYTES u8 [874:875] :one of the two planes a level's alphas alternate between
-bss local alpha_plane_b ALPHA_PLANE_BYTES u8 [876:878] :the other plane
-bss local tile_arena TILE_ARENA_BYTES u8 [879:880] :the atlases

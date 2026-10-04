@@ -24,10 +24,44 @@ line on the UART, rather than holding a wait forever. A long call looks at
 the stream from inside its loops through sound_tick, so the lead is never
 spent by the kernel's own work.
 
+## .set SOUND_STREAM
+
+`u32`: the playback stream's id.
+
+## .set PERIOD_BYTES
+
+`u64`: a period's samples in bytes.
+
+## .set PERIOD_STRIDE
+
+`u64`: a period's transfer, the stream id then the samples.
+
+## .set RING_MASK
+
+`u64`: an index's place in the ring.
+
+## .set ACCUM_BYTES
+
+`u64`: the mixer's accumulator, two 32-bit samples a frame.
+
+## .set SOUND_STALL_TICKS
+
+`u64`: how long a backend with periods in flight may return nothing before it has stopped.
+
+## .set SOUND_POLL_TICKS
+
+`u64`: how often a wait on the stream alone wakes to look for a stall.
+
 ## .set SOUND_DRAIN_PERIODS
+
+`u64`: the periods of silence the exit plays past the last with content.
 
 So the host's own buffer behind the device, 92 ms on ALSA, has played what
 it held before QEMU ends.
+
+## .set SOUND_FLUSH_TICKS
+
+`u64`: the longest the exit waits for the ring and the voices to end.
 
 ## sys_sound_write
 
@@ -40,6 +74,18 @@ The stream's parameters are the one format, the period, and the lead. The
 period chains are laid out once: descriptor 2i the stream id and the
 samples, 2i+1 the status. Then the synthesizer is reset, the line stays
 enabled from here on, and the stream is primed with every period.
+
+## msg_sound_at
+
+`15 u8`: the debug line naming the device's transport, under DEBUG only.
+
+## msg_no_sound
+
+`15 u8`: the debug line for a machine without one, under DEBUG only.
+
+## msg_sound_refused
+
+`20 u8`: the debug line for a device that refused, under DEBUG only.
 
 ## sound_service
 
@@ -88,3 +134,91 @@ refill silence by then, so the host's own buffer has played the last
 content before QEMU ends; then, the refills stopped, until every period has
 come back, a stall there being the device keeping a period, after which the
 exit goes on. With DEBUG the counts go to the debug channel.
+
+## msg_sound_counts
+
+`22 u8`: the debug line on the stream's counts, under DEBUG only.
+
+## msg_sound_returned
+
+`11 u8`: that line's returned field.
+
+## msg_sound_failed
+
+`9 u8`: that line's failed field.
+
+## sound_control_queue
+
+The control queue's record.
+
+## sound_queue
+
+The tx queue's record.
+
+## sound_periods
+
+The periods, each the stream id then its samples, PERIOD_STRIDE apart.
+
+## sound_status
+
+Each period's status record, written by the device.
+
+## sound_request
+
+`24 u8`: a control request.
+
+## sound_response
+
+`u32`: its status.
+
+## sound_base
+
+`addr`: the device's transport.
+
+## sound_state
+
+`u64`: 0 until opened, then sound_open's answer plus 1.
+
+## sound_live
+
+`u64`: 1 while the stream runs.
+
+## sound_head
+
+`u64`: the count of frames put in the ring.
+
+## sound_tail
+
+`u64`: the count taken from it.
+
+## sound_ring
+
+`16384 i16`: the frames queued, left then right.
+
+## sound_accum
+
+`1920 i32`: the mixer's accumulator.
+
+## sound_busy
+
+`8 u8`: 1 for each period in flight.
+
+## sound_submitted
+
+`u64`: the periods offered.
+
+## sound_returned
+
+`u64`: the periods returned.
+
+## sound_failed
+
+`u64`: the returns whose status was not OK.
+
+## sound_last_return
+
+`u64`: the time of the last return.
+
+## msg_sound_stalled
+
+`20 u8`: the line a stalled stream ends with on the UART.

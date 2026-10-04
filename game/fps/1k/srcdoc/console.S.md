@@ -30,6 +30,14 @@ the lit loop: the lit loop's picture from the same build, which the alpha
 fixture reads against the tiled one. Both bytes exist for the test; play never
 sends the frame.
 
+## .set CONSOLE_FRAME
+
+A console frame's bytes.
+
+## .set CONSOLE_CAPACITY
+
+The console buffer's bytes.
+
 ## console_read
 
 The partial frame is moved to the front of the buffer.
@@ -40,3 +48,27 @@ L: the tiles forgotten and rebuilt under no budget from the next frame, every
 lumel set full bright first when the frame's byte 4 is 1, so a capture reads
 the texture sampled as the lit one is; under a budget of nothing instead when
 byte 5 is 1, so every surface stays on the lit loop.
+
+## k_thousand_d
+
+`f64`: millimetres a metre.
+
+## console_buf
+
+`CONSOLE_CAPACITY u8`: the bytes from the host, a partial frame at the front.
+
+## console_record
+
+`REPORT_SIZE u8`: the console's answer.
+
+## console_pending
+
+`u32`: the bytes kept.
+
+## report_pending
+
+`u8`: 1 when the next frame is reported on the UART.
+
+## measure_end
+
+`u8`: set by an E, cleared once the end marker has gone out.

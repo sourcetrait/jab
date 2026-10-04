@@ -13,6 +13,50 @@ with a separator when it is used. Data follows padded to 512, and two zeroed
 blocks end the archive. A header whose name is empty, or whose checksum does
 not answer for it, is the end.
 
+## .set TAR_NAME
+
+`u8`: a ustar header's 100-byte name.
+
+## .set TAR_NAME_BYTES
+
+`u64`.
+
+## .set TAR_SIZE
+
+`u8`: the size as octal text.
+
+## .set TAR_SIZE_BYTES
+
+`u64`.
+
+## .set TAR_CHECKSUM
+
+`u8`: the checksum as octal text.
+
+## .set TAR_CHECKSUM_BYTES
+
+`u64`.
+
+## .set TAR_TYPE
+
+`u8`: the type byte.
+
+## .set TAR_MAGIC
+
+`u8`: the magic `ustar`.
+
+## .set TAR_MAGIC_BYTES
+
+`u64`.
+
+## .set TAR_PREFIX
+
+`u8`: the prefix that goes before the name.
+
+## .set TAR_PREFIX_BYTES
+
+`u64`.
+
 ## sys_tar_list
 
 A page that filled the buffer still has to say whether anything follows, so
@@ -33,3 +77,7 @@ longer than a hundred characters is written.
 
 tar writes a directory's name with a trailing separator, which is why the
 record's one is ignored.
+
+## tar_scratch
+
+The record sys_tar_find reads each entry into.

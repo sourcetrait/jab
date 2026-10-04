@@ -12,12 +12,11 @@ pub(crate) struct Tree {
 }
 
 /// An entry the code alone produces, with what the merge must know of it:
-/// whether its syntax is certain, a data label's size, and a macro's facts.
+/// whether its syntax is certain, and a macro's facts.
 #[derive(Clone, Debug)]
 pub(crate) struct Gen {
     pub(crate) entry: Entry,
     pub(crate) certain: bool,
-    pub(crate) size: Option<u64>,
     pub(crate) kinds: Vec<Kind>,
     pub(crate) outputs: Vec<bool>,
     pub(crate) writes: BTreeSet<&'static str>,
@@ -44,7 +43,6 @@ pub(crate) fn tree(sources: &[&Source]) -> Tree {
         let stmts = match &symbol.def {
             Def::Macro { body, .. } => body,
             Def::Label { stmts, .. } => stmts,
-            _ => continue,
         };
         for stmt in stmts {
             let target = || stmt.args.last().map(|arg| arg.trim().to_owned());
@@ -58,36 +56,14 @@ pub(crate) fn tree(sources: &[&Source]) -> Tree {
     tree
 }
 
-/// The entries the code alone gives a source, in its order.
+/// The entries the code alone gives a source, in its order: its routines,
+/// jump targets, and macros.
 pub(crate) fn gens(source: &Source, tree: &Tree) -> Vec<Gen> {
-    source.symbols.iter().map(|symbol| generated(symbol, tree)).collect()
+    source.symbols.iter().filter_map(|symbol| generated(symbol, tree)).collect()
 }
 
-fn line(syntax: Syntax, symbol: &Symbol, local: bool, ty: Option<String>) -> Entry {
-    Entry {
-        syntax,
-        local,
-        name: symbol.name.clone(),
-        shape: Shape::Line { ty },
-        range: Some((symbol.first, symbol.last)),
-        summary: None,
-        notes: Vec::new(),
-    }
-}
-
-fn generated(symbol: &Symbol, tree: &Tree) -> Gen {
-    let plain = |entry: Entry| Gen {
-        entry,
-        certain: true,
-        size: None,
-        kinds: Vec::new(),
-        outputs: Vec::new(),
-        writes: BTreeSet::new(),
-        complete: true,
-    };
+fn generated(symbol: &Symbol, tree: &Tree) -> Option<Gen> {
     match &symbol.def {
-        Def::Constant => plain(line(Syntax::Set, symbol, false, None)),
-        Def::Linker => plain(line(Syntax::Ld, symbol, false, None)),
         Def::Macro { params, .. } => {
             let facts = tree.macros.get(&symbol.name).cloned().unwrap_or_default();
             let args = params
@@ -113,20 +89,20 @@ fn generated(symbol: &Symbol, tree: &Tree) -> Gen {
                 syntax: Syntax::Macro,
                 local: false,
                 name: symbol.name.clone(),
-                shape: Shape::Signature { args, outs },
+                args,
+                outs,
                 range: Some((symbol.first, symbol.last)),
                 summary: None,
                 notes: Vec::new(),
             };
-            Gen {
+            Some(Gen {
                 entry,
                 certain: true,
-                size: None,
                 kinds: facts.kinds,
                 outputs: facts.outputs,
                 writes: facts.writes,
                 complete: facts.complete,
-            }
+            })
         }
         Def::Label { section: Section::Text, global, stmts } if !is_data(stmts) => {
             let name = &symbol.name;
@@ -144,31 +120,22 @@ fn generated(symbol: &Symbol, tree: &Tree) -> Gen {
                 syntax,
                 local: !global,
                 name: name.clone(),
-                shape: Shape::Signature { args, outs },
+                args,
+                outs,
                 range: Some((symbol.first, symbol.last)),
                 summary: None,
                 notes: Vec::new(),
             };
-            Gen { certain, ..plain(entry) }
+            Some(Gen { entry, certain, kinds: Vec::new(), outputs: Vec::new(), writes: BTreeSet::new(), complete: true })
         }
-        Def::Label { section, global, stmts } => {
-            let syntax = match section {
-                Section::Bss => Syntax::Bss,
-                Section::Rodata | Section::Text => Syntax::Rodata,
-                Section::Data => Syntax::Data,
-            };
-            let (ty, size) = data_type(stmts);
-            let mut made = plain(line(syntax, symbol, !global, ty));
-            made.size = size;
-            made
-        }
+        Def::Label { .. } => None,
     }
 }
 
 /// True for a label in text whose statements are all data directives: a
 /// table, not code.
 fn is_data(stmts: &[Stmt]) -> bool {
-    let sized = |stmt: &Stmt| data_type(std::slice::from_ref(stmt)).1.is_some();
+    let sized = |stmt: &Stmt| data_bytes(std::slice::from_ref(stmt)).is_some();
     let aligns = |stmt: &Stmt| matches!(stmt.op.as_str(), ".balign" | ".align" | ".p2align");
     stmts.iter().any(sized) && stmts.iter().all(|stmt| sized(stmt) || aligns(stmt))
 }
@@ -241,49 +208,27 @@ fn result(register: &str) -> Out {
     Out::Result { name: register.to_owned(), location: register.to_owned(), ty: Some("?".to_owned()) }
 }
 
-/// A data label's type and size in bytes, as far as its directives say.
-pub(crate) fn data_type(stmts: &[Stmt]) -> (Option<String>, Option<u64>) {
-    let mut width: Option<(&'static str, u64)> = None;
-    let mut count: u64 = 0;
-    let mut bytes: Option<u64> = Some(0);
-    let mut mixed = false;
+/// The bytes a label's data directives reserve, when every one of them says.
+pub(crate) fn data_bytes(stmts: &[Stmt]) -> Option<u64> {
+    let mut bytes: u64 = 0;
     for stmt in stmts {
-        let element = match stmt.op.as_str() {
-            ".byte" => Some(("u8", 1)),
-            ".2byte" | ".half" | ".short" | ".hword" => Some(("u16", 2)),
-            ".4byte" | ".word" | ".long" | ".int" => Some(("u32", 4)),
-            ".8byte" | ".dword" | ".quad" => Some(("u64", 8)),
-            ".float" | ".single" => Some(("f32", 4)),
-            ".double" => Some(("f64", 8)),
-            ".skip" | ".space" | ".zero" | ".asciz" | ".string" | ".ascii" => Some(("u8", 1)),
+        let width = match stmt.op.as_str() {
+            ".byte" | ".skip" | ".space" | ".zero" | ".asciz" | ".string" | ".ascii" => 1,
+            ".2byte" | ".half" | ".short" | ".hword" => 2,
+            ".4byte" | ".word" | ".long" | ".int" | ".float" | ".single" => 4,
+            ".8byte" | ".dword" | ".quad" | ".double" => 8,
             ".balign" | ".align" | ".p2align" | ".type" | ".size" | ".global" | ".globl" => continue,
-            _ => None,
-        };
-        let Some((word, size)) = element else {
-            return (None, None);
+            _ => return None,
         };
         let elements = match stmt.op.as_str() {
-            ".skip" | ".space" | ".zero" => stmt.args.first().and_then(|arg| number(arg)),
-            ".asciz" | ".string" => stmt.args.first().map(|arg| string_bytes(arg) + 1),
-            ".ascii" => stmt.args.first().map(|arg| string_bytes(arg)),
-            _ => Some(stmt.args.len() as u64),
+            ".skip" | ".space" | ".zero" => number(stmt.args.first()?)?,
+            ".asciz" | ".string" => string_bytes(stmt.args.first()?) + 1,
+            ".ascii" => string_bytes(stmt.args.first()?),
+            _ => stmt.args.len() as u64,
         };
-        match (elements, bytes) {
-            (Some(n), Some(total)) => bytes = Some(total + n * size),
-            _ => bytes = None,
-        }
-        match width {
-            Some((seen, _)) if seen != word => mixed = true,
-            _ => width = Some((word, size)),
-        }
-        count += elements.unwrap_or(0);
+        bytes += elements * width;
     }
-    let ty = match (width, mixed, bytes) {
-        (Some((word, _)), false, Some(_)) if count == 1 => Some(word.to_owned()),
-        (Some((word, _)), false, Some(_)) => Some(format!("{count} {word}")),
-        _ => None,
-    };
-    (ty, bytes.filter(|total| *total > 0))
+    (bytes > 0).then_some(bytes)
 }
 
 fn number(text: &str) -> Option<u64> {
@@ -320,22 +265,4 @@ fn string_bytes(text: &str) -> u64 {
         count += c.len_utf8() as u64;
     }
     count
-}
-
-/// How many bytes a type word or array type takes, when it says.
-pub(crate) fn type_bytes(ty: &str) -> Option<u64> {
-    let mut words = ty.split_whitespace();
-    let first = words.next()?;
-    let (count, word) = match first.parse::<u64>() {
-        Ok(count) => (count, words.next()?),
-        Err(_) => (1, first),
-    };
-    let width = match word {
-        "u8" | "i8" => 1,
-        "u16" | "i16" => 2,
-        "u32" | "i32" | "f32" => 4,
-        "u64" | "i64" | "f64" | "addr" => 8,
-        _ => return None,
-    };
-    Some(count * width)
 }

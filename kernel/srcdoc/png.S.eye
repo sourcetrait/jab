@@ -1,21 +1,3 @@
-set PNG_SIG_LOW u32 [4] :the signature's first word, as the big-endian word a read sees
-set PNG_SIG_HIGH u32 [5] :its second
-set PNG_IHDR u32 [6] :the chunk types as big-endian words
-set PNG_PLTE u32 [7]
-set PNG_TRNS u32 [8]
-set PNG_IDAT u32 [9]
-set PNG_IEND u32 [10]
-set PNG_HEADER_END u64 [11] :the signature and the IHDR chunk, where the chunks after it begin
-set PNG_ADLER_MOD u64 [12] :the modulus of Adler-32
-set PNG_ADLER_RUN u64 [13] :bytes between reductions of the Adler sums
-set PNG_SIDE_LIMIT u64 [14] :past this a width or height cannot fit any buffer a program has
-set PNG_DEFLATE_BASE u64 [15] :what turns a deflate code of 1 to 7 into JAB_PNG_INPUT to JAB_PNG_DISTANCE
-set PNG_SEGMENT u64 [16] :a piece of a chunk, as it is read and handed to the decoder
-set PNG_PLTE_MAX u64 [17] :the longest palette chunk taken
-set PNG_TRNS_MAX u64 [18] :the longest transparency chunk taken
-set PNG_FROM_MEMORY u64 [19] :a source the program holds
-set PNG_FROM_DISK u64 [20] :a source on a romfs disk
-set PNG_NAME_BYTES u64 [21] :a frame's name, digits and .png
 ecall sys_png_size source addr,length u64 > width a0 u64,height a1 u64,status a2 u64 [26:49] :a PNG's width and height from its header
  source :ends the run unless the whole of it lies inside the program's window
  width :0 unless the status is JAB_PNG_OK, as is the height
@@ -58,34 +40,3 @@ call local png_unfilter > status a0 u64,clobber a1-a7 [958:1093] :undoes each ro
  status :JAB_PNG_OK, or JAB_PNG_FILTER on a filter type that does not exist
 call local png_convert > status a0 u64,clobber a1-a7 [1095:1323] :turns the unfiltered rows into native pixels in place, four bytes each
  status :JAB_PNG_OK, or JAB_PNG_PALETTE for an indexed image with no palette or an index past it
-bss local png_kind u64 [1327:1328] :the source's kind, PNG_FROM_MEMORY or PNG_FROM_DISK
-bss local png_src addr [1329:1330] :the program's bytes
-bss local png_len u64 [1331:1332] :the file's length
-bss local png_disk u64 [1333:1334] :the disk's index
-bss local png_data u64 [1335:1336] :where the file's bytes begin on the disk
-bss local png_pos u64 [1337:1338] :the chunk cursor, an offset into the file
-bss local png_chunk_len u64 [1339:1340] :the length of the IDAT the stream is in
-bss local png_chunk_done u64 [1341:1342] :the bytes of it handed on
-bss local png_crc_state u64 [1343:1344] :that chunk's running CRC
-bss local png_crc_word u64 [1345:1346] :the IHDR's CRC as computed
-bss local png_width u64 [1347:1348]
-bss local png_height u64 [1349:1350]
-bss local png_depth u64 [1351:1352] :the bit depth
-bss local png_type u64 [1353:1354] :the colour type
-bss local png_channels u64 [1355:1356] :the samples a pixel
-bss local png_bpp u64 [1357:1358] :bytes a pixel for the filters, at least one
-bss local png_rowbytes u64 [1359:1360] :bytes a row without its filter byte
-bss local png_filtered u64 [1361:1362] :the filtered size of the whole image
-bss local png_pixels addr [1363:1364] :where the pixels go
-bss local png_plte addr [1365:1366] :the palette, 0 with none
-bss local png_plte_count u64 [1367:1368] :its entries
-bss local png_trns addr [1369:1370] :the transparency, 0 with none
-bss local png_trns_len u64 [1371:1372] :its bytes
-bss local png_seen_idat u64 [1373:1374] :1 once the stream has been read
-bss local png_hook_code u64 [1375:1376] :why the hook stopped, 0 when the bytes simply ended
-bss local png_head 40 u8 [1377:1378] :the signature and the IHDR as read
-bss local png_chunkhead 8 u8 [1379:1380] :a chunk's length and type, or a CRC
-bss local png_name 32 u8 [1381:1382] :a frame's name, built from the end
-bss local png_plte_buf 768 u8 [1383:1384]
-bss local png_trns_buf 256 u8 [1385:1386]
-bss local png_seg 2048 u8 [1387:1388] :the piece of a chunk last read

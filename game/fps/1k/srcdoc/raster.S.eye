@@ -1,18 +1,3 @@
-rodata local k_half_d f64 [3:4]
-rodata local k_one_d f64 [5:6]
-rodata local k_depth_scale_d f64 [7:8] :2^26, 1/z into 6.26
-rodata local k_uv_scale_d f64 [9:10] :2^16, u/z and v/z into 48.16
-rodata local k_hx_d f64 [11:12] :the projection's centre column
-rodata local k_hy_d f64 [13:14] :the projection's centre row
-rodata local k_hz_d f64 [15:16] :the focal length in pixels
-rodata local k_lane_bias u64 [17:18] :a brightness word's three lanes each biased past zero for the interval step
-rodata local k_lane_masks 3 u64 [19:23] :each lane's low 4, 5, or 6 bits cleared, for a step over 16, 32, or 64 pixels
-rodata local k_near f32 [24:25] :the near plane's depth
-rodata local k_hx f32 [26:27] :the projection's centre column
-rodata local k_hy f32 [28:29] :the projection's centre row
-rodata local k_hz f32 [30:31] :the focal length in pixels
-rodata local k_half f32 [32:33]
-rodata local k_big f32 [34:35] :a row past any edge's, an empty list's bound
 call local poly_reset > count vert_count u64 [39:42] :the polygon in hand emptied
 call local poly_point x f32,y f32,z f32 > point verts 3 f32,count vert_count u64 [44:59] :a world point appended to the polygon in hand; one past MAX_VERTS is dropped
  point :the entry at the count before
@@ -51,22 +36,3 @@ macro mip_bind level 192(sp) u64,u s8 i64,v s9 i64,du t5 i64,dv t6 i64 > texels 
  level :the block's level in span_fill's frame
 call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [841:1613] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, the texture read from its chain at each block's level; no float in the loop
  end :the pixel past the last
-bss local vert_count u64 [1617:1618] :the polygon in hand's points
-bss local edge_count u64 [1619:1620] :the edge list's edges
-bss local edge_ymin f32 [1621:1622] :the edges' top
-bss local edge_ymax f32 [1623:1624] :the edges' bottom
-bss local sky_uoff i64 [1625:1626] :the sky's u offset from the camera's yaw, texture repeats in 16.16
-bss local sky_voff i64 [1627:1629] :the sky's v offset from the camera's pitch, texture repeats in 16.16
-bss local poly POLY_SIZE u8 [1630:1631] :the polygon in hand, POLY_* fields
-bss local plane 14 f32 [1632:1634] :the plane in hand, PLANE_* fields
-bss local plane_d 14 f64 [1635:1637] :the plane in hand as doubles, PLANED_* fields
-bss local verts MAX_VERTS*3 f32 [1638:1639] :the polygon in hand's world points
-bss local vview MAX_VERTS*3 f32 [1640:1641] :its points in the camera's basis
-bss local cverts MAX_CLIPPED*3 f32 [1642:1643] :its points clipped to the near plane
-bss local pverts MAX_CLIPPED*2 f32 [1644:1646] :its points projected
-bss local edges MAX_EDGES*4 f32 [1647:1648] :the edge list, EDGE_* fields
-bss local crossings MAX_EDGES f32 [1649:1651] :a row's crossings' x, ascending
-bss local span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8 [1652:1653] :the frame's spans as the fill emitted them
-bss local span_count u64 [1654:1655] :the frame's spans, running on past the table
-bss local poly_serial u64 [1656:1658] :the polygons submitted so far this frame, the serial a record carries
-bss local zbuf SCREEN_W*SCREEN_H u32 [1659:1660] :the depth buffer, 1/z in 6.26 a pixel

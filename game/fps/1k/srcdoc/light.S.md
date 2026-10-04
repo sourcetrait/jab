@@ -29,6 +29,46 @@ up to 44 levels apart from three yaws at one spot, light that moved as the
 camera turned; a held table keyed by the span's ends and a stride of rows
 went with that scheme.
 
+## k_lumel_d
+
+`f64`: half a metre, a lumel's aim along u.
+
+## k_sqrt2_mantissa
+
+`u64`: root two's mantissa, past which k rounds up.
+
+## k_light_ambient
+
+`f32`: the ambient in each channel.
+
+## k_light_none
+
+`f32`: a point light's spread cosine, under -1.
+
+## k_light_minus_one
+
+`f32`.
+
+## k_depth_scale
+
+`f32`: 2^26, one in 6.26.
+
+## msg_lumels
+
+`17 u8`.
+
+## word_baked_in
+
+`11 u8`.
+
+## word_lumels
+
+`10 u8`.
+
+## word_unmapped
+
+`10 u8`.
+
 ## lights_gather
 
 The axis comes from the yaw and pitch, with the cosine of the spread; a
@@ -159,3 +199,47 @@ texture's size.
 
 A node's texel coordinate is the origin plus the column and the row of
 lumels, its point taken along the frame's axes.
+
+## light_count
+
+`u32`: the lights in the table.
+
+## lights
+
+`MAX_LIGHTS*12 f32`: the light table, LIGHT_* fields.
+
+## sector_lights
+
+`MAX_SECTORS*SECTOR_LIGHTS_SIZE u8`: each sector's list, a count byte then that many light indices.
+
+## entity_light
+
+`MAX_ENTITIES i32`: each entity's light index, -1 for an entity that is no light.
+
+## lumel_cursor
+
+`addr`: the arena's next free lumel.
+
+## lumap_count
+
+`u64`: the maps baked.
+
+## lumel_count
+
+`u64`: the lumels in them.
+
+## lumap_missing
+
+`u64`: the textured surfaces left without a map.
+
+## bake_grid
+
+`GRID_SIZE u8`: the frame the map in hand is baked over, GRID_* fields.
+
+## lumaps
+
+`LUMAP_COUNT*6 u64`: every surface's map, LUMAP_* fields.
+
+## lumel_arena
+
+`LUMEL_ARENA_BYTES u8`: every map's lumels.

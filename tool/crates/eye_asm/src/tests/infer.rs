@@ -27,31 +27,28 @@ fn generated() -> Vec<Gen> {
 }
 
 #[test]
-fn how_a_label_is_entered_decides_its_syntax() {
+fn how_a_label_is_entered_decides_its_syntax_and_data_gives_none() {
     let gens = generated();
     let syntax: Vec<(&str, Syntax, bool)> = gens.iter().map(|made| (made.entry.name.as_str(), made.entry.syntax, made.entry.local)).collect();
-    assert_eq!(
-        syntax,
-        [("sys_demo", Syntax::Ecall, false), ("helper", Syntax::Call, true), ("table", Syntax::Rodata, true), ("words", Syntax::Bss, true)]
-    );
+    assert_eq!(syntax, [("sys_demo", Syntax::Ecall, false), ("helper", Syntax::Call, true)]);
 }
 
 #[test]
 fn a_handler_takes_its_frame_slots_and_live_registers() {
     let gens = generated();
-    let Shape::Signature { args, outs } = &gens[0].entry.shape else { panic!("no signature") };
-    assert_eq!(args.iter().map(|arg| arg.name.as_str()).collect::<Vec<_>>(), ["a0", "a1"]);
-    assert_eq!(outs, &[Out::Result { name: "a0".to_owned(), location: "a0".to_owned(), ty: Some("?".to_owned()) }]);
+    let entry = &gens[0].entry;
+    assert_eq!(entry.args.iter().map(|arg| arg.name.as_str()).collect::<Vec<_>>(), ["a0", "a1"]);
+    assert_eq!(entry.outs, [Out::Result { name: "a0".to_owned(), location: "a0".to_owned(), ty: Some("?".to_owned()) }]);
 }
 
 #[test]
 fn a_routine_names_what_it_writes_and_the_saved_registers_it_changes() {
     let gens = generated();
-    let Shape::Signature { args, outs } = &gens[1].entry.shape else { panic!("no signature") };
-    assert_eq!(args.len(), 2);
+    let entry = &gens[1].entry;
+    assert_eq!(entry.args.len(), 2);
     assert_eq!(
-        outs,
-        &[
+        entry.outs,
+        [
             Out::Result { name: "a0".to_owned(), location: "a0".to_owned(), ty: Some("?".to_owned()) },
             Out::Regs { word: "clobber".to_owned(), regs: vec!["s1".to_owned()] },
         ]
@@ -73,8 +70,7 @@ fn a_saved_register_and_a_system_call_result_are_no_arguments() {
         "f:\n    addi sp, sp, -16\n    sd a1, 8(sp)\n    mv a0, t0\n    li a7, 3\n    ecall\n    mv t1, a2\n    ld a1, 8(sp)\n    addi sp, sp, 16\n    ret\n",
     );
     let tree = tree(&[&source]);
-    let Shape::Signature { args, .. } = &gens(&source, &tree)[0].entry.shape else { panic!("no signature") };
-    assert!(args.is_empty());
+    assert!(gens(&source, &tree)[0].entry.args.is_empty());
 }
 
 #[test]
@@ -85,10 +81,9 @@ fn an_operand_in_an_offset_is_an_immediate() {
 }
 
 #[test]
-fn data_takes_its_count_and_width() {
-    let gens = generated();
-    assert_eq!(gens[3].entry.shape, Shape::Line { ty: Some("3 u64".to_owned()) });
-    assert_eq!(gens[3].size, Some(24));
-    assert_eq!(type_bytes("64 i16"), Some(128));
-    assert_eq!(type_bytes("4 addr"), Some(32));
+fn data_directives_say_their_bytes_when_every_one_does() {
+    assert_eq!(data_bytes(&[parse_stmt(".8byte 0, 0, 0", 1)]), Some(24));
+    assert_eq!(data_bytes(&[parse_stmt(".balign 8", 1), parse_stmt(".asciz \"ab\"", 2)]), Some(3));
+    assert_eq!(data_bytes(&[parse_stmt(".skip MAX_ACTORS", 1)]), None);
+    assert_eq!(data_bytes(&[parse_stmt("ret", 1)]), None);
 }

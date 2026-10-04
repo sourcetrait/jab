@@ -22,10 +22,64 @@ png.S hands the decoder each chunk's data as the one before runs out, and
 the stream is never copied together. A gzip is one segment and gives no
 hook.
 
+## .set DF_MAX_BITS
+
+`u64`: the longest code.
+
+## .set DF_LIT_SYMBOLS
+
+`u64`: the literal and length alphabet.
+
+## .set DF_DIST_SYMBOLS
+
+`u64`: the distance alphabet.
+
+## .set DF_CODE_SYMBOLS
+
+`u64`: the code-length alphabet.
+
+## .set DF_LENGTHS
+
+`u64`: the lengths a dynamic block carries at most.
+
+## .set DF_TICK_BYTES
+
+`u64`: output bytes between looks at the sound stream.
+
 ## .set DF_OK
+
+`u64`: no failure.
 
 The codes are what went wrong, as jab.sys.gz.read reports it, four higher
 there (JAB_GZ_*).
+
+## .set DF_ERR_INPUT
+
+`u64`: the stream ended in the middle of something.
+
+## .set DF_ERR_OUTPUT
+
+`u64`: the buffer could not hold it.
+
+## .set DF_ERR_BLOCK
+
+`u64`: a block type that does not exist.
+
+## .set DF_ERR_STORED
+
+`u64`: a stored block's length disagrees with itself.
+
+## .set DF_ERR_CODES
+
+`u64`: a code table that is not a Huffman code.
+
+## .set DF_ERR_SYMBOL
+
+`u64`: a symbol no table can produce.
+
+## .set DF_ERR_DISTANCE
+
+`u64`: a distance reaching before the output.
 
 ## deflate_inflate
 
@@ -98,3 +152,115 @@ and a call keeps none of them.
 A literal is a byte; anything above 256 is a length with a distance after
 it, and the copy reads back what the output already holds, from that far
 back.
+
+## df_clorder
+
+`19 u8`: the order a dynamic block writes its code-length lengths in.
+
+## df_lenbase
+
+`29 u16`: each length symbol's base.
+
+## df_lenextra
+
+`29 u8`: each length symbol's extra bits.
+
+## df_distbase
+
+`30 u16`: each distance symbol's base.
+
+## df_distextra
+
+`30 u8`: each distance symbol's extra bits.
+
+## df_in
+
+`addr`: the segment being read.
+
+## df_inlen
+
+`u64`: its length.
+
+## df_inpos
+
+`u64`: the input cursor within it.
+
+## df_out
+
+`addr`: the output, the program's buffer.
+
+## df_outcap
+
+`u64`: the bytes it holds.
+
+## df_outpos
+
+`u64`: the bytes written.
+
+## df_bitbuf
+
+`u64`: bits read and not yet taken.
+
+## df_bitcnt
+
+`u64`: how many.
+
+## df_error
+
+`u64`: the first failure, DF_OK until one.
+
+## df_last
+
+`u64`: the current block's final bit.
+
+## df_scratch
+
+`u64`: a count held across a call.
+
+## df_scratch2
+
+`u64`: a repeated length held across a call.
+
+## df_more
+
+`addr`: the hook, 0 for none.
+
+## df_want
+
+`u64`: the bits df_bits wants across a refill.
+
+## df_tick
+
+`u64`: output bytes until the next look at the sound stream.
+
+## df_lencnt
+
+`16 u16`: the literal and length code's counts.
+
+## df_distcnt
+
+`16 u16`: the distance code's counts.
+
+## df_codecnt
+
+`16 u16`: the code-length code's counts.
+
+## df_offs
+
+`17 u16`: where each length's symbols start.
+
+## df_lensym
+
+`288 u16`: the literal and length code's symbols.
+
+## df_distsym
+
+`30 u16`: the distance code's symbols.
+
+## df_codesym
+
+`19 u16`: the code-length code's symbols.
+
+## df_lengths
+
+`318 u8`: the lengths a table is built from.

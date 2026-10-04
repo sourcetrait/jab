@@ -22,6 +22,66 @@ The console is cells of FONT_WIDTH by FONT_HEIGHT, each glyph a 16-bit row
 per pixel row with the glyph in the high FONT_WIDTH bits, white on black. A
 newline ends the line; the bottom scrolls.
 
+## .set DISPLAY_RESOURCE
+
+`u32`: the one resource's id.
+
+## .set GPU_CMD_BYTES
+
+`u64`: bytes a command buffer holds.
+
+## .set GPU_RESP_BYTES
+
+`u64`: bytes a batch response buffer holds.
+
+## .set GPU_TRANSFERS_PER_BATCH
+
+`u64`: the transfers a batch holds, the last batch carrying the flush beside them.
+
+## .set FONT_WIDTH
+
+`u64`: a console cell's width in pixels.
+
+## .set FONT_HEIGHT
+
+`u64`: its height.
+
+## .set FONT_ROW_BYTES
+
+`u64`: bytes in a glyph's row.
+
+## .set FONT_GLYPH_BYTES
+
+`u64`: bytes in a glyph.
+
+## .set FONT_FIRST
+
+`u8`: the first character the font draws.
+
+## .set FONT_LAST
+
+`u8`: the last.
+
+## .set CONSOLE_COLUMNS
+
+`u64`: the cells across the screen.
+
+## .set CONSOLE_ROWS
+
+`u64`: the lines down it.
+
+## .set CONSOLE_LINE_BYTES
+
+`u64`: framebuffer bytes in a line of cells.
+
+## .set CONSOLE_FG
+
+`u32`: the console's text, white.
+
+## .set CONSOLE_BG
+
+`u32`: its ground, black.
+
 ## sys_display_flip_rects
 
 Every rectangle is checked before any is shown. The count is bounded before
@@ -60,6 +120,10 @@ Its t registers live across text_pixel, which touches t1 and a7 only.
 What the display is comes first, then the resource, its backing, the
 scanout, and the first frame.
 
+## msg_gpu_at
+
+`13 u8`: the debug line naming the GPU's transport, under DEBUG only.
+
 ## display_present_rect
 
 The transfer's offset is the byte offset of the rectangle's top left in the
@@ -69,10 +133,26 @@ framebuffer.
 
 With DEBUG the first mode is reported on the debug channel.
 
+## msg_display
+
+`14 u8`: the debug line on the display's first mode, under DEBUG only.
+
+## msg_enabled
+
+`10 u8`: that line's enabled field.
+
 ## gpu_submit
 
 Descriptors 0 and 1 carry it. With DEBUG every command and its answer is
 reported on the debug channel.
+
+## msg_gpu_cmd
+
+`14 u8`: the debug line on a command, under DEBUG only.
+
+## msg_gpu_resp
+
+`7 u8`: that line's response field.
 
 ## console_write
 
@@ -80,3 +160,39 @@ A newline moves to the next line; a line past the last scrolls the screen
 up; other control bytes are skipped, and bytes past ASCII draw as a space.
 The dirty band takes in each line's pixel rows, and only that band is
 shown.
+
+## gpu_queue
+
+The GPU's control queue record.
+
+## gpu_cmd
+
+`64 u8`: the single command's buffer.
+
+## gpu_resp
+
+`408 u8`: the single command's response.
+
+## gpu_batch_cmds
+
+`2048 u8`: a batch's command buffers, GPU_CMD_BYTES each.
+
+## gpu_batch_resps
+
+`768 u8`: a batch's response buffers, GPU_RESP_BYTES each.
+
+## gpu_base
+
+`addr`: the GPU's transport.
+
+## display_state
+
+`u64`: 1 once open.
+
+## console_col
+
+`u64`: the cursor's column.
+
+## console_row
+
+`u64`: the cursor's line.

@@ -1,5 +1,3 @@
-set TICK u64 [5] :a frame period in time ticks
-set SOUND_POLL u64 [6] :how often a sound-only wait looks for a stall
 call frame_clock_init > tick frame_tick u64 [11:17]
  tick :now
 call frame_ready > ready a0 bool [18:26]
@@ -12,5 +10,3 @@ ecall sys_await mask u64 > events a0 u64,tick frame_tick u64,told frame_reported
  events :the bits that fired; 0 when nothing in the mask can happen, at once for 0
  tick :moved past now when told and not yet answered by a flip
  told :1 when the display's bit fired
-bss local frame_tick u64 [172:173] :the time of the next tick
-bss local frame_reported u64 [174:175] :1 once a wait reported the tick, 0 once a flip answered it

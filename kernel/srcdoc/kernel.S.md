@@ -23,7 +23,25 @@ port on the machine, and under DEBUG the debug channel, first, so the banner
 and everything after it go there. sscratch holds the kernel stack top while
 the program runs.
 
+## msg_banner
+
+`29 u8`: the banner on the debug channel, under DEBUG only.
+
+## .set KERNEL_FLAG_DEBUG
+
+`u32`: the flag JAB_KERNEL_DEBUG when assembled with DEBUG, else 0.
+
 ## kernel_flags
+
+`u32`: the mask of what the kernel was built with.
 
 Built from the symbols the assembler was given, JAB_KERNEL_* each, so a
 program reads at run time what it could also .ifdef at build.
+
+## kernel_stack
+
+`16384 u8`: the kernel's stack.
+
+## kernel_stack_top
+
+The top of the kernel's stack, empty.

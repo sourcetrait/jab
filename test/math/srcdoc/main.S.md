@@ -27,6 +27,38 @@ reloaded before every macro, since a `uart.print` between two macros could
 not be trusted to leave the argument registers alone. The f32 table gained
 the zero vector for the register norm's zero case.
 
+## .set SWEEP_POINTS
+
+`u64`: the sin and cos sweep's angles, from k_start, k_step apart.
+
+## .set ATAN_PAIRS
+
+`u64`: the pairs of atan_pairs.
+
+## .set ANGLE_COUNT
+
+`u64`: the angles of angles.
+
+## .set VEC3_PAIRS
+
+`u64`: the pairs of vec3_pairs.
+
+## .set VEC2_COUNT
+
+`u64`: the vectors of vec2s.
+
+## .set F32_PAIRS
+
+`u64`: the pairs of f32_pairs.
+
+## .set RNG_BYTES
+
+`u64`: the bytes drawn for each rng line.
+
+## .set LINE_BYTES
+
+`u64`: room for a line.
+
 ## sweep
 
 Its lines are `sin <x> <y>` and `cos <x> <y>`.
@@ -84,3 +116,215 @@ next symbol is `line_reset` and each measured span is the function alone.
 A line is LINE_BYTES, 256, enough for the longest case,
 `f64.vec3.norm.aliased` with six doubles of seventeen characters each behind
 a 22-character word.
+
+## k_step
+
+`f32`: the sweep's step, a fortieth of a radian.
+
+## k_start
+
+`f32`: the sweep's first angle, -20 radians.
+
+## k_pi_f
+
+`f32`: pi as the assembler rounds it, which the macro must match.
+
+## k_tau_f
+
+`f32`: tau as the assembler rounds it.
+
+## k_half_pi_f
+
+`f32`: half pi as the assembler rounds it.
+
+## k_pi_d
+
+`f64`: pi as the assembler rounds it.
+
+## k_tau_d
+
+`f64`: tau as the assembler rounds it.
+
+## k_half_pi_d
+
+`f64`: half pi as the assembler rounds it.
+
+## atan_pairs
+
+`48 f32`: y, x pairs, both zero, the axes, the diagonals, every octant, a point far along each axis.
+
+## angles
+
+`11 f32`: the angles each conversion takes.
+
+## vec3_pairs
+
+`24 f64`: a and b, three doubles each.
+
+## vec2s
+
+`8 f64`: the vectors, two doubles each.
+
+## f32_pairs
+
+`24 f32`: a and b, three singles each.
+
+## word_sin
+
+`5 u8`.
+
+## word_cos
+
+`5 u8`.
+
+## word_atan2
+
+`7 u8`.
+
+## word_rad
+
+`5 u8`.
+
+## word_deg
+
+`5 u8`.
+
+## word_roundtrip
+
+`11 u8`.
+
+## word_f32_pi
+
+`14 u8`.
+
+## word_f32_tau
+
+`15 u8`.
+
+## word_f32_half_pi
+
+`21 u8`.
+
+## word_f64_pi
+
+`14 u8`.
+
+## word_f64_tau
+
+`15 u8`.
+
+## word_f64_half_pi
+
+`21 u8`.
+
+## word_vec3_dot
+
+`14 u8`.
+
+## word_vec3_len
+
+`14 u8`.
+
+## word_vec3_sqrlen
+
+`17 u8`.
+
+## word_vec3_norm
+
+`15 u8`.
+
+## word_vec3_norm_aliased
+
+`23 u8`.
+
+## word_vec2_len
+
+`14 u8`.
+
+## word_vec2_sqrlen
+
+`17 u8`.
+
+## word_f32_vec3_dot
+
+`14 u8`.
+
+## word_f32_reg_dot
+
+`18 u8`.
+
+## word_f32_reg_sqrlen
+
+`21 u8`.
+
+## word_f32_reg_len
+
+`18 u8`.
+
+## word_f32_reg_norm
+
+`19 u8`.
+
+## word_f32_vec2_reg_sqrlen
+
+`21 u8`.
+
+## word_f32_vec2_reg_len
+
+`18 u8`.
+
+## word_f64_reg_dot
+
+`18 u8`.
+
+## word_f64_reg_sqrlen
+
+`21 u8`.
+
+## word_f64_reg_len
+
+`18 u8`.
+
+## word_f64_reg_norm
+
+`19 u8`.
+
+## word_f64_vec2_reg_sqrlen
+
+`21 u8`.
+
+## word_f64_vec2_reg_len
+
+`18 u8`.
+
+## word_rng
+
+`5 u8`.
+
+## word_rngsys
+
+`8 u8`.
+
+## msg_rngsys_none
+
+`13 u8`: the line for a machine with no rng device.
+
+## line
+
+`256 u8`: the line being built.
+
+## lineptr
+
+`addr`: the cursor in line.
+
+## norm_out
+
+`3 f64`: a vec3 norm's result.
+
+## norm_out_f
+
+`3 f32`: an f32 register norm's result.
+
+## rng_state
+
+`u64`: the generator's state word.

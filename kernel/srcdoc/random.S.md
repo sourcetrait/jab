@@ -12,3 +12,23 @@ buffer is what the device writes, so nothing is copied.
 
 One descriptor the device writes, the program's buffer, is offered in the
 next slot; the used element says how many bytes the device wrote.
+
+## msg_rng_at
+
+`13 u8`: the debug line naming the device's transport, under DEBUG only.
+
+## msg_no_rng
+
+`13 u8`: the debug line for a machine without one, under DEBUG only.
+
+## random_queue
+
+The device's virtqueue record.
+
+## random_base
+
+`addr`: the device's transport.
+
+## random_state
+
+`u64`: 0 until opened, then random_open's answer plus 1.

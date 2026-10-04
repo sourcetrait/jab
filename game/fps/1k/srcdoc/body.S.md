@@ -27,6 +27,38 @@ and roots it only when the bodies overlap; wall_push takes the push vector's
 length in place. The register forms touch only their destination, so the
 vectors survive them and nothing is stored or reloaded.
 
+## k_body_radius_d
+
+`f64`: the capsule's radius.
+
+## k_body_radius_sq_d
+
+`f64`: the radius squared.
+
+## k_body_height_d
+
+`f64`: the capsule's height.
+
+## k_body_eye_d
+
+`f64`: the eye over the feet.
+
+## k_body_step_d
+
+`f64`: the highest floor stepped onto, over the feet.
+
+## k_body_gravity_d
+
+`f64`: the fall's acceleration, metres a second squared.
+
+## k_thousandth_d
+
+`f64`.
+
+## k_walk_speed
+
+`f32`: the walk at full throw, metres a second.
+
 ## body_move
 
 The level forward and right come from the yaw.
@@ -43,3 +75,7 @@ admits the body when its floor at the point is at most a step above the feet
 and its ceiling leaves the body's height over that floor. The feet are pushed
 out along the nearest point's normal, or the wall's when the feet sit on the
 wall.
+
+## body_fall
+
+`f64`: the player's fall speed.

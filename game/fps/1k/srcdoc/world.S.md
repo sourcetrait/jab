@@ -33,12 +33,26 @@ projection, which is why the plane's bind sits at the end of its loop
 rather than beside the map's. The frame's tile budget is set beside the
 stats' zeroing, so the first polygons drawn build first.
 
+## k_near_sq_d
+
+`f64`: the near distance squared, within which a masked wall's opening goes unfilled.
+
+## k_zero_d
+
+`f64`.
+
 ## k_flow_near_sq_d
+
+`f64`: the flow's near case squared, 1.522 times the near distance.
 
 1.522 times the near distance, an on-screen point's distance being at most
 that times its depth (the screen's half extents over hz are 1 and 0.5625),
 so an opening whose wall lies further off loses nothing on screen to the
 near plane.
+
+## k_facing_slack_sq
+
+`f32`: the flow's facing slack, a millimetre squared, the eye on a wall's line within it still flowing the wall.
 
 ## world_draw
 
@@ -185,3 +199,47 @@ is within the near distance of the wall, where the opening would clip
 away. A piece is cut where its planes cross along the wall: the quad when
 the top is above the bottom at both ends, the triangle at the end where it
 is.
+
+## walk_tail
+
+`u64`: the sectors in walk_fifo.
+
+## stats
+
+`22 u64`: the frame's counts and its ticks by phase, STAT_* fields.
+
+## walk_fifo
+
+`MAX_SECTORS u32`: the sectors in the order the flow first reached them, the draw order.
+
+## walk_seen
+
+`MAX_SECTORS u8`: 1 for a sector the flow reached this frame.
+
+## wall_order
+
+`MAX_WALLS u64`: a sector's facing walls in the order they are drawn, the key, the squared distance from the eye to the wall's nearest point as a float, then the wall.
+
+## sector_rect
+
+`MAX_SECTORS*4 i32`: every sector's screen rectangle, the union of the openings it is seen through.
+
+## flow_pending
+
+`MAX_SECTORS u8`: the flow's waiting flags.
+
+## flow_ring
+
+`FLOW_RING u32`: the flow's ring of sectors.
+
+## flow_head
+
+`u64`: the ring's read.
+
+## flow_tail
+
+`u64`: the ring's write.
+
+## clip_rect
+
+`4 i32`: the rectangle the spans in hand are clipped to.

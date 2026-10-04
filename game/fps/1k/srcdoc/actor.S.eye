@@ -1,24 +1,3 @@
-rodata local frame_sets 8 addr [3:5] :the rotating sets' stems
-rodata local frame_singles 5 addr [6:8] :the singles' stems, the fallen frame, the three sparks, and the magazine
-rodata local android_rows 15*4 u32 [9:25] :an android's rows, the set, the milliseconds, the action, and the next, ROW_* fields
-rodata local action_table 10 addr [26:30] :each ACT_*'s action
-rodata local k_octant f32 [31:32] :the tangent of an eighth of a half turn, the octants' edge
-rodata local k_thousandth_f f32 [33:34]
-rodata local k_two f32 [35:36]
-rodata local k_spark_seconds f32 [37:38] :a spark frame's seconds
-rodata local word_set_stand 6 u8 [39:40]
-rodata local word_set_walk1 6 u8 [41:42]
-rodata local word_set_walk2 6 u8 [43:44]
-rodata local word_set_walk3 6 u8 [45:46]
-rodata local word_set_walk4 6 u8 [47:48]
-rodata local word_set_aim 4 u8 [49:50]
-rodata local word_set_fire 5 u8 [51:52]
-rodata local word_set_struck 7 u8 [53:54]
-rodata local word_single_fallen 15 u8 [55:56]
-rodata local word_single_spark1 15 u8 [57:58]
-rodata local word_single_spark2 15 u8 [59:60]
-rodata local word_single_spark3 15 u8 [61:62]
-rodata local word_single_magazine 13 u8 [63:1220]
 call local actors_place > actors actors MAX_ACTORS*ACTOR_SIZE u8,clobber a0-a5,a7,fa0-fa6 [68:151] :every actor gone, then one placed for each android and magazine entity, facing its yaw, its target the entity's, its feet on its sector's floor
 call local actor_row actor addr,row u32 > row ACTOR_ROW(actor) u32,timer ACTOR_TIMER(actor) f32,clobber a0-a5,a7,fa0-fa6 [153:178] :an actor put in a row, its timer the row's milliseconds, the action taken
 call local actor_ms actor addr > ms t0 i32 [180:186] :the milliseconds of an actor's row, negative for a held row
@@ -57,18 +36,3 @@ call local action_seek actor addr > clobber a0-a5,a7,fa0-fa6 [1106:1122] :a sear
 call local action_struck actor addr > flags ACTOR_FLAGS(actor) u32,clobber a0-a1,a4-a5,fa0-fa4 [1124:1136] :the struck sound at its chest; roused
 call local action_destroy actor addr > state rng u64,clobber a0-a1,a4-a5,fa0-fa4 [1138:1177] :the destruction's sound at its chest and three sparks about it by chance
 call local action_fall actor addr > actors actors MAX_ACTORS*ACTOR_SIZE u8,clobber a0-a5,a7,fa0-fa1 [1179:1217] :the magazine dropped half a metre to the android's right, on its floor; the fall reported
-rodata local k_chest_d f64 [1221:1222] :the chest over the feet
-rodata local k_spark_drop_d f64 [1223:1224] :a spark's drop under its point
-rodata local k_spark_spread_d f64 [1225:1226] :how far the destruction's sparks spread a unit of chance
-rodata local k_android_speed_d f64 [1227:1228] :the android's walk a second
-rodata local k_arrive_d f64 [1229:1230] :the arrival radius
-rodata local k_quarter_d f64 [1231:1232]
-rodata local k_sight_range_d f64 [1233:1234] :the android's sight's range
-rodata local k_near_sight_d f64 [1235:1236] :the range it sees all round
-rodata local k_stray_d f64 [1237:1239] :the G-1's stray a unit of chance, the tangent of twelve degrees over 128
-rodata local k_blocked_seconds f32 [1240:1241] :the seconds blocked before a waypoint is given up
-rodata local k_cycle_seconds f32 [1242:1243] :a cycle of aim and fire
-rodata local k_lost_seconds f32 [1244:1245] :the seconds without sight before the search
-bss local actors MAX_ACTORS*ACTOR_SIZE u8 [1249:1250] :the actor table, ACTOR_* records
-bss local actor_entity ENTITY_SIZE u8 [1251:1252] :the scratch entity an actor draws through
-bss local aim 7 f64 [1253:1254] :the line from an actor's eye to the player's, the eye, the unit direction, the distance, AIM_* fields

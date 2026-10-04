@@ -1,6 +1,6 @@
 [package]
 name = "eye_gen_asm_cli"
-description = "eye-gen-asm: writes a .eye.stub for each assembly source, the symbols generated from the code with what an existing .eye says merged in."
+description = "eye-gen-asm: writes a .eye.stub for each assembly source, its routines, jump targets, and macros generated from the code with what an existing .eye says merged in."
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

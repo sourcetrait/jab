@@ -1,20 +1,3 @@
-set TRACKS u64 [4] :the tracks a file may hold
-set TRACK_AT addr [5] :a track record's next byte to read
-set TRACK_END addr [6] :the chunk's end
-set TRACK_TICK u64 [7] :the next event's absolute tick
-set TRACK_STATUS u8 [8] :the running status
-set TRACK_DONE u8 [9]
-set TRACK_SIZE u64 [10] :bytes in a track record
-set HEADER_BYTES u64 [11] :bytes in the MThd chunk
-set CHUNK_HEADER_BYTES u64 [12] :bytes in a chunk's tag and length
-set FORMAT_MOST u16 [13] :the latest format taken
-set META u8 [14] :the meta event's status
-set SYSEX u8 [15]
-set SYSEX_ESCAPE u8 [16]
-set META_TEMPO u8 [17]
-set META_END u8 [18] :the end-of-track meta event
-set TEMPO_DEFAULT u64 [19] :microseconds a quarter note before a tempo event
-set PERIOD_MICROS u64 [20] :a period in microseconds
 ecall sys_midi_play source addr,length u64 > status a0 u64 [25:39] :plays the Standard MIDI File, whatever was playing stopped with its notes released, from the next period
  source :ends the run unless the whole file lies inside the program's window
  status :0, sound_open's code, or 3 when the file is not one the player takes
@@ -33,10 +16,3 @@ call local smf_event track addr > clobber a0-a3 [298:428] :fires the event at th
 call local smf_delta track addr > clobber a0-a2 [430:450] :adds the delta at the cursor to the track's tick and moves past it, a track with none left done
 call local smf_varint at addr,limit addr > value a0 u64,next a1 addr,read a2 bool [452:472]
  read :0 when the quantity runs past the limit or past four bytes
-bss local smf_playing u64 [476:477] :1 while a piece plays
-bss local smf_division u64 [478:479] :ticks a quarter note
-bss local smf_tempo u64 [480:481] :microseconds a quarter note
-bss local smf_position u64 [482:483] :the piece's position, 32.32 ticks
-bss local smf_increment u64 [484:485] :the position's step a period
-bss local smf_track_count u64 [486:487] :the tracks read
-bss local smf_tracks [488:489] :the track records

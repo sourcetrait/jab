@@ -18,15 +18,119 @@ flips shown, the clock's ticks, and the pixels a frame on the UART, and the
 test works out the rates. Only the last mode reaches the window, and its last
 frame stays up until the window closes.
 
+## .set DURATION
+
+`u64`: a mode's run, three seconds of the clock.
+
+## .set PIXELS
+
+The screen's pixels.
+
+## .set ZBUF_BYTES
+
+The depth buffer's bytes, a word a pixel.
+
 ## .set POLY_X
+
+`f32`: a vertex's screen x.
 
 The polygon is four vertices of six floats, every attribute affine across
 the quad.
 
+## .set POLY_Y
+
+`f32`: its screen y.
+
+## .set POLY_IZ
+
+`f32`: its 1/z.
+
+## .set POLY_UZ
+
+`f32`: its u/z.
+
+## .set POLY_VZ
+
+`f32`: its v/z.
+
+## .set POLY_BR
+
+`f32`: its brightness.
+
+## .set POLY_VERTEX
+
+A vertex's bytes, six floats.
+
+## .set POLY_VERTICES
+
+The quad's vertices.
+
+## .set BLOCK
+
+A span block's pixels, the texture coordinates exact at each block's ends and stepped within.
+
 ## .set POLY_FIXED
+
+`u64`: a polygon mode's flag, the depth an integer.
 
 The integer forms: 1/z in 6.26, u/z and v/z in 48.16, z in 48.16 as 2^42
 over 1/z, u and v in 16.16.
+
+## .set POLY_LIT
+
+`u64`: the flag for the pixels lit.
+
+## .set POLY_INTEGER
+
+`u64`: the flag for the blocks' ends in fixed point.
+
+## .set DEPTH_BITS
+
+1/z's fraction bits, 6.26.
+
+## .set Z_SHIFT
+
+Z as 2^Z_SHIFT over 1/z, 48.16.
+
+## .set TEX_BITS
+
+The texture's side as a power of two.
+
+## .set TEX_SIDE
+
+The texture's side in pixels.
+
+## .set TEX_MASK
+
+A texture coordinate's wrap.
+
+## .set TEX_ROW_BYTES
+
+A texture row's bytes.
+
+## .set TEX_ROW_SHIFT
+
+A texture row's offset as a shift of its index.
+
+## .set TEX_STEP
+
+`u32`: a drawn pixel's step across the texture, half a texel in 16.16.
+
+## .set SPAN
+
+A perspective span's pixels.
+
+## .set SPANS
+
+The spans in a row.
+
+## .set LINE_BYTES
+
+The UART line's buffer.
+
+## .set DIGITS_BYTES
+
+append_dec's scratch.
 
 ## idle
 
@@ -74,14 +178,114 @@ eight registers grouped, v8 to v15. RVA23 mandates vectors, and the assembler
 takes them from the program's profile, so no `.option` is needed; built only
 with --set vector.
 
+## frames
+
+`u64`: the frame count, for the routines.
+
+## elapsed
+
+`u64`: the mode's ticks.
+
+## digits
+
+`DIGITS_BYTES u8`: append_dec's scratch, the digits built backwards from its end.
+
+## line
+
+`LINE_BYTES u8`: the UART line.
+
+## texture
+
+`TEX_SIDE*TEX_SIDE u32`: the texture.
+
+## cross
+
+`12 f32`: a row's two crossings of the quad, an attribute set each.
+
+## zbuf
+
+`PIXELS u32`: the depth buffer, 1/z a pixel as a float or in 6.26.
+
+## name_fill
+
+`5 u8`.
+
+## name_texture
+
+`8 u8`.
+
+## name_perspective
+
+`12 u8`.
+
+## name_polygon
+
+`8 u8`.
+
+## name_fixed
+
+`6 u8`.
+
+## name_integer
+
+`8 u8`.
+
+## name_lit
+
+`4 u8`.
+
+## name_vector
+
+`7 u8`.
+
+## name_textureflip
+
+`12 u8`.
+
+## word_frames
+
+`9 u8`.
+
+## word_shown
+
+`8 u8`.
+
+## word_ticks
+
+`8 u8`.
+
+## word_pixels
+
+`9 u8`.
+
+## msg_no_display
+
+`22 u8`.
+
 ## poly
+
+`24 f32`: the quad, at each vertex the screen x and y, 1/z, u/z, v/z, and the brightness.
 
 A wall from z 2 at the screen's left edge to z 8 at its right, 9 units tall
 and 12 long at 64 texels a unit, whose projection through a 960 focal length
 covers the screen and beyond, so every pixel is inside it; the brightness is
 1 at the near edge and a quarter at the far.
 
+## k_half
+
+`f32`.
+
+## k_one
+
+`f32`.
+
+## k_sixty_four_k
+
+`f32`: one in 16.16.
+
 ## k_depth_scale
+
+`f32`: 2^26, 1/z into 6.26.
 
 1/z as an integer in 6.26: two to the 26th, so 1/z reaches 32 and z a
 thirty-second, and z at 50 units still resolves under a tenth of a
