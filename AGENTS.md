@@ -34,6 +34,50 @@ The 'eye-asm' tool can be used to view all signatures within a given src
 directory and, optionally, specific relative file or directory.
 (Eg, `eye-asm ./kernel/src`, `eye-asm ./kerne/src timer.S`)
 
+## Components
+- Jab Spec
+- Jab Kernel
+- Jab SDK
+- Jab Launch
+- Jab Metal
+- Jab Dash
+- JabIO
+- jab (term)
+
+## Spec
+System specifications that lock-in minimum-maximum hardware requirements.
+
+Nomenclature starts with the display type (1K (1080p), 2K (QHD), 4K, etc.)
+followed by an optional generation number (1K1, 1K2, etc.).
+
+Omission of the generation number implies first generation.
+
+### Launch
+Distribution for desktop systems (Linux, MacOS, Windows) including its
+self-named launcher app.
+
+### Metal
+Distribution for dedicated hardware, including its own self-named customized
+Alpine Linux distro.
+
+### Dash
+The system dashboard provided with Jab Metal and mirrored within Jab Launch.
+
+## JabIO
+Encompasses:
+- Device management and passthru on the host system
+- Drivers and SDK for the kernel
+
+### jab (noun)
+A `.jab` program assembled for the Jab Computer.
+
+The term is also used to describe the program's package, containing its
+executable and assets.
+
+Jabs are distributed as `pacman` packages (`.pkg.tar.zst`) and are known
+as *packs*.
+
+
 ## Environment
 
 Agent operation occurs within a Fedora toolbox podman container. Final testing
