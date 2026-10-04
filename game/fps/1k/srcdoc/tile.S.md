@@ -319,6 +319,17 @@ alone; a dark copy on the unlit loop point-samples where a tile at a
 level averages, and read 8 of 256 of view dependence that was the
 texture's.
 
+## lumels_parity
+
+The console's L frame with its byte 7 set, on a debug build alone,
+rewrites every lumel by its node's parity in its map, a quarter on each
+lane where the column and the row sum even and one where they sum odd.
+Every cell then holds a checkerboard of light, steepest beside its
+corners and flat at its centre, a gradient the test computes for itself:
+a tile's texel beside a node lit at the texel's centre reads apart from
+one lit at its corner by more than the build's rounding, where the
+room's light changes too little across a texel to tell the two.
+
 ## msg_alpha
 
 `12 u8`.

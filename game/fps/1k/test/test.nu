@@ -26,8 +26,12 @@
 # of the shrink among those colours, and the solid backdrop behind
 # where they do not, the lit loop's picture from the same build
 # agreeing at every level, and with level 0 alone built the mid pose's
-# blocks taking the chain at their own level and agreeing too, the same
-# poses under the room's own light reported, tiled against lit; one
+# blocks taking the chain at their own level and agreeing too, fewer
+# tiles built and read than with every level, the same poses under the
+# room's own light within TheUser's bound, tiled against lit; the
+# texel-centre rule, a white texture on that wall under lumels set as a
+# checkerboard, each texel beside a node read from its tile at the
+# light of its centre by the test's own bilinear; one
 # level a block, the still factory's spawn view with every level built
 # against the tiles held off, identical over the screen with the far
 # floor's blocks past the tiles' levels; the flow's three fixtures, a sprite straddling a
@@ -215,6 +219,28 @@ const FIXTURE_INSET = 8
 # The radius a sample must lie outside of about the screen's centre,
 # the crosshair's five and a pixel of rounding
 const FIXTURE_CROSSHAIR = 6
+# TheUser's bound on the alpha poses under the room's own light, tiled
+# against the lit loop over the opening: the largest difference in a
+# channel, of 255, for these three poses alone
+const REAL_LIGHT_BOUND = 10
+# The texel-centre rule rendered: the fixture's wall given a white
+# texture of the test's own, 16 square at two repeats a metre, so a
+# lumel cell is 16 texels, one repeat, its nodes on the repeats' edges;
+# the console's L frame byte 7 setting every lumel by its node's parity,
+# a quarter where its column and row sum even and one where odd, so a
+# cell's bilinear light runs steeply from each corner; head-on at 2 m,
+# level 0, a texel some 15 pixels across; the four texels touching each
+# node in the opening read at their centres against the bilinear light
+# there times 255, within the slack of the build's two truncations,
+# where a texel lit at its corner reads 63 or 85 beside a dark node and
+# 255 or 232 beside a bright one; a tile's texel one colour over the
+# pixels about its centre, where the lit loop lights each pixel at its
+# own coordinate and the same pixels vary
+const CENTRE_FIXTURE = { name: "texture/centrefix", size: 16, scale: 2.0 }
+const CENTRE_LIGHTS = [0.25, 1.0]
+const CENTRE_DISTANCE = 2.0
+const CENTRE_SLACK = 2
+const CENTRE_FOOTPRINT = 3
 # The flow's growth: a map of the test's own (grow-source) where the
 # hall S is reached from the camera's room C first through a narrow
 # high window, two hops, and again through a side room T and its wide
@@ -913,7 +939,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             if $mode == "tiled" {
                 assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
             } else if $mode == "capped" {
+                # the cap proven against the same pose built whole, the
+                # frame after the reset and the pose in each: fewer tiles
+                # built, and fewer pixels read from tiles, the blocks
+                # asking a coarser level taking the chain
+                let whole = ($fixture_runs | get $"($fp.name)_tiled" | get frame)
                 assert ($frame.tiles_built > 0) $"the view built its level 0 tiles on ($label): ($frame)"
+                assert ($frame.tiles_built < $whole.tiles_built) $"the cap held back the levels past 0 on ($label): ($frame.tiles_built) tiles built against ($whole.tiles_built) with every level"
+                assert ($frame.tiled < $whole.tiled) $"the blocks asking level ($fp.level) read the chain, not tiles, on ($label): ($frame.tiled) pixels tiled against ($whole.tiled) with every level"
             } else {
                 assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
             }
@@ -961,7 +994,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # opening: a tile holds lit texels filtered where the loop lights a
     # filtered texel at the pixel's own coordinate, so the two differ by
     # their rounding and the light's change across a texel; reported, the
-    # pixels that differ and the largest difference in a channel
+    # pixels that differ and the largest difference in a channel, held
+    # within TheUser's bound, each run proven on its path
     mut light_report = []
     for fp in $FIXTURE_POSES {
         let eye = ($fixture_runs | get $"($fp.name)_tiled" | get eye)
@@ -976,6 +1010,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
             let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
             assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
+            if $mode == "tiled" {
+                assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+            } else {
+                assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
+            }
             assert ($run.screen != "") $"a screen was taken on ($label)"
             $lit_captures = ($lit_captures | insert $mode (open --raw $run.screen | into binary))
         }
@@ -984,6 +1023,62 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         $light_report = ($light_report | append ($delta | insert pose $fp.name | insert level $fp.level))
     }
     print $"fps: the alpha poses under the room's light, tiled against lit over the opening: ($light_report | each {|r| $'($r.pose) at level ($r.level), ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most' } | str join '; ')"
+    for r in $light_report {
+        assert ($r.largest <= $REAL_LIGHT_BOUND) $"the ($r.pose) pose under the room's light, tiled against lit over the opening, within ($REAL_LIGHT_BOUND) of 255 a channel: ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most"
+    }
+
+    # the texel-centre rule (CENTRE_FIXTURE): the fixture's wall white
+    # under lumels set by their nodes' parity, posed head-on at level 0
+    # with the tiles built whole and again held off; every sampled texel
+    # beside a node read on the tiled run at its centre against the
+    # light of its centre, the four nodes of its cell bilinear there, and
+    # one colour over the pixels about its centre, which a tile holds and
+    # the lit loop, lighting each pixel at its own coordinate, does not:
+    # the held-off run's same pixels vary, proving the tiled reading came
+    # from the tiles; the samples' own arithmetic putting a texel lit at
+    # its corner past the slack beside dark and bright nodes alike
+    let centre_tree = (centre-tree $proof_source $game ($out | path join "centre"))
+    let centre_read = (map read ($centre_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
+    let centre_material = ($centre_read.materials | enumerate | where {|m| $m.item.name == $CENTRE_FIXTURE.name } | get 0.index)
+    let centre_wall = ($centre_read.walls | where {|w| $w.surface.material == $centre_material } | get 0)
+    let centre_a = ($centre_read.vertices | get $centre_wall.a)
+    let centre_b = ($centre_read.vertices | get $centre_wall.b)
+    let centre_eye = { x: ($centre_a.x - $CENTRE_DISTANCE), y: (($centre_a.y + $centre_b.y) / 2), z: $EYE_HEIGHT }
+    let centre_step = ($CENTRE_FIXTURE.size * $centre_wall.surface.u_scale * $CENTRE_DISTANCE / 960)
+    assert ($centre_step < 2) $"the centre pose reads level 0 by the block's rule at ($centre_step) texels a pixel"
+    let centre_opening = (fixture-opening $centre_read $centre_wall $centre_eye)
+    let centre_samples = (centre-samples $centre_read $centre_wall $centre_eye $centre_opening)
+    let telling = ($centre_samples | where {|s| (($s.corner - $s.expected) | math abs) > (2 * $CENTRE_SLACK) })
+    assert equal ($telling | get parity | uniq | sort) [0, 1] $"texels beside dark and bright nodes alike where the corner rule reads past twice the slack: ($telling | length) of ($centre_samples | length) samples"
+    let centre_disk = (romfs $centre_tree ($out | path join "centre.romfs"))
+    let centre_placed = { name: "centre", x: $centre_eye.x, y: $centre_eye.y, z: $centre_eye.z, yaw: 0, pitch: 0 }
+    mut centre_runs = {}
+    for mode in [tiled held] {
+        let sends = [{ at: 1400ms, bytes: (level-frame false ($mode == "held") 0 --parity) }, { at: 1500ms, bytes: (pose pose-frame $centre_placed) }]
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"centre_($mode)") --set $set --sound --api --disk $centre_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+        let label = $"the white wall under the parity lumels with the tiles ($mode)"
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+        let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
+        if $mode == "tiled" {
+            assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+        } else {
+            assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
+        }
+        assert ($run.screen != "") $"a screen was taken on ($label)"
+        $centre_runs = ($centre_runs | insert $mode (open --raw $run.screen | into binary))
+    }
+    let centre_tiled = (centre-read $centre_runs.tiled $centre_samples)
+    for r in $centre_tiled {
+        assert ($r.off <= $CENTRE_SLACK) $"the texel ($r.texel) beside the node ($r.node) lit ($r.light) reads the light of its centre from its tile, ($r.expected | math round --precision 2) of 255 within ($CENTRE_SLACK), at ($r.at): ($r.pixel | encode hex), where lit at its corner it would read ($r.corner | math round --precision 2)"
+        assert $r.uniform $"the texel ($r.texel) beside the node ($r.node) lit ($r.light) is one colour over the pixels about its centre at ($r.at), as a tile holds it"
+    }
+    let centre_held = (centre-read $centre_runs.held $centre_samples)
+    let varied = ($centre_held | where {|r| not $r.uniform } | length)
+    assert ($varied > (($centre_held | length) // 2)) $"the lit loop's picture varies over most sampled texels' pixels, so one colour there tells a tile: ($varied) of ($centre_held | length)"
+    print $"fps: the texel-centre rule, ($centre_tiled | length) texels beside ($centre_samples | get node | uniq | length) nodes read from their tiles within ($centre_tiled | get off | math max | math round --precision 2) of their centres' light, ($telling | length) where the corner's lies past twice the slack; the lit loop's pixels varied over ($varied)"
 
     # the flow's growth on the growth map: the far room is reached only
     # once the hall's rectangle has grown through the side room's path
@@ -1269,10 +1364,11 @@ def chain-levels [w: int, h: int]: nothing -> int {
 # The console's L frame: every tile forgotten, every lumel set full
 # bright first when `bright`, the build budget held at zero when `held`
 # so every span takes the lit loop, else lifted, and on a debug build the
-# levels a surface builds capped at `cap`, 0 for every level.
-def level-frame [bright: bool, held: bool, cap: int]: nothing -> binary {
+# levels a surface builds capped at `cap`, 0 for every level, and every
+# lumel set by its node's parity after the bright with `--parity`.
+def level-frame [bright: bool, held: bool, cap: int, --parity]: nothing -> binary {
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
-    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (0..<57 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # How two captures differ over a rectangle, [x0, y0, x1, y1] with the
@@ -1396,29 +1492,47 @@ export def fixture-row [y: int]: nothing -> record<bytes: binary, alphas: list<i
     { bytes: ($cells | get bytes | bytes collect), alphas: ($cells | get alphas | flatten) }
 }
 
-# A copy of the proof map compiled with its grate wall given the alpha
-# fixture's material at the fixture's scale, the alcove's floor,
-# ceiling, and walls given the backdrop's, its android dropped, and the
-# two textures laid in the tree after the compile, which names them
-# unresolved; the tree's path.
-def alpha-tree [source: record, game: path, out: path]: nothing -> string {
+# A copy of the proof map compiled with its grate wall given a material
+# of the test's own at a scale, the alcove's floor, ceiling, and walls
+# given the backdrop's, its android dropped, and the backdrop laid in the
+# tree after the compile, which names it unresolved; the tree's path.
+def fixture-tree [source: record, game: path, out: path, material: string, scale: float]: nothing -> string {
     let north = ($source.sectors | enumerate | where {|s| $s.item.name == "north" } | get 0.index)
     let sector = ($source.sectors | get $north)
     let grate = ($sector.walls | enumerate | where {|w| $w.item.material == "grate" } | get 0.index)
-    let stem = ($ALPHA_FIXTURE.name | path basename)
-    let walls = ($sector.walls | update $grate {|w| $w | update material $stem | update scale [$ALPHA_FIXTURE.scale, $ALPHA_FIXTURE.scale] | update offset [0.0, 0.0] })
+    let stem = ($material | path basename)
+    let walls = ($sector.walls | update $grate {|w| $w | update material $stem | update scale [$scale, $scale] | update offset [0.0, 0.0] })
     let alcove = ($source.sectors | enumerate | where {|s| $s.item.name == "alcove" } | get 0.index)
     let back = ($FIXTURE_BACKDROP.name | path basename)
     let solid = ($source.sectors | get $alcove | update floor.material $back | update ceiling.material $back | update wall.material $back)
     let fixed = ($source | update sectors ($source.sectors | update $north ($sector | update walls $walls) | update $alcove $solid))
     let tree = (variant-tree $fixed $FIXTURE_MAP [android] $out $game)
+    let backdrop = ($tree | path join (map tile-path $FIXTURE_BACKDROP.name | str substring 1..))
+    mkdir ($backdrop | path dirname)
+    let texel = ([$FIXTURE_BACKDROP.colour, 0x[ff]] | bytes collect)
+    png write-rgba $backdrop $FIXTURE_BACKDROP.size $FIXTURE_BACKDROP.size (0..<($FIXTURE_BACKDROP.size * $FIXTURE_BACKDROP.size) | each {|i| $texel } | bytes collect)
+    $tree
+}
+
+# The alpha fixture's tree: the grate wall given the fixture's texture
+# at its scale, the texture laid in; the tree's path.
+def alpha-tree [source: record, game: path, out: path]: nothing -> string {
+    let tree = (fixture-tree $source $game $out $ALPHA_FIXTURE.name $ALPHA_FIXTURE.scale)
     let file = ($tree | path join (map tile-path $ALPHA_FIXTURE.name | str substring 1..))
     mkdir ($file | path dirname)
     let pixels = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).bytes } | bytes collect)
     png write-rgba $file $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h $pixels
-    let backdrop = ($tree | path join (map tile-path $FIXTURE_BACKDROP.name | str substring 1..))
-    let texel = ([$FIXTURE_BACKDROP.colour, 0x[ff]] | bytes collect)
-    png write-rgba $backdrop $FIXTURE_BACKDROP.size $FIXTURE_BACKDROP.size (0..<($FIXTURE_BACKDROP.size * $FIXTURE_BACKDROP.size) | each {|i| $texel } | bytes collect)
+    $tree
+}
+
+# The texel-centre fixture's tree: the grate wall given an opaque white
+# texture of CENTRE_FIXTURE's size at its scale, laid in; the tree's
+# path.
+def centre-tree [source: record, game: path, out: path]: nothing -> string {
+    let tree = (fixture-tree $source $game $out $CENTRE_FIXTURE.name $CENTRE_FIXTURE.scale)
+    let file = ($tree | path join (map tile-path $CENTRE_FIXTURE.name | str substring 1..))
+    mkdir ($file | path dirname)
+    png write-rgba $file $CENTRE_FIXTURE.size $CENTRE_FIXTURE.size (0..<($CENTRE_FIXTURE.size * $CENTRE_FIXTURE.size) | each {|i| 0x[ff ff ff ff] } | bytes collect)
     $tree
 }
 
@@ -1567,6 +1681,86 @@ def rows-differ [p: binary, q: binary, rect: list<int>]: nothing -> list<int> {
         let to = ((($y * 1920) + $rect.2) * 3)
         if ($p | bytes at ($hp + $from)..<($hp + $to)) == ($q | bytes at ($hq + $from)..<($hq + $to)) { null } else { $y }
     } | compact
+}
+
+# The texel-centre fixture's samples: the four texels touching each node
+# of the wall's lumel map whose centres, with the pixels about them,
+# project inside the opening and clear of the crosshair, the map laid as
+# lumap_frame lays it, its origin a whole repeat at least a texel before
+# the wall's least u and its sector's top's v, a node a cell apart; each
+# texel with the node's parity, its light the cell's four nodes bilinear
+# at the texel's centre by the console's parity rule times 255, the
+# colour a white texel lit there takes, and the same at its corner, the
+# reading of the rule the centre replaced.
+def centre-samples [m: record, wall: record, eye: record, opening: list<int>]: nothing -> table<node: list<int>, parity: int, texel: list<int>, at: list<int>, expected: float, corner: float> {
+    let size = $CENTRE_FIXTURE.size
+    let s = $wall.surface
+    assert equal ($size * $s.u_scale / 2) ($size * 1.0) $"a lumel cell is one repeat: ($size * $s.u_scale / 2) texels in half a metre against ($size)"
+    let a = ($m.vertices | get $wall.a)
+    let b = ($m.vertices | get $wall.b)
+    let len = ((($b.x - $a.x) ** 2 + ($b.y - $a.y) ** 2) | math sqrt)
+    let e = [(($b.x - $a.x) / $len), (($b.y - $a.y) / $len)]
+    let sector = ($m.sectors | get $wall.sector)
+    let top = ([(map plane-z $sector.ceiling $a.x $a.y), (map plane-z $sector.ceiling $b.x $b.y)] | math max)
+    let bottom = ([(map plane-z $sector.floor $a.x $a.y), (map plane-z $sector.floor $b.x $b.y)] | math min)
+    let us = [($s.u_offset * $size), ((($s.u_scale * $len) + $s.u_offset) * $size)]
+    let vs = [(((($wall.anchor - $top) * $s.v_scale) + $s.v_offset) * $size), (((($wall.anchor - $bottom) * $s.v_scale) + $s.v_offset) * $size)]
+    let u0 = (((($us | math min | math floor | into int) - 1) // $size) * $size)
+    let v0 = (((($vs | math min | math floor | into int) - 1) // $size) * $size)
+    let cols = (((($us | math max | math ceil | into int) - $u0) // $size) + 2)
+    let rows = (((($vs | math max | math ceil | into int) - $v0) // $size) + 2)
+    assert ($cols >= 3 and $rows >= 3) $"the wall's map has a node inside it: ($cols) columns, ($rows) rows"
+    let light = {|c: int, r: int| $CENTRE_LIGHTS | get (($c + $r) mod 2) }
+    let lit = {|c: int, r: int, fx: float, fy: float|
+        let upper = (((do $light $c $r) * (1.0 - $fx)) + ((do $light ($c + 1) $r) * $fx))
+        let lower = (((do $light $c ($r + 1)) * (1.0 - $fx)) + ((do $light ($c + 1) ($r + 1)) * $fx))
+        ($upper * (1.0 - $fy)) + ($lower * $fy)
+    }
+    let f = $CENTRE_FOOTPRINT
+    let clear = ($FIXTURE_CROSSHAIR + (2 * $f))
+    1..<($cols - 1) | each {|c|
+        1..<($rows - 1) | each {|r|
+            [[-1, -1], [0, -1], [-1, 0], [0, 0]] | each {|d|
+                let tu = ($u0 + ($c * $size) + $d.0)
+                let tv = ($v0 + ($r * $size) + $d.1)
+                let along = (((($tu + 0.5) / $size) - $s.u_offset) / $s.u_scale)
+                let down = (((($tv + 0.5) / $size) - $s.v_offset) / $s.v_scale)
+                let at = (project $eye 0 [($a.x + ($e.0 * $along)), ($a.y + ($e.1 * $along)), ($wall.anchor - $down)])
+                let inside = ($at != null and ($at.0 - $f) >= $opening.0 and ($at.0 + $f) < $opening.2 and ($at.1 - $f) >= $opening.1 and ($at.1 + $f) < $opening.3)
+                if not $inside or (((($at.0 - 960) ** 2) + (($at.1 - 540) ** 2)) <= ($clear * $clear)) { null } else {
+                    let cc = (($tu - $u0) // $size)
+                    let cr = (($tv - $v0) // $size)
+                    let iu = (($tu - $u0) mod $size)
+                    let iv = (($tv - $v0) mod $size)
+                    {
+                        node: [$c, $r], parity: (($c + $r) mod 2), texel: [$tu, $tv], at: $at,
+                        expected: (255.0 * (do $lit $cc $cr (($iu + 0.5) / $size) (($iv + 0.5) / $size))),
+                        corner: (255.0 * (do $lit $cc $cr ($iu / $size) ($iv / $size))),
+                    }
+                }
+            }
+        } | flatten
+    } | flatten | compact
+}
+
+# The texel-centre samples read from a capture: each one's pixel at its
+# centre, the most any of its channels lies from the colour expected, and
+# whether the pixels CENTRE_FOOTPRINT about its centre each way are all
+# that one colour.
+def centre-read [bytes: binary, samples: table<node: list<int>, parity: int, texel: list<int>, at: list<int>, expected: float, corner: float>]: nothing -> table<node: list<int>, light: float, texel: list<int>, at: list<int>, expected: float, corner: float, pixel: binary, off: float, uniform: bool> {
+    let head = (ppm-head $bytes)
+    let f = $CENTRE_FOOTPRINT
+    let width = ((2 * $f) + 1)
+    $samples | each {|s|
+        let pixel = (pixel-at $bytes $head $s.at)
+        let off = (0..<3 | each {|c| (($pixel | bytes at $c..<($c + 1) | into int) - $s.expected) | math abs } | math max)
+        let run = (0..<$width | each {|i| $pixel } | bytes collect)
+        let uniform = ((-1 * $f)..$f | each {|dy|
+            let o = ($head + (((($s.at.1 + $dy) * 1920) + ($s.at.0 - $f)) * 3))
+            ($bytes | bytes at $o..<($o + ($width * 3))) == $run
+        } | all {|same| $same })
+        { node: $s.node, light: ($CENTRE_LIGHTS | get $s.parity), texel: $s.texel, at: $s.at, expected: $s.expected, corner: $s.corner, pixel: $pixel, off: $off, uniform: $uniform }
+    }
 }
 
 # The level of a run's recording between two seconds: the peak and the

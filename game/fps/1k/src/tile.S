@@ -857,6 +857,53 @@ lumels_bright:
 9:
     ret
 
+.ifdef DEBUG
+lumels_parity:
+    li t2, 64
+    slli t3, t2, CHANNEL_BITS
+    or t2, t2, t3
+    slli t3, t3, CHANNEL_BITS
+    or t2, t2, t3                   # the three lanes at a quarter
+    li t6, 256
+    slli t3, t6, CHANNEL_BITS
+    or t6, t6, t3
+    slli t3, t3, CHANNEL_BITS
+    or t6, t6, t3                   # and at one
+    la t0, lumaps
+    li t1, (LUMAP_COUNT * LUMAP_SIZE)
+    add t1, t1, t0
+1:
+    bgeu t0, t1, 9f
+    ld t3, LUMAP_BASE(t0)
+    beqz t3, 2f
+    ld t4, LUMAP_W(t0)
+    ld t5, LUMAP_H(t0)
+    li a0, 0                        # the row
+3:
+    bgeu a0, t5, 2f
+    li a1, 0                        # the column
+4:
+    bgeu a1, t4, 5f
+    add a2, a0, a1
+    andi a2, a2, 1
+    mv a3, t2                       # a node of even parity a quarter
+    beqz a2, 6f
+    mv a3, t6                       # an odd one one
+6:
+    sd a3, 0(t3)
+    addi t3, t3, 8
+    addi a1, a1, 1
+    j 4b
+5:
+    addi a0, a0, 1
+    j 3b
+2:
+    addi t0, t0, LUMAP_SIZE
+    j 1b
+9:
+    ret
+.endif
+
 .section .rodata
 .ifdef DEBUG
 msg_alpha:

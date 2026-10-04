@@ -21,4 +21,5 @@ call local alpha_search texels u64,whole s8 u64,target s9 u64 > threshold a0 u64
  whole :the texture's texels
  target :the texture's count at or above the pass
  count :the count at or above the threshold
-call local lumels_bright > lumels lumel_arena LUMEL_ARENA_BYTES u8 [832:858] :every lumel of every map set to the full brightness, one on each lane in a lumel's 256ths, for a debug build's console
+call local lumels_bright > lumels lumel_arena LUMEL_ARENA_BYTES u8 [832:860] :every lumel of every map set to the full brightness, one on each lane in a lumel's 256ths, for a debug build's console
+call local lumels_parity > lumels lumel_arena LUMEL_ARENA_BYTES u8,clobber a0-a3 [861:905] :every lumel of every map set by its node's parity, a quarter on each lane where its column and row sum even and one where odd, for a debug build's console alone

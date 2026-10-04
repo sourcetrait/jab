@@ -2,9 +2,9 @@
 
 The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
-with the lumels bright, the tiles held off, or the levels built capped, R the
-generator seeded, E the gauge's measurement closed, each reported back as
-REPORT_CONSOLE.
+with the lumels bright or set by parity, the tiles held off, or the levels built
+capped, R the generator seeded, E the gauge's measurement closed, each reported
+back as REPORT_CONSOLE.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start
@@ -31,8 +31,11 @@ the lit loop: the lit loop's picture from the same build, which the alpha
 fixture reads against the tiled one. Byte 6, on a debug build alone, caps the
 levels a surface builds, 0 for every level: at 1 a surface builds level 0 and
 stops, so a block asking a coarser level takes the chain at it, which the
-alpha fixture reads against the lit loop's picture too. The bytes exist for
-the test; play never sends the frame.
+alpha fixture reads against the lit loop's picture too. Byte 7, on a debug
+build alone, runs `lumels_parity` after the bright, every lumel a quarter or
+one by its node's parity, so the light across a cell is a gradient the
+texel-centre fixture computes for itself. The bytes exist for the test; play
+never sends the frame.
 
 ## .set CONSOLE_FRAME
 
@@ -51,8 +54,9 @@ The partial frame is moved to the front of the buffer.
 L: the tiles forgotten and rebuilt under no budget from the next frame, every
 lumel set full bright first when the frame's byte 4 is 1, so a capture reads
 the texture sampled as the lit one is; under a budget of nothing instead when
-byte 5 is 1, so every surface stays on the lit loop; and on a debug build the
-levels a surface builds held to byte 6 when it is not 0.
+byte 5 is 1, so every surface stays on the lit loop; and on a debug build
+every lumel set by its node's parity when byte 7 is 1, before the reset, and
+the levels a surface builds held to byte 6 when it is not 0.
 
 ## k_thousand_d
 

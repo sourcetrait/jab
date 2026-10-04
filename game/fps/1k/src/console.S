@@ -101,6 +101,12 @@ console_frame:
     beqz t1, 6f
     call lumels_bright
 6:
+.ifdef DEBUG
+    lbu t1, 7(s2)
+    beqz t1, 62f
+    call lumels_parity              # every lumel by its node's parity
+62:
+.endif
     call tiles_reset
     li t1, TILE_BUDGET_UNBOUND
     lbu t2, 5(s2)
