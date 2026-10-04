@@ -30,7 +30,7 @@ const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
 def main [map: string, poses: path, out: path, --kernel: path, --image: path, --set: string = "DEBUG"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let tree = ($game | path join ".target" "asset" $map)
+    let tree = (jab program-shard $game "asset" | path join $map)
     let shot = ($game | path join "nu" "shot.nu")
     let disk = ($out | path join $"($map).romfs")
     mkdir $out

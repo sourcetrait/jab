@@ -28,17 +28,18 @@ default: build
 render:
     let tool = "{{here}}/rust/target/release/svg2png"; if not ($tool | path exists) { ^cargo build --release --manifest-path "{{here}}/rust/Cargo.toml" }; for svg in (glob "{{here}}/content/**/*.svg") { ^$tool $svg ($svg | str replace --regex '\.svg$' '.png') }; for list in (glob "{{here}}/content/ambient/*.nuon") { ^nu "{{here}}/nu/ambient.nu" render $list ($list | str replace --regex '\.nuon$' '.mid') }; for recipe in (glob "{{here}}/content/sound/*.nuon") { ^nu "{{here}}/nu/sound.nu" render $recipe ($recipe | str replace --regex '\.nuon$' '.pcm') }
 
-# Every map source under content/map compiled into .target/asset/<name>
-# with its materials, ambients, counts, and plan views: the trees the
-# program's recipes build on, the factory the manifest's assets
+# Every map source under content/map compiled into the program's asset
+# shard of the target, one tree a map with its materials, ambients,
+# counts, and plan views: the trees the program's recipes build on, the
+# factory the manifest's target_assets
 compile:
-    for src in (glob "{{here}}/content/map/*.nuon") { ^nu "{{here}}/nu/map.nu" compile $src "{{here}}/.target/asset" }
+    use "{{root}}/sdk/nu/jab.nu"; let out = (jab program-shard "{{here}}" asset); for src in (glob "{{here}}/content/map/*.nuon") { ^nu "{{here}}/nu/map.nu" compile $src $out }
 
 # The sample trees the test puts on the machine itself, cage2 and
-# doortest, laid out by the conversion tooling kept outside the
-# repository; a missing one stops with its path
+# doortest, laid out in the asset shard by the conversion tooling kept
+# outside the repository; a missing one stops with its path
 sample-trees:
-    for m in [cage2 doortest] { if not ($"{{here}}/.target/asset/($m)/map.nuon" | path exists) { error make { msg: $"no test tree at {{here}}/.target/asset/($m); lay it out with the conversion tooling kept outside the repository" } } }
+    use "{{root}}/sdk/nu/jab.nu"; let trees = (jab program-shard "{{here}}" asset); for m in [cage2 doortest] { if not ($trees | path join $m "map.nuon" | path exists) { error make { msg: $"no test tree at ($trees | path join $m); lay it out with the conversion tooling kept outside the repository" } } }
 
 # Assemble and link src/main.S to .target/<tree>/<name>/<name>.jab when
 # stale; release, or `just build --set debug`
@@ -59,13 +60,13 @@ run *args: compile
 # as PNGs under out: `just pose cage2 poses.nuon out`; `just pose factory
 # poses.nuon out debug,owner` captures the surface each pixel belongs to
 pose map poses out set='debug': compile
-    ^just build --set {{set}}; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel "{{root}}/.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --set {{set}}
+    ^just build --set {{set}}; use "{{root}}/sdk/nu/jab.nu"; ^nu "{{here}}/test/pose.nu" "{{map}}" "{{poses}}" "{{out}}" --kernel (jab program-kernel "{{here}}" debug) --image (jab program-out "{{here}}" debug | path join "fps.jab") --set {{set}}
 
 # Build with DEBUG set, then play the factory on the pad from seeded
 # random tables for that many seconds a seed, a fault resolved to its
 # routine: `just smoke "[1 2 3]" 60`
 smoke seeds='[1]' seconds='60': compile
-    ^just build --set debug; ^nu "{{here}}/test/smoke.nu" --kernel "{{root}}/.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --out "{{here}}/.target/debug/fps/smoke" --seeds "{{seeds}}" --seconds {{seconds}}
+    ^just build --set debug; use "{{root}}/sdk/nu/jab.nu"; let out = (jab program-out "{{here}}" debug); ^nu "{{here}}/test/smoke.nu" --kernel (jab program-kernel "{{here}}" debug) --image ($out | path join "fps.jab") --out ($out | path join "smoke") --seeds "{{seeds}}" --seconds {{seconds}}
 
 # Build, then play the gauge's route (test/route_factory.nuon) on that
 # build headless, every frame of each run read from the program's clock
@@ -104,7 +105,7 @@ gauge-compare *files:
 # that socket in the foreground; `just play mcp cage2 300` another map
 # and bound
 play target='mcp' map='factory' seconds='600': compile
-    ^just build --set debug; ^nu "{{here}}/test/play.nu" --kernel "{{root}}/.target/debug/kernel/jab.elf" --image "{{here}}/.target/debug/fps/fps.jab" --out "{{here}}/.target/debug/fps/play" --map "{{map}}" --seconds {{seconds}} --target "{{target}}"
+    ^just build --set debug; use "{{root}}/sdk/nu/jab.nu"; let out = (jab program-out "{{here}}" debug); ^nu "{{here}}/test/play.nu" --kernel (jab program-kernel "{{here}}" debug) --image ($out | path join "fps.jab") --out ($out | path join "play") --map "{{map}}" --seconds {{seconds}} --target "{{target}}"
 
 # The fill-rate probe under test/fillrate, a program of its own built
 # against the workspace the same way: what the hart draws a second, mode
@@ -124,7 +125,6 @@ fillrate-run *args:
 shot ppm png step="4":
     ^nu "{{here}}/nu/shot.nu" "{{ppm}}" "{{png}}" --step {{step}}
 
-# Everything built here: both programs' trees, the asset trees, the
-# gauge's runs, and the test trees laid out from the sample content
+# Both programs' builds and their tests' and runs' output, in both trees
 clean:
-    rm -rf "{{here}}/.target" "{{fillrate}}/.target"
+    ^nu "{{root}}/sdk/nu/jab.nu" clean "{{here}}"; ^nu "{{root}}/sdk/nu/jab.nu" clean "{{fillrate}}"

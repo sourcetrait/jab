@@ -55,7 +55,7 @@ const loads = [
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "fixtures")
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir $stage
     let made = (^python3 ($env.FILE_PWD | path join "encode.py") $stage | from json)
     let img = ($out | path join "png.romfs")

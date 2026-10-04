@@ -30,7 +30,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # A tree, tarred, inside a romfs image; and what the kernel should say
 # about it, worked out here from the archive itself.
 def build-fixture [stage: path, img: path]: nothing -> record {
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir ($stage | path join "tree" "foo" "img")
     let note = "hello from a tar\n"
     $note | save -f ($stage | path join "tree" "foo" "note.txt")

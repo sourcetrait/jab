@@ -13,7 +13,7 @@ use ../../../../sdk/nu/jab.nu
 def main [--kernel: path, --image: path, --out: path, --map: string = "factory", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
     let workspace = ($game | path join ".." ".." ".." | path expand)
-    let tree = ($game | path join ".target" "asset" $map)
+    let tree = (jab program-shard $game "asset" | path join $map)
     if not ($tree | path join "map.nuon" | path exists) { error make { msg: $"no tree for ($map) at ($tree)" } }
     mkdir $out
     let disk = ($out | path join $"($map).romfs")

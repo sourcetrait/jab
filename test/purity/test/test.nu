@@ -52,7 +52,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let kernel_dir = ($ws | path join (open ($ws | path join "workspace.jab.toml") | get kernel))
     let tool = ($ws | path join "sdk" "nu" "jab.nu")
     ^nu $tool build --kernel $kernel_dir
-    let release = ($ws | path join ".target" "release" "kernel" "jab.elf")
+    let release = (jab target-root $ws | path join "release" "kernel" "jab.elf")
     assert ($release | path exists) $"the release kernel was built at ($release)"
 
     # the scan finds every debug line in the debug kernel

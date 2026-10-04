@@ -42,7 +42,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
 # Six gzip files in a romfs image, and what each should inflate to.
 def build-fixture [repo: path, stage: path, img: path]: nothing -> table<name: string, bytes: int, source: string> {
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir ($stage | path join "src")
     mkdir ($stage | path join "ship")
     let src = ($stage | path join "src")

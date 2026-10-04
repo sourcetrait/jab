@@ -62,7 +62,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # The fixture: repository files at their own paths, one entry of every
 # mode, and the two names. Returns what the test needs to judge by.
 def build-fixture [repo: path, stage: path, img: path]: nothing -> record {
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir $stage
 
     # the repository's own files, at the paths they have there

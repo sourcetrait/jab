@@ -12,8 +12,11 @@
 # program, else the workspace's, else the tools on PATH, under the
 # official triple or a distribution's name), QEMU (extern/qemu beside
 # the program, else the workspace's, else qemu-system-riscv64 on PATH),
-# the target (.target in the workspace, else beside the kernel or
-# program), and the manifests.
+# the target (target-root: one tree for the whole workspace, .target at
+# its root or $XDG_CACHE_HOME/jab/target/<checkout> where that is set,
+# every build and every tool's output sharded within it), and the
+# manifests. Nothing a build, a test, or a bench clears away is deleted:
+# it is retired under ~/tmp/jab/retired (retire).
 #
 # A build is described by its symbols: `--set debug,stats` names them,
 # comma separated, in any case, and each reaches the assembler as
@@ -97,11 +100,14 @@ def exe-name [name: string]: nothing -> string {
 }
 
 # Where a launch looks for extern/qemu before the workspace, as a run
-# does: the directory of the program a built image came from. A member's
-# image lies under the workspace's .target at the member's path, any
-# other program's under the program's own .target, and an image under no
-# .target is taken to sit beside its program.
+# does: the directory of the program a built image came from, which the
+# build writes beside the image as `home`. An image built before that
+# is read from its path: a member's under the workspace's .target at the
+# member's path, any other program's under the program's own .target,
+# and an image under no .target is taken to sit beside its program.
 def image-home [image: path]: nothing -> string {
+    let marker = ($image | path expand | path dirname | path join "home")
+    if ($marker | path exists) { return (open --raw $marker | decode | str trim) }
     let parts = ($image | path expand | path split)
     let marks = ($parts | enumerate | where item == ".target" | get index)
     if ($marks | is-empty) { return ($image | path expand | path dirname) }
@@ -213,7 +219,8 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # `--host-pad` attaches the host's own gamepad as a run does, on macOS
 # through the bridge `bridge` names, to be started beside QEMU. A
 # recording and the host's audio together are refused, as is the host's
-# pad beside a scripted one.
+# pad beside a scripted one. A previous run's files in `out` are retired,
+# its pipes kept.
 export def plan [
     --kernel: path
     --image: path
@@ -239,11 +246,10 @@ export def plan [
     let screen = ($out | path join "screen.ppm")
     let pidfile = ($out | path join "qemu.pid")
     let monitor = ($out | path join "monitor")
-    for f in [$log $qemu_log $screen $pidfile ($monitor + ".in") ($monitor + ".out")] {
-        if ($f | path exists) { rm $f }
-    }
-    ^mkfifo ($monitor + ".in") ($monitor + ".out")
-    let ws = (workspace-dir ($kernel | path expand) | default (workspace-dir $out))
+    for f in [$log $qemu_log $screen $pidfile] { retire $f }
+    fifo-at ($monitor + ".in")
+    fifo-at ($monitor + ".out")
+    let ws = (launch-workspace $kernel $image $out)
     let qemu = (qemu-binary (image-home $image) $ws)
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
@@ -251,7 +257,7 @@ export def plan [
     let ports = (ports (symbols $set) $out $api ($pad.port or $hosted.port))
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
-    if $wav != "" and ($wav | path exists) { rm $wav }
+    if $wav != "" { retire $wav }
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
     let shown = (if $window { display (image-manifest $image) } else { "none" })
@@ -284,6 +290,19 @@ export def plan [
         audio: $backend,
         bridge: $hosted.bridge,
     }
+}
+
+# The workspace a launch belongs to, whose generic disk rides along and
+# whose shims play a pad: the one the image's program builds against
+# (workspace-of, through the manifest at the image's home), since the
+# target an image and a kernel sit in can lie outside every workspace;
+# else the one above the kernel's ELF, else the one above `out`.
+def launch-workspace [kernel: path, image: path, out: path]: nothing -> oneof<string, nothing> {
+    let home = (image-home $image)
+    let manifest = ($home | path join "program.jab.toml")
+    let found = (if ($manifest | path exists) { try { workspace-of $home (open $manifest) } catch { null } } else { null })
+    if $found != null { return $found }
+    workspace-dir ($kernel | path expand) | default (workspace-dir $out)
 }
 
 # The manifest of the program an image was built from (image-home), for
@@ -594,15 +613,15 @@ def machine-disks [own: string, own_serial: string, own_readonly: bool, ws: oneo
 # `generic/manifest.nuon` fetches, each entry an archive by URL and
 # sha256 with the members to take and where each lands, so the large
 # third-party assets, the soundfonts today, are never committed and
-# are verified on every build. Staged under .target/generic and built
-# into .target/mix.romfs whenever the tree or the manifest changes,
-# the archives kept under .target/fetch. The path, or "" with no
-# workspace or no generic/ in it.
+# are verified on every build. Staged under the target's generic/ and
+# built into its mix.romfs whenever the tree or the manifest changes,
+# the archives kept under its fetch/, a stale stage retired. The path,
+# or "" with no workspace or no generic/ in it.
 def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     if $ws == null { return "" }
     let generic = ($ws | path join "generic")
     if not ($generic | path exists) { return "" }
-    let target = ($ws | path join ".target")
+    let target = (target-root $ws)
     let image = ($target | path join "mix.romfs")
     let stamp = ($target | path join "mix.flags")
     let manifest_path = ($generic | path join "manifest.nuon")
@@ -611,7 +630,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     let flags = (build-id ($manifest | to nuon) $inputs)
     if ($image | path exists) and (not (stale $image $inputs $flags $stamp)) { return $image }
     let stage = ($target | path join "generic")
-    if ($stage | path exists) { rm -r $stage }
+    retire $stage
     mkdir $stage
     for f in (files-under [$generic]) {
         let relative = ($f | path relative-to $generic)
@@ -623,7 +642,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     for entry in $manifest {
         let archive = (fetched $target $entry.url $entry.sha256)
         let unpack = ($target | path join "fetch" "unpack")
-        if ($unpack | path exists) { rm -r $unpack }
+        retire $unpack
         mkdir $unpack
         ^tar -xzf $archive -C $unpack ...($entry.members | get from)
         for m in $entry.members {
@@ -631,7 +650,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
             mkdir ($dest | path dirname)
             mv ($unpack | path join $m.from) $dest
         }
-        rm -r $unpack
+        retire $unpack
     }
     assets-names $stage
     ^genromfs -d $stage -f $image -V (volume-name "mix")
@@ -667,12 +686,12 @@ def fetched [target: path, url: string, sha256: string]: nothing -> string {
 # and events into (doc/padport.md). Nothing at all with none, so the
 # machine carries no serial device. The console keeps the UART in
 # every build, since a fault line has to reach the host when a port has
-# not come up.
+# not come up. A previous run's debug.log is retired.
 def ports [names: list<string>, out: path, api: bool, pad_port: bool]: nothing -> record<args: list<string>, debug_log: string, api_pipe: string, pad_pipe: string> {
     mkdir $out
     let debug = (if "DEBUG" in $names {
         let log = ($out | path join "debug.log")
-        if ($log | path exists) { rm $log }
+        retire $log
         { args: ["-chardev" $"file,id=jabdebug,path=($log)" "-device" "virtserialport,chardev=jabdebug,nr=1,name=jab.debug"], log: $log }
     } else { { args: [], log: "" } })
     let port = (if $api {
@@ -688,18 +707,23 @@ def ports [names: list<string>, out: path, api: bool, pad_port: bool]: nothing -
 }
 
 # What QEMU's pipe chardev opens at `pipe`: `<pipe>.in`, a named pipe
-# the host writes into, made when it is not one already, and
-# `<pipe>.out`, a plain file made empty, where the guest's bytes land.
+# the host writes into (fifo-at), and `<pipe>.out`, a plain file made
+# empty, where the guest's bytes land, a previous run's retired first.
 def pipe-pair [pipe: path]: nothing -> string {
-    let inward = ($pipe + ".in")
-    if (($inward | path type) != "pipe") {
-        if ($inward | path exists) { rm $inward }
-        ^mkfifo $inward
-    }
+    fifo-at ($pipe + ".in")
     let outward = ($pipe + ".out")
-    if ($outward | path exists) { rm $outward }
-    "" | save -f $outward
+    retire $outward
+    "" | save $outward
     $pipe
+}
+
+# A named pipe at `path`: one already there is kept, since a pipe holds
+# nothing once every end has closed, and anything else there is retired
+# before a fresh pipe is made.
+def fifo-at [path: path]: nothing -> nothing {
+    if ($path | path type) == "pipe" { return }
+    retire $path
+    ^mkfifo $path
 }
 
 # The gamepad a machine carries: nothing at all unless asked. Asked, on
@@ -719,8 +743,7 @@ def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>]
     if $ws == null { error make {msg: "a gamepad needs a workspace, above the kernel or the output directory, which holds shim/crates/evdev"} }
     let shim = (shim-build $ws "jabshim_evdev")
     let fifo = ($out | path join "pad")
-    if (($fifo | path type) != null) { rm $fifo }
-    ^mkfifo $fifo
+    fifo-at $fifo
     {
         args: ["-device" $"virtio-input-host-device,evdev=($fifo)"],
         env: { LD_PRELOAD: $shim, EVDEV_SHIM_FIFO: $fifo },
@@ -819,15 +842,20 @@ def profile [names: list<string>]: nothing -> string { if "DEBUG" in $names { "d
 def defsyms [names: list<string>]: nothing -> list<string> { $names | each {|n| ["--defsym" $"($n)=1"] } | flatten }
 
 # A program's assets as a romfs image, built when the directory it names
-# has moved on: `assets` in its manifest, relative to the manifest, with
-# the program's own name as the volume's. The image is what `just run`
-# puts on the machine, and the program reads it with jab.sys.romfs.*.
+# has moved on: `assets` in its manifest, relative to the manifest, or
+# `target_assets`, a tree the program's content compiles to under its
+# asset shard of the target (program-shard), with the program's own name
+# as the volume's. The image is what `just run` puts on the machine, and
+# the program reads it with jab.sys.romfs.*.
 def assets-image [c: record]: nothing -> string {
     let declared = ($c.manifest | get -o assets | default "")
-    if $declared == "" { return "" }
-    let dir = ($c.here | path join $declared | path expand)
+    let compiled = ($c.manifest | get -o target_assets | default "")
+    if $declared == "" and $compiled == "" { return "" }
+    if $declared != "" and $compiled != "" { error make {msg: $"($c.manifest.name): assets and target_assets together; a program's disk is one or the other"} }
+    let dir = (if $compiled != "" { shard-dir $c "asset" | path join $compiled } else { $c.here | path join $declared | path expand })
     if not ($dir | path exists) {
-        error make {msg: $"($c.manifest.name): assets = '($declared)' names no directory at ($dir)"}
+        let named = (if $compiled != "" { $"target_assets = '($compiled)'" } else { $"assets = '($declared)'" })
+        error make {msg: $"($c.manifest.name): ($named) names no directory at ($dir)"}
     }
     assets-names $dir
     let image = ($c.out | path join $"($c.manifest.name).romfs")
@@ -963,13 +991,13 @@ def clock-seconds [text: string]: nothing -> float {
     $text | split row ":" | each {|p| $p | into float } | reduce --fold 0.0 {|it, acc| $acc * 60.0 + $it }
 }
 
-# Where `watch` records: watch.nuonl under the workspace's .target.
+# Where `watch` records: watch.nuonl in the workspace's target.
 def watch-file [ws: path]: nothing -> string {
-    $ws | path expand | path join ".target" "watch.nuonl"
+    target-root $ws | path join "watch.nuonl"
 }
 
 # Record the running Jab QEMU per thread, once a second, to the
-# workspace's .target/watch.nuonl, whatever shell this is run from: a
+# workspace's target's watch.nuonl, whatever shell this is run from: a
 # first line describing the run (host, the running QEMU's version, the
 # window, the kernel and the symbols it was built with, read from its
 # tree's flags stamp), then a line per sample with every thread's
@@ -1060,6 +1088,103 @@ def watch-report [ws: path, skip: float]: nothing -> record {
     }
 }
 
+# The one build tree a workspace writes into, every build and every
+# tool's output sharded within it: `.target` at the workspace's root, or
+# where XDG_CACHE_HOME is set `$XDG_CACHE_HOME/jab/target/<checkout>`,
+# the checkout its directory's name and the first eight hex digits of the
+# SHA-256 of its path, so two checkouts on one machine never build over
+# each other. `anchor` is the workspace, or a program with none above it.
+export def target-root [anchor: path]: nothing -> string {
+    let anchor = ($anchor | path expand)
+    let cache = ($env.XDG_CACHE_HOME? | default "")
+    if $cache == "" { return ($anchor | path join ".target") }
+    let checkout = $"($anchor | path basename)-($anchor | hash sha256 | str substring 0..<8)"
+    $cache | path expand | path join "jab" "target" $checkout
+}
+
+# Where retire moves things: ~/tmp/jab/retired, under the user's own
+# tmp, never emptied by anything here. The home is nushell's, else HOME,
+# else USERPROFILE on Windows, since an embedded nushell may know none of
+# its own; with none of them, or one that is not absolute, it refuses
+# rather than retire into wherever it was run from. Untyped because it
+# can end in an error.
+def retired-home [] {
+    let candidates = [($nu.home-dir | default "" | into string) ($env.HOME? | default "") ($env.USERPROFILE? | default "")]
+    let home = ($candidates | where {|h| $h != "" } | get -o 0 | default "")
+    if $home == "" or ($home | path type) != "dir" or ($home | path expand) != $home {
+        error make {msg: $"no absolute home to retire into: nushell's, HOME, and USERPROFILE give ($candidates | to nuon)"}
+    }
+    $home | path join "tmp" "jab" "retired"
+}
+
+# Moves `path` out of the way whole in place of deleting it, under
+# ~/tmp/jab/retired/<stamp>/ at its own absolute path, so nothing a
+# build, a test, or a bench clears away is lost; a second retirement of
+# one path within a second takes a numbered name. Nothing when nothing
+# is there; a link is moved as a link.
+export def retire [path: path]: nothing -> nothing {
+    let from = ($path | path expand --no-symlink)
+    if ($from | path type) == null { return }
+    let stamp = (date now | format date "%Y%m%d-%H%M%S")
+    let at = (retired-home | path join $stamp ...($from | path split | skip 1))
+    mut dest = $at
+    mut n = 1
+    while ($dest | path type) != null {
+        $dest = $"($at).($n)"
+        $n += 1
+    }
+    mkdir ($dest | path dirname)
+    mv $from $dest
+}
+
+# Where a kernel's or a program's output lives in the target `root`:
+# under its path relative to the workspace when it lies inside it,
+# member or not; beside its own source when it lies inside the target
+# itself, as a measured candidate's copy does, `inside`; under
+# `external/<name>-<the first eight hex digits of its path's SHA-256>`
+# when it lies outside both; under its name with no workspace.
+def shard-of [here: path, workspace: oneof<string, nothing>, root: path, name: string]: nothing -> record<relative: string, inside: bool> {
+    if (under $here $root) { return { relative: "", inside: true } }
+    if $workspace == null { return { relative: $name, inside: false } }
+    if (under $here $workspace) { return { relative: ($here | path relative-to $workspace | str replace --all "\\" "/"), inside: false } }
+    { relative: (["external" $"($name)-($here | hash sha256 | str substring 0..<8)"] | path join), inside: false }
+}
+
+# A program's directory in the target for one purpose, whatever the
+# tree: `<target>/<purpose>/<its shard>`, or `<its own>/<purpose>` for
+# a program inside the target. The purposes: asset, the trees its
+# content compiles to; bench, the benches' runs; gauge, measurements
+# kept by name; candidates, measured copies of it; scratch.
+export def program-shard [dir: path, purpose: string]: nothing -> string {
+    let c = (context ($dir | path expand) "program" [])
+    shard-dir $c $purpose
+}
+
+def shard-dir [c: record, purpose: string]: nothing -> string {
+    if $c.inside { $c.here | path join $purpose } else { $c.root | path join $purpose $c.shard }
+}
+
+# Where a program's build of `tree`, release or debug, lands, its tests'
+# and runs' output beside it.
+export def program-out [dir: path, tree: string]: nothing -> string {
+    (context ($dir | path expand) "program" (tree-symbols $tree)).out
+}
+
+# The kernel a program runs on in `tree` (kernel-elf).
+export def program-kernel [dir: path, tree: string]: nothing -> string {
+    kernel-elf (context ($dir | path expand) "program" (tree-symbols $tree))
+}
+
+# The symbols that put a build in `tree`: DEBUG for debug, none for
+# release.
+def tree-symbols [tree: string]: nothing -> list<string> {
+    match $tree {
+        "debug" => ["DEBUG"],
+        "release" => [],
+        _ => { error make {msg: $"a tree is release or debug, not ($tree)"} },
+    }
+}
+
 # The nearest parent of `dir` holding workspace.jab.toml, or null.
 def workspace-dir [dir: path]: nothing -> oneof<string, nothing> {
     mut d = ($dir | path expand)
@@ -1105,15 +1230,17 @@ def tool-prefix [toolchain: oneof<string, nothing>] {
 }
 
 # Whether the assembler takes the RVA23 profile `march` names, tried on an
-# empty source in `dir` before a build assembles anything; one that does
-# not, binutils before 2.45, is refused with its version, since no other
-# ISA will do. Untyped because it can end in an error.
+# empty source under `dir`'s march/ before a build assembles anything,
+# the probe left there for the next; one that does not, binutils before
+# 2.45, is refused with its version, since no other ISA will do. Untyped
+# because it can end in an error.
 def march-check [asm: string, march: string, dir: path] {
-    let source = ($dir | path join "march.S")
-    let object = ($dir | path join "march.o")
+    let probe = ($dir | path join "march")
+    mkdir $probe
+    let source = ($probe | path join "march.S")
+    let object = ($probe | path join "march.o")
     "" | save -f $source
     let tried = (^$asm $march $source -o $object | complete)
-    rm -f $source $object
     if $tried.exit_code != 0 {
         let version = (^$asm --version | complete | get stdout | lines | get -o 0 | default "an assembler")
         let found = (which $asm | get -o 0.path | default $asm)
@@ -1190,10 +1317,9 @@ def member-of [dir: path, ws: path]: nothing -> bool {
 
 # The kernel's or a program's context for a build with `names` set:
 # manifest, workspace (workspace-of) and whether the directory is a
-# member of it, toolchain, symbols, the target tree (.target's debug or
-# release, the workspace's for a member and the program's own
-# otherwise), and the output directory (the workspace-relative path
-# under the tree, or the name).
+# member of it, toolchain, symbols, the target (target-root, the
+# workspace's or a lone program's own), the tree in it (debug or
+# release), and the output directory, the tree's shard (shard-of).
 def context [dir: path, kind: string, names: list<string>]: nothing -> record {
     let here = ($dir | path expand)
     let manifest_path = ($here | path join $"($kind).jab.toml")
@@ -1201,8 +1327,9 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
     let workspace = (workspace-of $here $manifest)
     let member = ($workspace != null and (member-of $here $workspace))
     let tree = (profile $names)
-    let target = (if $member { $workspace | path join ".target" $tree } else { $here | path join ".target" $tree })
-    let relative = (if $member { $here | path relative-to $workspace } else { $manifest.name })
+    let root = (target-root (if $workspace == null { $here } else { $workspace }))
+    let place = (shard-of $here $workspace $root $manifest.name)
+    let target = (if $place.inside { $here | path join $tree } else { $root | path join $tree })
     let tc = (toolchain $here $workspace)
     {
         here: $here,
@@ -1214,18 +1341,21 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
         prefix: (tool-prefix $tc),
         symbols: $names,
         profile: $tree,
+        root: $root,
+        shard: $place.relative,
+        inside: $place.inside,
         target: $target,
-        out: ($target | path join $relative),
+        out: (if $place.inside { $target } else { $target | path join $place.relative }),
     }
 }
 
 # The kernel ELF a program runs on: the workspace's, in the same tree
-# of that workspace's own .target, or JAB_KERNEL. Left untyped because
-# it ends in an error, which the output check rejects.
+# of that workspace's target, or JAB_KERNEL. Left untyped because it
+# ends in an error, which the output check rejects.
 def kernel-elf [c: record] {
     if $c.workspace != null {
         let ws = (open ($c.workspace | path join "workspace.jab.toml"))
-        return ($c.workspace | path join ".target" $c.profile $ws.kernel "jab.elf")
+        return (target-root $c.workspace | path join $c.profile $ws.kernel "jab.elf")
     }
     let from_env = ($env.JAB_KERNEL? | default "")
     if $from_env != "" { return $from_env }
@@ -1277,12 +1407,14 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
         ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
         $obj
     })
-    for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { rm $stray }
+    for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray }
     ^$ld -T $m.link -nostdlib ...$objects -o $elf
     ^$objdump -d $elf | save -f ($c.out | path join "jab.disas")
     $id | save -f $stamp
 }
 
+# Builds a program's image when stale, and writes beside it `home`, the
+# program's directory, which image-home reads back from the image.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
@@ -1292,6 +1424,9 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let flags = (($include_flags ++ $set_flags ++ [$march_program $c.prefix]) | str join " ")
     let image = ($c.out | path join $"($m.name).jab")
     let stamp = ($c.out | path join "flags")
+    mkdir $c.out
+    let home = ($c.out | path join "home")
+    if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
     cd $c.here
     let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link])
     let id = (build-id $flags $inputs)
@@ -1541,12 +1676,12 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
 }
 
 # A shim, one package of the workspace's shim/ workspace, built with
-# cargo into .target/shim on first use and whenever it changes: the
-# path of its shared library, to preload into QEMU, or with --bin of
-# its binary.
+# cargo into the target's shim/ on first use and whenever it changes:
+# the path of its shared library, to preload into QEMU, or with --bin
+# of its binary.
 def shim-build [ws: path, name: string, --bin]: nothing -> string {
     let manifest = ($ws | path join "shim" "Cargo.toml")
-    let target = ($ws | path join ".target" "shim")
+    let target = (target-root $ws | path join "shim")
     let built = (^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete)
     if $built.exit_code != 0 { error make {msg: $"building the shim package ($name) failed:\n($built.stderr)"} }
     if $bin { $target | path join "release" $name } else { $target | path join "release" $"lib($name).so" }
@@ -1576,7 +1711,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
     let out = ($line.context.out | path join "probe")
     mkdir $out
     let log = ($out | path join "sdl.log")
-    if ($log | path exists) { rm $log }
+    retire $log
     let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
     let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log }
@@ -1780,7 +1915,7 @@ def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: s
     let names = (symbols $set)
     let c = (context ($dir | path expand) "program" $names)
     let ready = (prepared ($dir | path expand) $names)
-    let out = (if $out == "" { $c.target | path join "machine" } else { $out | path expand })
+    let out = (if $out == "" { $c.out | path join "machine" } else { $out | path expand })
     plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound | to json
 }
 

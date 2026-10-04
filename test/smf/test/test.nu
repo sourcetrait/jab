@@ -94,7 +94,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # The piece, written to piece.mid under `stage` and made into the romfs
 # image at `img`: a tempo track and a note track on channel 0.
 def write-piece [stage: path, img: path]: nothing -> nothing {
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir $stage
     let half = ($DIVISION // 2)
     # the tempo track: the tempo, a tempo change at the fourth note's

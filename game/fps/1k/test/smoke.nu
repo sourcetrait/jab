@@ -36,7 +36,7 @@ def main [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", -
     let seeds = (try { $seeds | from nuon } catch { null })
     if ($seeds | describe) != "list<int>" { error make { msg: $"--seeds takes a NUON list of whole numbers, \"[1 2 3]\": ($seeds | to nuon)" } }
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let tree = ($game | path join ".target" "asset" "factory")
+    let tree = (jab program-shard $game "asset" | path join "factory")
     let elf = ($image | path dirname | path join "fps.elf")
     mkdir $out
     let disk = ($out | path join "factory.romfs")

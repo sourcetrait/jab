@@ -409,7 +409,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     gauge-rules ($out | path join "gauge_rules")
     print "fps: the gauge's rules hold on synthetic captures"
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let trees = ($game | path join ".target" "asset")
+    let trees = (jab program-shard $game "asset")
     mut runs = []
     for map in [doortest cage2] {
         let tree = ($trees | path join $map)
@@ -1207,7 +1207,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 # A copy of a map source with the entities of the given classes dropped,
 # compiled under out with the game's content; the tree's path.
 def variant-tree [source: record, name: string, dropped: list<string>, out: path, game: path]: nothing -> string {
-    if ($out | path exists) { rm -r $out }
+    jab retire $out
     mkdir $out
     let copy = ($source | update name $name | update entities ($source.entities | where {|e| $e.class not-in $dropped }))
     let src = ($out | path join $"($name).nuon")
@@ -1277,7 +1277,7 @@ def release-strings [image: path]: nothing -> nothing {
     let tool = ($here | path join ".." ".." ".." "sdk" "nu" "jab.nu" | path expand)
     let built = (^nu $tool build $here | complete)
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
-    let release = ($here | path join ".target" "release" "fps" "fps.jab")
+    let release = (jab program-out $here "release" | path join "fps.jab")
     assert ($release | path exists) $"the release image at ($release)"
     let debug_found = (jab strings $image "fps: ")
     for text in $DEBUG_TEXT {
@@ -1342,7 +1342,7 @@ def romfs [tree: path, image: path]: nothing -> string {
 # it; the map read, changed, and written back through the reader and
 # writer, and each texture written from its case; the copy's path.
 def sprite-tree [tree: path, out: path]: nothing -> string {
-    if ($out | path exists) { rm -r $out }
+    jab retire $out
     cp -r $tree $out
     let map_path = ($out | path join "map" "doortest.jabfps.map")
     let m = (map read $map_path)
@@ -1895,7 +1895,7 @@ def plan-views [tree: path, source: record, read: record]: nothing -> nothing {
 # A tree holding a map of the given bytes under the given name; its
 # path.
 def broken [tree: path, name: string, bytes: binary]: nothing -> string {
-    if ($tree | path exists) { rm -r $tree }
+    jab retire $tree
     mkdir ($tree | path join "map")
     $name | save --raw -f ($tree | path join "map" "name")
     $bytes | save --raw -f ($tree | path join "map" $"($name).jabfps.map")
@@ -2288,7 +2288,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 export def cadence-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
     let dir = ($out | path join "cadence")
     mkdir $dir
-    let proof_disk = (romfs ($game | path join ".target" "asset" "proof") ($dir | path join "proof.romfs"))
+    let proof_disk = (romfs (jab program-shard $game "asset" | path join "proof") ($dir | path join "proof.romfs"))
     let still_tree = (variant-tree (open ($game | path join "content" "map" "factory.nuon")) "factory_still" [android] ($dir | path join "still") $game)
     let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
     let still_read = (map read ($still_tree | path join "map" "factory_still.jabfps.map"))

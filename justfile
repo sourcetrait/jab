@@ -55,5 +55,7 @@ probe kind category name *args:
 watch *args:
     ^nu "{{jab}}" watch "{{here}}" {{args}}
 
+# Remove the workspace's target, everything every build, test, and run
+# here wrote: .target, or its shard of $XDG_CACHE_HOME/jab/target
 clean:
-    rm -rf "{{here}}/.target"
+    use "{{jab}}"; let target = (jab target-root "{{here}}"); if ($target | path type) == "dir" { rm -r $target }

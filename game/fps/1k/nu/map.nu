@@ -8,6 +8,7 @@
 # is the compiler: `nu map.nu compile <source> <out> [--content <dir>]`
 # writes the tree the engine reads under <out>/<name>/ with a plan view
 # an SVG a storey. src/map.inc spells the same layout.
+use ../../../../sdk/nu/jab.nu
 
 const magic = 0x0042414a            # JAB and a zero, little-endian
 const header_size = 8
@@ -566,8 +567,8 @@ def ranges-overlap [s: record, t: record, x: float, y: float]: nothing -> bool {
 def lay-out [src: record, m: record, content: string, out: string]: nothing -> string {
     let dest = ($out | path join $src.name)
     if ($dest | path exists) {
-        if not ((($dest | path join "map" "name") | path exists) or (ls -a $dest | is-empty)) { error make { msg: $"($dest) is not a tree the compiler wrote; not removing it" } }
-        rm -r $dest
+        if not ((($dest | path join "map" "name") | path exists) or (ls -a $dest | is-empty)) { error make { msg: $"($dest) is not a tree the compiler wrote; not retiring it" } }
+        jab retire $dest
     }
     mkdir ($dest | path join "map")
     let bytes = (write $m)

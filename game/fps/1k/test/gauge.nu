@@ -238,21 +238,22 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     let game = $program
     let workspace = ($game | path join ".." ".." ".." | path expand)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let target = (if $out == "" { $program | path join ".target" $tree "fps" "gauge" $stamp } else { $out | path expand })
+    let built = (jab program-out $program $tree)
+    let target = (if $out == "" { $built | path join "gauge" $stamp } else { $out | path expand })
     mkdir $target
     {
         game: $game,
         workspace: $workspace,
         tree: $tree,
-        kernel: (if $kernel == "" { $workspace | path join ".target" $tree "kernel" "jab.elf" } else { $kernel | path expand }),
-        image: (if $image == "" { $program | path join ".target" $tree "fps" "fps.jab" } else { $image | path expand }),
+        kernel: (if $kernel == "" { jab program-kernel $program $tree } else { $kernel | path expand }),
+        image: (if $image == "" { $built | path join "fps.jab" } else { $image | path expand }),
         out: $target,
     }
 }
 
 # A map's tree as the romfs image the program reads, built in `out`.
 def romfs-of [game: path, map: string, out: path]: nothing -> string {
-    let tree = ($game | path join ".target" "asset" $map)
+    let tree = (jab program-shard $game "asset" | path join $map)
     if not ($tree | path join "map.nuon" | path exists) { error make { msg: $"no tree for ($map) at ($tree)" } }
     let disk = ($out | path join $"($map).romfs")
     let made = (^genromfs -d $tree -f $disk -V "fps" | complete)
@@ -284,7 +285,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
     let prefix = ($flags | split row " " | last)
     let jab_inc = ($at.workspace | path join "sdk" "src" "jab.inc")
     let cap = (open --raw $jab_inc | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get -o 0.cap)
-    let tree = ($at.game | path join ".target" "asset" $map)
+    let tree = (jab program-shard $at.game "asset" | path join $map)
     let host = (sys host)
     let cpus = (sys cpu)
     {
@@ -341,9 +342,12 @@ def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, di
     { dir: $workspace, commit: $commit, dirty: ($status != "") }
 }
 
-# The program an image was built from: the directory the image's
-# nearest `.target` sits in.
+# The program an image was built from: the directory its build wrote
+# beside it as `home`, else, for an image built before that, the
+# directory the image's nearest `.target` sits in.
 def program-of [image: path]: nothing -> string {
+    let marker = ($image | path expand | path dirname | path join "home")
+    if ($marker | path exists) { return (open --raw $marker | decode | str trim) }
     let parts = ($image | path expand | path split)
     let marks = ($parts | enumerate | where {|e| $e.item == ".target" } | get index)
     if ($marks | is-empty) { $image | path expand | path dirname } else { $parts | first ($marks | last) | path join }
@@ -1193,11 +1197,11 @@ def "main compare" [
     ...files: string                 # the gauge.nuon files compared
     --field: string = "draw_us"      # the row's column compared
     --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
-    --out: string = ""               # where the comparison lands, the program's .target/compare.nuon unless given
+    --out: string = ""               # where the comparison lands, compare.nuon in the program's gauge shard of the target unless given
     --diagnostic                     # admit runs measured incomplete, invalid, unchecked, or unpaired, or missing a leg, marked
 ] {
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
-    let target = (if $out == "" { $env.FILE_PWD | path join ".." ".target" "compare.nuon" | path expand } else { $out | path expand })
+    let target = (if $out == "" { jab program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
     mkdir ($target | path dirname)
     $result | to nuon --indent 2 | save --raw -f $target
     for t in $result.table {

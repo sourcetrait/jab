@@ -86,7 +86,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # sample looped with a fast attack and a short release, one sample
 # header.
 def write-font [stage: path, img: path]: nothing -> nothing {
-    if ($stage | path exists) { rm -rf $stage }
+    jab retire $stage
     mkdir $stage
     let points = (0..<($CYCLE * $CYCLES) | each {|k| ((($k * 2.0 * 3.141592653589793) / $CYCLE) | math sin) * $AMPLITUDE | math round | into int })
     let samples = (($points | each {|v| le16 $v }) ++ (0..<46 | each {|| le16 0 }) | bytes collect)
