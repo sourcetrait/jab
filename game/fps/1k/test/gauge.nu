@@ -1243,10 +1243,12 @@ def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
     mut seen = false
     mut late = false
     mut out = []
-    for r in ($rows | where {|x| $x.critical_us != null }) {
-        let presented = ($r.flip_status == $FLIP_PRESENTED)
+    for r in ($rows | where {|x| ($x | get -o critical_us) != null }) {
+        let presented = (($r | get -o flip_status) == $FLIP_PRESENTED)
         let single = (($r | get -o flip_attempts | default 1) <= 1)
-        let start = (if $presented and $single { $r.flip_done_us - $r.flip_us } else { null })
+        let done = ($r | get -o flip_done_us)
+        let flip = ($r | get -o flip_us)
+        let start = (if $presented and $single and $done != null and $flip != null { $done - $flip } else { null })
         let interval = (if $start != null and $known { $start - $previous } else { null })
         let unknown = ($presented and $seen and $interval == null)
         $out = ($out | append ($r | insert call_interval_us $interval | insert call_unknown $unknown | insert after_late $late))
@@ -1272,35 +1274,42 @@ def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
 # under half a period after a frame past it, of the known.
 def bench-frames [rows: list<any>, period: number]: nothing -> record {
     if ($rows | is-empty) { return { frames: 0 } }
-    let calls = ($rows | get call_interval_us | compact)
+    let calls = (column-of $rows "call_interval_us" | compact)
     let multiples = ($calls | each {|c|
         let k = (($c / $period) | math round)
         if $k >= 1 and ((($c - $k * $period) | math abs) <= 1000) { $k } else { null }
     } | compact)
+    let critical = {|r| $r | get -o critical_us }
     {
         frames: ($rows | length),
-        presented: ($rows | where flip_status == $FLIP_PRESENTED | length),
-        interval: (stats ($rows | get flip_interval_us)),
+        presented: ($rows | where {|r| ($r | get -o flip_status) == $FLIP_PRESENTED } | length),
+        interval: (stats (column-of $rows "flip_interval_us")),
         call_interval: (stats $calls),
         grid: ($multiples | uniq --count | sort-by value | each {|c| { periods: $c.value, intervals: $c.count } }),
         off_grid: (($calls | length) - ($multiples | length)),
-        unknown_calls: ($rows | where {|r| $r.call_unknown } | length),
-        submission_age: (stats ($rows | get submission_age_us)),
-        critical: (stats ($rows | get critical_us)),
-        draw: (stats ($rows | get draw_us)),
-        wait: (stats ($rows | get wait_us)),
-        pacing: (stats ($rows | get pacing_us)),
-        await: (stats ($rows | get await_us)),
-        wakes: (total ($rows | get wakes)),
-        attempts: (total ($rows | get flip_attempts)),
-        refusals: (total ($rows | get refusals)),
-        flips_early: ($rows | where flip_status == $FLIP_EARLY | length),
-        flips_failed: ($rows | where {|r| $r.flip_status > $FLIP_EARLY } | length),
-        over: ($rows | where {|r| $r.critical_us >= $CEILING_US } | length),
-        fast: ($rows | where {|r| $r.critical_us < $period } | length),
-        fast_waited: ($rows | where {|r| $r.critical_us < $period and ($r.wait_us | default 0) > 0 } | length),
-        catch_up: ($rows | where {|r| $r.after_late and $r.call_interval_us != null and $r.call_interval_us < ($period / 2) } | length),
+        unknown_calls: ($rows | where {|r| ($r | get -o call_unknown) == true } | length),
+        submission_age: (stats (column-of $rows "submission_age_us")),
+        critical: (stats (column-of $rows "critical_us")),
+        draw: (stats (column-of $rows "draw_us")),
+        wait: (stats (column-of $rows "wait_us")),
+        pacing: (stats (column-of $rows "pacing_us")),
+        await: (stats (column-of $rows "await_us")),
+        wakes: (total (column-of $rows "wakes")),
+        attempts: (total (column-of $rows "flip_attempts")),
+        refusals: (total (column-of $rows "refusals")),
+        flips_early: ($rows | where {|r| ($r | get -o flip_status) == $FLIP_EARLY } | length),
+        flips_failed: ($rows | where {|r| ($r | get -o flip_status | default $FLIP_PRESENTED) > $FLIP_EARLY } | length),
+        over: ($rows | where {|r| (do $critical $r | default 0) >= $CEILING_US } | length),
+        fast: ($rows | where {|r| let c = (do $critical $r); $c != null and $c < $period } | length),
+        fast_waited: ($rows | where {|r| let c = (do $critical $r); $c != null and $c < $period and ($r | get -o wait_us | default 0) > 0 } | length),
+        catch_up: ($rows | where {|r| let i = ($r | get -o call_interval_us); ($r | get -o after_late) == true and $i != null and $i < ($period / 2) } | length),
     }
+}
+
+# A column of rows, null in a row that lacks it, as a capture older than
+# a field leaves it.
+def column-of [rows: list<any>, name: string]: nothing -> list<any> {
+    $rows | each {|r| $r | get -o $name }
 }
 
 # One step of a bench's run as its gauge.nuon holds it: a play when its
@@ -1320,13 +1329,15 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
         let m = ($r | get -o measured)
         let rows = ($all_rows | where run == $r.run)
         let standing = (standing-of $m $rows "critical_us" $requested)
-        let wall = ($r.ran | get -o wall_seconds | default 0)
+        let ran = ($r | get -o ran | default {})
+        let wall = ($ran | get -o wall_seconds | default 0)
+        let cpu = ($ran | get -o cpu_seconds)
         {
             run: $r.run,
-            seed: $r.seed,
+            seed: ($r | get -o seed),
             standing: $standing.standing,
             reasons: $standing.reasons,
-            cpu_over_wall: (if $wall == 0 or ($r.ran | get -o cpu_seconds) == null { null } else { $r.ran.cpu_seconds / $wall }),
+            cpu_over_wall: (if $wall == 0 or $cpu == null { null } else { $cpu / $wall }),
             outcomes: ($m | get -o outcomes),
             rows: (presented-calls $rows $period),
         }
@@ -1363,7 +1374,7 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let f = $c.frames
     let cpu = ($c.cpu_over_wall | compact)
     let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
-    let head = $"  cadence ($c.cadence), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
+    let head = $"  cadence ($c.cadence | default 'none asked'), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
     let apart = ($c.apart | each {|a|
         let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, presented every (ms $a.frames.interval.median) ms at the median" })
         $"    left out of the pool, a diagnostic: ($a.label) run ($a.run), ($a.standing): ($a.reasons | str join '; '); ($seen)"
