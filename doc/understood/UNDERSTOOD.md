@@ -42,8 +42,11 @@ runs only under QEMU's `virt` machine.
   it, the builds under `release/` and `debug/` at each program's path
   from here, a program's compiled assets, benches, and kept
   measurements under `asset/`, `bench/`, and `gauge/` the same way, the
-  generic disk, the shims, and `watch`'s record, and `tmp/retired/`,
-  whatever the tools have cleared away. `extern/` local links, ignored.
+  generic disk, the shims, and `watch`'s record. What the tools clear
+  away waits in `tmp/retired/`: under the XDG cache in
+  `$XDG_CACHE_HOME/jab/target/tmp`, beside every checkout's target and
+  shared by them, and otherwise in `.target/tmp`. `extern/` local
+  links, ignored.
 
 Build and run with `just` and nushell, from anywhere in the repository,
 a program named by its path from the root or by a shortcut
@@ -55,10 +58,14 @@ opens QEMU's own window when a display server is present, SDL with
 OpenGL on Linux and Windows and Cocoa on macOS, and otherwise serves the
 console over VNC on 127.0.0.1:5930, to tunnel and view; `JAB_DISPLAY`
 overrides with any `-display` value. Nothing the tools clear away is
-deleted, robojab included: a build's, a test's, a bench's, or `just adv
-clean`'s is moved whole into the target's own tmp,
-`tmp/retired/<stamp>/` at its path in the target, and emptying that is
-yours.
+deleted, robojab included: a build's, a test's, or a bench's is moved
+whole into the retire home, `tmp/retired/<stamp>/` at its place there.
+`just clean` retires the whole target, so the next build starts from
+nothing, and `just adv clean <path>` retires only the outputs of the
+programs under a path, or the kernel's, in one tree with `--tree`.
+`just retire` is the one command that deletes: it removes the retire
+home's `tmp` and everything in it. Neither `just clean` nor
+`just retire` takes an argument.
 The toolchain is found by its install directory, the one holding
 `bin/`: `RISCV_TOOLCHAIN`, else an `extern/riscv` link beside the kernel
 or program, else the workspace's `extern/riscv`, else the tools on

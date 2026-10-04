@@ -2,20 +2,25 @@ use crate::*;
 
 /// Moves `path` out of the way whole in place of deleting it, as the
 /// SDK's `retire` does, so nothing the harness clears away is lost: into
-/// the target's own tmp, `<root>/tmp/retired/<stamp>/`, at its path in the
-/// target, or under `outside/` at its absolute path when it lies outside
-/// it; a second retirement of one path within a second takes a numbered
-/// name. Nothing when nothing is there; a link, a fifo, or a socket is
-/// moved as it is. Across filesystems a file is copied and then unlinked,
-/// as `mv` moves one; anything else there is refused.
+/// the retire home's `retired/<stamp>/` (retire_home) at its place under
+/// the home's base, or under `outside/` at its absolute path when it lies
+/// outside it; a second retirement of one path within a second takes a
+/// numbered name. Nothing when nothing is there; a link, a fifo, or a
+/// socket is moved as it is; a path already retired is refused. Across
+/// filesystems a file is copied and then unlinked, as `mv` moves one;
+/// anything else there is refused.
 pub(crate) fn retire(path: &Path, root: &Path) -> RoboResult<()> {
     if fs::symlink_metadata(path).is_err() {
         return Ok(());
     }
     let from = lexical(path).map_err(RoboError::io(path.display().to_string()))?;
     let root = lexical(root).map_err(RoboError::io(root.display().to_string()))?;
-    let base = root.join("tmp").join("retired").join(stamp()?);
-    let at = match from.strip_prefix(&root) {
+    let (tmp, home_base) = retire_home(&root);
+    if from.starts_with(&tmp) {
+        return Err(RoboError::Retire(format!("{} is already retired; it is left as it is", from.display())));
+    }
+    let base = tmp.join("retired").join(stamp()?);
+    let at = match from.strip_prefix(&home_base) {
         Ok(rest) => base.join(rest),
         Err(_) => base.join("outside").join(from.strip_prefix("/").unwrap_or(&from)),
     };
@@ -39,6 +44,15 @@ pub(crate) fn retire(path: &Path, root: &Path) -> RoboResult<()> {
     }
 }
 
+/// Where a target's retirements go, as the SDK's retire-home says: `tmp`
+/// in a `.target`, else `tmp` beside every checkout's target under
+/// `jab/target`; with the directory a retired path keeps its place under,
+/// so a checkout's name rides along in the shared one.
+pub(crate) fn retire_home(root: &Path) -> (PathBuf, PathBuf) {
+    let base = if root.file_name().and_then(|n| n.to_str()) == Some(".target") { root.to_path_buf() } else { root.parent().map(Path::to_path_buf).unwrap_or_else(|| root.to_path_buf()) };
+    (base.join("tmp"), base)
+}
+
 /// A path made absolute with its `.` and `..` resolved from its own words,
 /// links left as they are, as nushell's `path expand --no-symlink` makes
 /// one, so a retirement never carries a `..` into the retired tree.
@@ -58,13 +72,15 @@ fn lexical(path: &Path) -> io::Result<PathBuf> {
 
 /// The target a path lies in, the nearest of its parents that is one, as
 /// the SDK's target-root makes them: a `.target` directory, or a
-/// checkout's under `jab/target` in the XDG cache.
+/// checkout's under `jab/target` in the XDG cache, never that directory's
+/// shared `tmp`.
 pub(crate) fn target_of(path: &Path) -> Option<PathBuf> {
     let name = |p: Option<&Path>| p.and_then(Path::file_name).and_then(|n| n.to_str()).map(str::to_owned);
     let mut dir = path.parent();
     while let Some(d) = dir {
         let parent = d.parent();
-        if name(Some(d)).as_deref() == Some(".target") || (name(parent).as_deref() == Some("target") && name(parent.and_then(Path::parent)).as_deref() == Some("jab")) {
+        let own = name(Some(d));
+        if own.as_deref() == Some(".target") || (own.as_deref() != Some("tmp") && name(parent).as_deref() == Some("target") && name(parent.and_then(Path::parent)).as_deref() == Some("jab")) {
             return Some(d.to_path_buf());
         }
         dir = parent;

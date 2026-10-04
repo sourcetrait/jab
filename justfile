@@ -8,7 +8,9 @@
 # names the build symbols. Everything the tool writes goes to one
 # target, .target here, or $XDG_CACHE_HOME/jab/target/<checkout> where
 # that is set, but for the cargo builds of tool/ and the game's rust/,
-# which keep cargo's own. `just adv` lists the commands for development.
+# which keep cargo's own. Nothing is deleted but by `just retire`: what
+# the tools clear away is retired to the tmp beside the targets. `just
+# adv` lists the commands for development.
 
 set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]
@@ -54,6 +56,19 @@ watch *args:
 # Run a program's bench, every step one after another, then its report
 bench *args:
     ^nu "{{jab}}" bench "{{here}}" {{args}}
+
+# Every build, test, run, and bench here moved aside, so the next build
+# starts from nothing; `just retire` deletes what it moved
+# Retire the whole target
+clean:
+    ^nu "{{jab}}" clean "{{here}}"
+
+# The one command that deletes: the tmp beside the targets,
+# $XDG_CACHE_HOME/jab/target/tmp, or .target/tmp, where everything
+# retired waits
+# Delete everything retired
+retire:
+    ^nu "{{jab}}" retire "{{here}}"
 
 # `just adv` lists them; `just adv <command> [args]` runs one, a relative
 # path among its args taken from where you are

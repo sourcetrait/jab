@@ -29,6 +29,24 @@ fn a_target_is_a_dot_target_or_a_checkout_under_jab_target() {
     assert_eq!(target_of(Path::new("/c/jab/target/jab-12345678/debug/f")), Some(PathBuf::from("/c/jab/target/jab-12345678")));
     assert_eq!(target_of(Path::new("/w/tool/target/release/f")), None, "a cargo target is no jab target");
     assert_eq!(target_of(Path::new("/c/jab/x/f")), None);
+    assert_eq!(target_of(Path::new("/c/jab/target/tmp/retired/s/f")), None, "the shared tmp is no checkout's target");
+}
+
+#[test]
+fn a_checkouts_retirement_goes_to_the_shared_tmp_beside_it_under_its_name() {
+    let base = scratch("shared").join("jab").join("target");
+    let root = base.join("jab-12345678");
+    let file = root.join("debug").join("h");
+    fs::create_dir_all(file.parent().expect("a parent")).expect("the debug directory");
+    fs::write(&file, b"h").expect("the file");
+    retire(&file, &root).expect("retired");
+    let kept = found(&base.join("tmp").join("retired"), "h");
+    assert_eq!(kept.len(), 1, "one retired copy in the shared tmp: {kept:?}");
+    assert!(kept[0].ends_with(Path::new("jab-12345678").join("debug").join("h")), "kept under the checkout's name: {}", kept[0].display());
+    assert!(!root.join("tmp").exists(), "nothing in the checkout's own tmp");
+    let again = kept[0].clone();
+    assert!(retire(&again, &root).is_err(), "a retired path is refused");
+    assert!(again.exists(), "and left as it is");
 }
 
 #[test]

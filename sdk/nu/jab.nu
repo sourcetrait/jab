@@ -18,7 +18,9 @@
 # .target at its root or $XDG_CACHE_HOME/jab/target/<checkout> where
 # that is set, every build and every tool's output sharded within it),
 # and the manifests. Nothing a build, a test, a bench, or a clean clears
-# away is deleted: it is retired into the target's own tmp (retire).
+# away is deleted: it is retired into the tmp beside the checkouts'
+# targets, or into a `.target`'s own (retire), and `retire` is the one
+# command that deletes, that tmp alone.
 #
 # A build is described by its symbols: `--set debug,stats` names them,
 # comma separated, in any case, and each reaches the assembler as
@@ -1118,9 +1120,11 @@ export def target-root [anchor: path]: nothing -> string {
 }
 
 # Whether `dir` is a target this tool makes (target-root): a `.target`
-# directory, or a checkout's under `jab/target` in the XDG cache.
+# directory, or a checkout's under `jab/target` in the XDG cache, which
+# is never that directory's shared `tmp` (retire-home).
 def is-target [dir: path]: nothing -> bool {
-    (($dir | path basename) == ".target") or (($dir | path dirname | path basename) == "target" and ($dir | path dirname | path dirname | path basename) == "jab")
+    let name = ($dir | path basename)
+    ($name == ".target") or ($name != "tmp" and ($dir | path dirname | path basename) == "target" and ($dir | path dirname | path dirname | path basename) == "jab")
 }
 
 # The target a path lies in, the nearest of its parents that is one
@@ -1135,24 +1139,37 @@ def target-of [path: path]: nothing -> oneof<string, nothing> {
     }
 }
 
+# Where a target's retirements go: `tmp`, which `just retire` empties,
+# beside every checkout's target under `jab/target` in the XDG cache,
+# else in the `.target` itself; `base` is the directory a retired path
+# keeps its place under, so a checkout's name rides along in the shared
+# one.
+def retire-home [target: path]: nothing -> record<tmp: string, base: string> {
+    let target = ($target | path expand)
+    let base = (if ($target | path basename) == ".target" { $target } else { $target | path dirname })
+    { tmp: ($base | path join "tmp"), base: $base }
+}
+
 # Moves `path` out of the way whole in place of deleting it, so nothing a
 # build, a test, a bench, or a clean clears away is lost: into the
-# target's own tmp, `<target>/tmp/retired/<stamp>/`, at its path in the
-# target, `root` when given, else the target the path lies in
-# (target-of); a path outside the target lands under `outside/` there at
-# its absolute path. A second retirement of one path within a second
-# takes a numbered name, and `--stamp` sets the stamp, so a clean's
-# entries share one. Nothing when nothing is there; a link is moved as a
-# link. A path in no target with no root given is left as it is and
-# refused. Untyped because it can end in an error.
+# retire home's `retired/<stamp>/` (retire-home) at its place under the
+# home's base, the target `root` when given, else the one the path lies
+# in (target-of); a path outside lands under `outside/` there at its
+# absolute path. A second retirement of one path within a second takes
+# a numbered name, and `--stamp` sets the stamp, so a clean's entries
+# share one. Nothing when nothing is there; a link is moved as a link.
+# A path in no target with no root given, or one already retired, is
+# left as it is and refused. Untyped because it can end in an error.
 export def retire [path: path, root?: path, --stamp: string = ""] {
     let from = ($path | path expand --no-symlink)
     if ($from | path type) == null { return }
     let target = (if $root != null { $root | path expand } else { target-of $from })
     if $target == null { error make {msg: $"($from) lies in no target, so there is nowhere to retire it to; it is left as it is"} }
+    let home = (retire-home $target)
+    if (under $from $home.tmp) { error make {msg: $"($from) is already retired; it is left as it is"} }
     let stamp = (if $stamp == "" { date now | format date "%Y%m%d-%H%M%S" } else { $stamp })
-    let rest = (if (under $from $target) { $from | path relative-to $target | path split } else { ["outside"] ++ ($from | path split | skip 1) })
-    let at = ($target | path join "tmp" "retired" $stamp ...$rest)
+    let rest = (if (under $from $home.base) { $from | path relative-to $home.base | path split } else { ["outside"] ++ ($from | path split | skip 1) })
+    let at = ($home.tmp | path join "retired" $stamp ...$rest)
     mut dest = $at
     mut n = 1
     while ($dest | path type) != null {
@@ -1998,7 +2015,7 @@ def --wrapped "main adv" [dir: path, ...words: string] {
     let name = ($words | first)
     let rest = ($words | skip 1)
     if $name == "probe" { ^nu $self probe $ws ...$rest; return }
-    if $name == "clean" { adv-clean $ws; return }
+    if $name == "clean" { adv-clean $ws $rest; return }
     let hit = ($commands | where command == $name)
     if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just adv` lists them"} }
     ^nu ($hit | first | get script) $name ...$rest
@@ -2046,7 +2063,7 @@ def adv-usage [params: string]: nothing -> string {
 def adv-list [commands: table]: nothing -> string {
     let sdk = [
         { command: "probe", usage: "<kind> <program> [--seconds 12] [--set names]", owner: "sdk", summary: "Probe one program under a window and print one NUON record on how its flips reached it, `sdl` the one kind, Linux only" }
-        { command: "clean", usage: "", owner: "sdk", summary: "Retire everything every build, test, run, and bench here wrote into the target's own tmp, so the next build starts from nothing" }
+        { command: "clean", usage: "[path] [--tree release|debug]", owner: "sdk", summary: "Retire the build outputs of the programs at or under a path, or the kernel's with `kernel`, in both trees or the one --tree names; with no path the whole target, as `just clean` does" }
     ]
     let all = ($sdk ++ ($commands | select command usage owner summary))
     let shown = ($all | each {|c|
@@ -2057,18 +2074,66 @@ def adv-list [commands: table]: nothing -> string {
     (["the commands for development, `just adv <command> [args]`:"] ++ $shown) | str join "\n"
 }
 
-# `just adv clean`: everything in the workspace's target but its tmp
-# retired there under one stamp (retire), so the next build starts from
-# nothing while nothing is deleted; only in a directory that is a target
-# this tool makes (is-target). Emptying the target's tmp is the user's.
-def adv-clean [ws: path]: nothing -> nothing {
+# `just clean`: the workspace's target retired whole under one stamp
+# (retire), so the next build starts from nothing while nothing is
+# deleted: a checkout's target under the XDG cache moved as one into the
+# shared tmp beside it, a `.target`'s entries but its own tmp into that
+# tmp; only a directory that is a target this tool makes (is-target).
+def clean-target [ws: path]: nothing -> nothing {
     let target = (target-root $ws)
     if ($target | path type) != "dir" { print $"jab: no target at ($target)"; return }
     if not (is-target $target) { error make {msg: $"($target) is not a target this tool makes; leaving it"} }
+    let home = (retire-home $target)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let entries = (ls -a $target | get name | where {|e| ($e | path basename) != "tmp" })
+    let entries = (if $home.base == $target { ls -a $target | get name | where {|e| ($e | path basename) != "tmp" } } else { [$target] })
     for e in $entries { retire $e $target --stamp $stamp }
-    print $"jab: retired ($entries | length) entries of ($target) to ($target | path join 'tmp' 'retired' $stamp); emptying ($target | path join 'tmp') is yours"
+    print $"jab: retired ($target) to ($home.tmp | path join 'retired' $stamp); `just retire` deletes everything retired"
+}
+
+# `just adv clean`: with no path the whole target, as `just clean`
+# (clean-target); with one, the build outputs of the programs at or
+# under it, or the kernel's with `kernel`, in both trees or the one
+# `--tree` names, each retired (retire) under one stamp. A program's
+# output holds the outputs of the programs under it, which go with it.
+def adv-clean [ws: path, words: list<string>]: nothing -> nothing {
+    let at = ($words | enumerate | where item == "--tree" | get -o 0.index)
+    let trees = (if $at == null { ["release" "debug"] } else { [($words | get -o ($at + 1) | default "")] })
+    for t in $trees { if $t not-in ["release" "debug"] { error make {msg: $"--tree is release or debug, not ($t)"} } }
+    let words = (if $at == null { $words } else { $words | enumerate | where {|e| $e.index != $at and $e.index != ($at + 1) } | get item })
+    if ($words | is-empty) { clean-target $ws; return }
+    let target = (target-root $ws)
+    let stamp = (date now | format date "%Y%m%d-%H%M%S")
+    let dirs = (if (path-words $words) == "kernel" {
+        let m = (open ($ws | path join "workspace.jab.toml"))
+        $trees | each {|t| (context ($ws | path join $m.kernel) "kernel" (tree-symbols $t)).out }
+    } else {
+        programs-under $ws $words | each {|p| $trees | each {|t| program-out ($ws | path join $p) $t } } | flatten
+    })
+    mut retired = []
+    for d in $dirs {
+        if ($d | path type) != null {
+            retire $d $target --stamp $stamp
+            $retired = ($retired | append $d)
+        }
+    }
+    print (if ($retired | is-empty) { "jab: nothing built there to retire" } else { $"jab: retired ($retired | str join ', ') to ((retire-home $target).tmp | path join 'retired' $stamp)" })
+}
+
+# `just retire`: everything retired deleted, the retire home's tmp
+# (retire-home) removed whole, the one thing this tool deletes; only a
+# directory named tmp in a `.target` or beside the checkouts under
+# `jab/target`, never a link, and nothing when it is not there.
+def retire-all [ws: path]: nothing -> nothing {
+    let home = (retire-home (target-root $ws))
+    let tmp = $home.tmp
+    if ($tmp | path type) == null { print $"jab: nothing retired at ($tmp)"; return }
+    let kind = (ls -D $tmp | get 0.type)
+    let base = ($home.base | path basename)
+    let placed = (($tmp | path basename) == "tmp") and ($base == ".target" or ($base == "target" and ($home.base | path dirname | path basename) == "jab"))
+    if $kind != "dir" or not $placed { error make {msg: $"($tmp) is not the retire home this tool keeps; leaving it"} }
+    let size = (du $tmp | get -o 0.apparent | default 0b)
+    rm --recursive --permanent $tmp
+    print $"jab: deleted ($tmp), ($size) retired"
 }
 
 # The benches of the workspace's programs, `<program>/<bench>` each: the
@@ -2434,15 +2499,18 @@ def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12
     probe $program $kind (symbols $set) $seconds
 }
 
-# Retire the kernel's (--kernel) or the program's build output from both
-# trees (retire).
-def "main clean" [dir: path, --kernel] {
-    for names in [[] ["DEBUG"]] {
-        let c = (context $dir (if $kernel { "kernel" } else { "program" }) $names)
-        retire $c.out
-    }
+# Retire the workspace's whole target (clean-target): `just clean`.
+def "main clean" [ws: path] {
+    if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
+    clean-target ($ws | path expand)
+}
+
+# Delete everything retired (retire-all): `just retire`.
+def "main retire" [ws: path] {
+    if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
+    retire-all ($ws | path expand)
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <dir> [--kernel]; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }
