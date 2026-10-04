@@ -13,26 +13,27 @@
 # frame; `play` puts the build in the host's window, audio, and gamepad
 # for a person to play and closes the measurement after `--seconds`;
 # `read` reads a capture either made; `compare` sets builds' captures
-# side by side, a build being an image at a cadence, a walked leg per
-# stretch of its path, refusing a run measured incomplete, invalid, or
-# before validity was recorded, one that cannot be paired, or one missing
-# a leg another run holds, unless `--diagnostic` admits it, and a run with
-# nothing to compare in it outright, every run's standing and missing
-# legs kept. Each run keeps the route it played and its identity beside
-# its capture, then gauge.nuon and the summary. The measurement is the
-# capture read in order through the first end marker; what follows it
-# counts for nothing. A frame passes the ceiling when its critical path,
-# its start to the end of its reporting with the wait and the await
-# apart, is under 15 ms; a measurement is valid when it is complete,
-# every flip presented or refused as its cadence allows, every phase
-# within its frame, every frame's clock agreeing with its state, and at
-# schema 2 every frame's start, critical path, wait, and await adding up
-# to the next frame's start, and passes when it is valid and every frame
-# in it passes. A capture holding no record of the clock's kinds, 7, 8,
-# 9, or 10, is a build older than them: it holds no measurement and is
-# read from its state records alone, the drawing's and the game's
-# microseconds. `just gauge`, `just gauge-play`, `just gauge-read`, and
-# `just gauge-compare` run it.
+# side by side, a build being an image at the cadence it played, a
+# walked leg per stretch of its path, refusing a run measured incomplete,
+# invalid, or before validity was recorded, one that cannot be paired,
+# or one missing a leg another run holds, unless `--diagnostic` admits
+# it, and a run with nothing to compare in it outright, every run's
+# standing and missing legs kept. Each run keeps the route it played and
+# its identity beside its capture, then gauge.nuon and the summary. The
+# measurement is the capture read in order through the first end marker;
+# what follows it counts for nothing. A frame passes the ceiling when its
+# critical path, its start to the end of its reporting with the wait and
+# the await apart, is under 15 ms; a measurement is valid when it is
+# complete, every flip presented or refused as its cadence allows, every
+# phase within its frame, every frame's clock agreeing with its state,
+# and at schema 2 every frame's start, critical path, wait, and await
+# adding up to the next frame's start and its start, simulation, flip
+# end, and next start in that order, and passes when it is valid and
+# every frame in it passes. A capture holding no record of the clock's
+# kinds, 7, 8, 9, or 10, is a build older than them: it holds no
+# measurement and is read from its state records alone, the drawing's
+# and the game's microseconds. `just gauge`, `just gauge-play`, `just
+# gauge-read`, and `just gauge-compare` run it.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
@@ -578,8 +579,11 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
 # presented, since those cadences flip again on a refusal; attempts other
 # than the refusals and the final attempt, which is a refusal itself only
 # when its status says so; a frame whose next start less its start is not
-# its critical path, its wait, and its await to within RESIDUAL_US; and a
-# next start that is not the next frame's start.
+# its critical path, its wait, and its await to within RESIDUAL_US; a
+# frame whose start, simulation, flip end, and next start do not come in
+# that order, so no submission age is negative, a frame that reached no
+# flip keeping a flip end from before its start; and a next start that is
+# not the next frame's start.
 def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<string> {
     let unshown = ($rows | where {|r| $r.flip_status not-in $FLIP_VALID })
     let negative = ($rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
@@ -599,6 +603,7 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     let unpresented = ($rows | where {|r| $r.cadence in [1 2] and $r.flip_status != $FLIP_PRESENTED })
     let counted = ($rows | where {|r| $r.flip_attempts != ($r.refusals + (if $r.flip_status == $FLIP_EARLY { 0 } else { 1 })) })
     let unbalanced = ($rows | where {|r| $r.residual_us < 0 or $r.residual_us > $RESIDUAL_US })
+    let disordered = ($rows | where {|r| not ($r.start_us <= $r.simulation_us and $r.simulation_us <= $r.flip_done_us and $r.flip_done_us <= $r.next_start_us) })
     let broken = ($rows | window 2 | where {|w| $w.0.next_start_us != $w.1.start_us })
     $base | append [
         (if ($unrecorded | is-empty) { null } else { $"($unrecorded | length) frames without a presentation record" }),
@@ -608,6 +613,7 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
         (if ($unpresented | is-empty) { null } else { $"($unpresented | length) frames under cadence 1 or 2 whose final flip was not presented" }),
         (if ($counted | is-empty) { null } else { $"($counted | length) frames whose attempts are not their refusals and their final attempt" }),
         (if ($unbalanced | is-empty) { null } else { $"($unbalanced | length) frames whose next start less their start is not their critical path, wait, and await" }),
+        (if ($disordered | is-empty) { null } else { $"($disordered | length) frames whose start, simulation, flip end, and next start are out of order" }),
         (if ($broken | is-empty) { null } else { $"($broken | length) frames whose next start is not the next frame's start" }),
     ] | compact
 }
@@ -893,35 +899,39 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 }
 
 # Set builds' captures side by side: each run of each gauge.nuon a
-# measurement, a build an image at the cadence its runs asked for, its
-# runs its batches, named by the label less a trailing _<n>, one name a
-# build and one build a name; for each leg a value of `field` a run, a
-# leg whose eye travels one bin or more taken per bin of its path over
-# the bins every run reached, a shorter one over its frames, so a leg's
-# value is its path's and not its frame count's. Every run is classified
-# before any leg is measured (standing-of): one measured incomplete,
-# invalid, or unchecked, or one that cannot be paired, is refused unless
-# `diagnostic` admits it, and one empty, unclassified, or unusable is
-# refused even then. A run's expected legs are every leg any compared
-# run holds, and one missing any is refused unless `diagnostic` admits
-# it, its missing legs then an explicit missing result in its run and in
-# its build's row in place of a value, never a mean over fewer batches.
-# The comparison fails with every refused run's file, run, and reasons.
-# The method, the bins, every run's standing, missing legs, and bins
-# with their medians, and the table, each row naming its batches'
-# standings and the batches missing its leg, come back together.
+# measurement, a build an image at the cadence its runs played
+# (effective-cadence), its runs its batches, named by the label less a
+# trailing _<n>, one name a build and one build a name, each run keeping
+# the cadence its identity asked beside the one it played; for each leg a
+# value of `field` a run, a leg whose eye travels one bin or more taken
+# per bin of its path over the bins every run reached, a shorter one over
+# its frames, so a leg's value is its path's and not its frame count's.
+# Every run is classified before any leg is measured (standing-of): one
+# measured incomplete, invalid, or unchecked, or one that cannot be
+# paired, is refused unless `diagnostic` admits it, and one empty,
+# unclassified, or unusable is refused even then. A run's expected legs
+# are every leg any compared run holds, and one missing any is refused
+# unless `diagnostic` admits it, its missing legs then an explicit
+# missing result in its run and in its build's row in place of a value,
+# never a mean over fewer batches. The comparison fails with every
+# refused run's file, run, and reasons. The method, the bins, every run's
+# standing, cadences, missing legs, and bins with their medians, and the
+# table, each row naming its batches' standings and the batches missing
+# its leg, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let g = (open ($f | path expand))
         let build = ($g.label | str replace --regex '_\d+$' '')
         let image = ($g.identity | get -o build.image_sha256 | default "")
-        let cadence = ($g.identity | get -o mode.cadence)
+        let requested = ($g.identity | get -o mode.cadence)
         let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
+            let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
-            let standing = (standing-of ($r.measured? | default null) $rows $field $cadence)
+            let standing = (standing-of $measured $rows $field $requested)
             {
-                file: ($f | path expand), label: $g.label, build: $build, image: $image, cadence: $cadence, run: $r.run,
+                file: ($f | path expand), label: $g.label, build: $build, image: $image,
+                requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
                 held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
             }
@@ -956,11 +966,11 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     })
     let builds = ($runs | get build | uniq)
     for b in $builds {
-        let made = ($runs | where build == $b | each {|r| { image: $r.image, cadence: $r.cadence } } | uniq)
+        let made = ($runs | where build == $b | each {|r| { image: $r.image, cadence: $r.effective_cadence } } | uniq)
         if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence each: ($made | to nuon); a build's batches are one build" } }
     }
-    for made in ($runs | each {|r| { image: $r.image, cadence: $r.cadence } } | uniq) {
-        let names = ($runs | where {|r| $r.image == $made.image and $r.cadence == $made.cadence } | get build | uniq)
+    for made in ($runs | each {|r| { image: $r.image, cadence: $r.effective_cadence } } | uniq) {
+        let names = ($runs | where {|r| $r.image == $made.image and $r.effective_cadence == $made.cadence } | get build | uniq)
         if ($names | length) > 1 { error make { msg: $"one build, ($made | to nuon), is labelled ($names | str join ' and '); a build has one name" } }
     }
     let common = ($expected | each {|leg|
@@ -1006,8 +1016,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             leg_value: "a walked leg's value is the mean of its bin values over the bins every run in the comparison reached; a standing leg's is its frames' median by nearest rank",
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: ([
-                "a build is an image's SHA-256 at the cadence its runs asked for; a capture's label less a trailing"
-                "_<n> names it, one name a build and one build a name, and its runs are its batches"
+                "a build is an image's SHA-256 at the cadence its runs played: the one asked at schema 2, and 0"
+                "below it, where a request other than 0 leaves the run unpaired; a capture's label less a trailing"
+                "_<n> names it, one name a build and one build a name, and its runs are its batches; each run"
+                "keeps the cadence asked and the cadence played"
             ] | str join " "),
             table: ([
                 "a build's value for a leg is the mean of its runs' values and the half spread is half their range,"
@@ -1019,7 +1031,8 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "that is not a number or a leg holding no number in it; those three refused even under --diagnostic;"
                 "incomplete, invalid, or unchecked (complete but measured before validity was recorded); unpaired, a"
                 "build older than the clock records, read from its states alone, whose console answers a seed it"
-                "never takes, or a run not seeded before its first frame or seeded again after it, or at schema 2"
+                "never takes, or a run not seeded before its first frame or seeded again after it, or below schema"
+                "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or at schema 2"
                 "one whose cadence was not asked before its first frame or was asked again after it, whose identity"
                 "asks no cadence from 0 to 2, or with a frame at another cadence; those four refused unless"
                 "--diagnostic admits it; or valid; each table row names its batches' standings"
@@ -1079,11 +1092,14 @@ def standing-of [
 }
 
 # Why a clocked run cannot be paired with another, none when it can: no
-# seed answered before its first frame, or one answered after it; and at
-# schema 2, no cadence asked before its first frame, or one asked after
-# it, an identity asking no cadence from 0 to 2, or a frame at a cadence
-# other than the one asked. A measurement written before schema 2 was
-# read is at schema 1.
+# seed answered before its first frame, or one answered after it; below
+# schema 2, an identity asking a cadence other than 0, which a program
+# writing schema 1 cannot play, the request read as the identity holds it
+# before effective-cadence puts 0 in its place; and at schema 2, no
+# cadence asked before its first frame, or one asked after it, an
+# identity asking no cadence from 0 to 2, or a frame at a cadence other
+# than the one asked. A measurement written before schema 2 was read is
+# at schema 1.
 def unpaired-reasons [m: record, requested: any]: nothing -> list<string> {
     let schema = ($m | get -o schema | default 1)
     let seeded = ($m | get -o seeded | default false)
@@ -1092,7 +1108,12 @@ def unpaired-reasons [m: record, requested: any]: nothing -> list<string> {
         (if $seeded { null } else { "unseeded: no seed answered before the first frame" }),
         (if $late_seed { "a seed answered after the first frame" } else { null }),
     ]
-    if $schema != 2 { return ($seeds | compact) }
+    if $schema != 2 {
+        let legacy = (if $requested == null or $requested == 0 { null } else {
+            $"the identity asks cadence ($requested), which a capture below schema 2 cannot play"
+        })
+        return ($seeds | append $legacy | compact)
+    }
     let cadence_set = ($m | get -o cadence_set | default false)
     let late_cadence = ($m | get -o late_cadence | default false)
     let cadences = ($m | get -o cadences | default [])
@@ -1108,6 +1129,15 @@ def unpaired-reasons [m: record, requested: any]: nothing -> list<string> {
         $asked,
         (if ($others | is-empty) { null } else { $"frames at cadence ($others | each {|c| $c | into string } | str join ', ') where the identity asked ($requested)" }),
     ] | compact
+}
+
+# The cadence a run played, the one a build is named by: the one its
+# identity asked at schema 2; below it 0, the one cadence a program
+# writing schema 1 or no clock records has, set only after
+# unpaired-reasons has held the request to it. A measurement written
+# before schema 2 was read is at schema 1.
+def effective-cadence [m: oneof<record, nothing>, requested: any]: nothing -> any {
+    if ($m | get -o schema | default 1) == 2 { $requested } else { $CADENCE_AFTER_FLIP }
 }
 
 # Why a run's rows give nothing to compare in `field`, read from the rows'

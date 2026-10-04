@@ -1887,13 +1887,18 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # past the refusals and the final one, a cadence outside 0 to 2, and a
 # next start apart from the next frame's start are invalid; a one-frame
 # capture closes through its next start alone, and one whose next start
-# does not close is invalid. A comparison refuses as unpaired a run whose
-# seed or cadence went unanswered, came late, or came early and again
-# late, whose identity asks a cadence outside 0 to 2 or none, or with a
-# frame at another cadence than asked, each named with its reason and
-# admitted marked under --diagnostic; it refuses two cadences under one
-# name and one build under two names, and keeps one image's two cadences
-# apart as two builds.
+# does not close is invalid; a simulation before its frame's start, one
+# past its flip's end, and a flip's end past its next start are each out
+# of order and invalid for that alone. A comparison refuses as unpaired a
+# run whose seed or cadence went unanswered, came late, or came early and
+# again late, whose identity asks a cadence outside 0 to 2 or none, with
+# a frame at another cadence than asked, or below schema 2 whose identity
+# asks a cadence other than 0, each named with its reason and admitted
+# marked under --diagnostic; it refuses two cadences under one name and
+# one build under two names, keeps one image's two cadences apart as two
+# builds, and takes one image's schema 1 captures asking none and 0 as
+# one build at cadence 0, each comparison it must make wrapped and held
+# to no refusal.
 export def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -2130,10 +2135,26 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let unclosed_says = $"a one-frame capture whose next start does not close is invalid: ($unclosed.invalid)"
     assert ((not $unclosed.valid) and ($unclosed.invalid | any {|r| $r =~ "critical path, wait, and await" })) $unclosed_says
 
+    # a frame's start, simulation, flip end, and next start come in that
+    # order: frame 1's start is 20,000, its flip's end 21,700, its next
+    # start 40,000; each case moves one field of it and is out of order
+    # alone, the sum and the continuity reading none of them
+    let disorder = "1 frames whose start, simulation, flip end, and next start are out of order"
+    let orders = [
+        { name: "the simulation before the start", items: (fx-set $good2 "present" 1 { simulation: ($FX_PERIOD - 1) }) }
+        { name: "the simulation past the flip's end", items: (fx-set $good2 "present" 1 { simulation: ($FX_PERIOD + 1701) }) }
+        { name: "the flip's end past the next start", items: (fx-set $good2 "frame" 1 { flip_done: (2 * $FX_PERIOD + 1) }) }
+    ]
+    for o in $orders {
+        let ordered = (do $measure $o.items)
+        assert ($ordered.complete and $ordered.invalid == [$disorder]) $"($o.name) is out of order and nothing else: ($ordered.problems) ($ordered.invalid)"
+    }
+
     # pairing: a seed or a cadence unanswered, answered late, or answered
     # early and again late, an identity asking a cadence outside 0 to 2 or
-    # none, and a frame at another cadence than asked each leave a run
-    # unpaired, refused unless --diagnostic admits it marked
+    # none, a frame at another cadence than asked, and below schema 2 an
+    # identity asking a cadence other than 0 each leave a run unpaired,
+    # refused unless --diagnostic admits it marked
     let paired = (fx-gauge $dir "paired" "paired" "paired" 0 $good2)
     let without = {|kind: string| $good2 | where {|i| $i.kind != $kind } }
     let unpaired = [
@@ -2146,6 +2167,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         { name: "asked_outside", items: $good2, cadence: 3, reason: "asks cadence 3, outside 0 to 2" }
         { name: "asked_none", items: $good2, cadence: null, reason: "the identity asks no cadence" }
         { name: "asked_other", items: $good2, cadence: 1, reason: "frames at cadence 0 where the identity asked 1" }
+        { name: "legacy_asked", items: $good, cadence: 1, reason: "the identity asks cadence 1, which a capture below schema 2 cannot play" }
     ]
     for u in $unpaired {
         let file = (fx-gauge $dir $u.name $u.name $u.name $u.cadence $u.items)
@@ -2164,13 +2186,30 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         ""
     } catch {|e| $e.msg })
     assert ($split | str contains "come from 2 builds") $"two cadences under one name refuse the comparison: ($split)"
-    let kept_apart = (gauge compare [(fx-gauge $dir "apart_0" "after" "one_image" 0 $good2) (fx-gauge $dir "apart_1" "early" "one_image" 1 $early)] "draw_us" 50)
+    let kept_apart = (try {
+        gauge compare [(fx-gauge $dir "apart_0" "after" "one_image" 0 $good2) (fx-gauge $dir "apart_1" "early" "one_image" 1 $early)] "draw_us" 50
+    } catch {|e| { refusal: $e.msg } })
+    let apart_says = $"one image's two cadences compare without a refusal: ($kept_apart | get -o refusal)"
+    assert (($kept_apart | get -o refusal) == null) $apart_says
     assert equal ($kept_apart.table | get build | uniq | sort) [after early] $"one image's two cadences are two builds: ($kept_apart.table)"
     let renamed = (try {
         gauge compare [(fx-gauge $dir "named_0" "one" "same_image" 0 $good2) (fx-gauge $dir "named_1" "two" "same_image" 0 $good2)] "draw_us" 50
         ""
     } catch {|e| $e.msg })
     assert ($renamed | str contains "a build has one name") $"one build under two names refuses the comparison: ($renamed)"
+
+    # below schema 2 a capture plays cadence 0 whatever its identity asks:
+    # one image's schema 1 captures, one asking none and one 0, are one
+    # build at cadence 0, each run keeping what it asked
+    let legacy = (try {
+        gauge compare [(fx-gauge $dir "legacy_1" "legacy_1" "legacy_image" null $good) (fx-gauge $dir "legacy_2" "legacy_2" "legacy_image" 0 $good)] "draw_us" 50
+    } catch {|e| { refusal: $e.msg } })
+    let legacy_says = $"schema 1 captures asking none and 0 compare as one build without a refusal: ($legacy | get -o refusal)"
+    assert (($legacy | get -o refusal) == null) $legacy_says
+    assert equal ($legacy.table | get build | uniq) [legacy] $"one image's schema 1 captures are the one build legacy: ($legacy.table)"
+    assert equal ($legacy.runs | get standing) [valid valid] $"both schema 1 captures stand valid: ($legacy.runs | get reasons)"
+    assert equal ($legacy.runs | get effective_cadence) [0 0] $"both played cadence 0: ($legacy.runs | get effective_cadence)"
+    assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
 }
 
 # A synthetic capture's records as the program sends them over `frames`
@@ -2239,8 +2278,9 @@ def fx-gauge [dir: path, name: string, label: string, image: string, cadence: an
 # layouts: the console's answers to R and to C; a state, its drawing and
 # game microseconds at 32 and 36, 1000 and 100 unless given; a frame's
 # clock, the crosshair and the mix 10 us each, the flip 500, the
-# reporting 100, its await; a drawing whose parts take 0.95 ms, its tiles
-# 0.1; a presentation; and the end marker's frame and schema.
+# reporting 100, its await, its flip's end 1.7 ms past its start unless
+# given; a drawing whose parts take 0.95 ms, its tiles 0.1; a
+# presentation; and the end marker's frame and schema.
 def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
@@ -2249,7 +2289,8 @@ def fx-bytes [items: list<any>]: nothing -> binary {
             "state" => (fx-pad ([0x[01 00 00 00] (fx-zeros 28) (fx-u32 ($i.draw? | default 1000)) (fx-u32 ($i.game? | default 100))] | bytes collect)),
             "frame" => ([
                 0x[07 00 00 00] (fx-u32 $i.frame) (fx-u64 ($i.frame * $FX_PERIOD)) (fx-u32 $i.critical) (fx-u32 $i.game) (fx-u32 $i.draw)
-                (fx-u32 10) (fx-u32 10) (fx-u32 500) (fx-u32 100) (fx-u32 ($i.await? | default 16000)) (fx-u64 ($i.frame * $FX_PERIOD + 1700))
+                (fx-u32 10) (fx-u32 10) (fx-u32 500) (fx-u32 100) (fx-u32 ($i.await? | default 16000))
+                (fx-u64 ($i.flip_done? | default ($i.frame * $FX_PERIOD + 1700)))
                 (fx-u32 $i.status) (fx-u32 $i.schema)
             ] | bytes collect),
             "draw" => ([
