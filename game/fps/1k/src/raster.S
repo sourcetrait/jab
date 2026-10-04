@@ -841,7 +841,7 @@ poly_rect:
 
 .balign CODE_PAGE
 span_fill:
-    addi sp, sp, -232
+    addi sp, sp, -240
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -935,6 +935,7 @@ span_fill:
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z, 48.16
+    sd t4, 232(sp)                  # the span's z, a flat row's z everywhere along it
     mul s8, s4, t4
     srai s8, s8, 16                 # u
     mul s9, s5, t4
@@ -943,17 +944,31 @@ span_fill:
     sd t3, 200(sp)                  # no tiles for the span
     la a0, poly
     mul t3, s10, s3
-    add t3, s2, t3                  # 1/z at the end
+    add t3, s2, t3                  # 1/z at the end, kept for the row below it
     li t4, IZ_MIN
     bge t3, t4, 21f
     mv t3, t4
 21:
+    beqz s3, 22f
 .ifdef COUNT
     count_add COUNT_DIVIDES, a5, a6
 .endif
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z at the end
+    j 27f
+22:
+    ld t4, 232(sp)                  # 1/z flat along the row: z at the end the start's
+.ifdef COUNT
+    count_add COUNT_FLAT, a5, a6
+    li a5, 1
+    slli a5, a5, Z_SHIFT
+    div a5, a5, t3                  # the reference, from the end's clamped 1/z
+    count_add COUNT_AVOIDED, a6, a7
+    beq a5, t4, 27f
+    count_add COUNT_MISMATCHES, a6, a7
+.endif
+27:
     mul a5, s10, s6
     add a5, a5, s4
     mul a5, a5, t4
@@ -1097,6 +1112,7 @@ span_fill:
 31:
     mv s11, s10
 32:
+    beqz s3, 34f
     mul t3, s11, s3
     add t3, t3, s2                  # 1/z at the end
     li t4, IZ_MIN
@@ -1109,6 +1125,24 @@ span_fill:
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z at the end
+    j 35f
+34:
+    ld t4, 232(sp)                  # 1/z flat along the row: the span's z
+.ifdef COUNT
+    mul a5, s11, s3
+    add a5, a5, s2                  # the reference: 1/z at the end as computed
+    li a6, IZ_MIN
+    bge a5, a6, 3401f
+    mv a5, a6
+3401:
+    li a6, 1
+    slli a6, a6, Z_SHIFT
+    div a5, a6, a5
+    count_add COUNT_AVOIDED, a6, a7
+    beq a5, t4, 35f
+    count_add COUNT_MISMATCHES, a6, a7
+.endif
+35:
     mul t3, s11, s6
     add t3, t3, s4                  # u/z at the end
     mul t3, t3, t4
@@ -1246,6 +1280,7 @@ span_fill:
     mv t2, s10                      # cut short by the span's end
 443:
     beq t2, s11, 445f
+    beqz s3, 4440f
     mul t3, t2, s3
     add t3, t3, s2                  # 1/z at the interval's end
     li t4, IZ_MIN
@@ -1258,6 +1293,24 @@ span_fill:
     li t4, 1
     slli t4, t4, Z_SHIFT
     div t4, t4, t3                  # z there
+    j 4441f
+4440:
+    ld t4, 232(sp)                  # 1/z flat along the row: the span's z
+.ifdef COUNT
+    mul a5, t2, s3
+    add a5, a5, s2                  # the reference: 1/z at the interval's end as computed
+    li a6, IZ_MIN
+    bge a5, a6, 4442f
+    mv a5, a6
+4442:
+    li a6, 1
+    slli a6, a6, Z_SHIFT
+    div a5, a6, a5
+    count_add COUNT_AVOIDED, a6, a7
+    beq a5, t4, 4441f
+    count_add COUNT_MISMATCHES, a6, a7
+.endif
+4441:
     mul a5, t2, s6
     add a5, a5, s4
     mul a5, a5, t4
@@ -1679,7 +1732,7 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 232
+    addi sp, sp, 240
     ret
 
 .section .bss

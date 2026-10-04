@@ -295,6 +295,18 @@ divides by its length. Quake shifts the full step bare (WinQuake
 `d_scan.c`), a rounding that would move texels here, so the pictures stay
 the divide's to the byte.
 
+Where the polygon's 1/z holds along the row, POLY_IZA zero, z is one value
+along the span: s2 steps by s3 a pixel and never moves. The prologue's z at
+the first pixel, kept in slot 232 (the frame 240 bytes), then serves the
+span's end, every block's end, and every lit interval's end, each a divide
+whose input would be the same clamp of s2. The span's end keeps its
+clamped 1/z in t3 all the same, since the row below the end reads it, and
+that reciprocal keeps its divide: it adds B to the end's clamped 1/z where
+the row below the start adds B to the raw s2, so with A zero the two part
+whenever s2 is under IZ_MIN, past 16,384 m. Which spans qualify is A's
+value alone: flat floors and ceilings under no camera roll, and any wall
+or slope whose depth holds along the row, a wall seen square among them.
+
 A COUNT build (`--set debug,count`) counts every divide span_fill makes,
 site by site, into count_stats, which count_report prints after the frame
 line. It is the instrument of MapperDivides' proof and is never timed: its
