@@ -1,6 +1,7 @@
-# spleen.nu: generate the kernel's console font from a Spleen BDF.
+# spleen.nu: generate the kernel's console font from a Spleen BDF, the
+# kernel's command for development `font`:
 #
-#   nu spleen.nu <spleen-12x24.bdf> <src/font.S>
+#   just adv font <spleen-12x24.bdf>
 #
 # Takes the printable ASCII glyphs, 32 to 126, from the BDF, each 24
 # rows of 16 bits with the 12-pixel glyph in the high bits, and writes
@@ -8,8 +9,15 @@
 # BSD 2-clause; its license is at doc/thirdparty/spleen/LICENSE.
 use std/assert
 
-def main [bdf: path, out: path] {
-    let text = (open --raw $bdf | decode)
+def main [] {
+    print "nu spleen.nu font <spleen-12x24.bdf>; `just adv font <bdf>` at the repository's root"
+}
+
+# The kernel's console font regenerated into src/font.S from a Spleen
+# 12x24 BDF: `just adv font <spleen-12x24.bdf>`
+def "main font" [bdf: path] {
+    let out = ($env.FILE_PWD | path join ".." "src" "font.S" | path expand)
+    let text = (open --raw ($bdf | path expand) | decode)
     let version = ($text | lines | where {|l| $l =~ '^COMMENT  \* Spleen ' } | first | str replace -r '^COMMENT  \* ' '')
     let glyphs = ($text | split row "STARTCHAR " | skip 1 | each {|c|
         let ls = ($c | lines)

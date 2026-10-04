@@ -7,7 +7,7 @@
 # path to serve on in the foreground, for a script. The plan and
 # everything the run writes land in `out`; a fault on the UART is
 # resolved to its routine from the ELF beside the image through the
-# toolchain the build's flags name. `just play` builds and runs it.
+# toolchain the build's flags name. `just adv play` builds and runs it.
 use ../../../../sdk/nu/jab.nu
 
 def main [--kernel: path, --image: path, --out: path, --map: string = "factory", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {

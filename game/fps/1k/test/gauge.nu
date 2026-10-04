@@ -32,12 +32,17 @@
 # every frame in it passes. A capture holding no record of the clock's
 # kinds, 7, 8, 9, or 10, is a build older than them: it holds no
 # measurement and is read from its state records alone, the drawing's
-# and the game's microseconds. `just gauge`, `just gauge-play`, `just
-# gauge-read`, and `just gauge-compare` run it.
+# and the game's microseconds. `bench-report` reads a run of a bench
+# whose steps are this script's, every cadence's frames pooled. `just
+# adv gauge`, `just adv gauge-play`, `just adv gauge-read`, and `just adv
+# gauge-compare` run it, and `just bench game/fps/1k/cadence` runs
+# `play`, `run`, and `bench-report`.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
 
+# the workspace, four directories above this script
+const WORKSPACE = (path self | path dirname | path join ".." ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
 const SCHEMAS = [1 2]
@@ -101,6 +106,7 @@ def main [] {
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
+    print "nu gauge.nu bench-report <a bench run's directory>"
 }
 
 # Play the route on the build `runs` times and read every frame: the
@@ -858,9 +864,11 @@ def ms [us: any]: nothing -> string {
 }
 
 # The report: every run's measurement and outcome under the identity,
-# written as gauge.nuon in `out`, its legs and its outliers printed.
+# written as gauge.nuon in `out`, a previous one there retired, its legs
+# and its outliers printed.
 def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
     let file = ($out | path join "gauge.nuon")
+    jab retire $file (jab target-root $WORKSPACE)
     let doc = {
         label: $label,
         identity: $id,
@@ -868,7 +876,7 @@ def report [label: string, id: record, runs: list<any>, out: path]: nothing -> n
         runs: ($runs | each {|r| { run: $r.run, seed: $r.seed, out: $r.out, ran: $r.ran, measured: ($r.measured | reject rows) } }),
         rows: ($runs | each {|r| $r.measured.rows | each {|row| $row | insert run $r.run } } | flatten),
     }
-    $doc | to nuon | save --raw -f $file
+    $doc | to nuon | save --raw $file
     for r in $runs {
         for l in $r.measured.legs {
             if ($l.critical? | default null) == null {
@@ -1192,7 +1200,8 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
 # reasons; under `--diagnostic` a leg some batch of a build is missing
 # prints as missing in place of a value; the method, the bins every run
 # reached, each run's standing, missing legs, and bins with their
-# medians, and the table go to `--out`.
+# medians, and the table go to `--out`, a previous comparison there
+# retired.
 def "main compare" [
     ...files: string                 # the gauge.nuon files compared
     --field: string = "draw_us"      # the row's column compared
@@ -1203,7 +1212,8 @@ def "main compare" [
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { jab program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
     mkdir ($target | path dirname)
-    $result | to nuon --indent 2 | save --raw -f $target
+    jab retire $target (jab target-root $WORKSPACE)
+    $result | to nuon --indent 2 | save --raw $target
     for t in $result.table {
         let marks = ($t.standings | where {|s| $s != "valid" })
         let marked = (if ($marks | is-empty) { "" } else { $"; ($marks | str join ', ')" })
@@ -1217,4 +1227,198 @@ def "main compare" [
         print $"gauge: ($t.build) ($t.leg): ($value)($marked)"
     }
     print $"gauge: ($target)"
+}
+
+# A run's frames in order, each with the interval from the presented
+# flip before it to its own, both read at the presenting call's start,
+# the flip's end less the call, null for a frame not presented and for
+# the first, and with whether the frame before it ran past the period;
+# the clocked frames alone.
+def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
+    mut previous: any = null
+    mut late = false
+    mut out = []
+    for r in ($rows | where {|x| $x.critical_us != null }) {
+        let start = (if $r.flip_status == $FLIP_PRESENTED { $r.flip_done_us - $r.flip_us } else { null })
+        let interval = (if $start == null or $previous == null { null } else { $start - $previous })
+        $out = ($out | append ($r | insert call_interval_us $interval | insert after_late $late))
+        if $start != null { $previous = $start }
+        $late = ($r.critical_us >= $period)
+    }
+    $out
+}
+
+# Frames pooled: the counts; the presented interval, the interval
+# between presenting calls, the submission age, the critical path, the
+# drawing, the wait, the pacing, and the await by nearest rank (stats);
+# the presenting calls' intervals on the tick grid, within a millisecond
+# of a whole number of periods, counted by that number, and the rest
+# off it; the wakes, attempts, and refusals; the flips early and failed;
+# the frames over the ceiling; the fast frames, under the period, and
+# those of them that waited; and the catch-up intervals, under half a
+# period after a frame past it.
+def bench-frames [rows: list<any>, period: number]: nothing -> record {
+    if ($rows | is-empty) { return { frames: 0 } }
+    let calls = ($rows | get call_interval_us | compact)
+    let multiples = ($calls | each {|c|
+        let k = (($c / $period) | math round)
+        if $k >= 1 and ((($c - $k * $period) | math abs) <= 1000) { $k } else { null }
+    } | compact)
+    {
+        frames: ($rows | length),
+        presented: ($rows | where flip_status == $FLIP_PRESENTED | length),
+        interval: (stats ($rows | get flip_interval_us)),
+        call_interval: (stats $calls),
+        grid: ($multiples | uniq --count | sort-by value | each {|c| { periods: $c.value, intervals: $c.count } }),
+        off_grid: (($calls | length) - ($multiples | length)),
+        submission_age: (stats ($rows | get submission_age_us)),
+        critical: (stats ($rows | get critical_us)),
+        draw: (stats ($rows | get draw_us)),
+        wait: (stats ($rows | get wait_us)),
+        pacing: (stats ($rows | get pacing_us)),
+        await: (stats ($rows | get await_us)),
+        wakes: (total ($rows | get wakes)),
+        attempts: (total ($rows | get flip_attempts)),
+        refusals: (total ($rows | get refusals)),
+        flips_early: ($rows | where flip_status == $FLIP_EARLY | length),
+        flips_failed: ($rows | where {|r| $r.flip_status > $FLIP_EARLY } | length),
+        over: ($rows | where {|r| $r.critical_us >= $CEILING_US } | length),
+        fast: ($rows | where {|r| $r.critical_us < $period } | length),
+        fast_waited: ($rows | where {|r| $r.critical_us < $period and ($r.wait_us | default 0) > 0 } | length),
+        catch_up: ($rows | where {|r| $r.after_late and $r.call_interval_us != null and $r.call_interval_us < ($period / 2) } | length),
+    }
+}
+
+# One step of a bench's run as its gauge.nuon holds it: a play when its
+# identity names the host's own pad, else a batch of the route; its
+# cadence and period; and every run with its standing, CPU seconds over
+# wall seconds, outcomes, and frames (presented-calls). A step with no
+# gauge.nuon holds no runs.
+def bench-step [dir: path, label: string, state: any]: nothing -> record {
+    let file = ($dir | path join $label "gauge.nuon")
+    if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, file: null, runs: [] } }
+    let g = (open $file)
+    let period = (1000000 / ($g.identity | get -o cap | default $CAP))
+    let runs = ($g.runs | each {|r|
+        let m = $r.measured
+        let wall = ($r.ran | get -o wall_seconds | default 0)
+        {
+            run: $r.run,
+            seed: $r.seed,
+            standing: { complete: ($m | get -o complete), valid: ($m | get -o valid), seeded: ($m | get -o seeded), cadences: ($m | get -o cadences) },
+            cpu_over_wall: (if $wall == 0 or ($r.ran | get -o cpu_seconds) == null { null } else { $r.ran.cpu_seconds / $wall }),
+            outcomes: ($m | get -o outcomes),
+            rows: (presented-calls ($g.rows | where run == $r.run) $period),
+        }
+    })
+    { label: $label, state: $state, kind: (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" }), cadence: ($g.identity | get -o mode.cadence), period_us: $period, file: $file, runs: $runs }
+}
+
+# A cadence's steps of one kind pooled: the steps, the runs, those
+# complete, valid, seeded, and at the cadence asked, each run's
+# standing, CPU seconds over wall seconds, and outcomes, and the frames
+# of every run (bench-frames).
+def bench-cadence [steps: list<any>, cadence: any]: nothing -> record {
+    let runs = ($steps | each {|s| $s.runs | each {|r| $r | insert label $s.label } } | flatten)
+    let period = ($steps | first | get period_us)
+    {
+        cadence: $cadence,
+        steps: ($steps | get label),
+        runs: ($runs | length),
+        valid: ($runs | where {|r| $r.standing.complete == true and $r.standing.valid == true and $r.standing.seeded == true and $r.standing.cadences == [$cadence] } | length),
+        standings: ($runs | each {|r| { label: $r.label, run: $r.run } | merge $r.standing }),
+        cpu_over_wall: ($runs | each {|r| $r.cpu_over_wall }),
+        outcomes: ($runs | each {|r| { label: $r.label, run: $r.run, outcomes: $r.outcomes } }),
+        frames: (bench-frames ($runs | each {|r| $r.rows } | flatten) $period),
+    }
+}
+
+# A cadence's lines in a bench's report, milliseconds to a tenth as
+# least, median, 95th, 99th, and greatest.
+def bench-cadence-text [c: record]: nothing -> list<string> {
+    let f = $c.frames
+    let cpu = ($c.cpu_over_wall | compact)
+    let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
+    let head = $"  cadence ($c.cadence), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) complete, valid, seeded, and at the cadence; the process at ($core) of a core"
+    if $f.frames == 0 { return [$head "    no frames"] }
+    let grid = (if ($f.grid | is-empty) { "none" } else { $f.grid | each {|g| $"($g.intervals) at ($g.periods)P" } | str join ", " })
+    [
+        $head
+        $"    ($f.frames) frames, ($f.presented) presented every (spread $f.interval)"
+        $"    submission age (spread $f.submission_age)"
+        $"    critical path (spread $f.critical); drawing (spread $f.draw)"
+        $"    wait (spread $f.wait); pacing (ms $f.pacing.median) and await (ms $f.await.median) at the median"
+        $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.catch_up) catch-up"
+        $"    ($f.fast) fast, ($f.fast_waited) of them waited; ($f.over) over 15 ms; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
+    ]
+}
+
+# A bench's report as text: the steps, each kind's cadences, then the
+# comparisons.
+def bench-text [doc: record]: nothing -> string {
+    let named = (if $doc.bench == null { "" } else { $"($doc.bench) " })
+    let head = [
+        $"bench ($named)run ($doc.stamp | default '-') in ($doc.dir)"
+        $"steps: ($doc.steps | each {|s| $'($s.label) (if $s.file == null { 'no capture' } else { $s.state | default 'read' })' } | str join ', ')"
+    ]
+    let kinds = ($doc.groups | each {|g|
+        let title = (if $g.kind == "play" { "your play" } else { "the route" })
+        [$"($title), per cadence, ms as least / median / 95th / 99th / greatest:"] ++ ($g.cadences | each {|c| bench-cadence-text $c } | flatten)
+    } | flatten)
+    let compared = ($doc.compared | each {|c|
+        if ($c | get -o error) != null { [$"the route at 50 cm on ($c.field): refused, ($c.error | lines | first)"] } else {
+            [$"the route at 50 cm, ($c.field) by leg, ms with the half spread:"] ++ ($c.table | get build | uniq | each {|b|
+                let legs = ($c.table | where build == $b | each {|t| if $t.value_us == null { $"($t.leg) -" } else { $"($t.leg) (ms $t.value_us) \((ms $t.half_spread_us)\)" } })
+                $"  ($b): ($legs | str join ', ')"
+            })
+        }
+    } | flatten)
+    $head ++ $kinds ++ $compared | str join "\n"
+}
+
+# A bench's report, `nu gauge.nu bench-report <dir>`, over the steps a
+# run of the bench wrote in `dir`, each a directory holding its
+# gauge.nuon, in the order bench.nuon lists them, else every directory's
+# by name: the plays, each on the host's own pad, and the route's
+# batches apart, each per cadence with every run pooled, untrimmed
+# (bench-cadence); then the route's batches compared at 50 cm on
+# critical_us and draw_us, a build a cadence, its batches its steps
+# (compare). report.nuon and report.txt are written in `dir`, any there
+# before retired, and the text printed.
+def "main bench-report" [dir: path] {
+    let dir = ($dir | path expand)
+    let listed = ($dir | path join "bench.nuon")
+    let bench = (if ($listed | path exists) { open $listed } else { null })
+    let labels = (if $bench != null { $bench.steps | get label } else { ls $dir | where type == dir | get name | each {|d| $d | path basename } | where {|d| $d != "watch" } | sort })
+    let steps = ($labels | each {|label|
+        let state = (if $bench == null { null } else { $bench.steps | where label == $label | get -o 0.state })
+        bench-step $dir $label $state
+    })
+    let groups = (["play" "route"] | each {|kind|
+        let these = ($steps | where kind == $kind)
+        { kind: $kind, cadences: ($these | get cadence | uniq | sort | each {|c| bench-cadence ($these | where cadence == $c) $c }) }
+    } | where {|g| not ($g.cadences | is-empty) })
+    let files = ($steps | where kind == "route" | get file)
+    let compared = (if ($files | is-empty) { [] } else {
+        ["critical_us" "draw_us"] | each {|field|
+            try { { field: $field, table: (compare $files $field 50 | get table) } } catch {|e| { field: $field, error: $e.msg } }
+        }
+    })
+    let doc = {
+        bench: ($bench | get -o bench),
+        stamp: ($bench | get -o stamp),
+        dir: $dir,
+        steps: ($steps | each {|s| $s | reject runs }),
+        groups: $groups,
+        compared: $compared,
+    }
+    let text = (bench-text $doc)
+    let nuon_file = ($dir | path join "report.nuon")
+    let text_file = ($dir | path join "report.txt")
+    jab retire $nuon_file (jab target-root $WORKSPACE)
+    jab retire $text_file (jab target-root $WORKSPACE)
+    $doc | to nuon --indent 1 | save --raw $nuon_file
+    $text + "\n" | save --raw $text_file
+    print $text
+    print $"gauge: ($nuon_file)"
 }

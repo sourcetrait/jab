@@ -67,6 +67,11 @@ impl Driver {
         self.seconds
     }
 
+    /// The target the plan's files lie in (Plan::target).
+    pub(crate) fn target(&self) -> RoboResult<PathBuf> {
+        self.plan.target()
+    }
+
     /// Whether QEMU runs right now.
     pub(crate) fn alive(&mut self) -> bool {
         self.machine.as_mut().is_some_and(|m| m.alive())

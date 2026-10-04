@@ -49,6 +49,7 @@ mod machine;
 mod mcp;
 mod pad;
 mod plan;
+mod retire;
 mod run;
 mod screen;
 mod socket;
@@ -60,6 +61,7 @@ pub(crate) use machine::*;
 pub(crate) use mcp::*;
 pub(crate) use pad::*;
 pub(crate) use plan::*;
+pub(crate) use retire::*;
 pub(crate) use screen::*;
 pub(crate) use socket::*;
 

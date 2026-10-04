@@ -5,24 +5,28 @@
 # and the helpers that read a screen: `jab screen`, `jab ink`,
 # `jab pixel`, `jab thumbnail`. As a script (`nu jab.nu <command> ...`)
 # it builds, runs, and tests the kernel and the programs for the
-# justfiles, doing every lookup the workspace defines: the workspace
-# directory (the nearest parent holding workspace.jab.toml, or the one
-# a program's manifest names from outside any), the
-# toolchain (RISCV_TOOLCHAIN, else extern/riscv beside the kernel or
-# program, else the workspace's, else the tools on PATH, under the
-# official triple or a distribution's name), QEMU (extern/qemu beside
-# the program, else the workspace's, else qemu-system-riscv64 on PATH),
-# the target (target-root: one tree for the whole workspace, .target at
-# its root or $XDG_CACHE_HOME/jab/target/<checkout> where that is set,
-# every build and every tool's output sharded within it), and the
-# manifests. Nothing a build, a test, or a bench clears away is deleted:
-# it is retired under ~/tmp/jab/retired (retire).
+# repository's one justfile, doing every lookup the workspace defines:
+# the programs (the members workspace.jab.toml lists and every other
+# program under the workspace, each by its path from it or a word its
+# `shortcuts` table names), the workspace directory (the nearest parent
+# holding workspace.jab.toml, or the one a program's manifest names from
+# outside any), the toolchain (RISCV_TOOLCHAIN, else extern/riscv beside
+# the kernel or program, else the workspace's, else the tools on PATH,
+# under the official triple or a distribution's name), QEMU (extern/qemu
+# beside the program, else the workspace's, else qemu-system-riscv64 on
+# PATH), the target (target-root: one tree for the whole workspace,
+# .target at its root or $XDG_CACHE_HOME/jab/target/<checkout> where
+# that is set, every build and every tool's output sharded within it),
+# and the manifests. Nothing a build, a test, a bench, or a clean clears
+# away is deleted: it is retired into the target's own tmp (retire).
 #
 # A build is described by its symbols: `--set debug,stats` names them,
 # comma separated, in any case, and each reaches the assembler as
 # `--defsym NAME=1` for `.ifdef NAME` to read, in the kernel and the
-# programs alike. DEBUG picks the debug tree, .target/debug, and every
-# other build lands in .target/release, so the two coexist. `test`
+# programs alike. DEBUG picks the target's debug tree, and every other
+# build lands in its release tree, so the two coexist. A program's
+# manifest may name a `prepare` script, run before it is built, tested,
+# or run, and an `adv` script, whose commands `just adv` lists. `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -31,6 +35,8 @@
 # way. A build is skipped when its output is newer than every input and
 # the flags, symbols included, match the last build.
 
+# This tool's own file, which `adv` runs again for the SDK's commands.
+const self = (path self)
 # The riscv64 binutils prefixes: the official toolchain's triple first,
 # then the names distributions package the tools under.
 const triples = [
@@ -658,8 +664,8 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     $image
 }
 
-# An archive the manifest names, fetched into .target/fetch on first
-# use, which a run says once since it can take a while, and verified
+# An archive the manifest names, fetched into the target's fetch/ on
+# first use, which a run says once since it can take a while, and verified
 # by its sha256 then and on every later build; a mismatch stops with
 # both digests named.
 def fetched [target: path, url: string, sha256: string]: nothing -> string {
@@ -996,19 +1002,11 @@ def watch-file [ws: path]: nothing -> string {
     target-root $ws | path join "watch.nuonl"
 }
 
-# Record the running Jab QEMU per thread, once a second, to the
-# workspace's target's watch.nuonl, whatever shell this is run from: a
-# first line describing the run (host, the running QEMU's version, the
-# window, the kernel and the symbols it was built with, read from its
-# tree's flags stamp), then a line per sample with every thread's
-# cumulative CPU seconds, one short line printed per sample with the
-# rates since the last. When the run ends, the report on the recording
-# is printed to paste (watch-report), the first `--skip` seconds dropped
-# as the load. Interrupted, it ends with no report.
-def "main watch" [ws: path, --skip: float = 5.0] {
-    let pids = (jab-pids)
-    if ($pids | is-empty) { error make {msg: "no jab is running"} }
-    let pid = ($pids | first)
+# What a recording says first about the QEMU it records: the host, the
+# QEMU's version, the window, the kernel and the symbols it was built
+# with, read from its tree's flags stamp, its pid, and when the
+# recording started.
+def watch-header [pid: int, started: datetime]: nothing -> record {
     let command = (ps -l | where pid == $pid | get -o 0.command | default "")
     let window = ($command | parse --regex '-display (?P<w>\S+)' | get -o 0.w | default "")
     let kernel = ($command | parse --regex '-kernel (?P<k>\S+)' | get -o 0.k | default "")
@@ -1017,12 +1015,29 @@ def "main watch" [ws: path, --skip: float = 5.0] {
     let symbols = ($stamp | parse --regex '--defsym (?P<s>[A-Z0-9_]+)=1' | get s)
     let binary = (command-binary $command)
     let qemu = (try { ^$binary --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" })
+    { os: $nu.os-info.name, arch: $nu.os-info.arch, qemu: $qemu, window: $window, kernel: $kernel, symbols: $symbols, pid: $pid, started: ($started | format date "%Y-%m-%dT%H:%M:%S") }
+}
+
+# Record the running Jab QEMU per thread, once a second, to the
+# workspace's target's watch.nuonl, a previous recording retired,
+# whatever shell this is run from: a first line describing the run
+# (watch-header), then a line per sample with every thread's cumulative
+# CPU seconds, one short line printed per sample with the rates since
+# the last. When the run ends, the report on the recording is printed to
+# paste (watch-report-of), the first `--skip` seconds dropped as the
+# load. Interrupted, it ends with no report. `watch bench` records a
+# bench's runs instead.
+def "main watch" [ws: path, --skip: float = 5.0] {
+    let pids = (jab-pids)
+    if ($pids | is-empty) { error make {msg: "no jab is running"} }
+    let pid = ($pids | first)
     let file = (watch-file $ws)
     mkdir ($file | path dirname)
+    retire $file
     let started = (date now)
-    let run = { os: $nu.os-info.name, arch: $nu.os-info.arch, qemu: $qemu, window: $window, kernel: $kernel, symbols: $symbols, pid: $pid, started: ($started | format date "%Y-%m-%dT%H:%M:%S") }
-    ({ run: $run } | to nuon) + (char nl) | save --raw -f $file
-    print $"jab watch: recording ($pid) to ($file), ($symbols | str join ', ') under ($window)"
+    let run = (watch-header $pid $started)
+    ({ run: $run } | to nuon) + (char nl) | save --raw $file
+    print $"jab watch: recording ($pid) to ($file), ($run.symbols | str join ', ') under ($run.window)"
     if ($pids | length) > 1 { print $"jab watch: ($pids | length) jab processes; recording the first" }
     mut last: any = null
     loop {
@@ -1042,11 +1057,11 @@ def "main watch" [ws: path, --skip: float = 5.0] {
         $last = { at: $at, threads: $threads }
         sleep 1sec
     }
-    print (watch-report $ws $skip | to nuon --indent 2)
+    print (watch-report-of $file $skip | to nuon --indent 2)
 }
 
-# The report on what `watch` recorded, as one NUON record: the run as
-# recorded, the stretch reported on, and per thread the steady CPU
+# The report on a recording `watch` made, as one NUON record: the run
+# as recorded, the stretch reported on, and per thread the steady CPU
 # seconds a second over that stretch and the peak second, with the
 # process total; threads under 0.005 a second are left out. The stretch
 # drops the first `skip` seconds as the load, or nothing for a run too
@@ -1055,8 +1070,8 @@ def "main watch" [ws: path, --skip: float = 5.0] {
 # identity between samples: a row whose second-by-second rate is
 # impossible for one thread, negative or past one, is reported with
 # `stable: false` and no peak, its steady figure a mix.
-def watch-report [ws: path, skip: float]: nothing -> record {
-    let lines = (open --raw (watch-file $ws) | decode | lines | where {|l| ($l | str trim) != "" })
+def watch-report-of [file: path, skip: float]: nothing -> record {
+    let lines = (open --raw $file | decode | lines | where {|l| ($l | str trim) != "" })
     let header = ($lines | first | from nuon)
     let recorded = ($lines | skip 1 | each {|l| $l | from nuon })
     let after = ($recorded | where at >= $skip)
@@ -1102,31 +1117,42 @@ export def target-root [anchor: path]: nothing -> string {
     $cache | path expand | path join "jab" "target" $checkout
 }
 
-# Where retire moves things: ~/tmp/jab/retired, under the user's own
-# tmp, never emptied by anything here. The home is nushell's, else HOME,
-# else USERPROFILE on Windows, since an embedded nushell may know none of
-# its own; with none of them, or one that is not absolute, it refuses
-# rather than retire into wherever it was run from. Untyped because it
-# can end in an error.
-def retired-home [] {
-    let candidates = [($nu.home-dir | default "" | into string) ($env.HOME? | default "") ($env.USERPROFILE? | default "")]
-    let home = ($candidates | where {|h| $h != "" } | get -o 0 | default "")
-    if $home == "" or ($home | path type) != "dir" or ($home | path expand) != $home {
-        error make {msg: $"no absolute home to retire into: nushell's, HOME, and USERPROFILE give ($candidates | to nuon)"}
-    }
-    $home | path join "tmp" "jab" "retired"
+# Whether `dir` is a target this tool makes (target-root): a `.target`
+# directory, or a checkout's under `jab/target` in the XDG cache.
+def is-target [dir: path]: nothing -> bool {
+    (($dir | path basename) == ".target") or (($dir | path dirname | path basename) == "target" and ($dir | path dirname | path dirname | path basename) == "jab")
 }
 
-# Moves `path` out of the way whole in place of deleting it, under
-# ~/tmp/jab/retired/<stamp>/ at its own absolute path, so nothing a
-# build, a test, or a bench clears away is lost; a second retirement of
-# one path within a second takes a numbered name. Nothing when nothing
-# is there; a link is moved as a link.
-export def retire [path: path]: nothing -> nothing {
+# The target a path lies in, the nearest of its parents that is one
+# (is-target), or null.
+def target-of [path: path]: nothing -> oneof<string, nothing> {
+    mut d = ($path | path expand --no-symlink | path dirname)
+    loop {
+        if (is-target $d) { return $d }
+        let up = ($d | path dirname)
+        if $up == $d { return null }
+        $d = $up
+    }
+}
+
+# Moves `path` out of the way whole in place of deleting it, so nothing a
+# build, a test, a bench, or a clean clears away is lost: into the
+# target's own tmp, `<target>/tmp/retired/<stamp>/`, at its path in the
+# target, `root` when given, else the target the path lies in
+# (target-of); a path outside the target lands under `outside/` there at
+# its absolute path. A second retirement of one path within a second
+# takes a numbered name, and `--stamp` sets the stamp, so a clean's
+# entries share one. Nothing when nothing is there; a link is moved as a
+# link. A path in no target with no root given is left as it is and
+# refused. Untyped because it can end in an error.
+export def retire [path: path, root?: path, --stamp: string = ""] {
     let from = ($path | path expand --no-symlink)
     if ($from | path type) == null { return }
-    let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let at = (retired-home | path join $stamp ...($from | path split | skip 1))
+    let target = (if $root != null { $root | path expand } else { target-of $from })
+    if $target == null { error make {msg: $"($from) lies in no target, so there is nowhere to retire it to; it is left as it is"} }
+    let stamp = (if $stamp == "" { date now | format date "%Y%m%d-%H%M%S" } else { $stamp })
+    let rest = (if (under $from $target) { $from | path relative-to $target | path split } else { ["outside"] ++ ($from | path split | skip 1) })
+    let at = ($target | path join "tmp" "retired" $stamp ...$rest)
     mut dest = $at
     mut n = 1
     while ($dest | path type) != null {
@@ -1283,9 +1309,9 @@ def stale [output: path, inputs: list<string>, flags: string, stamp: path]: noth
 # `workspace` names, relative to the manifest, for a program that lives
 # outside any. Its kernel is built there with the same symbols and
 # found in that workspace's tree, and its generic disk, its toolchain
-# link, its shims, and discovery come from there, while the program's
-# own output lands beside the program unless the program is a member
-# (member-of). Under a workspace the key is not read. Null with neither.
+# link, its shims, and discovery come from there, and the program's own
+# output lands in that workspace's target at the program's path
+# (shard-of). Under a workspace the key is not read. Null with neither.
 def workspace-of [here: path, manifest: record]: nothing -> oneof<string, nothing> {
     let above = (workspace-dir $here)
     if $above != null { return $above }
@@ -1304,10 +1330,8 @@ def under [dir: path, root: path]: nothing -> bool {
 }
 
 # Whether `dir` is one of the workspace's own, its kernel or a program
-# workspace.jab.toml lists, by its workspace-relative path: a member
-# builds into the workspace's .target under that path. A program under
-# the workspace's directory that it does not list, a game's say, builds
-# against the workspace with its output beside itself.
+# workspace.jab.toml lists, by its workspace-relative path, which is how
+# an image built before its `home` marker is placed (image-home).
 def member-of [dir: path, ws: path]: nothing -> bool {
     if not (under $dir $ws) { return false }
     let relative = ($dir | path relative-to $ws | str replace --all "\\" "/")
@@ -1316,16 +1340,15 @@ def member-of [dir: path, ws: path]: nothing -> bool {
 }
 
 # The kernel's or a program's context for a build with `names` set:
-# manifest, workspace (workspace-of) and whether the directory is a
-# member of it, toolchain, symbols, the target (target-root, the
-# workspace's or a lone program's own), the tree in it (debug or
-# release), and the output directory, the tree's shard (shard-of).
+# manifest, workspace (workspace-of), toolchain, symbols, the target
+# (target-root, the workspace's or a lone program's own), the tree in
+# it (debug or release), and the output directory, the tree's shard
+# (shard-of).
 def context [dir: path, kind: string, names: list<string>]: nothing -> record {
     let here = ($dir | path expand)
     let manifest_path = ($here | path join $"($kind).jab.toml")
     let manifest = (open $manifest_path)
     let workspace = (workspace-of $here $manifest)
-    let member = ($workspace != null and (member-of $here $workspace))
     let tree = (profile $names)
     let root = (target-root (if $workspace == null { $here } else { $workspace }))
     let place = (shard-of $here $workspace $root $manifest.name)
@@ -1336,7 +1359,6 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
         manifest: $manifest,
         manifest_path: $manifest_path,
         workspace: $workspace,
-        member: $member,
         toolchain: $tc,
         prefix: (tool-prefix $tc),
         symbols: $names,
@@ -1458,14 +1480,6 @@ def prepared [dir: path, names: list<string>]: nothing -> record {
     let kernel = (kernel-elf $c)
     if not ($kernel | path exists) { error make {msg: $"no kernel at ($kernel); build the kernel first, with the same --set"} }
     { context: $c, kernel: $kernel, image: ($c.out | path join $"($c.manifest.name).jab") }
-}
-
-# Build the kernel and every program of the workspace at `ws` with
-# `names` set.
-def workspace-build [ws: path, names: list<string>]: nothing -> nothing {
-    let m = (open ($ws | path join "workspace.jab.toml"))
-    build-kernel ($ws | path join $m.kernel) $names
-    for p in $m.programs { build-program ($ws | path join $p) $names }
 }
 
 # The arguments that run a program's test/test.nu on the kernel: the
@@ -1697,8 +1711,8 @@ def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing 
     }
 }
 
-# The SDL probe: the shim built with cargo into the workspace's .target,
-# the program run under `sdl,gl=on` with the UART off for `seconds`, the
+# The SDL probe: the shim built with cargo into the target's shim/, the
+# program run under `sdl,gl=on` with the UART off for `seconds`, the
 # shim's log read back, and one NUON record printed. Linux only, since
 # it preloads a library into QEMU. With no display server SDL runs its
 # offscreen driver, which draws nothing but keeps every path the same.
@@ -1841,24 +1855,125 @@ def sdl-report [log: path]: nothing -> record {
     }
 }
 
-# Build the kernel and every program of the workspace at `ws`; release
-# unless --set says otherwise.
-def "main workspace build" [ws: path, --set: string = ""] {
-    workspace-build $ws (symbols $set)
+# Whether `dir` is a workspace's root, holding workspace.jab.toml.
+def is-workspace [dir: path]: nothing -> bool {
+    $dir | path expand | path join "workspace.jab.toml" | path exists
 }
 
-# Test every program, a category, or one program, on a build with DEBUG
-# set beside whatever --set names; prints each test's output and a
-# summary, exits 1 if any fails. A test that drives the API asks
-# `jab launch` for the port itself.
-def "main workspace test" [ws: path, category: string = "", name: string = "", --set: string = ""] {
-    let names = (with-debug (symbols $set))
-    workspace-build $ws $names
+# Every program of the workspace at `ws` by its path from it: the members
+# workspace.jab.toml lists, then the programs under its directory it does
+# not list, the game's among them, found by their manifests outside the
+# target, the cargo trees, and extern/.
+def programs-of [ws: path]: nothing -> list<string> {
+    let ws = ($ws | path expand)
+    let listed = (open ($ws | path join "workspace.jab.toml") | get programs)
+    let root = (target-root $ws)
+    let found = (glob ($ws | path join "**" "program.jab.toml") --exclude ["**/.git/**" "**/.target/**" "**/target/**" "**/extern/**"]
+        | each {|f| $f | path dirname }
+        | where {|d| not (under $d $root) }
+        | each {|d| $d | path relative-to $ws | str replace --all "\\" "/" }
+        | where {|p| $p not-in $listed }
+        | sort)
+    $listed ++ $found
+}
+
+# A path given as words, each split on its slashes, so `example bounce`,
+# `example/bounce`, and `game/fps/1k` all read; "" for none.
+def path-words [words: list<string>]: nothing -> string {
+    $words | each {|w| $w | split row "/" } | flatten | where {|w| $w != "" and $w != "." } | str join "/"
+}
+
+# A program's path in the workspace from words (path-words), a word the
+# workspace's `shortcuts` table names standing for its path: `fps` for
+# game/fps/1k.
+def program-path [ws: path, words: list<string>]: nothing -> string {
+    let at = (path-words $words)
+    let shortcuts = (open ($ws | path expand | path join "workspace.jab.toml") | get -o shortcuts | default {})
+    $shortcuts | get -o $at | default $at
+}
+
+# The programs at or under a path in the workspace, every program for no
+# path; a path matching none is an error naming them all. Untyped because
+# it ends in an error.
+def programs-under [ws: path, words: list<string>] {
+    let at = (program-path $ws $words)
+    let all = (programs-of $ws)
+    let picked = (if $at == "" { $all } else { $all | where {|p| $p == $at or ($p | str starts-with $"($at)/") } })
+    if ($picked | is-empty) { error make {msg: $"no program at or under ($at); the programs: ($all | str join ', ')"} }
+    $picked
+}
+
+# The one program at a path in the workspace, its directory. Untyped
+# because it ends in an error.
+def program-at [ws: path, words: list<string>] {
+    let at = (program-path $ws $words)
+    if $at == "" { error make {msg: "a program by its path from the workspace, or its shortcut: example/bounce, game/fps/1k, fps"} }
+    let all = (programs-of $ws)
+    if $at not-in $all { error make {msg: $"no program at ($at); the programs: ($all | str join ', ')"} }
+    $ws | path expand | path join $at
+}
+
+# Whether a program, by its path from the workspace, is a test: one under
+# a `test` directory, which `just test` runs and `just run` does not.
+def is-test [at: string]: nothing -> bool {
+    "test" in ($at | split row "/")
+}
+
+# The one program `just run` takes at a path in the workspace, its
+# directory: any program but a test (is-test). Untyped because it ends
+# in an error.
+def run-target [ws: path, words: list<string>] {
+    let at = (program-path $ws $words)
+    let all = (programs-of $ws)
+    let runnable = ($all | where {|p| not (is-test $p) })
+    if $at == "" { error make {msg: $"a program to run by its path from the workspace, or its shortcut: ($runnable | str join ', ')"} }
+    if $at in $all and (is-test $at) { error make {msg: $"($at) is a test; `just test ($at)` runs it"} }
+    if $at not-in $runnable { error make {msg: $"no program to run at ($at); the programs: ($runnable | str join ', ')"} }
+    $ws | path expand | path join $at
+}
+
+# A program's preparation before it is built, tested, or run: the script
+# its manifest's `prepare` names, relative to the manifest, run from the
+# program's directory with the phase, build, test, or run; nothing
+# without one. A preparation that fails stops the command with its
+# output.
+def prepare [dir: path, phase: string]: nothing -> nothing {
+    let here = ($dir | path expand)
+    let script = (open ($here | path join "program.jab.toml") | get -o prepare | default "")
+    if $script == "" { return }
+    let r = (do { cd $here; ^nu ($here | path join $script) $phase } | complete)
+    print -n $r.stdout
+    if $r.exit_code != 0 { error make {msg: $"preparing ($here) to ($phase) failed:\n($r.stderr)"} }
+}
+
+# Build the kernel, then the programs at or under a path in the
+# workspace, every program for none, each prepared first, with `names`.
+def build-under [ws: path, words: list<string>, names: list<string>]: nothing -> nothing {
+    let ws = ($ws | path expand)
     let m = (open ($ws | path join "workspace.jab.toml"))
-    let selected = ($m.programs | where {|p| ($category == "" or ($p | str starts-with $"($category)/")) and ($name == "" or ($p | path basename) == $name) })
-    if ($selected | is-empty) { error make {msg: $"no program matches ($category) ($name)"} }
+    build-kernel ($ws | path join $m.kernel) $names
+    for p in (programs-under $ws $words) {
+        let dir = ($ws | path join $p)
+        prepare $dir "build"
+        build-program $dir $names
+    }
+}
+
+# Test the programs at or under a path in the workspace, every program
+# for none, each on a build with DEBUG beside `names` and prepared to
+# test first; prints each test's output and a summary, exits 1 if any
+# fails. A test that drives the API asks `jab launch` for the port
+# itself.
+def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> nothing {
+    let ws = ($ws | path expand)
+    let names = (with-debug $names)
+    let selected = (programs-under $ws $words)
+    let m = (open ($ws | path join "workspace.jab.toml"))
+    build-kernel ($ws | path join $m.kernel) $names
     let results = ($selected | each {|p|
-        let ready = (prepared ($ws | path join $p) $names)
+        let dir = ($ws | path join $p)
+        prepare $dir "test"
+        let ready = (prepared $dir $names)
         let r = (^nu ...(test-args $ready) | complete)
         print $"--- ($p)"
         print -n $r.stdout
@@ -1869,16 +1984,380 @@ def "main workspace test" [ws: path, category: string = "", name: string = "", -
     if not ($results | all {|r| $r.passed }) { exit 1 }
 }
 
-# Build everything, then run one program with the console window;
-# release unless --set says otherwise, the API's port on the machine
-# with --api; the keyboard and the tablet on by default and off with
-# --no-kbm; the gamepad found on the host attached by default and left
-# off with --no-pad; the sound device over the host's audio by default
-# and off with --no-sound.
-def "main workspace run" [ws: path, category: string, name: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound] {
-    let names = (symbols $set)
-    workspace-build $ws $names
-    run-program ($ws | path join $category $name) $names $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound)
+# The development commands, `just adv`: with no command the list, the
+# SDK's own, probe and clean, then the kernel's and every program's, the
+# `main <command>` definitions of the nushell script its manifest's `adv`
+# names; with one, the SDK's or the script's that defines it, run with
+# the rest of the words as they came, from the directory the command was
+# given in, so a relative path among them is the caller's.
+def --wrapped "main adv" [dir: path, ...words: string] {
+    let ws = ($dir | path expand)
+    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    let commands = (adv-commands $ws)
+    if ($words | is-empty) { print (adv-list $commands); return }
+    let name = ($words | first)
+    let rest = ($words | skip 1)
+    if $name == "probe" { ^nu $self probe $ws ...$rest; return }
+    if $name == "clean" { adv-clean $ws; return }
+    let hit = ($commands | where command == $name)
+    if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just adv` lists them"} }
+    ^nu ($hit | first | get script) $name ...$rest
+}
+
+# Every development command the kernel and the programs declare: the
+# `main <command>` definitions of the script a manifest's `adv` names,
+# relative to it, each with the comment above it, the script, and its
+# owner's path and directory.
+def adv-commands [ws: path]: nothing -> table<command: string, usage: string, owner: string, home: string, script: string, summary: string> {
+    let m = (open ($ws | path join "workspace.jab.toml"))
+    let owners = ([{ path: $m.kernel, manifest: "kernel.jab.toml" }] ++ (programs-of $ws | each {|p| { path: $p, manifest: "program.jab.toml" } }))
+    $owners | each {|o|
+        let home = ($ws | path join $o.path)
+        let declared = (open ($home | path join $o.manifest) | get -o adv | default "")
+        if $declared == "" { [] } else {
+            let script = ($home | path join $declared)
+            let lines = (open --raw $script | decode | lines)
+            $lines | enumerate | each {|l|
+                let hit = ($l.item | parse --regex '^def (?:--wrapped )?"main (?P<command>[^"]+)"\s*\[(?P<params>.*)\][^\]]*$' | get -o 0)
+                if $hit == null { null } else {
+                    let above = ($lines | first $l.index | reverse | take while {|x| $x | str starts-with "#" } | reverse | each {|x| $x | str replace --regex '^#\s?' '' } | str join " ")
+                    { command: $hit.command, usage: (adv-usage $hit.params), owner: $o.path, home: $home, script: $script, summary: $above }
+                }
+            } | compact
+        }
+    } | flatten
+}
+
+# A command's arguments as `just adv` shows them, from its definition's
+# parameters: a required one `<name>`, one with a default `[name]`, a
+# flag `[--flag value]` or `[--flag]`, the rest `[args...]`.
+def adv-usage [params: string]: nothing -> string {
+    $params | split row "," | each {|p| $p | str trim } | where {|p| $p != "" } | each {|p|
+        let name = ($p | split row ":" | first | split row "=" | first | str trim)
+        let default = (if ($p | str contains "=") { $p | split row "=" | skip 1 | str join "=" | str trim | str trim --char '"' } else { "" })
+        if ($name | str starts-with "...") { "[args...]" } else if ($name | str starts-with "--") {
+            if ($p | str contains ":") { $"[($name) ($default)]" } else { $"[($name)]" }
+        } else if $default != "" { $"[($name)]" } else { $"<($name)>" }
+    } | str join " "
+}
+
+# The list `just adv` prints: each command with its arguments and its
+# owner, and its description up to its first example or full stop.
+def adv-list [commands: table]: nothing -> string {
+    let sdk = [
+        { command: "probe", usage: "<kind> <program> [--seconds 12] [--set names]", owner: "sdk", summary: "Probe one program under a window and print one NUON record on how its flips reached it, `sdl` the one kind, Linux only" }
+        { command: "clean", usage: "", owner: "sdk", summary: "Retire everything every build, test, run, and bench here wrote into the target's own tmp, so the next build starts from nothing" }
+    ]
+    let all = ($sdk ++ ($commands | select command usage owner summary))
+    let shown = ($all | each {|c|
+        let cut = ($c.summary | split row ": `" | first | split row ". " | first)
+        let usage = (if $c.usage == "" { "" } else { $" ($c.usage)" })
+        $"  just adv ($c.command)($usage)  [($c.owner)]\n      ($cut)"
+    })
+    (["the commands for development, `just adv <command> [args]`:"] ++ $shown) | str join "\n"
+}
+
+# `just adv clean`: everything in the workspace's target but its tmp
+# retired there under one stamp (retire), so the next build starts from
+# nothing while nothing is deleted; only in a directory that is a target
+# this tool makes (is-target). Emptying the target's tmp is the user's.
+def adv-clean [ws: path]: nothing -> nothing {
+    let target = (target-root $ws)
+    if ($target | path type) != "dir" { print $"jab: no target at ($target)"; return }
+    if not (is-target $target) { error make {msg: $"($target) is not a target this tool makes; leaving it"} }
+    let stamp = (date now | format date "%Y%m%d-%H%M%S")
+    let entries = (ls -a $target | get name | where {|e| ($e | path basename) != "tmp" })
+    for e in $entries { retire $e $target --stamp $stamp }
+    print $"jab: retired ($entries | length) entries of ($target) to ($target | path join 'tmp' 'retired' $stamp); emptying ($target | path join 'tmp') is yours"
+}
+
+# The benches of the workspace's programs, `<program>/<bench>` each: the
+# NUON files under a program's bench/ directory.
+def benches-of [ws: path]: nothing -> list<string> {
+    programs-of $ws | each {|p|
+        glob ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
+    } | flatten
+}
+
+# The bench `name` names, `<program>/<bench>`, the program by its path
+# or a shortcut (program-path): the program's path and directory, the
+# bench's name and file, and its definition, held to its shape: a
+# summary, and steps each with a label of its own and the script it runs
+# with its arguments. Untyped because it ends in an error.
+def bench-at [ws: path, name: string] {
+    let words = ($name | split row "/" | where {|w| $w != "" })
+    let all = (benches-of $ws)
+    if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `just bench <program>/<bench>`: ($all | str join ', ')"} }
+    let bench = ($words | last)
+    let program = (program-path $ws ($words | drop 1))
+    let file = ($ws | path expand | path join $program "bench" $"($bench).nuon")
+    if not ($file | path exists) { error make {msg: $"no bench ($bench) in ($program); the benches: ($all | str join ', ')"} }
+    let def = (open $file)
+    if ($def | get -o summary) == null or ($def | get -o steps) == null { error make {msg: $"($file) needs a summary and steps"} }
+    let labels = ($def.steps | each {|s| $s | get -o label | default "" })
+    if ($labels | any {|l| $l == "" }) or ($labels | uniq | length) != ($labels | length) { error make {msg: $"($file): every step needs a label of its own"} }
+    if ($def.steps | any {|s| ($s | get -o run | default [] | is-empty) }) { error make {msg: $"($file): every step needs `run`, its script and the script's arguments"} }
+    { name: $"($program)/($bench)", program: $program, dir: ($ws | path expand | path join $program), bench: $bench, file: $file, def: $def }
+}
+
+# Where a bench's runs land: the program's bench shard of the target
+# under the bench's name, each run a stamped directory in it, beside
+# state.nuon, which says what the latest run is doing for `watch bench`.
+def bench-home [b: record]: nothing -> string {
+    program-shard $b.dir "bench" | path join $b.bench
+}
+
+# The list `just bench` prints: each bench with its summary.
+def bench-list [ws: path]: nothing -> string {
+    let shown = (benches-of $ws | each {|n|
+        let b = (bench-at $ws $n)
+        $"  just bench ($n)\n      ($b.def.summary)"
+    })
+    (["the benches, `just bench <program>/<bench>` with `just watch bench <program>/<bench>` in a second terminal:"] ++ $shown) | str join "\n"
+}
+
+# A bench's state file as its run last wrote it; null when there is
+# none.
+def bench-state [file: path]: nothing -> oneof<record, nothing> {
+    if not ($file | path exists) { return null }
+    try { open $file } catch { null }
+}
+
+# Whether the run a state describes is under way: not finished, and its
+# process alive.
+def bench-live [s: record]: nothing -> bool {
+    ($s.state not-in [done failed]) and (process-alive ($s.pid | into string))
+}
+
+# The state file written whole, through a file beside it moved over it,
+# so `watch bench` never reads half of one.
+def bench-save-state [file: path, state: record]: nothing -> nothing {
+    let next = $"($file).next"
+    $state | to nuon | save --raw -f $next
+    mv -f $next $file
+}
+
+# Run a bench, `just bench <program>/<bench>`: the NUON file of that name
+# under the program's bench/ directory, with a summary, the tree, the
+# steps, each a label and the program's script with its arguments and,
+# for a step a person attends, `attend`, what they do; and the report, a
+# script run over the run's directory at the end. The program is built
+# in the tree, then every step runs in order with `--out` its own
+# directory and `--label` its label, an attended step announced and
+# counted down first, a step that fails recorded and the rest run; then
+# the report. A run is a stamped directory in the program's bench shard
+# of the target, its bench.nuon recording every step's outcome as it
+# lands, and state.nuon beside the stamps says what the run is doing,
+# for `just watch bench`. `--only` runs the steps its comma-separated
+# labels name; with no bench, the list. Nothing is deleted: a run writes
+# its own directory and the state.
+def "main bench" [ws: path, name?: string, --only: string = ""] {
+    let ws = ($ws | path expand)
+    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    if $name == null { print (bench-list $ws); return }
+    let b = (bench-at $ws $name)
+    let labels = ($b.def.steps | get label)
+    let picked = ($only | split row "," | each {|l| $l | str trim } | where {|l| $l != "" })
+    let unknown = ($picked | where {|l| $l not-in $labels })
+    if not ($unknown | is-empty) { error make {msg: $"($b.name) has no step ($unknown | str join ', '); its steps: ($labels | str join ', ')"} }
+    let steps = (if ($picked | is-empty) { $b.def.steps } else { $b.def.steps | where {|s| $s.label in $picked } })
+    let tree = ($b.def | get -o tree | default "release")
+    let names = (tree-symbols $tree)
+    let home = (bench-home $b)
+    let stamp = (date now | format date "%Y%m%d-%H%M%S")
+    let dir = ($home | path join $stamp)
+    if ($dir | path exists) { error make {msg: $"a run of ($b.name) started this second, at ($dir)"} }
+    mkdir $dir
+    let state_file = ($home | path join "state.nuon")
+    let record_file = ($dir | path join "bench.nuon")
+    let total = ($steps | length)
+    let base = { bench: $b.name, stamp: $stamp, dir: $dir, pid: $nu.pid, started: (date now | format date "%Y-%m-%dT%H:%M:%S"), total: $total }
+    mut record = {
+        bench: $b.name, summary: $b.def.summary, tree: $tree, stamp: $stamp, started: $base.started, file: $b.file,
+        steps: ($steps | each {|s| { label: $s.label, attend: ($s | get -o attend), run: $s.run, state: "pending", exit: null, seconds: null } }),
+        report: null, state: "building",
+    }
+    $record | to nuon --indent 2 | save --raw $record_file
+    bench-save-state $state_file ($base | merge { step: 0, label: "", state: "building" })
+    print $"jab bench: ($b.name), ($total) steps, into ($dir): ($b.def.summary)"
+    let broken = (try {
+        let m = (open ($ws | path join "workspace.jab.toml"))
+        build-kernel ($ws | path join $m.kernel) $names
+        prepare $b.dir "build"
+        build-program $b.dir $names
+        null
+    } catch {|e| $e.msg })
+    if $broken != null {
+        $record = ($record | merge { state: "failed" })
+        $record | to nuon --indent 2 | save --raw -f $record_file
+        bench-save-state $state_file ($base | merge { step: 0, label: "", state: "failed" })
+        error make {msg: $"($b.name): the build failed: ($broken)"}
+    }
+    for entry in ($steps | enumerate) {
+        let s = $entry.item
+        let n = ($entry.index + 1)
+        bench-save-state $state_file ($base | merge { step: $n, label: $s.label, state: "running" })
+        let attend = ($s | get -o attend)
+        if $attend != null {
+            print $"jab bench: step ($n) of ($total), ($s.label): ($attend)"
+            for left in 10..1 { print -n $"\r  starting in ($left) s "; sleep 1sec }
+            print ""
+        } else {
+            print $"jab bench: step ($n) of ($total), ($s.label)"
+        }
+        let script = ($b.dir | path join ($s.run | first))
+        let started = (date now)
+        let code = (try {
+            ^nu $script ...($s.run | skip 1) --out ($dir | path join $s.label) --label $s.label
+            0
+        } catch { $env.LAST_EXIT_CODE? | default 1 })
+        let seconds = ((((date now) - $started) / 1sec) | math round --precision 1)
+        let i = $entry.index
+        let outcome = { state: (if $code == 0 { "done" } else { "failed" }), exit: $code, seconds: $seconds }
+        let updated = ($record.steps | enumerate | each {|e| if $e.index == $i { $e.item | merge $outcome } else { $e.item } })
+        $record = ($record | merge { steps: $updated })
+        $record | to nuon --indent 2 | save --raw -f $record_file
+        if $code != 0 { print $"jab bench: ($s.label) failed with exit ($code); on to the next step" }
+    }
+    bench-save-state $state_file ($base | merge { step: $total, label: "", state: "reporting" })
+    let report = ($b.def | get -o report)
+    let reported = (if $report == null { null } else {
+        try { ^nu ($b.dir | path join ($report | first)) ...($report | skip 1) $dir; 0 } catch { $env.LAST_EXIT_CODE? | default 1 }
+    })
+    let failed = ($record.steps | where state != "done" | get label)
+    let final = (if ($failed | is-empty) and ($reported == null or $reported == 0) { "done" } else { "failed" })
+    $record = ($record | merge { report: $reported, state: $final })
+    $record | to nuon --indent 2 | save --raw -f $record_file
+    bench-save-state $state_file ($base | merge { step: $total, label: "", state: $final })
+    let failures = (if ($failed | is-empty) { "" } else { $"; failed: ($failed | str join ', ')" })
+    let unreported = (if $reported == null or $reported == 0 { "" } else { $"; the report failed with exit ($reported)" })
+    print $"jab bench: ($b.name) ($final), ($total) steps($failures)($unreported); everything in ($dir)"
+}
+
+# The QEMUs of a bench's run: those whose command lines name its
+# directory.
+def bench-qemus [run: path]: nothing -> list<int> {
+    ps -l | where {|p| ((command-binary $p.command | path basename) == (exe-name $qemu_name)) and ($p.command | str contains $run) } | get pid
+}
+
+# The busiest threads of a watch report as one short line.
+def watch-top [threads: list<any>]: nothing -> string {
+    $threads | first 4 | each {|t| $"($t.name) ($t.steady)" } | str join ", "
+}
+
+# A recording's threads' rates over its last `span` samples, the
+# busiest first, as one short line; "" while it holds too few.
+def watch-rates [file: path, span: int]: nothing -> string {
+    let samples = (open --raw $file | decode | lines | where {|l| ($l | str trim) != "" } | skip 1)
+    if ($samples | length) < 2 { return "" }
+    let last = ($samples | last | from nuon)
+    let first = ($samples | last ([($span + 1) ($samples | length)] | math min) | first | from nuon)
+    let seconds = ($last.at - $first.at)
+    if $seconds <= 0 { return "" }
+    $last.threads | each {|t|
+        let before = ($first.threads | where id == $t.id | get -o 0.cpu | default $t.cpu)
+        { name: $t.name, rate: (($t.cpu - $before) / $seconds) }
+    } | where rate >= 0.01 | sort-by rate --reverse | first 4 | each {|r| $"($r.name) ($r.rate | math round --precision 2)" } | str join "  "
+}
+
+# Record every QEMU of a bench's run, `just watch bench
+# <program>/<bench>` in a second terminal: it waits for the bench's next
+# run, or takes up one under way, then records each QEMU of the run per
+# thread once a second, under the step running when it started, to
+# watch/<step>-<n>.nuonl in the run's directory, a line printed as each
+# starts and ends and the rates every five seconds. When the bench has
+# finished and no QEMU of it is left, it prints the bench's report and
+# its own per QEMU, the steady CPU seconds a second after the first
+# `--skip` (watch-report-of), and writes them together as watch.nuon in
+# the run's directory. Interrupted, it ends with no report.
+def "main watch bench" [...words: string, --skip: float = 5.0] {
+    if ($words | is-empty) { error make {msg: "nu jab.nu watch bench <program>/<bench> <workspace>"} }
+    let ws = ($words | last | path expand)
+    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    let named = ($words | drop 1)
+    if ($named | is-empty) { print (bench-list $ws); return }
+    let b = (bench-at $ws ($named | first))
+    let state_file = (bench-home $b | path join "state.nuon")
+    let before = (bench-state $state_file)
+    mut state = (if $before != null and (bench-live $before) { $before } else { null })
+    if $state == null { print $"jab watch: waiting for ($b.name) to start: `just bench ($b.name)` in another terminal" }
+    while $state == null {
+        sleep 1sec
+        let s = (bench-state $state_file)
+        if $s != null and ($before == null or $s.stamp != $before.stamp) { $state = $s }
+    }
+    let run = $state.dir
+    let stamp = $state.stamp
+    let watch_dir = ($run | path join "watch")
+    mkdir $watch_dir
+    print $"jab watch: recording ($b.name)'s run ($stamp), ($state.total) steps, into ($watch_dir)"
+    mut seen = []
+    mut label = ""
+    mut tick = 0
+    loop {
+        let read = (bench-state $state_file)
+        let current = (if $read != null and $read.stamp == $stamp { $read } else { $state })
+        if $current.label != "" and $current.label != $label { print $"jab watch: step ($current.step) of ($current.total), ($current.label)" }
+        $label = $current.label
+        let step = $label
+        let pids = (bench-qemus $run)
+        let known = ($seen | each {|e| $e.pid })
+        for pid in ($pids | where {|p| $p not-in $known }) {
+            let n = (($seen | where {|e| $e.label == $step } | length) + 1)
+            let file = ($watch_dir | path join $"($step)-($n).nuonl")
+            let started = (date now)
+            retire $file
+            ({ run: (watch-header $pid $started) } | to nuon) + (char nl) | save --raw $file
+            $seen = ($seen | append { pid: $pid, label: $step, n: $n, file: $file, started: $started, ended: false })
+            print $"jab watch: ($step), QEMU ($n), ($pid)"
+        }
+        let now = (date now)
+        for e in ($seen | enumerate | where {|x| not $x.item.ended }) {
+            if $e.item.pid in $pids {
+                ({ at: (($now - $e.item.started) / 1sec), threads: (threads-of $e.item.pid) } | to nuon) + (char nl) | save --raw --append $e.item.file
+            } else {
+                let i = $e.index
+                $seen = ($seen | enumerate | each {|x| if $x.index == $i { $x.item | merge { ended: true } } else { $x.item } })
+                let r = (try { watch-report-of $e.item.file $skip } catch { null })
+                print (if $r == null { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended, too short to report" } else { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended: ($r.process) of a core over ($r.seconds) s; (watch-top $r.threads)" })
+            }
+        }
+        $tick += 1
+        if ($tick mod 5) == 0 {
+            for e in ($seen | where {|x| not $x.ended }) {
+                let rates = (watch-rates $e.file 5)
+                if $rates != "" { print $"  ($e.label) ($e.n): ($rates)" }
+            }
+        }
+        let finished = ($current.state in [done failed]) or (not (process-alive ($current.pid | into string)))
+        if $finished and ($pids | is-empty) and ($seen | all {|x| $x.ended }) { break }
+        sleep 1sec
+    }
+    let last = (bench-state $state_file)
+    let ended = (if $last == null or $last.stamp != $stamp { "superseded by a later run" } else if $last.state in [done failed] { $last.state } else { "ended unfinished" })
+    let per = ($seen | each {|e|
+        let w = (try { watch-report-of $e.file $skip } catch {|err| { error: $err.msg } })
+        { step: $e.label, n: $e.n, pid: $e.pid, file: $e.file, watch: $w }
+    })
+    let text_file = ($run | path join "report.txt")
+    print ""
+    print $"jab watch: ($b.name)'s run ($stamp) ($ended)"
+    print (if ($text_file | path exists) { open --raw $text_file | decode | str trim --right } else { "the bench wrote no report" })
+    print "per QEMU, the steady CPU seconds a second:"
+    for p in $per {
+        print (if ($p.watch | get -o error) != null { $"  ($p.step) ($p.n): ($p.watch.error)" } else { $"  ($p.step) ($p.n): ($p.watch.process) of a core over ($p.watch.seconds) s; (watch-top $p.watch.threads)" })
+    }
+    let report_file = ($run | path join "report.nuon")
+    let whole = {
+        bench: $b.name, run: $stamp, dir: $run, state: $ended,
+        steps: (try { open ($run | path join "bench.nuon") | get steps } catch { null }),
+        report: (if ($report_file | path exists) { open $report_file } else { null }),
+        watch: $per,
+    }
+    let out = ($run | path join "watch.nuon")
+    retire $out
+    $whole | to nuon --indent 2 | save --raw $out
+    print $"jab watch: ($out)"
 }
 
 # The keyboard and the tablet on the line: on unless --no-kbm, and
@@ -1894,18 +2373,6 @@ def pad-choice [pad: bool, no_pad: bool]: nothing -> bool {
     not $no_pad
 }
 
-# Build everything, then probe one program under a window for
-# --seconds: `just probe sdl example walk`; release unless --set says
-# otherwise. Prints one NUON record on how the program's flips reached
-# the window.
-def "main workspace probe" [ws: path, kind: string, category: string, name: string, --seconds: int = 12, --set: string = ""] {
-    let names = (symbols $set)
-    workspace-build $ws $names
-    probe ($ws | path join $category $name) $kind $names $seconds
-}
-
-# Build the kernel at `dir` (--kernel) or the program at `dir`; release
-# unless --set says otherwise.
 # The headless machine for a program prepared and printed as JSON, for a
 # harness in another language to run and drive: `nu jab.nu plan <dir>
 # --disk <romfs> --serial fps --api --gamepad --set debug`, the kernel and
@@ -1919,40 +2386,63 @@ def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: s
     plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound | to json
 }
 
-def "main build" [dir: path, --kernel, --set: string = ""] {
+# Build: at a workspace's root the kernel and every program, or the
+# programs at or under a path (`example`, `example/bounce`,
+# `game/fps/1k`), each prepared first; at a program's directory that
+# program, prepared; with --kernel at the kernel's, the kernel. Release
+# unless --set says otherwise.
+def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {
     let names = (symbols $set)
-    if $kernel { build-kernel $dir $names } else { build-program $dir $names }
+    if (is-workspace $dir) { build-under $dir $words $names; return }
+    if $kernel { build-kernel $dir $names } else {
+        prepare $dir "build"
+        build-program $dir $names
+    }
 }
 
-# Build the program at `dir` with DEBUG set beside whatever --set names
-# and run its test/test.nu on the debug kernel.
-def "main test" [dir: path, --set: string = ""] {
-    ^nu ...(test-args (prepared $dir (with-debug (symbols $set))))
+# Test with DEBUG set beside whatever --set names: at a workspace's root
+# every program's test, or those at or under a path, with a summary,
+# failing if any fails; at a program's directory its test/test.nu on the
+# debug kernel.
+def "main test" [dir: path, ...words: string, --set: string = ""] {
+    let names = (symbols $set)
+    if (is-workspace $dir) { test-under $dir $words $names; return }
+    prepare $dir "test"
+    ^nu ...(test-args (prepared $dir (with-debug $names)))
 }
 
-# Build the program at `dir` and run it with the console window; release
-# unless --set says otherwise, the API's port on the machine with --api,
-# the keyboard and the tablet off with --no-kbm, the gamepad off with
-# --no-pad.
-def "main run" [dir: path, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound] {
-    run-program $dir (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound)
+# Build, then run one program with its window and the UART on stdio: at
+# a workspace's root the program at a path, never a test (run-target),
+# at a program's directory that program. Release unless --set says
+# otherwise; the API's port on the machine with --api; the keyboard and
+# the tablet off with --no-kbm, the gamepad the host has off with
+# --no-pad, the sound device off with --no-sound. QEMU's exit code is
+# the program's status.
+def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound] {
+    let program = (if (is-workspace $dir) { run-target $dir $words } else { $dir | path expand })
+    prepare $program "run"
+    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound)
 }
 
-# Build the program at `dir` and probe it under a window for --seconds;
-# release unless --set says otherwise. `sdl` is the one probe.
-def "main probe" [dir: path, kind: string, --seconds: int = 12, --set: string = ""] {
-    probe $dir $kind (symbols $set) $seconds
+# Probe one program under a window for --seconds and print one NUON
+# record on how its flips reached the window, at a workspace's root the
+# program at a path, at a program's directory that program; release
+# unless --set says otherwise. `sdl` is the one probe.
+def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = ""] {
+    let program = (if (is-workspace $dir) { program-at $dir $words } else { $dir | path expand })
+    prepare $program "run"
+    probe $program $kind (symbols $set) $seconds
 }
 
-# Remove the kernel's (--kernel) or the program's build output from both
-# trees.
+# Retire the kernel's (--kernel) or the program's build output from both
+# trees (retire).
 def "main clean" [dir: path, --kernel] {
     for names in [[] ["DEBUG"]] {
         let c = (context $dir (if $kernel { "kernel" } else { "program" }) $names)
-        if ($c.out | path exists) { rm -r $c.out }
+        retire $c.out
     }
 }
 
 def main [] {
-    print "nu jab.nu <build|test|clean> <dir> [--kernel] [--set names]; nu jab.nu run <dir> [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu probe <dir> sdl [--seconds N] [--set names]; nu jab.nu workspace <build|test|run> <ws> [category [name]] [--set names] [--api] [--no-kbm] [--no-pad]; nu jab.nu workspace probe <ws> sdl <category> <name> [--seconds N]; nu jab.nu watch <ws> [--skip N]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <dir> [--kernel]; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }

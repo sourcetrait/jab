@@ -1,5 +1,5 @@
 # The shims: what the SDK's tool puts between QEMU and the host, one
-# crate each under crates/, built into the workspace's .target/shim:
+# crate each under crates/, built into the jab target's shim/:
 # libraries preloaded into QEMU with LD_PRELOAD, and the pad bridge,
 # a binary run beside it. A crate declares only its name and
 # description; everything else is the workspace's.

@@ -2,17 +2,19 @@ use crate::*;
 
 /// The harness over a Unix socket: one command a line in, one JSON line
 /// out, the machine started at once and served until quit or ten seconds
-/// past the bound, whether or not QEMU is still running.
+/// past the bound, whether or not QEMU is still running. Whatever sits at
+/// the socket's path is retired before the bind, and the socket after,
+/// into the plan's target (retire).
 pub(crate) fn serve_socket(mut driver: Driver, sock: &Path) -> RoboResult<i32> {
-    if sock.exists() {
-        fs::remove_file(sock).map_err(RoboError::io(sock.display().to_string()))?;
-    }
+    let root = driver.target()?;
+    retire(sock, &root)?;
     let listener = UnixListener::bind(sock).map_err(RoboError::io(sock.display().to_string()))?;
     listener.set_nonblocking(true).map_err(RoboError::io("the socket"))?;
     driver.start()?;
     println!("robojab: up on {} for {} s at most", sock.display(), driver.seconds());
     let code = accept_loop(&mut driver, &listener);
-    let _ = fs::remove_file(sock);
+    drop(listener);
+    let _ = retire(sock, &root);
     code
 }
 

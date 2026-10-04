@@ -66,6 +66,12 @@ impl Plan {
             sound: path_field("sound")?,
         })
     }
+
+    /// The target the plan's files lie in, where a run retires what it
+    /// clears away (retire).
+    pub(crate) fn target(&self) -> RoboResult<PathBuf> {
+        target_of(&self.out).ok_or_else(|| RoboError::Plan(format!("{} lies in no target, so a run has nowhere to retire what it clears away", self.out.display())))
+    }
 }
 
 /// Bytes from a hex string, either case, whitespace ignored.

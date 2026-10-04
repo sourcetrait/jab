@@ -33,3 +33,8 @@ programs = [
   'test/purity',
   'test/profile'
 ]
+
+# A word standing for a program's path wherever the tool takes one:
+# `just run fps` is `just run game/fps/1k`.
+[shortcuts]
+fps = 'game/fps/1k'

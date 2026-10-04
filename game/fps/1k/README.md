@@ -31,23 +31,31 @@ built against the Jab SDK from outside its workspace, for the 1K tier
 - `rust/` a cargo workspace for the host tools: `svg2png`, which
   renders the SVGs.
 
-Both programs build, test, and run through this directory's justfile
+Both programs build, test, and run through the jab root's justfile
 against the jab workspace three directories up, named by the
 `workspace` key of each manifest: the kernel is built there with the
-same symbols, and the generic disk rides along.
+same symbols, the generic disk rides along, and the output lands in the
+jab target at the program's path. Building the game compiles our maps
+first (`nu/prepare.nu`); the game's commands for development are
+`nu/adv.nu`'s. From the jab root:
 
-    just render                  # every SVG under content/ to its PNG
-    just compile                 # every map source into .target/asset/<name>
-    just test                    # the game's test
-    just run                     # the game in a window
-    just gauge                   # every frame of the gauge's route, three runs
-    just fillrate-test
-    just fillrate-run --no-pad --no-sound
+    just build game/fps/1k       # the game and the probe
+    just test game/fps/1k        # the game's test and the probe's
+    just run game/fps/1k         # the game in a window
+    just adv render              # every asset under content/ rendered
+    just adv compile             # every map source into the asset shard
+    just adv gauge               # every frame of the gauge's route, three runs
+    just adv                     # every command for development
 
-From the jab root, `just run game fps 1k` runs the game. Building the
-game compiles our maps first. The sample trees under
-`.target/asset/<map>` are laid out by conversion tooling kept outside
-this repository over third-party sample content, never shipped, until
-the game runs on its own content alone; the test stops with a message
-when one is missing. `just shot` turns a run's capture into a PNG to
-look at.
+The bench `bench/cadence.nuon` measures the frame's three cadences in
+your window with live audio, your own play at each and then the gauge's
+route at each: run `just watch bench game/fps/1k/cadence` in one
+terminal and `just bench game/fps/1k/cadence` in another, and the watch
+reports the whole bench when it ends.
+
+The sample trees in the game's asset shard of the jab target,
+`asset/game/fps/1k/<map>`, are laid out by conversion tooling kept
+outside this repository over third-party sample content, never shipped,
+until the game runs on its own content alone; the test stops with a
+message when one is missing. `just adv shot` turns a run's capture into
+a PNG to look at.

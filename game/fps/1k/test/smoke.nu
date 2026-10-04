@@ -5,8 +5,9 @@
 # line on the UART, which is resolved to its routine from the ELF's
 # symbols and printed, since a fixed pose never finds what ten seconds of
 # play does. `nu smoke.nu --kernel <jab.elf> --image <fps.jab> --out <dir>
-# --seeds "[1 2 3]" --seconds 60`; `just smoke [seeds] [seconds]` builds and
-# runs it. Every seed is one launch of a debug build with the factory's
+# --seeds "[1 2 3]" --seconds 60`; `just adv smoke [seeds] [seconds]`,
+# the seeds separated by commas, builds and runs it. Every seed is one
+# launch of a debug build with the factory's
 # tree; the table it played is kept beside the run as pad.nuon, so a
 # seed that faults is replayed by its number.
 use ../../../../sdk/nu/jab.nu

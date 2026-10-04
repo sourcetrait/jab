@@ -1,0 +1,22 @@
+# The frame's three cadences on the factory, in your window with live
+# audio: your own play at each first, then the gauge's route at each,
+# three seeded runs a batch, the batches in the order 0, 1, 2, 2, 1, 0 so
+# a drift of the host's falls on every cadence alike. `just bench
+# game/fps/1k/cadence` runs it, `just watch bench game/fps/1k/cadence` in
+# a second terminal records every run of it.
+{
+  summary: "the three cadences: your play at each, then the route at each, 0 1 2 2 1 0, in your window with live audio"
+  tree: "release"
+  steps: [
+    { label: "play0", attend: "your turn: play the factory with your pad for 60 seconds at cadence 0, each frame awaiting the display's tick after its flip", run: ["test/gauge.nu" "play" "--tree" "release" "--seconds" "60" "--cadence" "0"] }
+    { label: "play1", attend: "your turn: play the factory with your pad for 60 seconds at cadence 1, each frame shown as soon as it is ready", run: ["test/gauge.nu" "play" "--tree" "release" "--seconds" "60" "--cadence" "1"] }
+    { label: "play2", attend: "your turn: play the factory with your pad for 60 seconds at cadence 2, every frame held to the display's tick", run: ["test/gauge.nu" "play" "--tree" "release" "--seconds" "60" "--cadence" "2"] }
+    { label: "cadence0_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "0"] }
+    { label: "cadence1_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "1"] }
+    { label: "cadence2_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "2"] }
+    { label: "cadence2_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "2"] }
+    { label: "cadence1_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "1"] }
+    { label: "cadence0_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--cadence" "0"] }
+  ]
+  report: ["test/gauge.nu" "bench-report"]
+}

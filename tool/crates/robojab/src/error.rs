@@ -1,7 +1,7 @@
 use crate::*;
 
 /// What stops the harness: the invocation, a file, the plan, the machine,
-/// a command, or an image.
+/// a command, an image, or a retirement.
 #[derive(Debug)]
 pub(crate) enum RoboError {
     Usage(String),
@@ -10,6 +10,7 @@ pub(crate) enum RoboError {
     Machine(String),
     Command(String),
     Image(String),
+    Retire(String),
 }
 
 pub(crate) type RoboResult<T> = Result<T, RoboError>;
@@ -31,6 +32,7 @@ impl fmt::Display for RoboError {
             RoboError::Machine(message) => write!(f, "machine: {message}"),
             RoboError::Command(message) => write!(f, "{message}"),
             RoboError::Image(message) => write!(f, "image: {message}"),
+            RoboError::Retire(message) => write!(f, "retire: {message}"),
         }
     }
 }

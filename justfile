@@ -1,12 +1,14 @@
-# LowKick Jab workspace. Every recipe hands off to the SDK's nushell tool,
-# sdk/nu/jab.nu, which reads workspace.jab.toml and does all lookups and
-# up-to-date checks in one process. Needs nushell, just, a riscv64 GNU
-# toolchain, and a QEMU with the RVA23 model, rva23s64; see the tool for
-# how the toolchain, QEMU, and the target directory are found. `--set
-# debug,stats` after a recipe names the build symbols; a build lands in
-# .target/debug with DEBUG set and in .target/release otherwise. `--api`
-# on a run puts the API's port on the machine; every build carries the
-# API and runs either way.
+# Jab. The repository's one justfile: every recipe hands off to the SDK's
+# nushell tool, sdk/nu/jab.nu, which reads workspace.jab.toml and does
+# every lookup and up-to-date check in one process. Needs nushell, just,
+# a riscv64 GNU toolchain, and a QEMU with the RVA23 model, rva23s64. A
+# program is named by its path from here, its words spaced or joined by
+# slashes, example/bounce, game/fps/1k, or by a shortcut
+# workspace.jab.toml names, fps. `--set debug,stats` after a recipe
+# names the build symbols. Everything the tool writes goes to one
+# target, .target here, or $XDG_CACHE_HOME/jab/target/<checkout> where
+# that is set, but for the cargo builds of tool/ and the game's rust/,
+# which keep cargo's own. `just adv` lists the commands for development.
 
 set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]
@@ -17,45 +19,45 @@ jab := here / "sdk" / "nu" / "jab.nu"
 
 default: build
 
-# Build the kernel, then every program, skipping what is up to date;
-# release, or `just build --set debug`
+# `just build`, `just build example`, `just build game/fps/1k --set
+# debug`; what is up to date is skipped
+# Build the kernel and every program, or the programs under a path
 build *args:
-    ^nu "{{jab}}" workspace build "{{here}}" {{args}}
+    ^nu "{{jab}}" build "{{here}}" {{args}}
 
-# Build everything with DEBUG set, then run the integration test of every
-# program, of one category (`just test example`), or of one program
-# (`just test example helloworld`); prints each test's output and a
-# summary, fails if any fails
-test category="" name="" *args:
-    ^nu "{{jab}}" workspace test "{{here}}" "{{category}}" "{{name}}" {{args}}
+# `just test`, `just test example/pad`, `just test game/fps/1k`; each
+# test's output, then a summary, failing if any fails
+# Build with DEBUG set, then test every program, or those under a path
+test *args:
+    ^nu "{{jab}}" test "{{here}}" {{args}}
 
-# Build everything, then run one program with the console window:
-# `just run example helloworld`; release, or `just run example bounce
-# --set debug`, which writes the kernel's debug channel to a file; `just
-# run example wasd --api` with the API's port on the machine; the host's
-# gamepad attached when one is found, or `--no-pad`; the keyboard and
-# the tablet off with `--no-kbm`, which a pad run with a port needs. A
-# program the workspace does not list runs by its path through its own
-# directory's justfile, which builds it against the workspace: `just run
-# game fps 1k`; a path's words may be joined by slashes, `just run
-# example/helloworld`, `just run game/fps/1k`
+# `just run example/bounce`, `just run fps`; release, or `--set
+# debug`; `--api` puts the API's port on the machine; the host's gamepad
+# and sound come along unless `--no-pad` or `--no-sound`, the keyboard
+# and the tablet unless `--no-kbm`
+# Build, then run one program in its window
 run +args:
-    let words = ("{{args}}" | split row " " | where {|w| $w != "" }); let given = ($words | take while {|w| not ($w | str starts-with "-") }); let flags = ($words | skip ($given | length)); let path = ($given | each {|w| $w | split row "/" } | flatten | where {|w| $w != "" and $w != "." }); let relative = ($path | str join "/"); let dir = ("{{here}}" | path join ...$path); if ($path | is-empty) { error make { msg: "just run <path to a program> [flags]: `just run example helloworld`, `just run game fps 1k`" } } else if $relative in (open "{{here}}/workspace.jab.toml" | get programs) { ^nu "{{jab}}" workspace run "{{here}}" ...$path ...$flags } else if ($dir | path join "justfile" | path exists) { ^just --justfile ($dir | path join "justfile") run ...$flags } else { error make { msg: $"no program at ($relative): the workspace lists none there and it has no justfile" } }
+    ^nu "{{jab}}" run "{{here}}" {{args}}
 
-# Build, then probe one program under a window and print one NUON
-# record on how its flips reached it: `just probe sdl example walk`,
-# twelve seconds or `--seconds N`; Linux, with cargo for the shim
-probe kind category name *args:
-    ^nu "{{jab}}" workspace probe "{{here}}" "{{kind}}" "{{category}}" "{{name}}" {{args}}
-
-# Record the running Jab QEMU per thread, once a second, to
-# .target/watch.nuonl: `just watch` from any shell while a program
-# runs; when the run ends, one NUON record on it to paste, per thread
-# the steady CPU seconds a second after the first five, or `--skip N`
+# From any shell while a program runs; when the run ends, one NUON record
+# on it to paste, per thread the steady CPU seconds a second after the
+# first five, or `--skip N`. `just watch bench game/fps/1k/cadence`, in
+# a second terminal before or during that bench, records every run of it
+# and reports the whole bench when it ends
+# Record the running Jab QEMU per thread, once a second
 watch *args:
-    ^nu "{{jab}}" watch "{{here}}" {{args}}
+    ^nu "{{jab}}" watch {{args}} "{{here}}"
 
-# Remove the workspace's target, everything every build, test, and run
-# here wrote: .target, or its shard of $XDG_CACHE_HOME/jab/target
-clean:
-    use "{{jab}}"; let target = (jab target-root "{{here}}"); if ($target | path type) == "dir" { rm -r $target }
+# `just bench` lists them; `just bench game/fps/1k/cadence` runs one,
+# `--only play0,cadence0_1` the steps named; nothing is deleted, and
+# everything is written to the target
+# Run a program's bench, every step one after another, then its report
+bench *args:
+    ^nu "{{jab}}" bench "{{here}}" {{args}}
+
+# `just adv` lists them; `just adv <command> [args]` runs one, a relative
+# path among its args taken from where you are
+# The commands for development
+[no-cd]
+adv *args:
+    ^nu "{{jab}}" adv "{{here}}" {{args}}

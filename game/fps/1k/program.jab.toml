@@ -4,3 +4,5 @@ workspace = '../../..'
 includes = ['../../../sdk/src']
 link = '../../../sdk/src/program.ld'
 target_assets = 'factory'
+prepare = 'nu/prepare.nu'
+adv = 'nu/adv.nu'

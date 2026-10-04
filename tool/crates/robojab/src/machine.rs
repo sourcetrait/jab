@@ -55,14 +55,21 @@ pub(crate) struct Machine {
 }
 
 impl Machine {
-    /// QEMU started from the plan under `timeout`, as the SDK's launch runs it.
+    /// QEMU started from the plan under `timeout`, as the SDK's launch runs
+    /// it, a previous run's files retired first (retire), its pipes kept.
     pub(crate) fn start(plan: Plan, seconds: u64) -> RoboResult<Machine> {
-        let _ = fs::remove_file(&plan.pidfile);
+        let root = plan.target()?;
+        let stdout_path = plan.out.join("robojab.stdout");
+        let stderr_path = plan.out.join("robojab.stderr");
+        let qemu_log = plan.qemu.iter().position(|a| a == "-D").and_then(|at| plan.qemu.get(at + 1)).map(PathBuf::from);
+        for path in [Some(&plan.pidfile), Some(&plan.serial_log), plan.api_out.as_ref(), plan.debug_log.as_ref(), plan.sound.as_ref(), qemu_log.as_ref(), Some(&stdout_path), Some(&stderr_path)].into_iter().flatten() {
+            retire(path, &root)?;
+        }
         for path in [&plan.api_out, &plan.debug_log].into_iter().flatten() {
             fs::write(path, b"").map_err(RoboError::io(path.display().to_string()))?;
         }
-        let stdout = fs::File::create(plan.out.join("robojab.stdout")).map_err(RoboError::io("robojab.stdout"))?;
-        let stderr = fs::File::create(plan.out.join("robojab.stderr")).map_err(RoboError::io("robojab.stderr"))?;
+        let stdout = fs::File::create(&stdout_path).map_err(RoboError::io("robojab.stdout"))?;
+        let stderr = fs::File::create(&stderr_path).map_err(RoboError::io("robojab.stderr"))?;
         let mut command = Command::new("timeout");
         command
             .arg("--signal=TERM")
@@ -189,13 +196,12 @@ impl Machine {
         }
     }
 
-    /// The screen through the monitor into a fresh PPM beside the plan's files.
+    /// The screen through the monitor into a fresh PPM beside the plan's
+    /// files, a previous run's of that name retired.
     pub(crate) fn screendump(&mut self) -> RoboResult<PathBuf> {
         self.shots += 1;
         let path = self.plan.out.join(format!("shot_{}.ppm", self.shots));
-        if path.exists() {
-            fs::remove_file(&path).map_err(RoboError::io(path.display().to_string()))?;
-        }
+        retire(&path, &self.plan.target()?)?;
         self.monitor(&format!("screendump {}", path.display()))?;
         let mut last = 0u64;
         for _ in 0..200 {

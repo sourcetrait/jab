@@ -6,8 +6,10 @@ running RISC-V programs a hobbyist drops in. Everything is virtio, and it
 runs only under QEMU's `virt` machine.
 
 - `workspace.jab.toml` the workspace: the kernel and the programs.
-- `kernel/` the kernel: `kernel.jab.toml`, a `justfile`, sources under
-  `src/`, and each source's `.eye` and `.md` under `srcdoc/`.
+- `justfile` the repository's one justfile, every recipe handing off to
+  `sdk/nu/jab.nu`.
+- `kernel/` the kernel: `kernel.jab.toml`, sources under `src/`, and
+  each source's `.eye` and `.md` under `srcdoc/`.
 - `sdk/` what a program uses, its sources under `src/` and their `.eye`
   and `.md` under `srcdoc/`: `jab.inc`, whose `jab.sys.*` macros are
   the kernel's calls, each a trap into it; `jab_f32.inc`,
@@ -17,8 +19,8 @@ runs only under QEMU's `virt` machine.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `example/<name>/`, `test/<name>/` programs by category, each with
-  `program.jab.toml`, a `justfile`, `src/main.S` and its `srcdoc/`, and
-  its integration test at `test/test.nu`.
+  `program.jab.toml`, `src/main.S` and its `srcdoc/`, and its
+  integration test at `test/test.nu`.
 - `shim/` the preload shims, a cargo workspace, a crate each under
   `crates/`: `sdl` for the probe and `evdev` for the pad tests.
 - `tool/` the host tools, a cargo workspace, a crate each under
@@ -33,16 +35,30 @@ runs only under QEMU's `virt` machine.
   `eye-gen-asm`, which writes a `.eye.stub` beside each `.eye` from the
   code, carrying what the `.eye` says, and with `--done` puts each stub in
   its `.eye`'s place, refusing unless every source has one.
-- `.target/release/` and `.target/debug/` build output, ignored;
-  `extern/` local links, ignored.
+- `.target/` the one target, ignored, unless `XDG_CACHE_HOME` is set,
+  when it is `$XDG_CACHE_HOME/jab/target/<checkout>` instead, the
+  checkout its directory's name and the first eight hex digits of its
+  path's SHA-256: every build and every tool's output, sharded within
+  it, the builds under `release/` and `debug/` at each program's path
+  from here, a program's compiled assets, benches, and kept
+  measurements under `asset/`, `bench/`, and `gauge/` the same way, the
+  generic disk, the shims, and `watch`'s record, and `tmp/retired/`,
+  whatever the tools have cleared away. `extern/` local links, ignored.
 
-Build and run with `just` and nushell: `just build`, `just test` (or
-`just test example`, `just test example helloworld`), `just run example
-helloworld` from here, or `just build` and `just test` inside the kernel
-or a program. `just run` opens QEMU's own window when a display server
-is present, SDL with OpenGL on Linux and Windows and Cocoa on macOS,
-and otherwise serves the console over VNC on 127.0.0.1:5930, to tunnel
-and view; `JAB_DISPLAY` overrides with any `-display` value.
+Build and run with `just` and nushell, from anywhere in the repository,
+a program named by its path from the root or by a shortcut
+`workspace.jab.toml` names, `fps` for `game/fps/1k`: `just build` (or
+`just build example`, `just build game/fps/1k`), `just test` (or `just
+test example/pad`), `just run example/helloworld` or `just run fps`, and
+`just watch`; `just adv` lists the commands for development. `just run`
+opens QEMU's own window when a display server is present, SDL with
+OpenGL on Linux and Windows and Cocoa on macOS, and otherwise serves the
+console over VNC on 127.0.0.1:5930, to tunnel and view; `JAB_DISPLAY`
+overrides with any `-display` value. Nothing the tools clear away is
+deleted, robojab included: a build's, a test's, a bench's, or `just adv
+clean`'s is moved whole into the target's own tmp,
+`tmp/retired/<stamp>/` at its path in the target, and emptying that is
+yours.
 The toolchain is found by its install directory, the one holding
 `bin/`: `RISCV_TOOLCHAIN`, else an `extern/riscv` link beside the kernel
 or program, else the workspace's `extern/riscv`, else the tools on
@@ -51,18 +67,24 @@ or program, else the workspace's `extern/riscv`, else the tools on
 `extern/qemu`, its `qemu-system-riscv64` under `bin/` or at its top,
 `.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
 a test alike; an `extern/qemu` with no binary in it is an error, never a
-fall to `PATH`. A program the workspace does not list, `game/fps/1k` the first,
-builds against it: its kernel is built here with the same symbols, and
-the generic disk, the toolchain link, the shims, and discovery are this
-workspace's, while its own output lands in a `.target/` beside it; one
-outside the tree names the workspace in its manifest, `workspace =
-'../../../..'` relative to the manifest.
+fall to `PATH`. A program the workspace does not list, `game/fps/1k`
+the first, builds against it: its kernel is built here with the same
+symbols, and the generic disk, the toolchain link, the shims, and
+discovery are this workspace's, and its output lands in the one target
+at its path from here; `just build` and `just test` find it under the
+root and take it with the members; one outside the tree names the
+workspace in its manifest, `workspace = '../../../..'` relative to the
+manifest. A manifest may also name `target_assets`, a tree its content
+compiles to in its asset shard of the target, which becomes its disk;
+`prepare`, a nushell script the tool runs before building, testing, or
+running it; and `adv`, a nushell script whose `main <command>`
+definitions are its commands for development.
 
 A build is described by its symbols: `just build --set debug,stats`
 names them, in any case, and each reaches the assembler as a defined
 symbol, `DEBUG` and `STATS`, for `.ifdef` to read in the kernel and in
-your program alike. A build with `DEBUG` lands in `.target/debug` and
-any other in `.target/release`, so the two coexist. `just test` always
+your program alike. A build with `DEBUG` lands in the target's `debug/`
+and any other in its `release/`, so the two coexist. `just test` always
 sets `DEBUG`, so a program's own debug reporting is there for its test;
 `just build` and `just run` are release unless asked otherwise, and a
 release kernel carries no debug code and no debug text, which
@@ -142,7 +164,7 @@ A run prints nothing of its own; what the kernel says in a debug build
 is in `debug.log` beside the program's build output, and what a program
 sends over the API is in `api.out` there. `just watch`, from any shell
 while a program runs, records the QEMU process per thread once a
-second to `.target/watch.nuonl` until the run ends, printing each
+second to `watch.nuonl` in the target until the run ends, printing each
 second's rates as it goes: on Linux the harts as `CPU 0/TCG` and on
 and the main loop under the process name, which is where the host's
 copy and paint of each flip lands; on macOS, whose threads carry no
@@ -156,16 +178,34 @@ macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
 
-`just probe sdl example walk` looks at the window itself: it runs the
-program under SDL with OpenGL for twelve seconds (`--seconds N`) with a
-small library preloaded into QEMU, `shim/crates/sdl`, built with cargo
-into `.target/shim`, which logs every SDL call the window makes with a
-timestamp and its callers; then it prints one NUON record on how the
-program's flips reached the window, ready to paste: the uploads per
-flip and their spacing, the flip cadence, the drawn frames and their
-interval, and any frame drawn inside a flip, which is a half-drawn
-tick. Linux only, since it preloads into QEMU; with no display server
-SDL runs its offscreen driver, drawing nothing along the same path.
+`just bench <program>/<bench>` runs a program's bench, the NUON file of
+that name under the program's `bench/`: `just bench game/fps/1k/cadence`
+(or `fps/cadence`) is `game/fps/1k/bench/cadence.nuon`. The program is
+built in the bench's tree, then each step runs in order, a script of the
+program's with its arguments and its own output directory; a step a
+person attends is announced and counted down first, and a step that
+fails is recorded and the rest run. The bench's report then reads every
+step. Each run of a bench is a stamped directory in the program's
+`bench/` shard of the target, with `bench.nuon` recording each step's
+outcome, and a state file beside the stamps says what runs. `just watch
+bench <program>/<bench>`, in a second terminal before the bench starts
+or while it runs, records every QEMU of the run per thread under its
+step; when the bench has finished it prints the bench's report and its
+own per QEMU, and writes them together as `watch.nuon` in the run.
+`just bench` alone lists the benches, and `--only` runs the steps its
+comma-separated labels name.
+
+`just adv probe sdl example/walk` looks at the window itself: it runs
+the program under SDL with OpenGL for twelve seconds (`--seconds N`)
+with a small library preloaded into QEMU, `shim/crates/sdl`, built with
+cargo into the target's `shim/`, which logs every SDL call the window
+makes with a timestamp and its callers; then it prints one NUON record
+on how the program's flips reached the window, ready to paste: the
+uploads per flip and their spacing, the flip cadence, the drawn frames
+and their interval, and any frame drawn inside a flip, which is a
+half-drawn tick. Linux only, since it preloads into QEMU; with no
+display server SDL runs its offscreen driver, drawing nothing along the
+same path.
 
 A gamepad on the host reaches a program two ways, and a program never
 learns which. A run finds the pad through `jabdisco`, built with
@@ -241,8 +281,8 @@ rides beside it on every run and launch: the workspace's generic
 assets, `generic/` mirrored to the image's root plus what
 `generic/manifest.nuon` fetches, today the FluidR3 GM and GS soundfonts
 under `/mix/snd/font` with their license under
-`/doc/license/fluid-soundfont`, fetched into `.target/fetch` on first
-use, verified by sha256, and never committed.
+`/doc/license/fluid-soundfont`, fetched into the target's `fetch/` on
+first use, verified by sha256, and never committed.
 Both asset disks are attached read-only, so a program's write to one
 comes back as the device's error and the image the next run reads is
 the one the tool built; the blank data disk a run carries when a

@@ -17,8 +17,8 @@
 # frame after that placement, for a cost read once the frame has
 # settled. Every event the run
 # reports over the API, a round, an android's, the frame struck, a
-# pickup, or a trace, is printed with its fields. `just pose` builds
-# and runs it.
+# pickup, or a trace, is printed with its fields. `just adv pose`
+# builds and runs it.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 
