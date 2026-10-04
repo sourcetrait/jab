@@ -9,7 +9,9 @@
 # `play` puts the build in the host's window, audio, and gamepad for a
 # person to play and closes the measurement after `--seconds`; `read`
 # reads a capture either made; `compare` sets builds' captures side by
-# side, a walked leg per stretch of its path. Each run keeps the route
+# side, a walked leg per stretch of its path, refusing a run its
+# measurement found incomplete or invalid unless `--diagnostic` admits
+# it, every run's standing kept. Each run keeps the route
 # it played and its identity beside its capture, then gauge.nuon and the
 # summary. The measurement is the capture read in order through the
 # first end marker; what follows it counts for nothing. A frame passes
@@ -64,6 +66,8 @@ const FLIP_VALID = [0 1]
 # the android events and what a round met, as the program reports them
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 const MET = [nothing geometry android]
+# the standings a comparison refuses unless admitted as a diagnostic
+const REFUSED = [incomplete invalid]
 
 def main [] {
     print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--host] [--out <dir>] [--label <name>]"
@@ -741,21 +745,31 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # of `field` a run, a leg whose eye travels one bin or more taken per
 # bin of its path over the bins every run reached, a shorter one over
 # its frames, so a leg's value is its path's and not its frame count's.
-# The method, the bins, every run's bins with their medians, and the
-# table come back together.
-export def compare [files: list<string>, field: string, bin_cm: int]: nothing -> record {
+# A run its measurement found incomplete or invalid is refused, naming
+# its file, its run, and the reasons, unless `diagnostic` admits it.
+# The method, the bins, every run's standing and bins with their
+# medians, and the table, each row naming its batches' standings, come
+# back together.
+export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let runs = ($files | each {|f|
         let g = (open ($f | path expand))
         let build = ($g.label | str replace --regex '_\d+$' '')
         let image = ($g.identity | get -o build.image_sha256 | default "")
         $g.runs | each {|r|
             let rows = ($g.rows | where run == $r.run)
+            let standing = (standing-of $r.measured)
             {
                 file: ($f | path expand), label: $g.label, build: $build, image: $image, run: $r.run,
+                standing: $standing.standing, reasons: $standing.reasons,
                 legs: ($rows | get leg | uniq | each {|leg| leg-measure ($rows | where leg == $leg) $leg $field $bin_cm }),
             }
         }
     } | flatten)
+    let refused = ($runs | where {|r| $r.standing in $REFUSED })
+    if (not $diagnostic) and (not ($refused | is-empty)) {
+        let named = ($refused | each {|r| $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')" } | str join "\n  ")
+        error make { msg: $"these runs' measurements found them ($refused | get standing | uniq | str join ' or '), so the comparison refuses them; --diagnostic admits them, marked:\n  ($named)" }
+    }
     let builds = ($runs | get build | uniq)
     for b in $builds {
         let images = ($runs | where build == $b | get image | uniq)
@@ -784,7 +798,10 @@ export def compare [files: list<string>, field: string, bin_cm: int]: nothing ->
         $names | each {|leg|
             let values = ($valued | where build == $b | each {|r| $r.legs | where leg == $leg | get -o 0.value } | compact)
             if ($values | is-empty) { null } else {
-                { build: $b, leg: $leg, value_us: ($values | math avg), half_spread_us: ((($values | math max) - ($values | math min)) / 2), batches: ($values | length) }
+                {
+                    build: $b, leg: $leg, value_us: ($values | math avg), half_spread_us: ((($values | math max) - ($values | math min)) / 2),
+                    batches: ($values | length), standings: ($valued | where build == $b | get standing | uniq),
+                }
             }
         } | compact
     } | flatten)
@@ -799,10 +816,31 @@ export def compare [files: list<string>, field: string, bin_cm: int]: nothing ->
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: "a capture's label less a trailing _<n> names its build, whose runs are its batches and share the image's SHA-256",
             table: "a build's value for a leg is the mean of its runs' values; the half spread is half their range",
+            standing: "a run stands as its measurement records it: clockless, a build older than the clock records read from its states alone; incomplete or invalid, refused unless --diagnostic admits it; unchecked, complete but measured before validity was recorded; or valid; each table row names its batches' standings",
+            admitted: $diagnostic,
         },
         common: $common,
         runs: $valued,
         table: $table,
+    }
+}
+
+# A run's standing in a comparison, as its measurement records it:
+# clockless, a build older than the clock records, read from its states
+# alone; incomplete, with the problems; unchecked, complete but measured
+# before the analyzer recorded validity; invalid, with the reasons; or
+# valid.
+def standing-of [m: record]: nothing -> record<standing: string, reasons: list<string>> {
+    if not ($m.clocked? | default false) {
+        { standing: "clockless", reasons: [] }
+    } else if not ($m.complete? | default false) {
+        { standing: "incomplete", reasons: ($m.problems? | default []) }
+    } else if $m.valid? == null {
+        { standing: "unchecked", reasons: [] }
+    } else if not $m.valid {
+        { standing: "invalid", reasons: ($m.invalid? | default []) }
+    } else {
+        { standing: "valid", reasons: [] }
     }
 }
 
@@ -826,19 +864,26 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
 }
 
 # Set builds' captures side by side (compare): every leg's value of
-# `--field` a run, a build's mean and half spread a leg, printed; the
-# method, the bins every run reached, each run's bins with their
+# `--field` a run, a build's mean and half spread a leg, printed, marked
+# with its runs' standings other than valid; a run measured incomplete
+# or invalid refused unless `--diagnostic` admits it; the method, the
+# bins every run reached, each run's standing and bins with their
 # medians, and the table go to `--out`.
 def "main compare" [
     ...files: string                 # the gauge.nuon files compared
     --field: string = "draw_us"      # the row's column compared
     --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
     --out: string = ""               # where the comparison lands, the program's .target/compare.nuon unless given
+    --diagnostic                     # admit runs their measurements found incomplete or invalid, marked
 ] {
-    let result = (compare $files $field $bin_cm)
+    let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { $env.FILE_PWD | path join ".." ".target" "compare.nuon" | path expand } else { $out | path expand })
     mkdir ($target | path dirname)
     $result | to nuon --indent 2 | save --raw -f $target
-    for t in $result.table { print $"gauge: ($t.build) ($t.leg): (ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches" }
+    for t in $result.table {
+        let marks = ($t.standings | where {|s| $s != "valid" })
+        let marked = (if ($marks | is-empty) { "" } else { $"; ($marks | str join ', ')" })
+        print $"gauge: ($t.build) ($t.leg): (ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches($marked)"
+    }
     print $"gauge: ($target)"
 }
