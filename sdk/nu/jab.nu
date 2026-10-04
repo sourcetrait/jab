@@ -414,35 +414,34 @@ export def launch [
         let elapsed = ((date now) - $started)
         # the pad port's header goes in as soon as QEMU is up, before any
         # event, since the kernel waits for the whole of it
+        # every write into QEMU's pipes is bounded (fifo-write), since QEMU
+        # can end between the check that it runs and the write
         if (not $header_sent) and $alive {
-            $gamepad.header | save --raw --append $pad_in
+            fifo-write $pad_in $gamepad.header | ignore
             $header_sent = true
         }
         while $sent < ($keys | length) and ($keys | get $sent | get at) <= $elapsed {
             let k = ($keys | get $sent)
-            if $alive { monitor-send $monitor $"sendkey ($k.key) ($k.hold)" }
+            if $alive { monitor-send $monitor $"sendkey ($k.key) ($k.hold)" | ignore }
             $sent += 1
         }
         while $sent_data < ($send | length) and ($send | get $sent_data | get at) <= $elapsed {
             let d = ($send | get $sent_data)
-            if $alive and $api_in != "" { $d.bytes | save --raw --append $api_in }
+            if $alive and $api_in != "" { fifo-write $api_in $d.bytes | ignore }
             $sent_data += 1
         }
         while $sent_pad < ($gamepad.groups | length) and ($gamepad.groups | get $sent_pad | get at) <= $elapsed {
             let g = ($gamepad.groups | get $sent_pad)
             if $alive {
-                if $gamepad.port { pad-frames $g.items | save --raw --append $pad_in } else if $gamepad.fifo != "" { pad-report $g.items | save --raw --append $gamepad.fifo }
+                if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) | ignore } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) | ignore }
             }
             $sent_pad += 1
         }
         if (not $captured) and ($elapsed >= $capture) {
             $captured = true
-            if $alive {
-                monitor-send $monitor $"screendump (hmp-quoted $screen)"
+            if $alive and (monitor-send $monitor $"screendump (hmp-quoted $screen)") {
                 wait-for-file $screen
-                # QEMU can end while the screen is awaited, its bound
-                # passing, and a pipe no one reads holds its writer forever
-                if (process-alive $pid) { monitor-send $monitor "quit" }
+                if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
             }
         }
     }
@@ -937,9 +936,20 @@ def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
     (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
 }
 
-# Give the QEMU monitor a command through its pipe.
-def monitor-send [monitor: path, command: string]: nothing -> nothing {
-    $"($command)\n" | save --raw --append ($monitor + ".in")
+# Give the QEMU monitor a command through its pipe (fifo-write); true
+# when it went in.
+def monitor-send [monitor: path, command: string]: nothing -> bool {
+    fifo-write ($monitor + ".in") $"($command)\n"
+}
+
+# Bytes into one of QEMU's pipes without waiting on a reader that is
+# gone: opening a pipe to write waits until some process reads it, and
+# QEMU can end between any check that it runs and the open, so `tee`
+# appends the bytes under a one-second bound. True when they went in;
+# false when no reader came within the second.
+def fifo-write [fifo: path, data: any]: nothing -> bool {
+    let r = ($data | ^timeout 1 tee -a $fifo | complete)
+    $r.exit_code == 0
 }
 
 # A word for the QEMU monitor's command line, which splits on spaces: in
@@ -2316,22 +2326,23 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     if $final != "done" { exit 1 }
 }
 
-# The QEMUs of a bench's run: those whose command lines name its
-# directory.
-def bench-qemus [run: path]: nothing -> list<int> {
-    ps -l | where {|p| ((command-binary $p.command | path basename) == (exe-name $qemu_name)) and ($p.command | str contains $run) } | get pid
+# The QEMUs of a bench's run, each its pid with its command line from
+# one look at the process table: those whose command lines name the
+# run's directory.
+def bench-qemus [run: path]: nothing -> list<record<pid: int, command: string>> {
+    ps -l | where {|p| ((command-binary $p.command | path basename) == (exe-name $qemu_name)) and ($p.command | str contains $run) } | each {|p| { pid: $p.pid, command: $p.command } }
 }
 
-# The step a QEMU of a bench's run belongs to, from its own command
-# line: the step directory under the run's directory its pid file and
-# its logs sit in, every step writing under `<run>/<label>/`; null when
-# the line names none of the bench's steps.
-def bench-step-of [pid: int, run: path, labels: list<string>]: nothing -> oneof<string, nothing> {
-    let command = (ps -l | where pid == $pid | get -o 0.command | default "")
+# The step a QEMU of a bench's run belongs to, read from the command
+# line the process table showed with its pid (bench-qemus): the step
+# directory under the run's directory its pid file and its logs sit in,
+# every step writing under `<run>/<label>/`; `unknown` when the line
+# names none of the bench's steps.
+def bench-step-of [command: string, run: path, labels: list<string>]: nothing -> string {
     let parts = ($command | split row $"($run)/")
-    if ($parts | length) < 2 { return null }
+    if ($parts | length) < 2 { return "unknown" }
     let named = ($parts | get 1 | split row "/" | first)
-    if $named in $labels { $named } else { null }
+    if $named in $labels { $named } else { "unknown" }
 }
 
 # The busiest threads of a watch report as one short line.
@@ -2357,8 +2368,9 @@ def watch-rates [file: path, span: int]: nothing -> string {
 # Record every QEMU of a bench's run, `just watch bench
 # <program>/<bench>` in a second terminal: it waits for the bench's next
 # run, or takes up one under way, then records each QEMU of the run per
-# thread once a second, under the step its own command line names
-# (bench-step-of), to watch/<step>-<n>.nuonl in the run's directory, a
+# thread once a second, under the step its own command line names as the
+# process table showed it, or `unknown` (bench-step-of), to
+# watch/<step>-<n>.nuonl in the run's directory, a
 # line printed as each
 # starts and ends and the rates every five seconds. When the bench has
 # finished and no QEMU of it is left, it prints the bench's report and
@@ -2396,10 +2408,12 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         let current = (if $read != null and $read.stamp == $stamp { $read } else { $state })
         if $current.label != "" and $current.label != $label { print $"jab watch: step ($current.step) of ($current.total), ($current.label)" }
         $label = $current.label
-        let pids = (bench-qemus $run)
+        let found = (bench-qemus $run)
+        let pids = ($found | each {|q| $q.pid })
         let known = ($seen | each {|e| $e.pid })
-        for pid in ($pids | where {|p| $p not-in $known }) {
-            let step = (bench-step-of $pid $run $labels | default $label)
+        for q in ($found | where {|x| $x.pid not-in $known }) {
+            let pid = $q.pid
+            let step = (bench-step-of $q.command $run $labels)
             let n = (($seen | where {|e| $e.label == $step } | length) + 1)
             let file = ($watch_dir | path join $"($step)-($n).nuonl")
             let started = (date now)
