@@ -9,9 +9,10 @@
 # `play` puts the build in the host's window, audio, and gamepad for a
 # person to play and closes the measurement after `--seconds`; `read`
 # reads a capture either made; `compare` sets builds' captures side by
-# side, a walked leg per stretch of its path, refusing a run its
-# measurement found incomplete or invalid unless `--diagnostic` admits
-# it, every run's standing kept. Each run keeps the route
+# side, a walked leg per stretch of its path, refusing a run measured
+# incomplete, invalid, or before validity was recorded unless
+# `--diagnostic` admits it, and a run with nothing to compare in it
+# outright, every run's standing kept. Each run keeps the route
 # it played and its identity beside its capture, then gauge.nuon and the
 # summary. The measurement is the capture read in order through the
 # first end marker; what follows it counts for nothing. A frame passes
@@ -20,10 +21,10 @@
 # when it is complete, every flip presented or refused as early, every
 # phase within its frame, and every frame's clock agreeing with its
 # state, and passes when it is valid and every frame in it passes. A
-# capture of a build older than the clock records holds no measurement
-# and is read from its state records alone, the drawing's and the game's
-# microseconds. `just gauge`, `just gauge-play`, `just gauge-read`, and
-# `just gauge-compare` run it.
+# capture holding no record of the clock's kinds, 7, 8, or 9, is a build
+# older than them: it holds no measurement and is read from its state
+# records alone, the drawing's and the game's microseconds. `just gauge`,
+# `just gauge-play`, `just gauge-read`, and `just gauge-compare` run it.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
@@ -66,8 +67,10 @@ const FLIP_VALID = [0 1]
 # the android events and what a round met, as the program reports them
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 const MET = [nothing geometry android]
-# the standings a comparison refuses unless admitted as a diagnostic
-const REFUSED = [incomplete invalid]
+# the standings a comparison refuses unless admitted as a diagnostic, and
+# those it refuses even then, holding nothing a comparison can read
+const REFUSED = [incomplete invalid unchecked]
+const REJECTED = [empty unclassified unusable]
 
 def main [] {
     print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--host] [--out <dir>] [--label <name>]"
@@ -429,12 +432,13 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
 # sent late or a second marker alike. A complete window is valid unless
 # a flip was never shown, a phase or a part sums past its whole, or a
 # frame's clock disagrees with its state (invalidity); it passes when it
-# is valid and no frame reaches the ceiling. A capture with no clock
-# records is a build older than them: its rows are its state records'
-# alone and it holds no window.
+# is valid and no frame reaches the ceiling. A capture with no record of
+# the clock's kinds, 7, 8, or 9, is a build older than them: its rows are
+# its state records' alone and it holds no window. Any one of them marks
+# the capture clocked and holds it to its window.
 export def measure [api: binary, legs: list<any>]: nothing -> record {
     let s = (stream $api)
-    let clocked = ((not ($s.frames | is-empty)) or $s.end != null)
+    let clocked = ((not ($s.frames | is-empty)) or (not ($s.draws | is-empty)) or $s.end != null)
     let final = (if $s.end == null { null } else { $s.end.frame })
     let problems = (if not $clocked { [] } else { window-problems $s })
     let complete = ($clocked and ($problems | is-empty))
@@ -745,31 +749,45 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # of `field` a run, a leg whose eye travels one bin or more taken per
 # bin of its path over the bins every run reached, a shorter one over
 # its frames, so a leg's value is its path's and not its frame count's.
-# A run its measurement found incomplete or invalid is refused, naming
-# its file, its run, and the reasons, unless `diagnostic` admits it.
-# The method, the bins, every run's standing and bins with their
-# medians, and the table, each row naming its batches' standings, come
-# back together.
+# Every run is classified before any leg is measured (standing-of): one
+# measured incomplete, invalid, or unchecked is refused unless
+# `diagnostic` admits it, and one empty, unclassified, or unusable is
+# refused even then, the comparison failing with every such run's file,
+# run, and reasons. The method, the bins, every run's standing and bins
+# with their medians, and the table, each row naming its batches'
+# standings, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
-    let runs = ($files | each {|f|
+    let classified = ($files | each {|f|
         let g = (open ($f | path expand))
         let build = ($g.label | str replace --regex '_\d+$' '')
         let image = ($g.identity | get -o build.image_sha256 | default "")
+        let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
-            let rows = ($g.rows | where run == $r.run)
-            let standing = (standing-of $r.measured)
+            let rows = ($all_rows | where run == $r.run)
+            let standing = (standing-of ($r.measured? | default null) $rows $field)
             {
                 file: ($f | path expand), label: $g.label, build: $build, image: $image, run: $r.run,
-                standing: $standing.standing, reasons: $standing.reasons,
-                legs: ($rows | get leg | uniq | each {|leg| leg-measure ($rows | where leg == $leg) $leg $field $bin_cm }),
+                standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
             }
         }
     } | flatten)
-    let refused = ($runs | where {|r| $r.standing in $REFUSED })
-    if (not $diagnostic) and (not ($refused | is-empty)) {
-        let named = ($refused | each {|r| $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')" } | str join "\n  ")
-        error make { msg: $"these runs' measurements found them ($refused | get standing | uniq | str join ' or '), so the comparison refuses them; --diagnostic admits them, marked:\n  ($named)" }
+    let stopped = ($classified | where {|r|
+        ($r.standing in $REJECTED) or ((not $diagnostic) and ($r.standing in $REFUSED))
+    })
+    if not ($stopped | is-empty) {
+        let head = ([
+            $"the comparison refuses ($stopped | length) runs: an empty, unclassified, or unusable run always,"
+            "an incomplete, invalid, or unchecked one unless --diagnostic admits it, marked"
+        ] | str join " ")
+        let named = ($stopped | each {|r| $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')" })
+        error make { msg: ([$head] | append $named | str join "\n  ") }
     }
+    let runs = ($classified | each {|r|
+        let legs = ($r.rows | get leg | uniq | each {|leg|
+            leg-measure ($r.rows | where leg == $leg) $leg $field $bin_cm
+        })
+        $r | reject rows | insert legs $legs
+    })
     let builds = ($runs | get build | uniq)
     for b in $builds {
         let images = ($runs | where build == $b | get image | uniq)
@@ -816,7 +834,14 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: "a capture's label less a trailing _<n> names its build, whose runs are its batches and share the image's SHA-256",
             table: "a build's value for a leg is the mean of its runs' values; the half spread is half their range",
-            standing: "a run stands as its measurement records it: clockless, a build older than the clock records read from its states alone; incomplete or invalid, refused unless --diagnostic admits it; unchecked, complete but measured before validity was recorded; or valid; each table row names its batches' standings",
+            standing: ([
+                "a run stands as its measurement and its own rows record it, classified before any leg is measured:"
+                "unclassified, its measurement recording no clocked; empty, no rows; unusable, a value of the field"
+                "that is not a number or a leg holding no number in it; those three refused even under --diagnostic;"
+                "clockless, a build older than the clock records read from its states alone; incomplete, invalid, or"
+                "unchecked (complete but measured before validity was recorded), refused unless --diagnostic admits"
+                "it; or valid; each table row names its batches' standings"
+            ] | str join " "),
             admitted: $diagnostic,
         },
         common: $common,
@@ -825,23 +850,55 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     }
 }
 
-# A run's standing in a comparison, as its measurement records it:
-# clockless, a build older than the clock records, read from its states
-# alone; incomplete, with the problems; unchecked, complete but measured
-# before the analyzer recorded validity; invalid, with the reasons; or
-# valid.
-def standing-of [m: record]: nothing -> record<standing: string, reasons: list<string>> {
-    if not ($m.clocked? | default false) {
-        { standing: "clockless", reasons: [] }
-    } else if not ($m.complete? | default false) {
-        { standing: "incomplete", reasons: ($m.problems? | default []) }
-    } else if $m.valid? == null {
-        { standing: "unchecked", reasons: [] }
-    } else if not $m.valid {
-        { standing: "invalid", reasons: ($m.invalid? | default []) }
-    } else {
-        { standing: "valid", reasons: [] }
+# A run's standing in a comparison, from its measurement and its own
+# rows for the compared field: unclassified, its measurement recording no
+# clocked, true or false; empty, no rows; unusable, a value of the field
+# that is not a number or a leg holding no number in it; clockless, a
+# build older than the clock records, read from its states alone;
+# incomplete, with the problems; unchecked, complete but measured before
+# the analyzer recorded validity; invalid, with the reasons; or valid.
+def standing-of [
+    m: oneof<record, nothing>    # the run's measurement as its gauge.nuon holds it
+    rows: list<any>              # the run's rows
+    field: string                # the column compared
+]: nothing -> record<standing: string, reasons: list<string>> {
+    let clocked = ($m | get -o clocked)
+    if ($clocked | describe) != "bool" {
+        let why = (if $m == null {
+            "the run records no measurement"
+        } else {
+            "its measurement records no clocked, true or false"
+        })
+        return { standing: "unclassified", reasons: [$why] }
     }
+    if ($rows | is-empty) { return { standing: "empty", reasons: ["the file holds no rows for the run"] } }
+    let unusable = (unusable-reasons $rows $field)
+    if not ($unusable | is-empty) { return { standing: "unusable", reasons: $unusable } }
+    if not $clocked { return { standing: "clockless", reasons: [] } }
+    if not ($m.complete? | default false) { return { standing: "incomplete", reasons: ($m.problems? | default []) } }
+    if $m.valid? == null {
+        let why = "measured before the analyzer recorded validity: re-read its capture with gauge read"
+        return { standing: "unchecked", reasons: [$why] }
+    }
+    if not $m.valid { return { standing: "invalid", reasons: ($m.invalid? | default []) } }
+    { standing: "valid", reasons: [] }
+}
+
+# Why a run's rows give nothing to compare in `field`, read from the rows'
+# own values: a value that is not a number, and a leg holding no number
+# in it; none when they give something.
+def unusable-reasons [rows: list<any>, field: string]: nothing -> list<string> {
+    let values = ($rows | each {|r|
+        { frame: ($r | get -o frame), leg: ($r | get -o leg), value: ($r | get -o $field) }
+    })
+    let typed = ($values | where {|v| $v.value != null and ($v.value | describe) not-in [int float] })
+    let bare = ($values | get leg | uniq | where {|leg|
+        $values | where {|v| $v.leg == $leg and $v.value != null } | is-empty
+    })
+    let typed_reasons = (if ($typed | is-empty) { [] } else {
+        [$"frame ($typed.0.frame)'s ($field) is a ($typed.0.value | describe), not a number"]
+    })
+    $typed_reasons | append ($bare | each {|leg| $"the leg ($leg) holds no number in ($field)" })
 }
 
 # A leg's frames reduced for a comparison: the eye's travel in metres,
@@ -865,16 +922,18 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
 
 # Set builds' captures side by side (compare): every leg's value of
 # `--field` a run, a build's mean and half spread a leg, printed, marked
-# with its runs' standings other than valid; a run measured incomplete
-# or invalid refused unless `--diagnostic` admits it; the method, the
-# bins every run reached, each run's standing and bins with their
-# medians, and the table go to `--out`.
+# with its runs' standings other than valid; a run measured incomplete,
+# invalid, or before validity was recorded refused unless `--diagnostic`
+# admits it, and one with nothing to compare refused even then, each
+# named with its file, its run, and the reasons; the method, the bins
+# every run reached, each run's standing and bins with their medians, and
+# the table go to `--out`.
 def "main compare" [
     ...files: string                 # the gauge.nuon files compared
     --field: string = "draw_us"      # the row's column compared
     --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
     --out: string = ""               # where the comparison lands, the program's .target/compare.nuon unless given
-    --diagnostic                     # admit runs their measurements found incomplete or invalid, marked
+    --diagnostic                     # admit runs measured incomplete, invalid, or unchecked, marked
 ] {
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { $env.FILE_PWD | path join ".." ".target" "compare.nuon" | path expand } else { $out | path expand })

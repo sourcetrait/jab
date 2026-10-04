@@ -1488,18 +1488,24 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 }
 
 # The gauge's rules over synthetic captures (gauge.nu's stream, measure,
-# and legs-for), each built as the program sends one and then broken the
-# way a wrong reading would accept: a frame record sent after the end
-# marker fills no gap before it; a second marker past the window changes
-# nothing; a marker at another schema refuses the window; a flip never
-# shown, a phase or a part past its whole, and a clock disagreeing with
-# its state each make a complete window invalid, while a flip refused as
-# early does not; a frame at the ceiling fails a valid window; a seed
-# answered after the first state is late; a route the identity did not
-# record is refused, kept or given, and a capture with no route is one
-# leg, play; a comparison refuses a run measured incomplete or invalid,
-# admits it marked under --diagnostic with its reasons, and admits a
-# clockless or unchecked run marked.
+# legs-for, and compare), each built as the program sends one and then
+# broken the way a wrong reading would accept: a frame record sent after
+# the end marker fills no gap before it; a second marker past the window
+# changes nothing; a marker at another schema refuses the window; a flip
+# never shown, a phase or a part past its whole, and a clock disagreeing
+# with its state each make a complete window invalid, while a flip
+# refused as early does not; a frame at the ceiling fails a valid window;
+# a seed answered after the first state is late; a frame record, a draw
+# record, or a marker alone among the states makes a capture clocked and
+# incomplete, where states alone are clockless; a route the identity did
+# not record is refused, kept or given, and a capture with no route is
+# one leg, play; a comparison refuses a run measured incomplete, invalid,
+# or unchecked, naming its file, its run, and the reasons, and admits it
+# marked under --diagnostic; it refuses under --diagnostic too an empty
+# run, whatever frame count its measurement records, an unclassified one,
+# and an unusable one, a field whose values are null though its name is
+# the states', and a clock field on a clockless run; it names every run
+# it refuses; and it admits a clockless run marked.
 def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -1539,6 +1545,13 @@ def gauge-rules [dir: path]: nothing -> nothing {
     let late = ($good | skip 1 | insert 1 { kind: "ack" })
     let ml = (do $measure $late)
     assert ((not $ml.seeded) and $ml.late_seed) "a seed answered after the first state is late"
+    let states = ($good | where {|i| $i.kind in ["ack" "state"] })
+    assert (not (do $measure $states).clocked) "states alone are a build older than the clock records"
+    for k in ["frame" "draw" "end"] {
+        let mk = (do $measure ($good | where {|i| $i.kind in ["ack" "state" $k] }))
+        let says = $"states with ($k) records alone are clocked and incomplete: ($mk.problems)"
+        assert ($mk.clocked and (not $mk.complete)) $says
+    }
 
     mkdir $dir
     let played = "{ legs: [{ name: \"played\", places: [], pad: [] }] }"
@@ -1554,33 +1567,77 @@ def gauge-rules [dir: path]: nothing -> nothing {
     assert (try { gauge legs-for $dir $id $given; false } catch { true }) "a route given that the identity did not record is refused"
     assert equal ((gauge legs-for ($dir | path join "bare") { route: null } "").legs | get 0.name) "play" "a capture with no route is one leg, play"
 
-    let rows = (0..<3 | each {|n| { run: 1, frame: $n, leg: "walk", entry: ($n == 0), x: 1.0, y: 1.0, draw_us: 1000 } })
-    let measured = {
-        valid: { clocked: true, complete: true, problems: [], valid: true, invalid: [] },
-        invalid: { clocked: true, complete: true, problems: [], valid: false, invalid: ["1 flips at status 2, never shown"] },
-        incomplete: { clocked: true, complete: false, problems: ["no end marker: the measurement never closed"], valid: false, invalid: [] },
-        clockless: { clocked: false, complete: false, problems: [], valid: false, invalid: [] },
-        unchecked: { clocked: true, complete: true, problems: [] },
+    let rows_of = {|clocked: bool|
+        0..<3 | each {|n|
+            let critical = (if $clocked { 1800 } else { null })
+            { run: 1, frame: $n, leg: "walk", entry: ($n == 0), x: 1.0, y: 1.0, draw_us: 1000, critical_us: $critical }
+        }
     }
-    let files = ($measured | columns | each {|name|
-        let file = ($dir | path join $"compare_($name).nuon")
-        { label: $name, identity: { build: { image_sha256: $name } }, runs: [{ run: 1, measured: ($measured | get $name) }], rows: $rows } | to nuon | save --raw -f $file
-        { name: $name, file: $file }
+    let clocked_rows = (do $rows_of true)
+    let clockless_rows = (do $rows_of false)
+    let checked = { clocked: true, complete: true, problems: [], valid: true, invalid: [] }
+    let stateless = { clocked: false, complete: false, problems: [], valid: false, invalid: [] }
+    let never_shown = ["1 flips at status 2, never shown"]
+    let never_closed = ["no end marker: the measurement never closed"]
+    let invalid = ($checked | update valid false | update invalid $never_shown)
+    let incomplete = ($checked | update complete false | update valid false | update problems $never_closed)
+    let fixtures = [
+        { name: "valid", measured: $checked, rows: $clocked_rows }
+        { name: "invalid", measured: $invalid, rows: $clocked_rows }
+        { name: "incomplete", measured: $incomplete, rows: $clocked_rows }
+        { name: "unchecked", measured: ($checked | reject valid invalid), rows: $clocked_rows }
+        { name: "clockless", measured: $stateless, rows: $clockless_rows }
+        { name: "empty", measured: ($stateless | insert frames 3), rows: [] }
+        { name: "unclassified", measured: ($checked | reject clocked), rows: $clocked_rows }
+        { name: "bare", measured: null, rows: $clocked_rows }
+        { name: "nulled", measured: $stateless, rows: ($clockless_rows | update draw_us null) }
+    ]
+    let files = ($fixtures | each {|x|
+        let file = ($dir | path join $"compare_($x.name).nuon")
+        let doc = { label: $x.name, identity: { build: { image_sha256: $x.name } } }
+        $doc | insert runs [{ run: 1, measured: $x.measured }] | insert rows $x.rows | to nuon | save --raw -f $file
+        { name: $x.name, file: ($file | path expand) }
     })
     let file_of = {|name: string| $files | where name == $name | get 0.file }
-    for name in [invalid incomplete] {
-        let pair = [(do $file_of "valid") (do $file_of $name)]
-        assert (try { gauge compare $pair "draw_us" 50; false } catch {|e| $e.msg =~ $name }) $"a comparison refuses a run measured ($name)"
+    let valid_file = (do $file_of "valid")
+    for name in ["invalid" "incomplete" "unchecked"] {
+        let file = (do $file_of $name)
+        let pair = [$valid_file $file]
+        let refused = (try { gauge compare $pair "draw_us" 50; "" } catch {|e| $e.msg })
+        let says = $"a comparison refuses a run measured ($name), naming its file and run: ($refused)"
+        assert ($refused | str contains $"($file) run 1, ($name): ") $says
         let admitted = (gauge compare $pair "draw_us" 50 --diagnostic)
         assert equal ($admitted.runs | where build == $name | get 0.standing) $name $"--diagnostic admits a run measured ($name), marked"
         assert (not ($admitted.runs | where build == $name | get 0.reasons | is-empty)) $"the ($name) run keeps its reasons"
         assert equal ($admitted.table | where build == $name | get 0.standings) [$name] $"the ($name) build's row names its standing"
     }
-    for name in [clockless unchecked] {
-        let compared = (gauge compare [(do $file_of "valid") (do $file_of $name)] "draw_us" 50)
-        assert equal ($compared.table | where build == $name | get 0.standings) [$name] $"a ($name) run is admitted and marked"
-        assert equal ($compared.table | where build == "valid" | get 0.standings) ["valid"] "a valid run stands valid"
+    let compared = (gauge compare [$valid_file (do $file_of "clockless")] "draw_us" 50)
+    let clockless_standings = ($compared.table | where build == "clockless" | get 0.standings)
+    assert equal $clockless_standings ["clockless"] "a clockless run is admitted and marked"
+    assert equal ($compared.table | where build == "valid" | get 0.standings) ["valid"] "a valid run stands valid"
+    let stopped = [
+        { fixture: "empty", field: "draw_us", standing: "empty" }
+        { fixture: "unclassified", field: "draw_us", standing: "unclassified" }
+        { fixture: "bare", field: "draw_us", standing: "unclassified" }
+        { fixture: "nulled", field: "draw_us", standing: "unusable" }
+        { fixture: "clockless", field: "critical_us", standing: "unusable" }
+    ]
+    for s in $stopped {
+        let file = (do $file_of $s.fixture)
+        for admit in [false true] {
+            let msg = (try {
+                gauge compare [$valid_file $file] $s.field 50 --diagnostic=$admit; ""
+            } catch {|e| $e.msg })
+            let says = $"the ($s.fixture) run on ($s.field) refused as ($s.standing), --diagnostic ($admit): ($msg)"
+            assert ($msg | str contains $"($file) run 1, ($s.standing): ") $says
+        }
     }
+    let invalid_file = (do $file_of "invalid")
+    let empty_file = (do $file_of "empty")
+    let every = (try { gauge compare [$valid_file $invalid_file $empty_file] "draw_us" 50; "" } catch {|e| $e.msg })
+    let names_invalid = ($every | str contains $"($invalid_file) run 1, invalid: ")
+    let names_empty = ($every | str contains $"($empty_file) run 1, empty: ")
+    assert ($names_invalid and $names_empty) $"every run refused is named, none left out: ($every)"
 }
 
 # A synthetic capture's records as the program sends them over `frames`

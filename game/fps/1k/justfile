@@ -90,8 +90,9 @@ gauge-read api:
 # Set builds' gauge.nuon files side by side, each walked leg per half
 # metre of its path, the method and every bin kept in
 # .target/compare.nuon: `just gauge-compare a/gauge.nuon b/gauge.nuon`; a
-# run measured incomplete or invalid is refused unless `--diagnostic`
-# admits it, marked
+# run measured incomplete, invalid, or before validity was recorded is
+# refused unless `--diagnostic` admits it, marked, and one with nothing to
+# compare is refused even then
 gauge-compare *files:
     ^nu "{{here}}/test/gauge.nu" compare {{files}}
 
