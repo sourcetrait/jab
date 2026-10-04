@@ -14,7 +14,9 @@
 # drawn, the stair on it walked to the upper storey, the factory, the
 # game's map, from its spawn and three poses with the sky read off the
 # yard's capture and two traces answered, its flights and driveway
-# walked from placed starts with the ambient following, the fight: an
+# walked from placed starts with the ambient following and their clock
+# read, the three cadences on a schedule of stalls and trigger reports
+# and on a timed walk (cadence-holds), the fight: an
 # android roused and firing, struck down by four rounds from the
 # console and one from the trigger, fallen, its magazine taken on a
 # walk, the shots heard; the light's view independence, floor points
@@ -85,6 +87,46 @@ const CLOCK_SCHEMA = 2
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
+# The cadence fixtures (cadence-holds): the cadences, the period at the
+# cap of 60 in microseconds, the S frame's command byte as a console
+# record carries it, and a sustained stage's first frames set aside.
+# CadenceSchedule on the proof map: the standing stall and the consume's
+# spin from 1.5 s, ten trigger reports, the frame whose flip is tried
+# before its wait, the frame stalled once, the slow stage's standing
+# stall, and the E. The once stall stands well past two periods: from the
+# tick before it to its flip's end run two present calls, 0.3 to 4 ms
+# each here, and the kernel sets the next tick from the grid when a flip
+# lands within a period of its tick and from the flip when later, so a
+# stall near two periods falls either side of that edge by chance; at 38
+# ms every cadence's frames stand 5 ms or more clear of every edge they
+# meet. Every timed action stands 300 ms or more from the
+# next: a launch writes its actions on the turns of its loop, about 220
+# ms apart here, so two reports nearer than that go in together and fire
+# once in a frame, as two S frames would act on one. The wakes a frame
+# stays under: a consume that takes nothing spins its 500 us again on
+# every wake, twenty or more in a period's wait. MotionByTime on the
+# still factory: the placement, north along the bay's east side clear of
+# the pillars, the standing stall, the stick held forward, the E, the
+# body's speed, and the clearance from every wall of a frame's sector its
+# frames keep
+const CADENCES = [0 1 2]
+const CADENCE_PERIOD = (1000000 / 60)
+const CONSOLE_S = 83
+const CADENCE_SKIP = 5
+const SCHEDULE_FAST = { at: 1500ms, stall: 4000, spin: 500 }
+const SCHEDULE_TRIGGERS = [1800ms 2200ms 2600ms 3000ms 3400ms 3800ms 4200ms 4600ms 5000ms 5400ms]
+const SCHEDULE_FORCED = 5900ms
+const SCHEDULE_ONCE = { at: 6300ms, stall: 38000 }
+const SCHEDULE_SLOW = { at: 7000ms, stall: 25000 }
+const SCHEDULE_END = 9000ms
+const SCHEDULE_WAKES = 8
+const MOTION_POSE = { name: "motion", x: 28.0, y: 2.5, z: 1.6, yaw: 90, pitch: 0 }
+const MOTION_AT = 1500ms
+const MOTION_STALL = 25000
+const MOTION_STICK = { from: 2000ms, to: 5000ms }
+const MOTION_END = 5500ms
+const MOTION_SPEED = 4.0
+const MOTION_CLEAR = 1.0
 const MET_GEOMETRY = 1
 const MET_ANDROID = 2
 const ROUSED = 1
@@ -800,6 +842,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile arena's peak at or past what it holds"
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
     print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early"
+
+    # the three cadences on a schedule of stalls and trigger reports and
+    # on a timed walk (cadence-holds)
+    cadence-holds $kernel $image $out $set $game
 
     # the fight: the first android, facing the spawn, rouses and fires;
     # from the placed eye four rounds from the console strike it down to
@@ -2210,6 +2256,230 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($legacy.runs | get standing) [valid valid] $"both schema 1 captures stand valid: ($legacy.runs | get reasons)"
     assert equal ($legacy.runs | get effective_cadence) [0 0] $"both played cadence 0: ($legacy.runs | get effective_cadence)"
     assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
+}
+
+# The program's three cadences on its own clock records, one
+# launch a cadence of each fixture, the debug build's S frames standing
+# stalls in place of the drawing, each window held complete and valid at
+# schema 2 before anything is read from it. CadenceSchedule, on the
+# proof map: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
+# 500 us spin inside every consume; ten trigger reports from 1.8 s, 400
+# ms apart, each pressed and released in one report; at 5.9 s a frame
+# whose flip is tried before its wait; at 6.3 s a frame stalled 30 ms;
+# from 7 s a 25 ms standing stall; the E at 9 s. A sustained stage sets
+# its first five frames aside; a one-off is read at the frame its S
+# answer names, the first state after it, and the frames after it as they
+# come. The fast
+# stage presents every period under every cadence, soon after its
+# simulation under 0 and a period after it under 1 and 2, which wait for
+# the tick, every frame with wakes holding the consume's spin in its
+# pacing and its critical path, never its wait; the forced frame under 1
+# and 2 is refused once and presents on the tick; the stalled frame's
+# intervals are each cadence's catch-up; the slow stage presents a period
+# past each late flip under 0, as soon as ready with no wait under 1, and
+# every second period on the tick grid under 2; ten rounds under every
+# cadence, presses taken in waits under 1 and 2, and few wakes a frame.
+# MotionByTime, on the still factory: placed on the bay's east side
+# facing north, a 25 ms standing stall, the stick held forward from 2 to
+# 5 s; over the frames the body moved in a metre or more from every wall
+# of their sector, the distance from the first to the last over the
+# difference of their simulation times is 4 m/s within 2 percent under
+# every cadence.
+export def cadence-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
+    let dir = ($out | path join "cadence")
+    mkdir $dir
+    let proof_disk = (romfs ($game | path join ".target" "asset" "proof") ($dir | path join "proof.romfs"))
+    let still_tree = (variant-tree (open ($game | path join "content" "map" "factory.nuon")) "factory_still" [android] ($dir | path join "still") $game)
+    let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
+    let still_read = (map read ($still_tree | path join "map" "factory_still.jabfps.map"))
+    let triggers = ($dir | path join "triggers.nuon")
+    $SCHEDULE_TRIGGERS | each {|at| [{ at: $at, type: 1, code: 313, value: 1 } { at: $at, type: 1, code: 313, value: 0 }] } | flatten | to nuon | save --raw -f $triggers
+    let stick = ($dir | path join "stick.nuon")
+    [{ at: $MOTION_STICK.from, type: 3, code: 1, value: 0 } { at: $MOTION_STICK.to, type: 3, code: 1, value: 127 }] | to nuon | save --raw -f $stick
+    let p = $CADENCE_PERIOD
+    for cadence in $CADENCES {
+        let says = $"on the schedule at cadence ($cadence)"
+        let sends = ([
+            { at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }
+            { at: $CLOCK_SEED_AT, bytes: (gauge cadence-frame $cadence) }
+            { at: $SCHEDULE_FAST.at, bytes: (stall-frame true $SCHEDULE_FAST.stall 0 false $SCHEDULE_FAST.spin) }
+            { at: $SCHEDULE_FORCED, bytes: (stall-frame true $SCHEDULE_FAST.stall 0 true $SCHEDULE_FAST.spin) }
+            { at: $SCHEDULE_ONCE.at, bytes: (stall-frame true $SCHEDULE_FAST.stall $SCHEDULE_ONCE.stall false $SCHEDULE_FAST.spin) }
+            { at: $SCHEDULE_SLOW.at, bytes: (stall-frame true $SCHEDULE_SLOW.stall 0 false $SCHEDULE_FAST.spin) }
+            { at: $SCHEDULE_END, bytes: (pose command-frame "E") }
+        ] | sort-by at)
+        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $proof_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
+        let m = (gauge measure $run.api [{ name: "schedule", places: [], pad: [] }])
+        assert ($m.complete and $m.valid and $m.schema == 2) $"the window complete and valid at schema 2 ($says): ($m.problems) ($m.invalid)"
+        assert equal $m.cadences [$cadence] $"every frame presented at cadence ($cadence) ($says)"
+        let s = (answered-frames $run.api $CONSOLE_S)
+        assert equal ($s | length) 4 $"the four S frames answered in the window ($says): ($s)"
+        let rows = (submitted $m.rows)
+        let row = {|f: int| $rows | where frame == $f | get 0 }
+        let fast = ($rows | where {|r| $r.frame >= ($s.0 + $CADENCE_SKIP) and $r.frame < $s.1 })
+        let slow = ($rows | where {|r| $r.frame >= ($s.3 + $CADENCE_SKIP) })
+
+        # the fast stage
+        let interval = ($fast | get submit_interval_us | compact | math median)
+        assert ((($interval - $p) | math abs) <= 500) $"the fast stage presents every period ($says): ($interval) us"
+        let age = ($fast | get submission_age_us | compact | math median)
+        if $cadence == 0 {
+            assert ($age < 8000) $"the fast stage's submission age its own work under cadence 0: ($age) us"
+        } else {
+            assert ($age > 14000) $"the fast stage's submission age near a period ($says): ($age) us"
+            let wait = ($fast | get wait_us | math median)
+            assert ($wait > 9000) $"the fast stage waits for the tick ($says): ($wait) us"
+        }
+        let woken = ($fast | where {|r| $r.wakes > 0 })
+        let spilled = ($woken | where {|r| $r.pacing_us < ($r.wakes * $SCHEDULE_FAST.spin) or $r.unattributed_us < 0 or $r.unattributed_us > 1000 })
+        let spilled_says = $"every frame with wakes holds the consume's spin in its pacing and its critical path ($says): ($spilled | select frame wakes pacing_us wait_us unattributed_us | first 3)"
+        assert ($spilled | is-empty) $spilled_says
+
+        # the frame whose flip is tried before its wait
+        let forced = (do $row $s.1)
+        let others = ($rows | where {|r| $r.frame != $s.1 and $r.flip_attempts != 1 })
+        assert ($others | is-empty) $"every other frame tries its flip once ($says): ($others | select frame flip_attempts refusals | first 3)"
+        if $cadence == 0 {
+            assert equal $forced.flip_attempts 1 $"the forced frame tries once under cadence 0, which awaits after its flip: ($forced.flip_attempts)"
+        } else {
+            let tried = ($forced.flip_attempts == 2 and $forced.refusals == 1 and $forced.flip_status == 0)
+            assert $tried $"the forced frame tried before its wait, refused once, then presented ($says): ($forced | select frame flip_attempts refusals flip_status)"
+            assert ((($forced.submit_interval_us - $p) | math abs) <= 1000) $"the forced frame presents on the tick ($says): ($forced.submit_interval_us) us"
+        }
+
+        # the frame stalled once and the two after it: under 0 its flip a
+        # period past the frame before's tick and its stall, the next a
+        # period past its flip and that frame's work; under 1 presented
+        # once ready, the next held to the tick a period past its flip, then
+        # the period; under 2 held to the third tick, then the period
+        let once = $SCHEDULE_ONCE.stall
+        let stalled = (do $row $s.2)
+        assert ($stalled.draw_us >= $once and $stalled.draw_us <= ($once + 1000)) $"the stalled frame's drawing its ($once / 1000) ms stall ($says): ($stalled.draw_us) us"
+        let after = (0..2 | each {|k| (do $row ($s.2 + $k)).submit_interval_us })
+        let recovered = (match $cadence {
+            0 => ($after.0 >= ($once + 9000) and $after.0 <= ($once + 17000) and $after.1 >= 19000 and $after.1 <= 27000)
+            1 => ($after.0 >= $once and $after.0 <= ($once + 7000) and $after.1 >= ($p - 500) and $after.1 <= ($p + 6000) and ((($after.2 - $p) | math abs) <= 1000))
+            _ => (((($after.0 - 3 * $p) | math abs) <= 1000) and ((($after.1 - $p) | math abs) <= 1000))
+        })
+        assert $recovered $"the stall's intervals ($says): ($after) us"
+
+        # the slow stage
+        let slow_interval = ($slow | get submit_interval_us | compact | math median)
+        if $cadence == 0 {
+            assert ($slow_interval > 40000) $"the slow stage a period past each late flip under cadence 0: ($slow_interval) us"
+        } else if $cadence == 1 {
+            assert ($slow_interval < 28000) $"the slow stage presents as soon as ready under cadence 1: ($slow_interval) us"
+            let waited = ($slow | where {|r| $r.wait_us > 0 })
+            assert ($waited | is-empty) $"no frame of the slow stage waits under cadence 1: ($waited | select frame wait_us | first 3)"
+        } else {
+            assert ((($slow_interval - 2 * $p) | math abs) <= 500) $"the slow stage every second period under cadence 2: ($slow_interval) us"
+            let intervals = ($slow | get submit_interval_us | compact)
+            let gridded = ($intervals | where {|i| (($i - (($i / $p) | math round) * $p) | math abs) <= 1000 } | length)
+            assert (($gridded * 10) >= (($intervals | length) * 9)) $"nine in ten of the slow stage's intervals on the tick grid under cadence 2: ($gridded) of ($intervals | length)"
+        }
+
+        # the rounds, the presses taken in waits, and the wakes a frame
+        let rounds = (records $run.api | where kind == 2 | length)
+        assert equal $rounds 10 $"ten rounds from ten trigger reports ($says)"
+        if $cadence != 0 {
+            let presses = ($rows | get wait_presses | math sum)
+            assert ($presses >= 1) $"presses taken in waits ($says): ($presses)"
+            let wakes = ($rows | get wakes | math max)
+            assert ($wakes < $SCHEDULE_WAKES) $"under ($SCHEDULE_WAKES) wakes in any frame ($says): ($wakes)"
+        }
+        print $"fps: the schedule at cadence ($cadence): ($m.frames) frames; the fast stage's interval ($interval) us and age ($age) us; the stall's intervals ($after) us; the slow stage's ($slow_interval) us"
+    }
+    for cadence in $CADENCES {
+        let says = $"walking at cadence ($cadence)"
+        let sends = ([
+            { at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }
+            { at: $CLOCK_SEED_AT, bytes: (gauge cadence-frame $cadence) }
+            { at: $MOTION_AT, bytes: (pose pose-frame $MOTION_POSE) }
+            { at: $MOTION_AT, bytes: (stall-frame true $MOTION_STALL 0 false 0) }
+            { at: $MOTION_END, bytes: (pose command-frame "E") }
+        ] | sort-by at)
+        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"motion_($cadence)") --set $set --sound --api --pad $stick --disk $still_disk --serial "fps" --send $sends --capture ($MOTION_END + 1sec) --seconds 7)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
+        let m = (gauge measure $run.api [{ name: "motion", places: [$MOTION_POSE], pad: [] }])
+        assert ($m.complete and $m.valid and $m.schema == 2) $"the window complete and valid at schema 2 ($says): ($m.problems) ($m.invalid)"
+        let moved = ($m.rows | window 2 | where {|w|
+            let step = (((($w.1.x - $w.0.x) ** 2) + (($w.1.y - $w.0.y) ** 2)) | math sqrt)
+            $step > 0.001 and $step < 0.5
+        } | each {|w| $w.1 })
+        let clear = ($moved | where {|r| $r.sector >= 0 and (wall-clearance $still_read $r.sector $r.x $r.y) >= $MOTION_CLEAR })
+        assert (($clear | length) >= 2) $"frames that moved clear of the walls ($says): ($clear | length) of ($moved | length)"
+        let first = ($clear | first)
+        let last = ($clear | last)
+        let seconds = (($last.simulation_us - $first.simulation_us) / 1000000)
+        assert ($seconds >= 2.0) $"the walk measured over at least 2 s ($says): ($seconds) s"
+        let metres = (((($last.x - $first.x) ** 2) + (($last.y - $first.y) ** 2)) | math sqrt)
+        let speed = ($metres / $seconds)
+        assert ((($speed - $MOTION_SPEED) | math abs) <= ($MOTION_SPEED * 0.02)) $"the body walks 4 m/s by the clock ($says): ($speed) m/s over ($seconds) s"
+        print $"fps: the walk at cadence ($cadence): ($speed) m/s over ($seconds) s, ($clear | length) frames, the interval's median ($m.rows | get flip_interval_us | compact | math median) us"
+    }
+}
+
+# A capture's rows each with the interval from the presented flip before
+# its own to its own, both read at the call's start, the flip's end less
+# its calls: the call that presents takes 0.5 to 2 ms here as the device
+# answers, so intervals between flip ends carry that spread, where a call
+# starts on the display's tick. Null for a frame whose flip did not
+# present and for the first that did.
+def submitted [rows: list<any>]: nothing -> list<any> {
+    mut previous: any = null
+    mut out = []
+    for r in $rows {
+        let start = (if $r.flip_status == 0 { $r.flip_done_us - $r.flip_us } else { null })
+        let interval = (if $start == null or $previous == null { null } else { $start - $previous })
+        if $start != null { $previous = $start }
+        $out = ($out | append ($r | insert submit_interval_us $interval))
+    }
+    $out
+}
+
+# The console's S frame, a debug build's alone: byte 4 the standing stall
+# on, byte 5 the reading frame's flip tried before its wait, then the
+# standing stall, the reading frame's own stall, and the spin inside
+# every consume, words in microseconds from byte 8.
+def stall-frame [on: bool, standing: int, once: int, forced: bool, spin: int]: nothing -> binary {
+    [
+        ("S" | into binary) 0x[00 00 00]
+        (if $on { 0x[01] } else { 0x[00] }) (if $forced { 0x[01] } else { 0x[00] }) 0x[00 00]
+        (fx-u32 $standing) (fx-u32 $once) (fx-u32 $spin) (fx-zeros 44)
+    ] | bytes collect
+}
+
+# The frames that read a console command, each the count of state records
+# before its answer, so the frame's own state is the next one.
+def answered-frames [api: binary, command: int]: nothing -> list<int> {
+    mut states = 0
+    mut frames = []
+    for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
+        let kind = ($r | bytes at 0..<1 | into int)
+        if $kind == 1 { $states += 1 }
+        if $kind == 11 and ($r | bytes at 4..<5 | into int) == $command { $frames = ($frames | append $states) }
+    }
+    $frames
+}
+
+# A point's distance in the plan from the nearest wall of a sector's
+# loops.
+def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> float {
+    let sec = ($m.sectors | get $sector)
+    $sec.first_loop..<($sec.first_loop + $sec.loop_count) | each {|li|
+        let lp = ($m.loops | get $li)
+        $lp.first_wall..<($lp.first_wall + $lp.wall_count) | each {|wi|
+            let w = ($m.walls | get $wi)
+            let a = ($m.vertices | get $w.a)
+            let b = ($m.vertices | get $w.b)
+            let dx = ($b.x - $a.x)
+            let dy = ($b.y - $a.y)
+            let along = (((($x - $a.x) * $dx) + (($y - $a.y) * $dy)) / (($dx * $dx) + ($dy * $dy)))
+            let t = ([0.0 ([1.0 $along] | math min)] | math max)
+            ((($x - ($a.x + $t * $dx)) ** 2) + (($y - ($a.y + $t * $dy)) ** 2)) | math sqrt
+        }
+    } | flatten | math min
 }
 
 # A synthetic capture's records as the program sends them over `frames`

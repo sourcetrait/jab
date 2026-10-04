@@ -3,8 +3,25 @@
 The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
 with the lumels bright or set by parity, the tiles held off, or the levels built
-capped, R the generator seeded, E the gauge's measurement closed, each reported
+capped, R the generator seeded, E the gauge's measurement closed, C the
+cadence chosen, S on a debug build the cadence fixture's stalls, each reported
 back as REPORT_CONSOLE.
+
+C takes byte 4 as the cadence, render.inc's CADENCE_*, from the reading
+frame's flip on (main.S's CLOCK_CADENCE); a value past the three leaves the
+cadence as it was. The gauge sends one beside R before the first frame, and
+every presentation record carries the cadence the frame presented under, the
+proof that it took.
+
+S is the cadence fixture's knob, on a debug build alone, acting on the frame
+that reads it, whose drawing and pacing follow console_read: byte 4 set
+stands the stall of bytes 8 to 11, in microseconds, in place of world_draw
+from this frame on, and clear puts the drawing back; bytes 12 to 15 are this
+frame's own stall in its place, 0 for none; byte 5 set has this frame's
+pacing step try its flip once before waiting; bytes 16 to 19 are a spin in
+microseconds inside every consume from this frame on (main.S's
+draw_or_stall, pacing_step, and pad_consume). An S sets every knob at once,
+so a fixture carries the standing stall and the spin in each.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start
@@ -81,3 +98,23 @@ the levels a surface builds held to byte 6 when it is not 0.
 ## measure_end
 
 `u8`: set by an E, cleared once the end marker has gone out.
+
+## stall_on
+
+`u8`: an S's byte 4, the standing stall in place of the drawing while set; a debug build's alone, as are the knobs after it.
+
+## flip_first
+
+`u8`: an S's byte 5, the reading frame's flip tried before its wait, cleared by that frame.
+
+## stall_us
+
+`u32`: the standing stall in microseconds, an S's bytes 8 to 11.
+
+## stall_once
+
+`u32`: the reading frame's own stall in microseconds, an S's bytes 12 to 15, taken once.
+
+## consume_spin
+
+`u32`: the spin inside every consume in microseconds, an S's bytes 16 to 19.

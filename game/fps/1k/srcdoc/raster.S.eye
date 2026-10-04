@@ -36,6 +36,6 @@ macro mip_bind level 192(sp) u64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshi
  level :the block's level in span_fill's frame, the chain's last at most
  shift :the level plus 16
  spill :s5 as it was, v/z, which the block's end takes back
-macro count_add field imm,scratch reg,base reg,n=1 imm > counter field(count_stats) u64,base base addr,scratch scratch u64 [834:839] :on a COUNT build alone, the counter at field in count_stats raised by n, the two registers named changed
+macro count_add field imm,scratch reg,base reg,n=1 imm > counter field(count_stats) u64,base base addr,scratch scratch [834:839] :on a COUNT build alone, the counter at field in count_stats raised by n, the two registers named changed
 call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [843:1736] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, each block at one level from its footprint held under the chain's last, read from the tiles where that level is built whole, else from the chain; no float in the loop
  end :the pixel past the last

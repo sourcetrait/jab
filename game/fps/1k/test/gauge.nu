@@ -57,8 +57,6 @@ const CONSOLE_C = 67
 # presenting would be early, 2 holds every flip to the display's tick
 const CADENCES = [0 1 2]
 const CADENCE_AFTER_FLIP = 0
-# the cadence a run asks the program for
-const CADENCE = 0
 # the cap a frame's period comes from when a capture's identity names none
 const CAP = 60
 # a frame's next start less its start less its critical path, wait, and
@@ -99,8 +97,8 @@ const REFUSED = [incomplete invalid unchecked unpaired]
 const REJECTED = [empty unclassified unusable]
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--host] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--host] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
 }
@@ -119,10 +117,12 @@ def "main run" [
     --map: string = ""           # the map tree the route plays on, the route's unless given
     --runs: int = 3              # the route's runs
     --seeds: list<int> = []      # each run's seed, run n's n unless given
+    --cadence: int = 1           # the cadence each run asks for, the program's own 1 unless given
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
 ] {
+    if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let at = (places $tree $kernel $image $out)
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_factory.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
@@ -139,11 +139,11 @@ def "main run" [
         let run_out = ($at.out | path join $"run_($n)")
         mkdir $run_out
         $route_bytes | save --raw -f ($run_out | path join "route.nuon")
-        let sends = ([{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $CADENCE) }]
+        let sends = ([{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }]
             | append ($r.legs | each {|l| $l.places | each {|p| { at: $p.at, bytes: (pose pose-frame $p) } } } | flatten)
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
-        let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $CADENCE, end: $r.end, capture: $capture }
+        let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, end: $r.end, capture: $capture }
         let id = (identity $at $set $map_name $route_file $mode)
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
@@ -172,9 +172,11 @@ def "main play" [
     --image: string = ""         # the program's image, the tree's own unless given
     --seconds: int = 120         # the measurement's length
     --seed: int = 1              # the seed the run sends
+    --cadence: int = 1           # the cadence the run asks for, the program's own 1 unless given
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
 ] {
+    if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let at = (places $tree $kernel $image $out)
     let disk = (romfs-of $at.game "factory" $at.out)
     let set = (if $at.tree == "debug" { "debug" } else { "" })
@@ -183,8 +185,8 @@ def "main play" [
     let bound = ((($capture + $BOUND_PAST) / 1sec) | math ceil)
     let run_out = ($at.out | path join "run_1")
     mkdir $run_out
-    let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $CADENCE) }, { at: $end, bytes: (pose command-frame "E") }]
-    let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $CADENCE, end: $end, capture: $capture }
+    let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }, { at: $end, bytes: (pose command-frame "E") }]
+    let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $cadence, end: $end, capture: $capture }
     let id = (identity $at $set "factory" null $mode)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"

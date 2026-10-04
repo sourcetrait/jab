@@ -21,9 +21,17 @@ the mix, the flip, and the reporting timed apart and the await after the path
 alone; the frame before's three records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
 frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW, and
-REPORT_PRESENT, read by test/gauge.nu). The frame awaits after its flip,
-render.inc's CADENCE_AFTER_FLIP, so it waits nothing before the flip and
-flips once.
+REPORT_PRESENT, read by test/gauge.nu). A frame presents under one of
+three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
+a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits
+the display's tick or the pad after its reporting, the loop as it first
+stood; CADENCE_IF_EARLY flips as soon as presenting is no longer early,
+waiting only when it would be, and starts the next frame at once;
+CADENCE_ON_GRID does the same with a frame ready after its tick waiting
+for the next, so every flip lands on the tick grid. The wait is the time
+inside the pacing step's awaits, apart from the critical path; the
+step's other work, the ready check, the consumes, and its own
+instructions, is the pacing, a phase.
 
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
@@ -183,6 +191,10 @@ The time ticks a microsecond.
 
 `u64`: the attempts answered as early.
 
+## .set CLOCK_CADENCE
+
+`u64`: the cadence the frame presented under, a CADENCE_*.
+
 ## .set CLOCK_SIZE
 
 frame_clock's bytes.
@@ -223,6 +235,15 @@ reached no flip says so; each flip attempt adds its call's ticks and counts
 itself, a refusal when it came early, and the ticks convert to microseconds
 once, in frame_records.
 
+After the mix the frame takes the cadence in force into CLOCK_CADENCE, so a
+C read in its console takes effect at its own flip: under 0 one flip_attempt
+and, after the reporting, the await, under 1 and 2 the pacing step, which
+ends with the flip, and no await after. A display wake of the await under 0
+sets tick_reported, as the pacing step's own awaits do.
+
+On a debug build draw_or_stall stands in for world_draw, so an S frame can
+put a known stall where the drawing was; with no S it is world_draw itself.
+
 ## frame_records
 
 Built from frame_clock and the stats, which world_draw zeroes only when the
@@ -240,6 +261,59 @@ besides the await that can wait, and its cost is the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker
 goes out right after that frame's records, so every record of the
 measurement precedes it and the frames past it are outside.
+
+## flip_attempt
+
+The flip's phase is the call alone, from the tick before it to the tick
+after, so a pacing step's own work around its attempts stays pacing. A
+presented flip clears tick_reported, as the kernel's frame_flipped clears
+its own; a refusal or a failure leaves it.
+
+## pacing_step
+
+Cadences 1 and 2. The ready check first,
+jab.sys.display.ready: under 1 a frame no longer early flips at once; an
+early frame awaits the display's tick or the pad, a wake on the pad alone
+consumed and the wait taken again, never a redraw, then flips. Under 2 a
+frame ready after its tick waits for the next one: the kernel moves a tick
+on only in an await that finds it reported with no flip since (timer.S's
+sys_await), so when tick_reported is clear one await reports the passed
+tick, returning at once, and the wait's await then moves the tick a period
+at a time past now and waits for it; when the tick is already reported,
+which a frame under 0 before it leaves, the wait's await moves it at once.
+A refused flip, which only an S's forced attempt meets, returns to the wait
+and flips again. The pacing is the step's ticks less its awaits' and its
+flips', so the ready checks, the consumes, and the step's own instructions
+are a phase of the critical path and the awaits alone are the wait.
+
+On a debug build an S's byte 5 has the step try its flip once before any
+wait, the forced attempt the cadence fixture reads as a refusal and then a
+presented flip on the tick.
+
+## pacing_await
+
+The pad stays in the mask: without it the device's 64-buffer queue goes
+undrained for the whole wait, a period for a fast frame and two or three
+under cadence 2.
+
+## pad_consume
+
+Every event the pad has delivered is taken, so its line drops and the next
+await sleeps; each gamepad press, an EV_KEY pressed in the gamepad's 32
+codes, is latched into pad_latched, which camera_look ORs into its presses
+and clears, and counted, the wait's presses; a release or an axis event is
+taken and left, the pad's state already holding it. On a debug build an S
+puts a spin of known microseconds inside every consume, the work the
+cadence fixture reads in the pacing and never in the wait.
+
+## draw_or_stall
+
+The stall's microseconds become ticks at US_TICKS and it spins on rdtime to
+the end, calling nothing; it zeroes the drawing's statistics as world_draw
+does at its start, the tile resets since the load kept, and the span count,
+so the frame's draw record reads a drawing of nothing beside its time. This
+frame's own stall, an S's bytes 12 to 15, is taken once; the standing one,
+bytes 8 to 11 while byte 4 is set, every frame.
 
 ## load_report
 
@@ -352,9 +426,17 @@ Falls into fill_screen with the colour 0.
 
 `f32`: the seconds since the frame before, clamped.
 
+## cadence
+
+`u32`: the cadence in force, a CADENCE_*, CADENCE_DEFAULT from the start and a C's after.
+
+## tick_reported
+
+`u8`: 1 while the display's tick is reported with no flip since, as the kernel keeps it, set by an await the display's bit ended and cleared by a presented flip.
+
 ## frame_clock
 
-`16 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
+`17 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
 
 ## clock_records
 

@@ -67,9 +67,12 @@ goes into camera_d a float at a time.
 
 ## camera_look
 
-The trigger's press is read two ways, the keys pressed since the frame before
-and every press among the events since, so a press released within the frame
-still fires.
+The trigger's press is read three ways, the keys pressed since the frame
+before, every press among the events since, and the presses the pacing
+step's consumes latched in the frame before's wait (main.S's pad_consume),
+so a press released within the frame or taken while the frame waited for
+its tick still fires; the three are one mask, so a press seen two ways fires
+once.
 
 With no pad the body stands where it is. The yaw runs counter-clockwise from
 east, so a right turn takes from it; the pitch is held within its limit; the
@@ -100,6 +103,10 @@ outside the type libraries' scratch set.
 ## right_y
 
 `u32`: the right stick's y axis code.
+
+## pad_latched
+
+`u32`: the gamepad presses the pacing step's consumes took, a bit a button from JAB_BTN_GAMEPAD, cleared by camera_look.
 
 ## report_record
 

@@ -191,6 +191,10 @@ camera_look:
     sw t1, 0(t0)
     not t2, t2
     and s2, t1, t2
+    la t0, pad_latched
+    lwu t1, 0(t0)
+    or s2, s2, t1
+    sw zero, 0(t0)                  # the presses the pacing step's consumes took
 11:
     jab.sys.pad.input
     beqz a0, 12f
@@ -387,6 +391,8 @@ cam_sector:
 right_x:
     .skip 4
 right_y:
+    .skip 4
+pad_latched:
     .skip 4
 .balign 8
 report_record:

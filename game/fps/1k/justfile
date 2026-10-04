@@ -70,17 +70,19 @@ smoke seeds='[1]' seconds='60': compile
 # Build, then play the gauge's route (test/route_factory.nuon) on that
 # build headless, every frame of each run read from the program's clock
 # records, gauge.nuon written under the tree's gauge directory and the
-# summary printed: `just gauge`, the release build three times; `just
-# gauge debug 1`; `just gauge release 3 --host` in the host's window and
-# audio
+# summary printed: `just gauge`, the release build three times at the
+# program's own cadence, 1; `just gauge debug 1`; `just gauge release 3
+# --host` in the host's window and audio; `--cadence 0`, `1`, or `2` for
+# the frame's cadence
 gauge tree='release' runs='3' *args:
     ^just build {{ if tree == "debug" { "--set debug" } else { "" } }}; ^nu "{{here}}/test/gauge.nu" run --tree {{tree}} --runs {{runs}} {{args}}
 
 # Build, then put the factory in the host's window, with its audio and
 # its own gamepad, for you to play; the measurement closes after that
-# many seconds and the window with it: `just gauge-play 120`
-gauge-play seconds='120' tree='release':
-    ^just build {{ if tree == "debug" { "--set debug" } else { "" } }}; ^nu "{{here}}/test/gauge.nu" play --tree {{tree}} --seconds {{seconds}}
+# many seconds and the window with it: `just gauge-play 120`, or `just
+# gauge-play 60 release --cadence 2` at a cadence of your choosing
+gauge-play seconds='120' tree='release' *args:
+    ^just build {{ if tree == "debug" { "--set debug" } else { "" } }}; ^nu "{{here}}/test/gauge.nu" play --tree {{tree}} --seconds {{seconds}} {{args}}
 
 # Read a run's capture as the gauge reads its own, the identity its
 # launch wrote beside it taken up: `just gauge-read <run>/api.out`

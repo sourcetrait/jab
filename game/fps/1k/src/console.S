@@ -133,10 +133,40 @@ console_frame:
     j 8f
 10:
     li t1, 'E'
-    bne t0, t1, 8f
+    bne t0, t1, 11f
     la t1, measure_end
     li t2, 1
     sb t2, 0(t1)                    # the frame records close after this frame's
+    j 8f
+11:
+    li t1, 'C'
+    bne t0, t1, 12f
+    lbu t1, 4(s2)
+    li t2, CADENCE_COUNT
+    bgeu t1, t2, 8f                 # any other value leaves the cadence
+    la t2, cadence
+    sw t1, 0(t2)                    # from this frame's flip on
+    j 8f
+12:
+.ifdef DEBUG
+    li t1, 'S'
+    bne t0, t1, 8f
+    lbu t1, 4(s2)
+    la t2, stall_on
+    sb t1, 0(t2)                    # the standing stall on, or the drawing back
+    lwu t1, 8(s2)
+    la t2, stall_us
+    sw t1, 0(t2)
+    lwu t1, 12(s2)
+    la t2, stall_once
+    sw t1, 0(t2)                    # this frame's own stall, 0 for none
+    lbu t1, 5(s2)
+    la t2, flip_first
+    sb t1, 0(t2)                    # this frame's flip tried before its wait
+    lwu t1, 16(s2)
+    la t2, consume_spin
+    sw t1, 0(t2)                    # the spin inside every consume
+.endif
 8:
     la t0, console_record
     li t1, REPORT_CONSOLE
@@ -212,3 +242,16 @@ report_pending:
     .skip 1
 measure_end:
     .skip 1
+.ifdef DEBUG
+stall_on:
+    .skip 1
+flip_first:
+    .skip 1
+.balign 4
+stall_us:
+    .skip 4
+stall_once:
+    .skip 4
+consume_spin:
+    .skip 4
+.endif

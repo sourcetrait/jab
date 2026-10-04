@@ -1062,7 +1062,11 @@ ticks; the pad's wakes during the wait and the presses they drained; the
 flip's attempts and the refusals among them; and the frame's cadence. Under
 CADENCE_AFTER_FLIP the frame awaits after its flip, so its wait, pacing,
 wakes, and presses are 0 and its attempts 1, a refusal among them when the
-flip came early. The pixel counts are candidates before the
+flip came early. Under CADENCE_IF_EARLY and CADENCE_ON_GRID the frame waits
+before its flip only when presenting would be early, the second also when
+it came after its tick, and flips again after a refusal, so its final flip
+presents and its await is the loop's few instructions to the next start.
+The pixel counts are candidates before the
 depth test and the masked pass: DRAW_TILED_PIXELS the blocks read from
 tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
 fallback loop took, which holds blocks off the tile grid as well as cells
@@ -1322,6 +1326,22 @@ A record's bytes, zero to the end.
 ## .set CADENCE_AFTER_FLIP
 
 `u32`: the cadence awaiting the display's tick or the pad after each flip.
+
+## .set CADENCE_IF_EARLY
+
+`u32`: the cadence flipping as soon as presenting is no longer early, the display's tick or the pad awaited before the flip only when it would be.
+
+## .set CADENCE_ON_GRID
+
+`u32`: the cadence holding every flip to the display's tick grid, a frame ready after its tick waiting for the next.
+
+## .set CADENCE_COUNT
+
+`u32`: the cadences; a C past them leaves the cadence as it was.
+
+## .set CADENCE_DEFAULT
+
+`u32`: the image's cadence until a C, CADENCE_IF_EARLY, until the cadences' measurements choose the shipped one.
 
 ## .set EVENT_ROUSED
 
