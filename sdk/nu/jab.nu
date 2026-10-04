@@ -1748,7 +1748,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
     mkdir $out
     let log = ($out | path join "sdl.log")
     retire $log $line.context.root
-    let server =(($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
+    let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
     let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
