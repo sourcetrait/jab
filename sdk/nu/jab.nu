@@ -376,7 +376,9 @@ export def launch [
     mut header_sent = (not $gamepad.port)
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
-        let pid = (if ($pidfile | path exists) { open --raw $pidfile | str trim } else { "" })
+        # QEMU deletes its pid file as it exits, so the read is tried, never
+        # checked first: an exit between a check and the open is no pid
+        let pid = (try { open --raw $pidfile | str trim } catch { "" })
         let alive = ($result == null and (process-alive $pid))
         let sample = (if $pid == "" { null } else { cpu-seconds $pid })
         if $sample != null { $cpu = $sample }
