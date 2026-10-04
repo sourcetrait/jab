@@ -1349,7 +1349,7 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
         $"    critical path (spread $f.critical); drawing (spread $f.draw)"
         $"    wait (spread $f.wait); pacing (ms $f.pacing.median) and await (ms $f.await.median) at the median"
         $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.catch_up) catch-up"
-        $"    ($f.fast) fast, ($f.fast_waited) of them waited; ($f.over) over 15 ms; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
+        $"    ($f.fast) fast, ($f.fast_waited) of them waited; ($f.over) at or over 15 ms; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
     ]
 }
 

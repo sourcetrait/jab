@@ -2172,7 +2172,7 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     let record_file = ($dir | path join "bench.nuon")
     let total = ($steps | length)
     let base = { bench: $b.name, stamp: $stamp, dir: $dir, pid: $nu.pid, started: (date now | format date "%Y-%m-%dT%H:%M:%S"), total: $total }
-    mut record = {
+    mut record: record = {
         bench: $b.name, summary: $b.def.summary, tree: $tree, stamp: $stamp, started: $base.started, file: $b.file,
         steps: ($steps | each {|s| { label: $s.label, attend: ($s | get -o attend), run: $s.run, state: "pending", exit: null, seconds: null } }),
         report: null, state: "building",
@@ -2279,7 +2279,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     let b = (bench-at $ws ($named | first))
     let state_file = (bench-home $b | path join "state.nuon")
     let before = (bench-state $state_file)
-    mut state = (if $before != null and (bench-live $before) { $before } else { null })
+    mut state: any = (if $before != null and (bench-live $before) { $before } else { null })
     if $state == null { print $"jab watch: waiting for ($b.name) to start: `just bench ($b.name)` in another terminal" }
     while $state == null {
         sleep 1sec

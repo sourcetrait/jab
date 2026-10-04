@@ -12,9 +12,10 @@ pub(crate) fn retire(path: &Path, root: &Path) -> RoboResult<()> {
     if fs::symlink_metadata(path).is_err() {
         return Ok(());
     }
-    let from = std::path::absolute(path).map_err(RoboError::io(path.display().to_string()))?;
+    let from = lexical(path).map_err(RoboError::io(path.display().to_string()))?;
+    let root = lexical(root).map_err(RoboError::io(root.display().to_string()))?;
     let base = root.join("tmp").join("retired").join(stamp()?);
-    let at = match from.strip_prefix(root) {
+    let at = match from.strip_prefix(&root) {
         Ok(rest) => base.join(rest),
         Err(_) => base.join("outside").join(from.strip_prefix("/").unwrap_or(&from)),
     };
@@ -36,6 +37,23 @@ pub(crate) fn retire(path: &Path, root: &Path) -> RoboResult<()> {
         }
         Err(error) => Err(RoboError::Io { what, source: error }),
     }
+}
+
+/// A path made absolute with its `.` and `..` resolved from its own words,
+/// links left as they are, as nushell's `path expand --no-symlink` makes
+/// one, so a retirement never carries a `..` into the retired tree.
+fn lexical(path: &Path) -> io::Result<PathBuf> {
+    let mut out = PathBuf::new();
+    for part in std::path::absolute(path)?.components() {
+        match part {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    Ok(out)
 }
 
 /// The target a path lies in, the nearest of its parents that is one, as

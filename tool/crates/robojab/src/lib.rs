@@ -70,4 +70,5 @@ pub use run::run;
 #[cfg(test)]
 mod tests {
     mod driver;
+    mod retire;
 }
