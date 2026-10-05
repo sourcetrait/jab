@@ -333,17 +333,23 @@ the harts sleeping on a word it changed with `jab.sys.worker.wake mask`, and
 ends with `jab.sys.worker.exit`. Hart 0 waits and wakes the same way, and its
 devices keep working while it waits. `jab.sys.worker.stop mask` stops
 workers: a waiting worker's wait answers 1, and one still running 50 ms
-later is interrupted where it is. When the stop returns, the workers' stacks
-and buffers are free. A worker may call only `jab.sys.harts` and the worker
+later is interrupted where it is. The stop looks at every online hart in its
+mask and returns only once each one's worker is gone, so a worker that was
+already on its way out is waited for too. When the stop returns, the
+workers' stacks and buffers are free. A worker's exit finishes its own
+bookkeeping before it marks its hart free, so a start that comes during an
+exit finds the hart busy, and a start after it begins cleanly. A worker may call only `jab.sys.harts` and the worker
 calls; any other call answers `JAB_DENIED`, all ones, and does nothing. A
 worker's fault ends the run with a line naming its hart, `jab: worker fault:
 hart=N argument=... cause=... epc=... tval=...`, once every other hart has
 stopped at a safe point, and `jab.sys.exit` stops every worker before the
-sound plays out. A debug kernel reads two settings for the worker tests:
-`jab.noack=<hart>` keeps that hart from taking its start, and
+sound plays out. A debug kernel reads three settings for the worker tests:
+`jab.noack=<hart>` keeps that hart from taking its start,
 `jab.claimhold=<ms>` holds the first fault's shutdown for that long before
-it stops the other harts. `test/workers` and `test/workerfault` prove each
-rule.
+it stops the other harts, and `jab.leavehold=<hart>` holds that hart's first
+exit halfway, for 200 ms at most, while the worker's argument names a word
+of the program's in which the kernel records what the next start or stop
+saw there. `test/workers` and `test/workerfault` prove each rule.
 
 `sdk/src/jab_jobs.inc` gives workers jobs. Each worker has a mailbox in the
 program's memory, two cache lines: hart 0 writes a job into one, and the

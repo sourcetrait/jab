@@ -34,6 +34,15 @@
 # On a debug kernel a second launch holds hart 3 from taking its start
 # (jab.noack=3): the start answers 6, hart 3 is failed for the run, a
 # second start answers 1, and the program goes on to its exit.
+# Two more hold hart 1's first exit between its two publications
+# (jab.leavehold=1), its worker's argument a word the kernel marks with
+# what looked at the hart inside the hold, each running one scenario
+# picked by a letter over the API:
+# - Restart: a start inside the hold sees the hart working and answers
+#   busy, then a retry starts it, and a stop's wait answers.
+# - StopExit: a stop inside the hold sees the hart working and waits for
+#   it, then a start on it answers 0.
+# The word decides each line; an expired hold is evidence of neither.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -98,6 +107,25 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $held = ($lines | get 9)
     }
 
-    print $"workers: ($got | str join '; '); the join's note ($seconds | math round -p 2) s at ($peak), ($frequency | math round -p 1) Hz; held from its start: ($held)"
+    mut witnessed = "not run: the knob is a debug kernel's"
+    if ($set | str contains "DEBUG") {
+        let restart = (jab launch --kernel $kernel --image $image --out ($out | path join "restart") --set $set --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[72]]] --seconds 20)
+        assert ($restart.debug | str contains "jab: bootargs jab.leavehold=1") $"Restart: the knob reached the kernel: ($restart.debug)"
+        assert (not ($restart.serial | str contains "expired")) $"Restart: the hold expired before the start looked, evidence of neither order: ($restart.serial)"
+        assert equal ($restart.serial | lines) ["restart: held, start saw busy, then 0, stopped 1"] $"Restart: a start while hart 1 holds at its exit's gap sees it working and answers busy, a retry starts it, and the stop's wait answers: ($restart.serial)"
+        assert equal $restart.status 0 $"Restart: exit status: ($restart.serial)"
+
+        let stopexit = (jab launch --kernel $kernel --image $image --out ($out | path join "stopexit") --set $set --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[73]]] --seconds 20)
+        let lines = ($stopexit.serial | lines)
+        assert (not ($stopexit.serial | str contains "expired")) $"StopExit: the hold expired before the stop looked, evidence of neither order: ($stopexit.serial)"
+        assert equal ($lines | get -o 0) "stopexit: held, stop saw working, then 0" $"StopExit: a stop while hart 1 holds at its exit's gap sees it working and waits for it, then a start on it answers 0: ($stopexit.serial)"
+        let took = ($lines | get -o 1 | default "" | parse "stopexit: the stop took {ticks} ticks")
+        assert (($took | length) == 1 and ($took.0.ticks | into int) > 0) $"StopExit: the stop's elapsed time, supporting evidence alone: ($stopexit.serial)"
+        assert equal ($lines | length) 2 $"StopExit: nothing after the elapsed time: ($stopexit.serial)"
+        assert equal $stopexit.status 0 $"StopExit: exit status: ($stopexit.serial)"
+        $witnessed = $"($restart.serial | str trim); ($lines.0), ($took.0.ticks) ticks"
+    }
+
+    print $"workers: ($got | str join '; '); the join's note ($seconds | math round -p 2) s at ($peak), ($frequency | math round -p 1) Hz; held from its start: ($held); witnessed: ($witnessed)"
     print "workers: ok"
 }

@@ -2,10 +2,12 @@
 
 workers: the worker calls, one fixture a line on the UART for the test to
 read line by line, each step's line naming what its calls answered. The
-program runs on four harts with the sound device on, opens the stream, and
-goes through the steps in order, ending with two workers still running when
-it exits. Every worker enters with a0 its job, a record of JOB_BYTES in
-bss, and ends by jab.sys.worker.exit or by a stop.
+program runs on four harts. With no API port, the test's first two
+launches, it opens the sound stream and goes through the steps in order,
+ending with two workers still running when it exits. With the port, it
+runs one scenario of jab.leavehold's, picked by a letter. Every worker
+enters with a0 its job, a record of JOB_BYTES in bss, and ends by
+jab.sys.worker.exit or by a stop.
 
 ## .set STACK_BYTES
 
@@ -101,6 +103,48 @@ PATTERN_V plus n.
 
 `u64`: the kernel's first address, an entry and a stack the start refuses.
 
+## .set JOB_STOPPED
+
+`u64`: a job's 32-bit word the restart's worker sets once its stop has come,
+the last thing it writes.
+
+## .set SELECT_WAIT
+
+`u64`: how long the program waits for a scenario's letter over the API, two
+seconds of the time counter.
+
+## .set HELD_WAIT
+
+`u64`: how long hart 0 polls the witness word for the exit's hold, half a
+second.
+
+## .set RETRY_WAIT
+
+`u64`: how long the restart retries a start answered busy, 200 ms, the
+hold's own bound.
+
+## .set HOLD_WAIT
+
+`u64`: how long the stop's scenario waits for a hold it returned inside to
+end, 300 ms, the hold's bound and a margin.
+
+## .set W_HELD
+## .set W_EXPIRED
+## .set W_SAW_WORKING
+## .set W_SAW_IDLE
+## .set W_STOP_SAW_WORKING
+## .set W_STOP_SAW_IDLE
+
+`u32`: the witness word as the kernel writes it (hart.inc's LEAVEHOLD_*):
+held; expired with nothing having looked; a start's read of the hart
+working, or idle; and a stop's.
+
+## _start
+
+The write of nothing answers 1 with no API port, so the same image runs the
+fixtures in turn under the test's first two launches and a scenario under
+the two that send its letter.
+
 ## join_with_sound
 
 The worker spins HOLD in user mode while hart 0 sleeps in
@@ -134,6 +178,26 @@ must end on its tick.
 Under the jab.noack knob for hart 3, the first start answers 6 and the
 second 1, hart 3 failed for the run.
 
+## restart
+
+Hart 0 starts once inside the hold and reads the witness word before any
+other call, so no later look can change it; the word names what the start
+read, and the start's answer has to agree. The retries then find the hart
+idle once the hold is released and start the worker, which hart 0 joins on
+its started word and stops; the stopped word, read after the stop returns,
+is what the stop's completion acquired from the worker's exit. The line
+reads `restart: held, start saw busy, then 0, stopped 1` when the start saw
+the hart working inside the hold.
+
+## stop_exit
+
+The stop is made inside the hold and the word read at once after it, before
+any other call, so no later look can overwrite or release the evidence. The
+word decides the line: working, and only then a start on the hart, which
+must answer 0; still held, the stop returned without looking at the hart,
+and the program waits out the hold and starts nothing. The stop's elapsed
+time is supporting evidence on a line of its own.
+
 ## sleep_worker
 
 A wait that ends 0 here would be the word changing, which nothing does, so
@@ -143,6 +207,13 @@ the loop goes back to sleep; only the stop ends it.
 
 The poll for a stop is a wait with a value the gate does not hold, which
 answers at once, 1 when a stop is pending.
+
+## hold_exit
+
+The witness word is hart 1's first worker's argument, so the kernel holds
+that worker's exit at its gap and marks the word. The poll ends when the
+word leaves 0, so a hold that expired before hart 0 looked is reported as
+expired by the scenario rather than as never held.
 
 ## refusals
 
@@ -179,6 +250,24 @@ its group or 0, the hart, the entry, the stack, and its size.
 ## word_then
 ## word_harts
 ## word_exiting
+## word_no_scenario
+## word_restart
+## word_restart_never
+## word_busy
+## word_idle
+## word_disagreed
+## word_expired
+## word_nothing
+## word_other
+## word_comma_then
+## word_stopped
+## word_stopexit
+## word_stopexit_never
+## word_saw_working
+## word_saw_idle
+## word_returned_held
+## word_stop_took
+## word_ticks
 
 `u8`: the lines' words.
 
@@ -192,6 +281,7 @@ its group or 0, the hart, the entry, the stack, and its size.
 ## job_d
 ## job_r
 ## job_p
+## job_e
 
 `JOB_BYTES u8`: the jobs, each on its own cache lines.
 
@@ -206,3 +296,12 @@ its group or 0, the hart, the entry, the stack, and its size.
 ## digits
 
 `32 u8`: put_dec's digits, built backward.
+
+## selector
+
+`8 u8`: the scenario's letter, and the write of nothing's buffer.
+
+## witness
+
+`u32`: the witness word, in its own 8 bytes, hart 1's first worker's
+argument under jab.leavehold.

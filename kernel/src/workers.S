@@ -134,14 +134,17 @@ worker_leave:                               # out of the program for good, back 
     sd zero, HART_SLEEPING(tp)
     csrw sscratch, zero
     mv sp, tp                               # the frame let go: the idle runs from the stack's top
-    fence rw, w                             # everything the worker did before the hart reads idle
-    li t0, WORK_IDLE
-    sd t0, HART_WORK(tp)
     li t0, 1
     sll t0, t0, t1
     not t0, t0
     la t2, workers_live
-    amoand.d zero, t0, (t2)
+    amoand.d zero, t0, (t2)                 # its live bit gone before the hart reads idle, so a start's own stays
+.ifdef DEBUG
+    call leavehold_gap                      # jab.leavehold's hold, between the two publications
+.endif
+    fence rw, w                             # everything the worker did before the hart reads idle
+    li t0, WORK_IDLE
+    sd t0, HART_WORK(tp)
     li a0, 0
     call hart_wake                          # hart 0, in case it waits on this exit
     j hart_idle
@@ -277,9 +280,18 @@ sys_worker_start:                           # a0 the hart, a1 the entry, a2 the 
     ld t0, HART_STATE(s5)
     li t1, HART_ONLINE
     bne t0, t1, 9f
-    li a0, JAB_START_BUSY
+.ifdef DEBUG
+    mv a0, s0
+    mv a1, s5
+    li a2, LEAVEHOLD_BY_START
+    call leavehold_work                     # the read jab.leavehold's witness sees
+    mv t0, a0
+.else
     ld t0, HART_WORK(s5)
+.endif
+    li a0, JAB_START_BUSY
     bnez t0, 9f                             # a worker there already
+    fence r, rw                             # its last worker's exit, released before its idle, before this start's stores
     li a0, JAB_START_ENTRY
     li t0, JAB_PROGRAM_BASE
     bltu s1, t0, 9f
@@ -390,8 +402,10 @@ sys_worker_start:                           # a0 the hart, a1 the entry, a2 the 
     j trap_return
 
 stop_pending:                               # a0 the harts asked to stop: those still in their workers
-    mv t2, a0
-    li a0, 0
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    mv a3, a0
+    li a4, 0                                # those still in
     li t3, 0                                # the hart
     la t4, hart_areas
     li t5, HART_STACK_BYTES
@@ -399,14 +413,22 @@ stop_pending:                               # a0 the harts asked to stop: those 
 1:
     li t5, JAB_HARTS_MAX
     bgeu t3, t5, 3f
-    srl t5, t2, t3
+    srl t5, a3, t3
     andi t5, t5, 1
     beqz t5, 2f
+.ifdef DEBUG
+    mv a0, t3
+    mv a1, t4
+    li a2, LEAVEHOLD_BY_STOP
+    call leavehold_work                     # the read jab.leavehold's witness sees
+    mv t5, a0
+.else
     ld t5, HART_WORK(t4)
+.endif
     beqz t5, 2f                             # idle: out for good
     li t6, 1
     sll t6, t6, t3
-    or a0, a0, t6
+    or a4, a4, t6
 2:
     addi t3, t3, 1
     li t5, HART_AREA_BYTES
@@ -414,15 +436,17 @@ stop_pending:                               # a0 the harts asked to stop: those 
     j 1b
 3:
     fence r, rw                             # what each stopped worker did, seen after its idle
+    mv a0, a4
+    ld ra, 8(sp)
+    addi sp, sp, 16
     ret
 
 .global sys_worker_stop
 sys_worker_stop:                            # a0 the mask: a0 its harts free of a worker, a1 those interrupted
     mv s4, a0
-    la t0, workers_live
-    ld t0, 0(t0)
-    and s0, a0, t0
-    andi s0, s0, -2                         # hart 0 runs the program
+    call harts_masks                        # a0 the online harts
+    and s0, s4, a0
+    andi s0, s0, -2                         # every online secondary in the mask, hart 0 running the program
     li s1, 0                                # those interrupted
     li s2, 0                                # the hart
 1:
@@ -433,7 +457,17 @@ sys_worker_stop:                            # a0 the mask: a0 its harts free of 
     beqz t0, 11f
     mv a0, s2
     call hart_record
-    addi t0, a0, HART_CONTROL
+    mv s3, a0
+.ifdef DEBUG
+    mv a1, s3
+    mv a0, s2
+    li a2, LEAVEHOLD_BY_STOP
+    call leavehold_work                     # the read jab.leavehold's witness sees
+.else
+    ld a0, HART_WORK(s3)
+.endif
+    beqz a0, 11f                            # idle: nothing to stop
+    addi t0, s3, HART_CONTROL
     li t1, WORK_STOP
     amoor.d zero, t1, (t0)
     mv a0, s2
@@ -617,6 +651,96 @@ shutdown_park:                              # stopped for another hart's shutdow
     wfi
     j 1b
 
+.ifdef DEBUG
+leavehold_gap:                              # jab.leavehold=<hart>: that hart's first exit held here, its worker's argument the witness word
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, leavehold_spent
+    ld t1, 0(t0)
+    bnez t1, 9f                             # one-shot, and spent
+    la a0, knob_leavehold
+    call knob_value
+    ld t0, HART_ID(tp)
+    bne a0, t0, 9f                          # another hart's, or no knob
+    la t0, leavehold_spent
+    li t1, 1
+    sd t1, 0(t0)
+    ld a0, HART_ARG(tp)                     # the word, checked before anything is written there
+    li t0, JAB_PROGRAM_BASE
+    bltu a0, t0, 9f
+    li t0, (JAB_STACK_TOP - 4)
+    bgtu a0, t0, 9f
+    andi t0, a0, 3
+    bnez t0, 9f                             # no word of the program's: inert for this exit
+    la t0, leavehold_word
+    sd a0, 0(t0)
+    fence w, w                              # the address before the enable that vouches for it
+    ld t1, HART_ID(tp)
+    addi t1, t1, 1
+    la t0, leavehold_hart
+    sd t1, 0(t0)
+    fence rw, w                             # the hold's publication before its word reads held
+    li t1, LEAVEHOLD_HELD
+    sw t1, 0(a0)
+    rdtime t2
+    li t0, LEAVEHOLD_TICKS
+    add t2, t2, t0                          # the hold's bound
+1:
+    lw t0, 0(a0)
+    bne t0, t1, 3f                          # an observation released it
+    rdtime t0
+    bgeu t0, t2, 2f
+    pause
+    j 1b
+2:
+    li t3, LEAVEHOLD_EXPIRED
+21:
+    lr.w t0, (a0)
+    bne t0, t1, 3f                          # observed at the last: the observation stands
+    sc.w t0, t3, (a0)
+    bnez t0, 21b
+3:
+    fence r, rw                             # the observer's code, and what it read first, before going on
+    la t0, leavehold_hart
+    sd zero, 0(t0)
+9:
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.pushsection .rodata
+knob_leavehold:
+    .asciz "jab.leavehold="
+.popsection
+
+leavehold_work:                             # a0 a hart, a1 its record, a2 the observer: a0 its HART_WORK, witnessed while jab.leavehold holds it
+    la t0, leavehold_hart
+    ld t0, 0(t0)
+    addi t1, a0, 1
+    bne t0, t1, 8f                          # not the hart held
+    fence r, r                              # the enable before the address it vouches for
+    la t0, leavehold_word
+    ld t2, 0(t0)
+    lw t0, 0(t2)
+    li t1, LEAVEHOLD_HELD
+    bne t0, t1, 8f                          # not held yet, or observed already
+    fence r, rw                             # the hold's publication before the read
+    ld a0, HART_WORK(a1)                    # the read the caller decides by
+    snez t0, a0
+    xori t0, t0, 1
+    addi t0, t0, LEAVEHOLD_SAW_WORKING      # working, or idle one past it
+    add a2, a2, t0                          # the observation: who looked and what it saw
+1:
+    lr.w t0, (t2)
+    bne t0, t1, 9f                          # an expiry's 3 stands
+    sc.w.rl t0, a2, (t2)                    # the read before the release
+    bnez t0, 1b
+    ret
+8:
+    ld a0, HART_WORK(a1)
+9:
+    ret
+.endif
+
 .section .rodata
 msg_stop_refused:
     .asciz "jab: worker stop refused: hart "
@@ -634,3 +758,11 @@ shutdown_owner:
 .global shutdown_unanswered
 shutdown_unanswered:
     .skip 8
+.ifdef DEBUG
+leavehold_hart:
+    .skip 8
+leavehold_word:
+    .skip 8
+leavehold_spent:
+    .skip 8
+.endif

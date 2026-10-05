@@ -119,6 +119,26 @@ and the stop forced, which takes the worker out at its next boundary.
 `u64`: a fault's kinds: a trap in the program, a trap in the kernel, and a
 line alone, with a value in decimal, or with a value in hex.
 
+## .set LEAVEHOLD_HELD
+## .set LEAVEHOLD_EXPIRED
+
+`u32`: the jab.leavehold witness word's states (DEBUG): held at the exit's
+gap; and the hold's bound passed with nothing having looked, an expired
+window that proves neither order.
+
+## .set LEAVEHOLD_SAW_WORKING
+## .set LEAVEHOLD_SAW_IDLE
+
+`u32`: what an observer read of the held hart's HART_WORK, written over the
+held state: working, or idle.
+
+## .set LEAVEHOLD_BY_START
+## .set LEAVEHOLD_BY_STOP
+
+`u32`: who looked, added to what it saw: the start's busy check, or the
+stop's scan or stop_pending; so 0x10 and 0x11 are a start's, 0x30 and 0x31
+a stop's.
+
 ## .set HART_CANARY
 
 `u64`: the word each hart writes at its stack's bottom, xored with its id.
@@ -148,3 +168,8 @@ it ends the run.
 
 `u64`: how long the shutdown's owner waits for every other hart to halt, a
 second; a hart past it is named after the fault lines.
+
+## .set LEAVEHOLD_TICKS
+
+`u64`: how long jab.leavehold holds an exit for an observer, 200 ms, before
+the word reads expired and the exit goes on.
