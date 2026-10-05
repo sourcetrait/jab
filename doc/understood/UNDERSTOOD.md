@@ -359,6 +359,9 @@ and its generation, `jab.job.await` is a worker's sleep until one comes,
 it is. The macros carry the memory ordering the hardware needs, so a worker
 never reads a job before it is whole, and hart 0 never reads a result
 before it is written. A job can be cancelled between the bands of its work.
+A cancel names the job in flight, or the next job once the mailbox is free,
+and each publish drops any other, so a cancel left over from an older job
+never ends a newer one, even when the generation count wraps.
 `test/jobs` races every order a job and its wake can come in, a thousand
 rounds each, and `just bench test/jobs/costs` measures what a job costs
 around its work, at four job sizes, with one worker and with three.

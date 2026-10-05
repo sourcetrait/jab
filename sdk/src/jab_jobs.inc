@@ -26,13 +26,18 @@
     sd \payload, JAB_JOB_PAYLOAD(\mailbox)
     sd \size, JAB_JOB_SIZE(\mailbox)
     lw \gen, JAB_JOB_GEN(\mailbox)
+    lw t0, JAB_JOB_CANCEL(\mailbox)
+    addiw t0, t0, -1
+    beq t0, \gen, .Ljab_job_publish_kept\@  # cancelled before its publish
+    sw \gen, JAB_JOB_CANCEL(\mailbox)       # the last generation: no job to come carries it
+.Ljab_job_publish_kept\@:
     addiw \gen, \gen, 1
     fence rw, w                     # the descriptor before the generation that publishes it
     sw \gen, JAB_JOB_GEN(\mailbox)
 .endm
 
 .macro jab.job.cancel mailbox, gen
-    sw \gen, JAB_JOB_CANCEL(\mailbox)
+    sw \gen, JAB_JOB_CANCEL(\mailbox)    # the job in flight, or the next once the mailbox is free
 .endm
 
 .macro jab.job.join mailbox

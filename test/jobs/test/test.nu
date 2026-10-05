@@ -13,7 +13,9 @@
 #   looks).
 # - EmptyFull: a fresh mailbox free, a published job's not, free again
 #   once its worker's completion is joined, the output the job's.
-# - Wrap: three jobs from generation 0xfffffffe, through the wrap to 1.
+# - Wrap: three jobs of three 1 ms bands from generation 0xfffffffe, through
+#   the wrap to 1, each done and whole, so a cancel word matching a stale
+#   generation would end the generation-0 job cancelled.
 # - Cancel: a job cancelled a band in, done as cancelled before its last
 #   band; a job cancelled before it is published, done as cancelled with
 #   no band run.
@@ -50,7 +52,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
             [RaceSpurious, $"spurious ($ROUNDS) rounds, 0 wrong, ($ROUNDS * $w) completions"]
             [RaceAfter, $"after ($ROUNDS) rounds, 0 wrong, ($ROUNDS * $w) completions"]
             [EmptyFull, "free 1 then 0 then 1, out 36"]
-            [Wrap, "wrap 3 jobs, generation 1, 0 wrong"]
+            [Wrap, "wrap 3 jobs, generation 1, 0 wrong, statuses 0 0 0, bands 3 3 3"]
             [Cancel, "cancel during 1 under 1, cancel before 1 bands 0"]
             [Done, "jobs: done"]
         ]

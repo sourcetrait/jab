@@ -52,6 +52,11 @@ sleeps in its await.
 `u32`: the generation the wrap step starts its mailbox at, two short of the
 wrap, and its jobs, which carry it through to 1.
 
+## .set WRAP_BANDS
+
+`u64`: each wrap job's bands of BAND_TICKS, so its worker checks the job's
+cancel before each.
+
 ## .set BAND_TICKS
 ## .set CANCEL_BANDS
 ## .set CANCEL_AFTER
@@ -111,7 +116,10 @@ the output the job's.
 ## wrap
 
 Worker 0's mailbox at WRAP_START, three jobs through the wrap, each joined
-and its output checked.
+and its output checked, its status and its bands kept. The jobs run bands,
+so each checks its cancel: the fresh mailbox's cancel word of 0 would
+match the wrapped generation 0 were publish not keeping the word behind
+the generation, and that job would end cancelled with no band run.
 
 ## cancel
 
@@ -160,8 +168,9 @@ A start refused ends the run with `jobs: a start refused` and exit 3.
 ## word_spurious
 ## word_after
 ## word_rounds
-## word_wrong
 ## word_wrong_comma
+## word_wrong_statuses
+## word_comma_bands
 ## word_completions
 ## word_free
 ## word_then
@@ -198,6 +207,10 @@ A start refused ends the run with `jobs: a start refused` and exit 3.
 ## selector
 
 `8 u8`: the scenario's letter.
+
+## wrap_kept
+
+`WRAP_JOBS * 16 u8`: each wrap job's status and bands, two u64s a job.
 
 ## line
 

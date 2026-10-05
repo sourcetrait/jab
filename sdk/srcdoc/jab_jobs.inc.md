@@ -46,6 +46,17 @@ of its bands, then completes as cancelled. A mailbox, a stack, or a buffer
 a worker owns is the program's again only once its job's completion is
 joined or the worker is stopped (jab.sys.worker.stop).
 
+The cancel's contract. A mailbox has one producer. A cancel names the job
+in flight, or the next job only once the job in flight is joined and the
+mailbox free. The cancel word holds one request, so cancelling the next
+job while the current one is in flight overwrites a pending cancel of the
+current one. A cancel of any other generation is dropped by the next
+publish, which keeps the word trailing: after a publish of generation G+1
+the word holds G+1 when that job was cancelled before it, and G otherwise,
+so nothing stale matches through the 32-bit wrap or a value's return after
+2^32 jobs. A mailbox starts zeroed, and the generation and the completion
+move only through the macros.
+
 ## .set JAB_JOB_BYTES
 
 `u64`: a mailbox, two 64-byte lines.
@@ -106,13 +117,18 @@ published over, since the worker may be reading its descriptor.
 
 The producer's, onto a free mailbox only. The job's own arguments at
 JAB_JOB_ARGS are stored before it, so its fence covers them; a wake of the
-worker follows.
+worker follows. Before the generation moves it reads the cancel word: one
+past the current generation is a cancel of this job issued before its
+publish and stays; anything else is replaced by the current generation, no
+job to come carrying it. t0 is its scratch, so its operands are any
+registers but t0, as the waits' are any but their scratch.
 
 ## .macro jab.job.cancel
 
 A plain store: the worker reads it at its next band's boundary, and a
 cancel is never lost, since the worker's completion of the job, cancelled
-or not, is what the producer joins.
+or not, is what the producer joins. It names the job in flight, or the next
+one once the mailbox is free; the contract above has the rest.
 
 ## .macro jab.job.join
 

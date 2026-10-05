@@ -12,6 +12,7 @@
 .set EMPTY_SIZE, 5
 .set WRAP_START, 0xfffffffe
 .set WRAP_JOBS, 3
+.set WRAP_BANDS, 3
 .set BAND_TICKS, (JAB_TIME_HZ / 1000)
 .set CANCEL_BANDS, 40
 .set CANCEL_AFTER, (JAB_TIME_HZ / 200)
@@ -215,10 +216,10 @@ wrap:
     li a0, 0
     call reset_mailbox
     li a0, 1
-    li a1, 0
-    li a2, 0
+    li a1, BAND_TICKS
+    li a2, WRAP_BANDS
     li a3, 0
-    call set_args
+    call set_args                           # every job bands of work, so each checks its cancel
     li t0, WRAP_START
     sw t0, JAB_JOB_GEN(s1)
     sw t0, JAB_JOB_DONE(s1)
@@ -229,6 +230,7 @@ wrap:
     mv s8, a0                               # worker 0's bit
     li s3, 1                                # the job
     li s4, 0                                # outputs wrong
+    la s9, wrap_kept                        # each job's status and bands
 1:
     li t0, WRAP_JOBS
     bgtu s3, t0, 2f
@@ -244,6 +246,11 @@ wrap:
     beq t0, t2, 11f
     addi s4, s4, 1
 11:
+    lwu t0, JAB_JOB_STATUS(s1)
+    sd t0, 0(s9)
+    ld t0, OWN_BANDS(s1)
+    sd t0, 8(s9)
+    addi s9, s9, 16
     addi s3, s3, 1
     j 1b
 2:
@@ -260,8 +267,14 @@ wrap:
     la a1, word_comma
     call put_dec_then
     mv a0, s4
-    la a1, word_wrong
+    la a1, word_wrong_statuses
     call put_dec_then
+    li a0, 0
+    call put_kept
+    la a1, word_comma_bands
+    call put_str
+    li a0, 8
+    call put_kept
     call say
 
 cancel:
@@ -749,6 +762,31 @@ put_dec_then_rev:
     addi sp, sp, 16
     ret
 
+put_kept:                                   # a0 a field's offset in wrap_kept's records: each job's, spaced, at the cursor
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    la s0, wrap_kept
+    add s0, s0, a0
+    li s1, WRAP_JOBS
+1:
+    ld a0, 0(s0)
+    call put_dec
+    addi s0, s0, 16
+    addi s1, s1, -1
+    beqz s1, 2f
+    li t0, ' '
+    sb t0, 0(s11)
+    addi s11, s11, 1
+    j 1b
+2:
+    ld ra, 24(sp)
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    addi sp, sp, 32
+    ret
+
 say_str:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -826,10 +864,12 @@ word_after:
     .asciz "after "
 word_rounds:
     .asciz " rounds, "
-word_wrong:
-    .asciz " wrong"
 word_wrong_comma:
     .asciz " wrong, "
+word_wrong_statuses:
+    .asciz " wrong, statuses "
+word_comma_bands:
+    .asciz ", bands "
 word_completions:
     .asciz " completions"
 word_free:
@@ -872,6 +912,8 @@ workers_n:
     .skip 8
 selector:
     .skip 8
+wrap_kept:
+    .skip (WRAP_JOBS * 16)
 line:
     .skip 160
 digits:
