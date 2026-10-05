@@ -1,12 +1,14 @@
-# harts's integration test: jab.sys.harts on machines of one, two, and
+# harts's integration test, first the held span's arithmetic on readings
+# of its own (HeldSpan), then jab.sys.harts on machines of one, two, and
 # four harts, three cold boots of each, every hart of the device tree
 # discovered and online and none failed, read after the program has
 # held two seconds; the kernel's own lines on the debug channel, its
 # masks and every hart's line, each online hart's record and canary
 # read back by hart 0; the idle secondaries' vCPU threads burning no
-# host core over a held second; each launch's record of its machine,
-# one and two harts diagnostic, the line carrying -smp and
-# multithreaded TCG; and a count the machine does not take refused by
+# host core over the held span, a second as the launch times it; each
+# launch's record of its machine, one and two harts diagnostic, the line
+# carrying -smp and multithreaded TCG; and a count the machine does not
+# take refused by
 # the launcher before QEMU starts. Then the platform check's two classes
 # on trees of the test's own through -dtb, QEMU's four-hart tree with one
 # change each: a cpu whose id is past JAB_HARTS_MAX, a topology problem,
@@ -37,14 +39,29 @@ use std/assert
 
 const PAST_MAX = 9
 const SLOW_TIMEBASE = 1000000
-# the CPU seconds an idle hart's vCPU thread may take over a held second:
-# 0.00 measured in every run, /proc counting hundredths, and a hart that
-# spins takes the whole second
-const IDLE_CPU = 0.05
-# when the held second starts, inside the program's two-second hold
+# the share of a core an idle hart's vCPU thread may take over the held
+# span: 0.00 measured in every run, /proc counting hundredths, and a hart
+# that spins takes the whole core
+const IDLE_RATE = 0.05
+# when the held span starts, inside the program's two-second hold
 const HELD_AT = 800ms
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
+    # the held span's arithmetic, on readings of the test's own: a thread's
+    # rate is the CPU it used over the span, so 0.45 s of a 0.9 s span is
+    # half a core, an idle thread's none, a thread in one reading alone
+    # passed over, and the span carried with the rates
+    let first = [[id, name, cpu]; ["1", "CPU 1/TCG", 2.0] ["2", "CPU 2/TCG", 3.5] ["3", "gone", 1.0]]
+    let second = [[id, name, cpu]; ["1", "CPU 1/TCG", 2.45] ["2", "CPU 2/TCG", 3.5] ["4", "new", 0.25]]
+    let held = (jab threads-between $first $second 0.9)
+    assert equal $held.span 0.9 $"HeldSpan: the span carried with the rates: ($held)"
+    assert equal ($held.threads | get name) ["CPU 1/TCG" "CPU 2/TCG"] $"HeldSpan: the threads in both readings, and only those: ($held.threads)"
+    let busy = ($held.threads | get 0)
+    assert ((($busy.delta - 0.45) | math abs) < 1e-9) $"HeldSpan: a thread's delta the CPU seconds between the readings: ($busy)"
+    assert ((($busy.rate - 0.5) | math abs) < 1e-9) $"HeldSpan: a thread's rate its delta over the span, 0.45 s of 0.9 half a core: ($busy)"
+    let idle = ($held.threads | get 1)
+    assert equal [$idle.delta $idle.rate] [0.0 0.0] $"HeldSpan: an idle thread's delta and rate none: ($idle)"
+
     let debug = ($set | str contains "DEBUG")
     let threads = ($nu.os-info.name == "linux")
     mut seen = []
@@ -190,14 +207,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 }
 
 # Each of the named harts' vCPU threads idle over the launch's held
-# second: QEMU names a hart's thread `CPU N/TCG`. Untyped because it
-# ends in an error.
+# span: QEMU names a hart's thread `CPU N/TCG`. Untyped because it ends
+# in an error.
 def idle-harts [run: record, harts: list<int>, what: string] {
-    assert (not ($run.threads | is-empty)) $"($what): the threads read over the held second: ($run.threads)"
+    assert (not ($run.threads | is-empty)) $"($what): the threads read over the held span: ($run.threads)"
     for h in $harts {
         let thread = ($run.threads | where name == $"CPU ($h)/TCG" | get -o 0)
         assert ($thread != null) $"($what): hart ($h)'s thread among ($run.threads | get name)"
-        assert ($thread.cpu <= $IDLE_CPU) $"($what): hart ($h)'s thread took ($thread.cpu) s of CPU over the held second, past ($IDLE_CPU)"
+        assert ($thread.rate <= $IDLE_RATE) $"($what): hart ($h)'s thread ran at ($thread.rate) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
     }
 }
 

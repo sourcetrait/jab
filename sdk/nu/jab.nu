@@ -387,10 +387,13 @@ def image-manifest [image: path]: nothing -> record {
 # `window` and the `audio` backend it ran with, and `machine`, the
 # record of the harts it had (machine-of); `--harts`, `--bootargs`, and
 # `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
-# that long after the start and again a second later (threads-of), and
-# `threads` carries each thread's name and the CPU seconds it used in
-# between, the harts' threads named `CPU N/TCG` on Linux; empty when the
-# run ended before the second reading. `--qemu` appends words of its own
+# that long after the start and again a second on (threads-of), each
+# reading timed as it is taken, since the loop polls: `threads_span` is
+# the seconds between the two, a second give or take a poll, and
+# `threads` carries each thread's name, the CPU seconds it used in
+# between, and those over the span (threads-between), the harts' threads
+# named `CPU N/TCG` on Linux; empty, its span null, when the run ended
+# before the second reading. `--qemu` appends words of its own
 # to the line, unchanged, after the launch's: a device or a property a
 # test needs that no launch flag gives. Such a run is diagnostic, its
 # `machine` keeping the platform asked for and marked so (machine-of
@@ -420,9 +423,9 @@ export def launch [
     --harts: int = 4           # the machine's harts, 1 or 2 for a diagnostic run
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
-    --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second later, the result's `threads`; 0 never
+    --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
     --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, cpu: float>>> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
     let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
@@ -458,7 +461,7 @@ export def launch [
     mut sent_pad = 0
     mut header_sent = (not $gamepad.port)
     mut threads_first: any = null
-    mut threads_held: list<record<name: string, cpu: float>> = []
+    mut threads_held: any = null
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
         # QEMU deletes its pid file as it exits, so the read is tried, never
@@ -500,17 +503,17 @@ export def launch [
                 if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
             }
         }
-        # each thread's CPU over the held second: a reading at `threads`,
-        # another a second on, the difference by thread id
+        # each thread's CPU over the held span: a reading at `threads`,
+        # another a second on, each timed as it is taken, since the loop
+        # polls and the span is a second give or take a poll
         if $threads != 0sec and $alive {
             if $threads_first == null and $elapsed >= $threads {
-                $threads_first = (threads-of ($pid | into int))
-            } else if $threads_first != null and ($threads_held | is-empty) and $elapsed >= ($threads + 1sec) {
-                let first = $threads_first
-                $threads_held = (threads-of ($pid | into int) | each {|t|
-                    let before = ($first | where id == $t.id | get -o 0)
-                    if $before == null { null } else { { name: $t.name, cpu: ($t.cpu - $before.cpu) } }
-                } | compact)
+                let reading = (threads-of ($pid | into int))
+                $threads_first = { threads: $reading, at: (date now) }
+            } else if $threads_first != null and $threads_held == null and $elapsed >= ($threads + 1sec) {
+                let reading = (threads-of ($pid | into int))
+                let at = (date now)
+                $threads_held = (threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
             }
         }
     }
@@ -532,7 +535,8 @@ export def launch [
         window: $machine.window,
         audio: $machine.audio,
         machine: (machine-of $harts --overrides $qemu),
-        threads: $threads_held,
+        threads: (if $threads_held == null { [] } else { $threads_held.threads }),
+        threads_span: (if $threads_held == null { null } else { $threads_held.span }),
     }
 }
 
@@ -1114,6 +1118,24 @@ def threads-of [pid: int]: nothing -> table<id: string, name: string, cpu: float
         },
         _ => { error make {msg: $"no thread reading here for ($nu.os-info.name)"} },
     }
+}
+
+# Each thread's CPU between two readings of threads-of taken `span`
+# seconds apart: by thread id, its name, `delta` the CPU seconds it used
+# in between, and `rate` those over the span, its share of a core; a
+# thread in one reading alone is passed over. The span rides along, so a
+# rate never travels without the stretch it was measured over. A span
+# that is not past zero is refused.
+export def threads-between [first: table<id: string, name: string, cpu: float>, second: table<id: string, name: string, cpu: float>, span: float]: nothing -> record<span: float, threads: list<record<name: string, delta: float, rate: float>>> {
+    if $span <= 0.0 { error make {msg: $"a span of ($span) s holds no rate"} }
+    let threads = ($second | each {|t|
+        let before = ($first | where id == $t.id | get -o 0)
+        if $before == null { null } else {
+            let delta = ($t.cpu - $before.cpu)
+            { name: $t.name, delta: $delta, rate: ($delta / $span) }
+        }
+    } | compact)
+    { span: $span, threads: $threads }
 }
 
 # `ps` clock text, M:SS.hh or H:MM:SS.hh, as seconds.

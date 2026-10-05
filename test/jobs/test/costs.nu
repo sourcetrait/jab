@@ -4,10 +4,13 @@
 # scenario. The dispatch is a worker's: from hart 0's look at the clock
 # before it publishes to the worker's look after its await takes the job.
 # The barrier is the round's: from the last worker's look before its
-# completion to hart 0's look after its join returns. Both are elapsed time
-# by rdtime, the machine's 10 MHz clock, as distributions over a hundred
-# rounds a size. `just bench test/jobs/costs` runs it on a release build
-# and reports; the test runs it once on its debug one.
+# completion to hart 0's look after its join returns. The round is a lower
+# bound on a round's overhead around its work, Astra's name for it: the
+# greatest of the round's dispatches plus that round's barrier, the least
+# the round cost beyond its jobs, and no ceiling on it. All three are
+# elapsed time by rdtime, the machine's 10 MHz clock, as distributions over
+# a hundred rounds a size. `just bench test/jobs/costs` runs it on a
+# release build and reports; the test runs it once on its debug one.
 use ../../../sdk/nu/jab.nu
 
 const SIZES_US = [10 100 1000 10000]
@@ -39,7 +42,9 @@ export def measure [kernel: path, image: path, out: path, set: string, --harts: 
             $at = $at + ($ROUNDS * $per)
             let dispatch = ($block | enumerate | where {|e| ($e.index mod $per) < $c } | get item)
             let barrier = ($block | enumerate | where {|e| ($e.index mod $per) == $c } | get item)
-            $rows = ($rows | append { workers: $c, size_us: $s, dispatch: (stats $dispatch), barrier: (stats $barrier) })
+            # a round's samples: its dispatches, one a worker, then its barrier
+            let round = ($block | chunks $per | each {|r| ($r | first $c | math max) + ($r | last) })
+            $rows = ($rows | append { workers: $c, size_us: $s, dispatch: (stats $dispatch), barrier: (stats $barrier), round: (stats $round) })
         }
     }
     { workers: $workers, harts: $harts, machine: $run.machine, qemu: $run.qemu, rows: $rows }
@@ -60,7 +65,8 @@ export def text [doc: record]: nothing -> string {
     let lines = ($doc.rows | each {|r|
         let d = $r.dispatch
         let b = $r.barrier
-        $"  workers ($r.workers), ($r.size_us) us jobs: dispatch median ($d.p50), p90 ($d.p90), max ($d.max); barrier median ($b.p50), p90 ($b.p90), max ($b.max)"
+        let o = $r.round
+        $"  workers ($r.workers), ($r.size_us) us jobs: dispatch median ($d.p50), p90 ($d.p90), max ($d.max); barrier median ($b.p50), p90 ($b.p90), max ($b.max); round overhead lower bound median ($o.p50), p90 ($o.p90), max ($o.max)"
     })
     [$head] ++ $lines | str join "\n"
 }

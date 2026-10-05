@@ -14,10 +14,11 @@
 #   one, two, and three): the last frame's hash the proof's, each worker's
 #   rows a third of every frame's, every row its band's worker's, the
 #   bands forward in time and overlapping, and the worker harts busy at
-#   once, their threads' CPU over a held second past the second.
+#   once, their threads' rates over the held span summing past one and a
+#   half cores.
 # - Animation: on its own with no API, the zoom by the clock: one worker
-#   first, its hart's thread busy and the idle workers' at rest over a
-#   held second; at nine seconds, more than one worker by then, the bars
+#   first, its hart's thread busy and the idle workers' at rest over the
+#   held span; at nine seconds, more than one worker by then, the bars
 #   at the left in the deal's pattern and nowhere else, the caption's
 #   text inside its black box, the palette on the rest.
 use ../../../sdk/nu/jab.nu
@@ -43,10 +44,10 @@ const BARS = {"ff4040": 1, "40ff40": 2, "4080ff": 3}
 const BAR_WIDTH = 12
 const BAND_ROWS = 8
 const BOX = {left: 12, top: 0, right: 511, bottom: 63}
-# the CPU seconds an idle worker's vCPU thread may take over a held
-# second, as test/jobs holds them, and the least a working one takes
-const IDLE_CPU = 0.05
-const BUSY_CPU = 0.5
+# the share of a core an idle worker's vCPU thread may take over the held
+# span, as test/jobs holds them, and the least a working one takes
+const IDLE_RATE = 0.05
+const BUSY_RATE = 0.5
 const PALETTE_SEEN = 8
 
 # A row of the fixed frame as the program computes it, each pixel's
@@ -77,9 +78,10 @@ def row-colors [row: int]: nothing -> list<int> {
     }
 }
 
-# Each hart's vCPU thread's CPU over a launch's held second.
-def hart-cpu [threads: list<record<name: string, cpu: float>>]: nothing -> list<record<hart: int, cpu: float>> {
-    $threads | where {|t| $t.name =~ '^CPU \d+/TCG$' } | each {|t| { hart: ($t.name | parse "CPU {n}/TCG" | get 0.n | into int), cpu: $t.cpu } } | sort-by hart
+# Each hart's vCPU thread's rate over a launch's held span, its share of
+# a core.
+def hart-cpu [threads: list<record<name: string, delta: float, rate: float>>]: nothing -> list<record<hart: int, rate: float>> {
+    $threads | where {|t| $t.name =~ '^CPU \d+/TCG$' } | each {|t| { hart: ($t.name | parse "CPU {n}/TCG" | get 0.n | into int), rate: $t.rate } } | sort-by hart
 }
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -128,19 +130,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($strays | is-empty) $"Bench: every row its band's worker's, band b on hart b mod 3 plus 1: rows ($strays | first 8)"
     let backward = ($doc.bands | where {|b| $b.start <= 0 or $b.end < $b.start } | get band)
     assert ($backward | is-empty) $"Bench: every band's interval forward in time: bands ($backward | first 8)"
-    assert $doc.cpu_at_once $"Bench: the worker harts busy at once, their CPU over the held second past ($doc.at_once) s: ($doc.harts)"
+    assert $doc.cpu_at_once $"Bench: the worker harts busy at once, their rates over the held span summing past ($doc.at_once) cores: ($doc.harts)"
     assert $doc.bands_at_once $"Bench: the last frame's bands overlapping, their time past ($doc.at_once) times the frame's span: ($doc.overlap)"
 
     let run = (jab launch --kernel $kernel --image $image --out ($out | path join "animation") --set $set --harts 4 --seconds 30 --capture 9sec --threads 1500ms)
     assert equal $run.serial "" "Animation: the UART stays silent"
     assert equal (open --raw $run.qemu_log) "" "Animation: QEMU has no complaint about the guest"
     let cpu = (hart-cpu $run.threads)
-    assert equal ($cpu | length) 4 $"Animation: the harts' threads read over the held second: ($run.threads)"
-    let working = ($cpu | where hart == 1 | get 0.cpu)
-    assert ($working > $BUSY_CPU) $"Animation: one worker first, hart 1 at work over the held second: ($cpu)"
+    assert equal ($cpu | length) 4 $"Animation: the harts' threads read over the held span: ($run.threads)"
+    let working = ($cpu | where hart == 1 | get 0.rate)
+    assert ($working > $BUSY_RATE) $"Animation: one worker first, hart 1 at work over the held span: ($cpu)"
     for h in [2 3] {
-        let idle = ($cpu | where hart == $h | get 0.cpu)
-        assert ($idle <= $IDLE_CPU) $"Animation: hart ($h)'s worker, asleep in its await while one works, took ($idle) s of CPU over the held second, past ($IDLE_CPU)"
+        let idle = ($cpu | where hart == $h | get 0.rate)
+        assert ($idle <= $IDLE_RATE) $"Animation: hart ($h)'s worker, asleep in its await while one works, ran at ($idle) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
     }
     assert ($run.screen != "") "Animation: a screen was taken"
     let screen = (jab screen $run.screen)
@@ -170,6 +172,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let seen = ($PALETTE | each {|c| jab ink $screen ($c | format number | get lowerhex | str replace "0x" "" | fill --alignment right --character "0" --width 6) | get count } | where {|n| $n > 0 } | length)
     assert ($seen >= $PALETTE_SEEN) $"Animation: the palette on the set's outside, ($PALETTE_SEEN) colours at least of 16: ($seen)"
 
-    print $"workers: proof hash ($hash); bench ($frames) frames in ($doc.ms) ms with three, workers' CPU ($doc.worker_cpu | math round --precision 2) s over the held second, bands at once ($doc.overlap.concurrency | math round --precision 2); animation ($w) workers at nine seconds, hart 1 ($working | math round --precision 2) s"
+    print $"workers: proof hash ($hash); bench ($frames) frames in ($doc.ms) ms with three, the workers' harts at ($doc.worker_cpu | math round --precision 2) cores over the held ($doc.span | math round --precision 2) s, bands at once ($doc.overlap.concurrency | math round --precision 2); animation ($w) workers at nine seconds, hart 1 at ($working | math round --precision 2) of a core"
     print "workers: ok"
 }

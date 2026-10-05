@@ -3,10 +3,11 @@
 # from the program's bench scenarios, the workers' count a digit over the
 # API. A run gives the frames and the stretch's milliseconds by the
 # program's clock, the last frame's hash, each worker's rows over every
-# frame, each hart's vCPU thread's CPU over a held second inside the
-# stretch, and the last frame's bands as intervals with their harts.
-# Concurrency is the worker harts' summed CPU over the held second past
-# the second itself, which one host core cannot give; the hashes equal
+# frame, each hart's vCPU thread's CPU over a held span inside the
+# stretch, a second as the launch times it, as the seconds used and their
+# rate, and the last frame's bands as intervals with their harts.
+# Concurrency is the worker harts' summed rate over the held span past
+# what one host core can give; the hashes equal
 # across the runs and the rows summing to the frames' say the work was
 # right and done once; the bands' overlap, their summed time over the
 # frame's span, is the supporting record. `just bench
@@ -14,7 +15,7 @@
 # test runs the three-worker run once on its debug one.
 use ../../../sdk/nu/jab.nu
 
-# when the held second starts: inside the stretch, which begins once the
+# when the held span starts: inside the stretch, which begins once the
 # digit lands a second in and lasts four
 const HELD_AT = 2sec
 const BANDS = 135
@@ -22,8 +23,8 @@ const BAND_ROWS = 8
 const ROWS = 1080
 const TICKS_PER_MS = 10000
 const MAX_WORKERS = 3
-# past this the workers ran at once, by their summed CPU over the held
-# second and by their bands' summed time over the frame's span: one at a
+# past this the workers ran at once, by their summed rates over the held
+# span and by their bands' summed time over the frame's span: one at a
 # time gives 1 at most, and /proc's hundredths a thread let a serial run
 # read a little past it
 const AT_ONCE = 1.5
@@ -53,8 +54,8 @@ export def measure [kernel: path, image: path, out: path, set: string, --workers
             hart: ($owners | get ($b * $BAND_ROWS)),
         }
     })
-    let harts = ($run.threads | where {|t| $t.name =~ '^CPU \d+/TCG$' } | each {|t| { hart: ($t.name | parse "CPU {n}/TCG" | get 0.n | into int), cpu: $t.cpu } } | sort-by hart)
-    let worker_cpu = ($harts | where hart > 0 | get cpu | math sum)
+    let harts = ($run.threads | where {|t| $t.name =~ '^CPU \d+/TCG$' } | each {|t| { hart: ($t.name | parse "CPU {n}/TCG" | get 0.n | into int), delta: $t.delta, rate: $t.rate } } | sort-by hart)
+    let worker_cpu = ($harts | where hart > 0 | get rate | math sum)
     let o = (overlap $bands)
     {
         workers: ($p.w | into int),
@@ -67,6 +68,7 @@ export def measure [kernel: path, image: path, out: path, set: string, --workers
         bands: $bands,
         overlap: $o,
         harts: $harts,
+        span: $run.threads_span,
         worker_cpu: $worker_cpu,
         at_once: $AT_ONCE,
         cpu_at_once: ($worker_cpu > $AT_ONCE),
@@ -104,11 +106,11 @@ def overlap [bands: list<record<band: int, start: int, end: int, hart: int>>]: n
 
 # A run's record as lines to read.
 export def text [doc: record]: nothing -> string {
-    let cpu = ($doc.harts | each {|h| $"hart ($h.hart) ($h.cpu | math round --precision 2)" } | str join ", ")
+    let cpu = ($doc.harts | each {|h| $"hart ($h.hart) ($h.rate | math round --precision 2)" } | str join ", ")
     let o = $doc.overlap
     [
         $"workers ($doc.workers): ($doc.frames) frames in ($doc.ms) ms, ($doc.fps | math round --precision 2) a second; hash ($doc.hash); rows ($doc.rows | str join ' ')"
-        $"  CPU over the held second: ($cpu); the workers' harts ($doc.worker_cpu | math round --precision 2) s"
+        $"  each hart's share of a core over the held ($doc.span | default 0.0 | math round --precision 2) s: ($cpu); the workers' harts ($doc.worker_cpu | math round --precision 2) together"
         $"  the last frame's bands: ($o.busy_ms | math round --precision 1) ms of work over a span of ($o.span_ms | math round --precision 1) ms, ($o.concurrency | math round --precision 2) at once on average, two or more for ($o.overlapped * 100 | math round --precision 1) percent of it"
     ] | str join "\n"
 }

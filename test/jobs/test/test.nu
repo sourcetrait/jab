@@ -2,8 +2,8 @@
 # calls, a line a fixture read line by line, on machines of two and four
 # harts, one worker and three:
 # - Idle: every worker asleep in its await while hart 0 holds two seconds;
-#   on four harts each worker's vCPU thread under 0.05 s of CPU over a held
-#   second.
+#   on four harts each worker's vCPU thread under 0.05 of a core over the
+#   held span, a second as the launch times it.
 # - Races, a thousand rounds each, every round a job a worker and a join,
 #   each worker's output checked and its completions counted: before (each
 #   worker lingers past its completion, so the next job is published before
@@ -21,17 +21,18 @@
 #   no band run.
 # Then the costs scenario once on four harts (costs.nu, which `just bench
 # test/jobs/costs` runs on a release build): every sample in, each a
-# distribution, held to no number, since a debug build's TCG times are
-# no measure.
+# distribution, the round's overhead bound beside the dispatch and the
+# barrier and at least each, held to no number, since a debug build's TCG
+# times are no measure.
 use ../../../sdk/nu/jab.nu
 use ./costs.nu
 use std/assert
 
 const ROUNDS = 1000
-# the CPU seconds an asleep worker's vCPU thread may take over a held
-# second, as test/harts holds an idle hart's
-const IDLE_CPU = 0.05
-# when the held second starts, inside the program's two-second idle, which
+# the share of a core an asleep worker's vCPU thread may take over the
+# held span, as test/harts holds an idle hart's
+const IDLE_RATE = 0.05
+# when the held span starts, inside the program's two-second idle, which
 # begins once the scenario's letter lands a second in
 const HELD_AT = 1500ms
 
@@ -64,11 +65,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal $run.status 0 $"exit status on ($harts) harts: ($run.serial)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($harts) harts"
         if $held {
-            assert (not ($run.threads | is-empty)) $"Idle: the threads read over the held second: ($run.threads)"
+            assert (not ($run.threads | is-empty)) $"Idle: the threads read over the held span: ($run.threads)"
             for h in 1..$w {
                 let thread = ($run.threads | where name == $"CPU ($h)/TCG" | get -o 0)
                 assert ($thread != null) $"Idle: hart ($h)'s thread among ($run.threads | get name)"
-                assert ($thread.cpu <= $IDLE_CPU) $"Idle: hart ($h)'s worker, asleep in its await, took ($thread.cpu) s of CPU over the held second, past ($IDLE_CPU)"
+                assert ($thread.rate <= $IDLE_RATE) $"Idle: hart ($h)'s worker, asleep in its await, ran at ($thread.rate) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
             }
         }
         $seen = ($seen | append $"($harts) harts: ($got | skip 1 | first 2 | str join '; ')")
@@ -81,6 +82,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal $r.dispatch.n (100 * $r.workers) $"Costs: a dispatch a worker a round at ($r.size_us) us, ($r.workers) workers: ($r.dispatch.n)"
         assert equal $r.barrier.n 100 $"Costs: a barrier a round at ($r.size_us) us, ($r.workers) workers: ($r.barrier.n)"
         assert ($r.dispatch.min > 0 and $r.barrier.min >= 0) $"Costs: every interval forward in time: ($r)"
+        assert equal $r.round.n 100 $"Costs: a round's overhead bound a round at ($r.size_us) us, ($r.workers) workers: ($r.round.n)"
+        assert ($r.round.min >= $r.barrier.min and $r.round.max >= $r.barrier.max and $r.round.max >= $r.dispatch.max) $"Costs: each round's bound at least its barrier and its greatest dispatch: ($r)"
     }
     print $"jobs: ($seen | str join '; ')"
     print (costs text $doc)
