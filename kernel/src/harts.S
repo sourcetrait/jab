@@ -415,6 +415,63 @@ msg_bootargs:
 .popsection
 .endif
 
+.ifdef DEBUG
+.global knob_value
+knob_value:
+    la t0, boot_args
+1:
+    lbu t1, 0(t0)                           # a token's start
+    beqz t1, 8f
+    li t2, ' '
+    bne t1, t2, 2f
+    addi t0, t0, 1
+    j 1b
+2:
+    mv t3, t0
+    mv t4, a0
+3:
+    lbu t5, 0(t4)
+    beqz t5, 5f                             # the whole name, its '=' with it
+    lbu t6, 0(t3)
+    bne t5, t6, 4f
+    addi t3, t3, 1
+    addi t4, t4, 1
+    j 3b
+4:
+    lbu t1, 0(t0)                           # another token: past it
+    beqz t1, 8f
+    li t2, ' '
+    beq t1, t2, 1b
+    addi t0, t0, 1
+    j 4b
+5:
+    li t4, 0                                # the value
+    li t2, 0                                # its digits
+6:
+    lbu t5, 0(t3)
+    addi t5, t5, -'0'
+    li t6, 10
+    bgeu t5, t6, 7f
+    li t6, 10
+    mul t4, t4, t6
+    add t4, t4, t5
+    addi t3, t3, 1
+    addi t2, t2, 1
+    j 6b
+7:
+    beqz t2, 8f                             # no digits: no value
+    lbu t5, 0(t3)
+    beqz t5, 71f
+    li t6, ' '
+    bne t5, t6, 8f                          # a digit run with more after it
+71:
+    mv a0, t4
+    ret
+8:
+    li a0, -1
+    ret
+.endif
+
 .global sys_harts
 sys_harts:
     la t0, harts_discovered

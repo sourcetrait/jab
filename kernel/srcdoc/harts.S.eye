@@ -5,5 +5,8 @@ call local cpu_usable tree addr,node u32 > usable a0 bool,clobber a1-a5 [251:282
 call local timebase_of tree addr,node u32 > hz a0 u64,present a1 bool,clobber a2-a5 [284:315] :the node's own timebase-frequency, one cell or two, the high cell first
  hz :0 when absent or of another length
  present :1 when the node has one, of any length
-call harts_report > clobber a0-a3 [316:418] :under DEBUG, on the debug channel: the masks, every problem kept, and the bootargs
-ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [419:429]
+call harts_report > clobber a0-a3 [316:419] :under DEBUG, on the debug channel: the masks, every problem kept, and the bootargs
+call knob_value name addr > value a0 u64 [420:475] :under DEBUG, a knob's decimal value from /chosen's bootargs
+ name :the knob with its '=', matched at a token's start
+ value :-1 when absent or not a run of digits alone
+ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [476:486]

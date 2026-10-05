@@ -52,6 +52,12 @@ bootargs, QEMU's -append, are copied for the knobs a debug build reads.
 Under DEBUG, after the debug channel is open: the three masks, each kept
 problem, and the bootargs when there are any.
 
+## knob_value
+
+A knob is a token of /chosen's bootargs, its name, an '=', and digits,
+read by a debug kernel alone; a token that only begins with the name, or a
+value with more than digits, is none.
+
 ## sys_harts
 
 The masks as kept: hart 0 online from the bootstrap on, a secondary listed

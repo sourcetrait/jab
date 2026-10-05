@@ -2258,25 +2258,25 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
 
     # machines: the specification's four harts, two harts diagnostic, and
-    # four harts on another -machine, as the AIA line will be
+    # four harts on another -machine, the PLIC's line before the AIA
     let four = (jab machine-of 4)
     let two = (jab machine-of 2)
-    let aia = ($four | update machine "virt,aia=aplic-imsic,aclint=on")
+    let plic = ($four | update machine "virt")
     let on_four = (fx-gauge $dir "machine_four" "four" "four" 0 $good2 --machine $four)
     let on_two = (fx-gauge $dir "machine_two" "two" "two" 0 $good2 --machine $two)
-    let on_aia = (fx-gauge $dir "machine_aia" "aia" "aia" 0 $good2 --machine $aia)
+    let on_plic = (fx-gauge $dir "machine_plic" "plic" "plic" 0 $good2 --machine $plic)
     let diag_refused = (try { gauge compare [$on_four $on_two] "draw_us" 50; "" } catch {|e| $e.msg })
     let diag_says = $"a run on a diagnostic machine is refused as diagnostic: ($diag_refused)"
     assert ($diag_refused | str contains $"($on_two) run 1, diagnostic: a diagnostic machine of 2 harts") $diag_says
     let diag_admitted = (gauge compare [$on_four $on_two] "draw_us" 50 --diagnostic)
     assert equal ($diag_admitted.table | where build == "two" | get 0.standings) ["diagnostic"] "--diagnostic admits it marked"
-    let across = (try { gauge compare [$on_four $on_aia] "draw_us" 50; "" } catch {|e| $e.msg })
+    let across = (try { gauge compare [$on_four $on_plic] "draw_us" 50; "" } catch {|e| $e.msg })
     assert ($across | str contains "the runs ran on 2 machines") $"runs on two machines refuse the comparison: ($across)"
-    let across_admitted = (gauge compare [$on_four $on_aia] "draw_us" 50 --diagnostic)
+    let across_admitted = (gauge compare [$on_four $on_plic] "draw_us" 50 --diagnostic)
     let rows = ($across_admitted.table | each {|t| [$t.build $t.machine.machine] })
-    assert equal $rows [[four virt] [aia "virt,aia=aplic-imsic,aclint=on"]] $"each build's row names its machine: ($rows)"
+    assert equal $rows [[four $four.machine] [plic virt]] $"each build's row names its machine: ($rows)"
     let one_name = (try {
-        gauge compare [(fx-gauge $dir "mixed_1" "mixed_1" "mixed" 0 $good2 --machine $four) (fx-gauge $dir "mixed_2" "mixed_2" "mixed" 0 $good2 --machine $aia)] "draw_us" 50 --diagnostic
+        gauge compare [(fx-gauge $dir "mixed_1" "mixed_1" "mixed" 0 $good2 --machine $four) (fx-gauge $dir "mixed_2" "mixed_2" "mixed" 0 $good2 --machine $plic)] "draw_us" 50 --diagnostic
         ""
     } catch {|e| $e.msg })
     assert ($one_name | str contains "come from 2 builds") $"one name's runs on two machines are two builds: ($one_name)"

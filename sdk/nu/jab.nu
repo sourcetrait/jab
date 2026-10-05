@@ -73,6 +73,9 @@ const march_kernel = "-march=rva23s64"
 # 11.1.2 already takes it for riscv64 when no instruction counting is
 # asked, and the line says so whatever the host's QEMU would choose.
 const accel = "tcg,thread=multi"
+# The interrupt platform: the APLIC in MSI mode feeding each hart's IMSIC
+# interrupt files, with the ACLINT's timer, which only TCG offers.
+const machine_name = "virt,aia=aplic-imsic,aclint=on"
 # The harts a machine takes: the specification's four, and one or two
 # for a diagnostic run, which its record labels so.
 const harts_allowed = [1 2 4]
@@ -155,7 +158,7 @@ def cpu-model [qemu: string]: nothing -> string {
 # refused.
 export def machine-of [harts: int]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
     if $harts not-in $harts_allowed { error make {msg: $"--harts takes 1, 2, or 4, the specification's four or a diagnostic one or two, not ($harts)"} }
-    { harts: $harts, diagnostic: ($harts != $harts_default), machine: "virt", cpu: $cpu_profile, accel: $accel }
+    { harts: $harts, diagnostic: ($harts != $harts_default), machine: $machine_name, cpu: $cpu_profile, accel: $accel }
 }
 
 # The machine on `qemu`: virt with `options` after it when given, the

@@ -33,7 +33,8 @@ programs = [
   'test/purity',
   'test/profile',
   'test/dtb',
-  'test/harts'
+  'test/harts',
+  'test/stuck'
 ]
 
 # A word standing for a program's path wherever the tool takes one:

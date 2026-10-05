@@ -31,4 +31,5 @@ The device's virtqueue record.
 
 ## random_state
 
-`u64`: 0 until opened, then random_open's answer plus 1.
+`u64`: 0 until opened, then random_open's answer plus 1, and 3 once its
+source stuck (aia.S).

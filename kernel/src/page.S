@@ -6,9 +6,10 @@
 .set TEST_SLOT, (((QEMU_VIRT_TEST >> 21) & 0x1ff) * 8)
 .set UART_PTE, ((((QEMU_VIRT_UART0 >> 21) << 21) >> 12) << 10)
 .set UART_SLOT, (((QEMU_VIRT_UART0 >> 21) & 0x1ff) * 8)
-.set PLIC_PTE, ((((QEMU_VIRT_PLIC >> 21) << 21) >> 12) << 10)
-.set PLIC_SLOT, (((QEMU_VIRT_PLIC >> 21) & 0x1ff) * 8)
-.set PLIC_PAGES, ((QEMU_VIRT_PLIC_SIZE + 0x1fffff) >> 21)
+.set APLIC_S_PTE, ((((QEMU_VIRT_APLIC_S >> 21) << 21) >> 12) << 10)
+.set APLIC_S_SLOT, (((QEMU_VIRT_APLIC_S >> 21) & 0x1ff) * 8)
+.set IMSIC_S_PTE, ((((QEMU_VIRT_IMSIC_S >> 21) << 21) >> 12) << 10)
+.set IMSIC_S_SLOT, (((QEMU_VIRT_IMSIC_S >> 21) & 0x1ff) * 8)
 .set ECAM_PTE, ((((QEMU_VIRT_PCIE_ECAM >> 21) << 21) >> 12) << 10)
 .set ECAM_SLOT, (((QEMU_VIRT_PCIE_ECAM >> 21) & 0x1ff) * 8)
 .set ECAM_PAGES, (QEMU_VIRT_PCIE_ECAM_SIZE >> 21)
@@ -34,6 +35,9 @@
 .endif
 .if (QEMU_VIRT_PCIE_MMIO & 0x3fffffff) != 0 || QEMU_VIRT_PCIE_MMIO_SIZE != 0x40000000
 .error "the PCI MMIO window is not one aligned GiB"
+.endif
+.if ((QEMU_VIRT_APLIC_S >> 21) == (QEMU_VIRT_APLIC_M >> 21)) || ((QEMU_VIRT_IMSIC_S >> 21) == (QEMU_VIRT_IMSIC_M >> 21))
+.error "a supervisor page shares its 2 MiB with the machine level's"
 .endif
 
 .section .text
@@ -66,18 +70,14 @@ page_init:
     sd t1, TEST_SLOT(t0)
     li t1, UART_PTE | PTE_KERNEL_RW
     sd t1, UART_SLOT(t0)
-    li t1, PLIC_SLOT
-    add t0, t0, t1
-    li t1, PLIC_PTE | PTE_KERNEL_RW
-    li t2, PLIC_PAGES
-    li t3, PAGE_PTE_STEP
-2:
-    sd t1, 0(t0)
-    add t1, t1, t3
-    addi t0, t0, 8
-    addi t2, t2, -1
-    bnez t2, 2b
-    la t0, page_l1_devices
+    li t1, APLIC_S_PTE | PTE_KERNEL_RW
+    li t2, APLIC_S_SLOT
+    add t2, t2, t0
+    sd t1, 0(t2)
+    li t1, IMSIC_S_PTE | PTE_KERNEL_RW
+    li t2, IMSIC_S_SLOT
+    add t2, t2, t0
+    sd t1, 0(t2)
     li t1, ECAM_SLOT
     add t0, t0, t1
     li t1, ECAM_PTE | PTE_KERNEL_RW

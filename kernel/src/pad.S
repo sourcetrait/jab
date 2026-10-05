@@ -194,6 +194,8 @@ msg_pad_at:
     la t0, pad_base
     ld a0, 0(t0)
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
+    la a1, pad_progress
+    la a2, pad_fault
     call virtio_irq_enable
     call pad_ranges
     call pad_name_read
@@ -252,8 +254,11 @@ pad_port_open:
     ld t0, 0(t0)
     li t1, PAD_PORT_HEADER_BYTES
     bgeu t0, t1, 2f
+    call serial_source
+    mv a1, a0
     la a0, serial_pad_rx_queue
     call virtio_wait_used
+    bnez a1, 8f                 # the port's source stuck
     j 1b
 2:
     la t0, pad_stream
@@ -711,6 +716,17 @@ pad_accept:
     addi t1, t1, 1
     sd t1, 0(t0)
 9:
+    ret
+
+pad_progress:
+    la t0, pad_queue
+    lhu a0, (PADQ_USED + VIRTQ_USED_IDX)(t0)
+    ret
+
+pad_fault:
+    la t0, pad_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 .global pad_pending

@@ -53,6 +53,8 @@ const fault_text = [
     "jab: device tree refused: code "
     "jab: timer unsupported: timebase-frequency "
     "jab: machine trap: cause="
+    "jab: interrupt platform refused: code "
+    "jab: interrupt source "
 ]
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {

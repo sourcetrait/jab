@@ -8,9 +8,11 @@
 # property's name past the strings, an unknown token, and nesting at the
 # bound and one past it. Then QEMU's tree through every lookup: a path, a
 # unit address matched when given and a name alone when not, a property, a
-# node's children, a phandle back to its node, and paths that are not
-# there. Last, the debug kernel's own reading of the tree it booted on: its
-# harts and its command line, given through -append.
+# node's children, a phandle back to its node, paths that are not there,
+# and a string list's entries in the supervisor IMSIC's compatible, each
+# entry matched whole and neither a prefix of one nor a tail. Last, the
+# debug kernel's own reading of the tree it booted on: its harts and its
+# command line, given through -append.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -87,6 +89,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         "absent /nope"
         "absent /cpus/cpu@9"
         "found /cpus/"
+        "listed riscv,imsics 1"
+        "listed qemu,imsics 1"
+        "listed riscv,imsic 0"
+        "listed imsics 0"
     ]
     let looked = ($lines | where {|l| not ($l starts-with "check ") })
     assert equal $looked $want $"every lookup as the tree has it: ($looked)"

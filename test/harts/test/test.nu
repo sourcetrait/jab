@@ -15,7 +15,10 @@
 # high cell of 1 ending the boot with the whole rate; and in the cpu
 # nodes, each cpu's own read before /cpus's, every cpu's own with none
 # at /cpus booting and cpu@2's own slow rate beside /cpus's ending the
-# boot.
+# boot. Then the interrupt platform as the tree describes it, each a
+# refusal with its code: the supervisor IMSIC gone, the ACLINT's timer
+# gone, the supervisor APLIC domain gone, and the supervisor IMSIC at an
+# address other than QEMU's, which the page tables map.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -91,8 +94,64 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $"($t.name): ($run.serial | str trim)"
     })
 
-    print $"harts: ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; ')"
+    # the interrupt platform: aia.inc's AIA_NO_IMSIC_S, AIA_NO_TIMER,
+    # AIA_NO_DOMAINS, and AIA_NOT_QEMU
+    let s_imsic = "/soc/interrupt-controller@28000000"
+    let refused = ([
+        { name: "no_imsic", tree: (nop-node $tree $s_imsic), code: 1 }
+        { name: "no_timer", tree: (nop-node $tree "/soc/mtimer@2007ff8"), code: 4 }
+        { name: "no_domain", tree: (nop-node $tree "/soc/interrupt-controller@d000000"), code: 3 }
+        { name: "moved_imsic", tree: (put32 $tree ((prop-offset $tree $s_imsic "reg") + 4) 0x29000000), code: 5 }
+    ] | each {|t|
+        let file = ($out | path join $"($t.name).dtb")
+        $t.tree | save --raw -f $file
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --dtb $file --seconds 20)
+        assert equal $run.status 1 $"($t.name): exit status ($run.status), ($run.serial)"
+        assert equal ($run.serial | lines) [$"jab: interrupt platform refused: code ($t.code)"] $"($t.name): its line: ($run.serial)"
+        $"($t.name): ($run.serial | str trim)"
+    })
+
+    print $"harts: ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($refused | str join '; ')"
     print "harts: ok"
+}
+
+# A tree with a node, its properties and its children with it, made NOP
+# tokens in place, by the node's whole path. Untyped because it can end
+# in an error.
+def nop-node [b: binary, path: string] {
+    let w = {|o| $b | bytes at $o..<($o + 4) | into int --endian big }
+    let off_struct = (do $w 8)
+    let end = ($off_struct + (do $w 36))
+    mut at = $off_struct
+    mut nodes = []
+    mut start = -1
+    mut depth = 0
+    while $at < $end {
+        let token = $at
+        let kind = (do $w $at)
+        $at = $at + 4
+        if $kind == 1 {
+            let n = ($b | bytes at $at..<$end | bytes index-of 0x[00])
+            $nodes = ($nodes | append ($b | bytes at $at..<($at + $n) | decode))
+            $at = $at + ((($n + 4) // 4) * 4)
+            if $start < 0 and ("/" + ($nodes | skip 1 | str join "/")) == $path {
+                $start = $token
+                $depth = ($nodes | length)
+            }
+        } else if $kind == 2 {
+            if $start >= 0 and ($nodes | length) == $depth {
+                let nops = (1..(($at - $start) // 4) | each { be32 4 } | bytes collect)
+                return ([($b | bytes at 0..<$start) $nops ($b | bytes at $at..)] | bytes collect)
+            }
+            $nodes = ($nodes | drop 1)
+        } else if $kind == 3 {
+            let len = (do $w $at)
+            $at = $at + 8 + ((($len + 3) // 4) * 4)
+        } else if $kind == 9 {
+            break
+        }
+    }
+    error make { msg: $"no node ($path) in the tree" }
 }
 
 # The offset in a tree of a property's value at a node's whole path.

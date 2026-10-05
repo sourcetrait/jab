@@ -282,7 +282,11 @@ counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
 0, since no event is selected and selecting one stays machine mode's.
 
 Every machine has four harts, `-smp 4`, on multithreaded TCG, `-accel
-tcg,thread=multi`, a host thread a hart. `--harts 1` or `--harts 2` on
+tcg,thread=multi`, a host thread a hart. The machine is `-machine
+virt,aia=aplic-imsic,aclint=on`. Its interrupts go through the RISC-V
+Advanced Interrupt Architecture: the APLIC turns each device's interrupt
+line into a message, and each hart's IMSIC receives those messages in its
+interrupt files. The ACLINT keeps the timer. `--harts 1` or `--harts 2` on
 `just run`, `jab.nu plan`, or `jab launch` gives a diagnostic machine of
 one or two harts, which every record of the run labels so, and any other
 count is refused before QEMU starts; every launch's record carries its
@@ -294,11 +298,19 @@ the program, and the others park. `jab.sys.harts` answers the discovered,
 online, and failed harts as masks, bit n for hart n. A cpu the kernel
 cannot use, an id past `JAB_HARTS_MAX` among them, keeps the kernel on
 hart 0 with every other hart failed, named on the debug channel; a tree
-the kernel cannot read, or a timer other than QEMU's 10 MHz, ends the run
-before the program starts, its line on the console and status 1. `jab
+the kernel cannot read, a timer other than QEMU's 10 MHz, or an interrupt
+platform other than QEMU's ends the run before the program starts, its
+line on the console and status 1. `jab
 launch --dtb <file>` hands the machine a tree of its own, `--bootargs
 <text>` puts QEMU's `-append` in the tree, which a debug kernel prints,
 and `jab dump-tree` writes the tree QEMU builds for a machine.
+
+A device that holds its interrupt raised while it makes no progress for
+three seconds is cut off. The kernel masks that interrupt and prints
+`jab: interrupt source N stalled` on the console. From then on the
+device's calls answer with its error, and a wait on it ends. A debug
+kernel reads `jab.hold=<virtio device id>` from `--bootargs` and holds
+that device's interrupt raised; `test/stuck` uses it to prove the rule.
 
 `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,

@@ -7,4 +7,5 @@ call dtb_prop tree addr,node u32,name addr > value a0 addr,bytes a1 u32,clobber 
 call dtb_phandle tree addr,phandle u32 > node a0 u32,clobber a2-a5 [370:428] :the node whose phandle property holds that value, or 0
 call dtb_name tree addr,node u32 > name a0 addr [429:434] :the node's name, NUL-terminated
 call dtb_named tree addr,node u32,name addr > same a0 bool,clobber a2 [435:453] :1 when the node's name is that string whole
-call dtb_equals value addr,bytes u32,string addr > same a0 bool,clobber a2 [454:472] :1 when a string property's value, its NUL counted in bytes, is that string
+call dtb_equals value addr,bytes u32,string addr > same a0 bool,clobber a2 [454:474] :1 when a string property's value, its NUL counted in bytes, is that string
+call dtb_listed value addr,bytes u32,string addr > listed a0 bool [475:502] :1 when the string is one of a string list's NUL-ended entries, as compatible holds them

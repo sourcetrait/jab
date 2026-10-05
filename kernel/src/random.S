@@ -31,10 +31,13 @@ sys_random:
     sh t1, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     fence rw, rw
     la t0, random_base
-    ld t0, 0(t0)
-    sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
+    ld a0, 0(t0)
+    sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
+    call irq_mmio_source
+    mv a1, a0
     la a0, random_queue
     call virtio_wait_used
+    bnez a1, 7f                 # its source stuck: no answer
     ld t1, VQ_LAST_USED(a0)
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
@@ -99,6 +102,8 @@ msg_rng_at:
     call virtio_driver_ok
     la t0, random_base
     ld a0, 0(t0)
+    la a1, random_progress
+    la a2, random_fault
     call virtio_irq_enable
     la t0, random_state
     li t1, 1
@@ -127,6 +132,17 @@ msg_no_rng:
 8:
     ld ra, 8(sp)
     addi sp, sp, 16
+    ret
+
+random_progress:
+    la t0, random_queue
+    lhu a0, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    ret
+
+random_fault:
+    la t0, random_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 .section .bss

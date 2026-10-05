@@ -133,6 +133,8 @@ msg_sound_at:
     call virtio_driver_ok
     la t0, sound_base
     ld a0, 0(t0)
+    la a1, sound_progress
+    la a2, sound_fault
     call virtio_irq_enable
     la t0, sound_request
     li t1, VIRTIO_SND_R_PCM_SET_PARAMS
@@ -291,10 +293,12 @@ sound_control:
     la a5, sound_response
     li a6, 4
     call virtio_request
+    bnez a1, 11f                            # its source stuck: no answer
     la t0, sound_response
     lwu t0, 0(t0)
     li t1, VIRTIO_SND_S_OK
     beq t0, t1, 1f
+11:
     li a0, 1
     j 2f
 1:
@@ -549,7 +553,7 @@ sound_tick:
     sd t4, 40(sp)
     sd t5, 32(sp)
     sd t6, 24(sp)
-    call plic_service
+    call irq_drain
     ld ra, 72(sp)
     ld a0, 64(sp)
     ld t2, 56(sp)
@@ -578,7 +582,8 @@ sound_wait:
     csrc sie, t0
     li t0, -1
     csrw stimecmp, t0
-    call plic_service
+    call irq_drain
+    call irq_report
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
@@ -598,6 +603,9 @@ sound_flush:
     add t0, t0, t1
     sd t0, 8(sp)                # when to stop waiting for the voices
 1:
+    la t0, sound_live
+    ld t0, 0(t0)
+    beqz t0, 5f                 # its source stuck: nothing more returns
     call sound_stalled
     bnez a0, 5f
     rdtime t0
@@ -619,6 +627,9 @@ sound_flush:
     addi t0, t0, JAB_SOUND_PERIODS + SOUND_DRAIN_PERIODS
     sd t0, 0(sp)                # the return count to reach
 3:
+    la t0, sound_live
+    ld t0, 0(t0)
+    beqz t0, 5f
     call sound_stalled
     bnez a0, 5f
     la t0, sound_returned
@@ -685,6 +696,22 @@ msg_sound_failed:
     ld ra, 24(sp)
     addi sp, sp, 32
 9:
+    ret
+
+sound_progress:
+    la t0, sound_control_queue
+    lhu a0, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    la t0, sound_queue
+    lhu t1, (SNDQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+    ret
+
+sound_fault:
+    la t0, sound_live
+    sd zero, 0(t0)
+    la t0, sound_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 .global sound_pending

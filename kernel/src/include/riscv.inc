@@ -19,6 +19,13 @@
 .set SENVCFG_CBCFE, (1 << 6)
 .set SENVCFG_CBIE_FLUSH, (1 << 4)
 .set MSTATEEN0_ENVCFG, (1 << 62)
+.set MSTATEEN0_SVSLCT, (1 << 60)
+.set MSTATEEN0_AIA, (1 << 59)
+.set MSTATEEN0_IMSIC, (1 << 58)
+
+.set CSR_SISELECT, 0x150
+.set CSR_SIREG, 0x151
+.set CSR_STOPEI, 0x15c
 
 .set MCOUNTEREN_ALL, 0xffffffff
 .set SCOUNTEREN_ALL, 0xffffffff

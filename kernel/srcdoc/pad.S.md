@@ -186,7 +186,8 @@ The events for sys_pad_input, PAD_RING entries.
 
 ## pad_state
 
-`u64`: 0 until opened, then pad_open's answer plus 1.
+`u64`: 0 until opened, then pad_open's answer plus 1, and 3 once the
+device's source stuck (aia.S).
 
 ## pad_keys
 

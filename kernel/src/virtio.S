@@ -88,79 +88,13 @@ virtio_driver_ok:
     sw t0, VIRTIO_MMIO_STATUS(a0)
     ret
 
-.global virtio_irq_enable
-virtio_irq_enable:
-    li t0, QEMU_VIRT_VIRTIO0
-    sub t1, a0, t0
-    li t0, QEMU_VIRT_VIRTIO_STRIDE
-    divu t1, t1, t0
-    addi a0, t1, QEMU_VIRT_VIRTIO_IRQ0
-    j plic_enable
-
-.global plic_enable
-plic_enable:
-    li t0, QEMU_VIRT_PLIC
-    slli t2, a0, 2
-    add t2, t2, t0
-    li t3, 1
-    sw t3, QEMU_VIRT_PLIC_PRIORITY(t2)
-    li t2, QEMU_VIRT_PLIC + QEMU_VIRT_PLIC_ENABLE + QEMU_VIRT_PLIC_ENABLE_STRIDE * QEMU_VIRT_HART0_S_CONTEXT
-    srli t5, a0, 5
-    slli t5, t5, 2
-    add t2, t2, t5              # the word holding the line
-    lwu t3, 0(t2)
-    li t4, 1
-    andi t5, a0, 31
-    sll t4, t4, t5
-    or t3, t3, t4
-    sw t3, 0(t2)
-    li t2, QEMU_VIRT_PLIC + QEMU_VIRT_PLIC_CONTEXT + QEMU_VIRT_PLIC_CONTEXT_STRIDE * QEMU_VIRT_HART0_S_CONTEXT
-    sw zero, QEMU_VIRT_PLIC_THRESHOLD(t2)
-    ret
-
-.global plic_service
-plic_service:
-    addi sp, sp, -16
-    sd ra, 8(sp)
-1:
-    li t0, QEMU_VIRT_PLIC + QEMU_VIRT_PLIC_CONTEXT + QEMU_VIRT_PLIC_CONTEXT_STRIDE * QEMU_VIRT_HART0_S_CONTEXT
-    lwu t1, QEMU_VIRT_PLIC_CLAIM(t0)
-    beqz t1, 4f
-    sd t1, 0(sp)
-    li t2, QEMU_VIRT_PCIE_IRQ0
-    bltu t1, t2, 2f
-    addi t2, t2, QEMU_VIRT_PCIE_IRQ_COUNT
-    bgeu t1, t2, 3f
-    mv a0, t1
-    call pci_service_line
-    j 3f
-2:
-    addi t2, t1, -QEMU_VIRT_VIRTIO_IRQ0
-    li t3, QEMU_VIRT_VIRTIO_STRIDE
-    mul t2, t2, t3
-    li t3, QEMU_VIRT_VIRTIO0
-    add t2, t2, t3
-    lwu t3, VIRTIO_MMIO_INTERRUPT_STATUS(t2)
-    sw t3, VIRTIO_MMIO_INTERRUPT_ACK(t2)
-    la t3, sound_base
-    ld t3, 0(t3)
-    bne t2, t3, 3f
-    call sound_service
-3:
-    li t0, QEMU_VIRT_PLIC + QEMU_VIRT_PLIC_CONTEXT + QEMU_VIRT_PLIC_CONTEXT_STRIDE * QEMU_VIRT_HART0_S_CONTEXT
-    ld t1, 0(sp)
-    sw t1, QEMU_VIRT_PLIC_CLAIM(t0)
-    j 1b
-4:
-    ld ra, 8(sp)
-    addi sp, sp, 16
-    ret
-
 .global virtio_wait_used
 virtio_wait_used:
-    addi sp, sp, -16
-    sd ra, 8(sp)
+    addi sp, sp, -32
+    sd ra, 24(sp)
     sd a0, 0(sp)
+    sd a1, 8(sp)
+    sd zero, 16(sp)                         # whether its source stuck
     li t4, SIE_SEIE
     csrs sie, t4
 1:
@@ -169,11 +103,22 @@ virtio_wait_used:
     lhu t0, (VQ_USED + VIRTQ_USED_IDX)(a0)
     ld t1, VQ_LAST_USED(a0)
     bne t0, t1, 2f
+    la t0, irq_faulted
+    ld t0, 0(t0)
+    ld t1, 8(sp)
+    srl t0, t0, t1
+    andi t0, t0, 1
+    bnez t0, 21f                            # masked: no completion is coming
     wfi
-    call plic_service
+    call irq_drain
+    call irq_report
     j 1b
+21:
+    li t0, 1
+    sd t0, 16(sp)
 2:
-    call plic_service
+    call irq_drain
+    call irq_report
     la t4, sound_live
     ld t4, 0(t4)
     bnez t4, 3f
@@ -181,8 +126,9 @@ virtio_wait_used:
     csrc sie, t4
 3:
     ld a0, 0(sp)
-    ld ra, 8(sp)
-    addi sp, sp, 16
+    ld a1, 16(sp)
+    ld ra, 24(sp)
+    addi sp, sp, 32
     ret
 
 .global virtio_request
@@ -210,13 +156,17 @@ virtio_request:
     sh t0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a2)
     fence rw, rw
     sw a1, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
+    call irq_mmio_source
+    mv a1, a0
     mv a0, a2
     call virtio_wait_used
+    bnez a1, 1f                             # its source stuck: the request abandoned
     ld t2, VQ_LAST_USED(a0)
     addi t2, t2, 1
     li t0, 0xffff
     and t2, t2, t0
     sd t2, VQ_LAST_USED(a0)
+1:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret

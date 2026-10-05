@@ -15,13 +15,17 @@ the cache-block operations, cbo.inval as a flush (riscv.inc), and
 mstateen0 lets supervisor mode reach senvcfg, where kmain opens the same
 operations to the program: the RVA23 CPU carries Smstateen, under which
 senvcfg is an illegal instruction in supervisor mode until machine mode
-allows it. Every counter the hart has is readable below machine mode.
+allows it, and the same register lets supervisor mode reach the interrupt
+file's CSRs, siselect, sireg, and stopei (riscv.inc). Every counter the
+hart has is readable below machine mode.
 
 The bss is cleared here, before anything writes it, since the tree's
 reading keeps what it finds there; nothing has been pushed on the stack
 yet, which lies in bss. The tree is read with paging off at the address
-QEMU handed over (harts.S's harts_topology), then the mret enters kmain as
-supervisor with the hart id in a0.
+QEMU handed over, the harts first (harts.S's harts_topology), then the
+interrupt platform (aia.S's aia_topology), and the root APLIC domain is
+set up from it (aia_root); then the mret enters kmain as supervisor with
+the hart id in a0.
 
 ## mtrap
 

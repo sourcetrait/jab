@@ -168,6 +168,38 @@ _start:
     addi s1, s1, 8
     j 7b
 8:
+    la a0, tree
+    la a1, path_imsic
+    call dtb_path
+    beqz a0, 93f
+    mv a1, a0
+    la a0, tree
+    la a2, word_compatible
+    call dtb_prop
+    beqz a0, 93f
+    mv s3, a0                               # the IMSIC's compatible list
+    mv s4, a1                               # its bytes
+    la s1, listed
+81:
+    ld s2, 0(s1)
+    beqz s2, 82f
+    mv a0, s3
+    mv a1, s4
+    mv a2, s2
+    call dtb_listed
+    mv s5, a0
+    la a0, word_listed
+    call line_str
+    mv a0, s2
+    call line_str
+    li a0, ' '
+    call line_char
+    mv a0, s5
+    call line_dec
+    call line_print
+    addi s1, s1, 8
+    j 81b
+82:
     jab.sys.exit 0
 90:
     la a0, msg_no_disk
@@ -363,6 +395,12 @@ absent:
     .quad path_cpu9
     .quad path_cpus_trailing
     .quad 0
+listed:
+    .quad word_imsics
+    .quad word_qemu_imsics
+    .quad word_imsic
+    .quad word_imsics_tail
+    .quad 0
 
 path_good:
     .asciz "/good.dtb"
@@ -409,6 +447,8 @@ path_chosen:
     .asciz "/chosen"
 path_nope:
     .asciz "/nope"
+path_imsic:
+    .asciz "/soc/interrupt-controller@28000000"
 
 serial_dtb:
     .asciz "dtb"
@@ -452,6 +492,18 @@ word_phandle:
     .asciz "phandle"
 word_bootargs:
     .asciz "bootargs"
+word_compatible:
+    .asciz "compatible"
+word_listed:
+    .asciz "listed "
+word_imsics:
+    .asciz "riscv,imsics"
+word_qemu_imsics:
+    .asciz "qemu,imsics"
+word_imsic:
+    .asciz "riscv,imsic"
+word_imsics_tail:
+    .asciz "imsics"
 msg_no_disk:
     .asciz "no disk of serial dtb"
 msg_good_refused:

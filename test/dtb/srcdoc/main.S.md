@@ -9,7 +9,9 @@ timebase-frequency, `timebase <hz>`; a cpu's reg by a path with a unit
 address and by one without, `reg <path> <reg>`; cpu@1's interrupt
 controller's phandle and the node dtb_phandle finds for it, `phandle <n>
 same|other <name>`; /chosen's bootargs, `bootargs <text>`; and paths found
-or not, `found <path>` or `absent <path>`.
+or not, `found <path>` or `absent <path>`; and the supervisor IMSIC's
+compatible list through dtb_listed, `listed <string> <0|1>`, for both of
+its entries, a prefix of one, and a tail of one.
 
 ## .set FILE_BYTES
 
@@ -22,6 +24,10 @@ or not, `found <path>` or `absent <path>`.
 ## absent
 
 `6 addr`: the paths looked up for found or absent, ended by 0.
+
+## listed
+
+`5 addr`: the strings looked for in the IMSIC's compatible, ended by 0.
 
 ## path_good
 ## path_magic
@@ -52,6 +58,10 @@ broken and nested ones.
 
 `u8`: the paths looked up in QEMU's tree.
 
+## path_imsic
+
+`u8`: QEMU's supervisor IMSIC node.
+
 ## serial_dtb
 
 `4 u8`: the disk's serial.
@@ -79,8 +89,21 @@ broken and nested ones.
 ## word_reg
 ## word_phandle
 ## word_bootargs
+## word_compatible
 
 `u8`: the property names and the value the lookups read by.
+
+## word_listed
+
+`u8`: the listed lines' first word.
+
+## word_imsics
+## word_qemu_imsics
+## word_imsic
+## word_imsics_tail
+
+`u8`: the strings looked for: the list's two entries, a prefix of one, and
+a tail of one.
 
 ## msg_no_disk
 ## msg_good_refused

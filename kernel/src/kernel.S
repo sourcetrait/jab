@@ -18,6 +18,7 @@ kmain:
     csrw scounteren, t0
     li t0, (SENVCFG_CBZE | SENVCFG_CBCFE | SENVCFG_CBIE_FLUSH)
     csrs senvcfg, t0
+    call aia_supervisor
     call serial_open
 .ifdef DEBUG
     la a0, msg_banner

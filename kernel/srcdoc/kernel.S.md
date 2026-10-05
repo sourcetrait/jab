@@ -19,7 +19,9 @@ such instruction an illegal instruction. The program may read every
 counter the hart has and run the cache-block operations, cbo.inval as a
 flush (riscv.inc), which boot.S opened below machine mode.
 
-The ports come up before the program starts: the API when the run put its
+The supervisor APLIC domain and hart 0's interrupt file are set up before
+any device's interrupt is let through (aia.S's aia_supervisor). The ports
+come up before the program starts: the API when the run put its
 port on the machine, and under DEBUG the debug channel, first, so the banner
 and everything after it go there, the harts as the tree gave them first
 (harts.S's harts_report). sscratch holds the kernel stack top while the

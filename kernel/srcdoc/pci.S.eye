@@ -9,4 +9,4 @@ call local pci_capabilities config addr,record addr > common PCI_DEV_COMMON(reco
 call pci_count_of > count a0 u64 [230:235]
  count :the virtio devices the scan found
 call pci_device index u64 > record a0 addr [236:243]
-call pci_service_line line u64 [244:260] :reads the ISR of every device on the PLIC line, which drops the level
+call pci_service_line line u64 [244:260] :reads the ISR of every device on the INTx line, which drops the level

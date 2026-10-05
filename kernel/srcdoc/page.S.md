@@ -2,8 +2,10 @@
 
 Sv39 with 2 MiB pages, one root table and one level 1 table per GiB in use,
 built once and never changed: the first 2 MiB (QEMU's test device), the
-2 MiB at the UART, the PLIC's two, and the PCI ECAM's 128 for the kernel,
-and the PCI MMIO window's whole GiB as one leaf in the root; in RAM the
+2 MiB at the UART, the APLIC supervisor domain's 2 MiB, the supervisor
+IMSIC files' 2 MiB, and the PCI ECAM's 128 for the kernel, and the PCI MMIO
+window's whole GiB as one leaf in the root, the machine level's domain and
+files never mapped; in RAM the
 kernel's own 2 MiB at its start, supervisor only, then the framebuffer's
 pages, user read-write, then the program's window, user
 read-write-execute, which is every page from there to the end of the
@@ -16,7 +18,8 @@ For each address the file sets the PTE of the 2 MiB page holding it, the
 page's aligned base as a PPN shifted into place, and the byte offset of that
 page's slot in a level 1 table. Assembly stops unless the program's window,
 as the SDK states it, ends where RAM does and begins after the framebuffer,
-and unless the PCI MMIO window is one aligned GiB.
+unless the PCI MMIO window is one aligned GiB, and unless each supervisor
+page of the AIA has its 2 MiB apart from the machine level's.
 
 ## .set TEST_PTE
 
@@ -34,17 +37,23 @@ and unless the PCI MMIO window is one aligned GiB.
 
 `u64`: that page's slot in a level 1 table, in bytes.
 
-## .set PLIC_PTE
+## .set APLIC_S_PTE
 
-`u64`: the PTE, flags clear, of the PLIC's first 2 MiB page.
+`u64`: the PTE, flags clear, of the 2 MiB page holding the APLIC's
+supervisor domain.
 
-## .set PLIC_SLOT
+## .set APLIC_S_SLOT
 
 `u64`: that page's slot in a level 1 table, in bytes.
 
-## .set PLIC_PAGES
+## .set IMSIC_S_PTE
 
-`u64`: the 2 MiB pages the PLIC spans.
+`u64`: the PTE, flags clear, of the 2 MiB page holding the supervisor
+IMSIC files, a page a hart.
+
+## .set IMSIC_S_SLOT
+
+`u64`: that page's slot in a level 1 table, in bytes.
 
 ## .set ECAM_PTE
 

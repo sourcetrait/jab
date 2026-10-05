@@ -197,7 +197,8 @@ The debug channel's transmit queue record, under DEBUG only.
 
 ## serial_state
 
-`u64`: 0 until opened, then serial_open's answer plus 1.
+`u64`: 0 until opened, then serial_open's answer plus 1, and 3 once its
+source stuck (aia.S), every port then down.
 
 ## serial_ports
 

@@ -66,4 +66,5 @@ The kernel's ring of key events, KEYBOARD_RING entries.
 
 ## keyboard_state
 
-`u64`: 1 once open.
+`u64`: 1 once open, 3 once its source stuck (aia.S), the keyboard then
+refused.

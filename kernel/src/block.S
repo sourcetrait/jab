@@ -252,7 +252,9 @@ msg_disk_pci:
     ld t0, 8(sp)
     lbu a0, PCI_DEV_LINE(t0)
     beqz a0, 2f
-    call plic_enable
+    la a1, block_progress
+    la a2, block_fault
+    call irq_enable
 2:
     ld t0, 8(sp)
     ld t0, PCI_DEV_DEVICE_CFG(t0)
@@ -356,17 +358,70 @@ block_request:
     ld a0, 0(sp)
     li a1, 0
     call vpci_notify
+    ld t0, 0(sp)
+    lbu a1, PCI_DEV_LINE(t0)    # its source
     ld a0, 8(sp)
     call virtio_wait_used
+    bnez a1, 1f                 # its line stuck: the status unanswered
     ld t2, VQ_LAST_USED(a0)
     addi t2, t2, 1
     li t0, 0xffff
     and t2, t2, t0
     sd t2, VQ_LAST_USED(a0)
+1:
     la t0, block_status
     lbu a0, 0(t0)
     ld ra, 24(sp)
     addi sp, sp, 32
+    ret
+
+block_progress:
+    mv t6, a0                   # the line
+    li a0, 0
+    la t0, block_count
+    ld t0, 0(t0)
+    li t1, 0                    # the disk
+1:
+    bgeu t1, t0, 9f
+    slli t2, t1, 3
+    la t3, block_bases
+    add t3, t3, t2
+    ld t3, 0(t3)
+    lbu t2, PCI_DEV_LINE(t3)
+    bne t2, t6, 2f
+    li t2, VQ_STRIDE
+    mul t2, t2, t1
+    la t3, block_queues
+    add t3, t3, t2
+    lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t3)
+    add a0, a0, t2
+2:
+    addi t1, t1, 1
+    j 1b
+9:
+    ret
+
+block_fault:
+    la t0, block_count
+    ld t0, 0(t0)
+    li t1, 0                    # the disk
+1:
+    bgeu t1, t0, 9f
+    slli t2, t1, 3
+    la t3, block_bases
+    add t3, t3, t2
+    ld t3, 0(t3)
+    lbu t2, PCI_DEV_LINE(t3)
+    bne t2, a0, 2f
+    li t2, JAB_BLOCK_ENTRY
+    mul t2, t2, t1
+    la t3, block_records
+    add t3, t3, t2
+    sb zero, JAB_BLOCK_KIND(t3) # down: its calls answer that it never came up
+2:
+    addi t1, t1, 1
+    j 1b
+9:
     ret
 
 .section .bss

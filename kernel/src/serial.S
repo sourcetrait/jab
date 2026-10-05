@@ -100,6 +100,8 @@ serial_open:
     call virtio_driver_ok
     la t0, serial_base
     ld a0, 0(t0)
+    la a1, serial_progress
+    la a2, serial_fault
     call virtio_irq_enable
     la t0, serial_base
     ld t0, 0(t0)
@@ -299,14 +301,57 @@ serial_send:
     la t0, serial_base
     ld t0, 0(t0)
     sw a1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
+    sd a0, 0(sp)
+    call serial_source
+    mv a1, a0
+    ld a0, 0(sp)
     call virtio_wait_used
+    bnez a1, 1f                 # its source stuck: the bytes abandoned
     ld t2, VQ_LAST_USED(a0)
     addi t2, t2, 1
     li t0, 0xffff
     and t2, t2, t0
     sd t2, VQ_LAST_USED(a0)
+1:
     ld ra, 8(sp)
     addi sp, sp, 16
+    ret
+
+.global serial_source
+serial_source:
+    la t0, serial_base
+    ld a0, 0(t0)
+    j irq_mmio_source
+
+serial_progress:
+    la t0, serial_control_rx_queue
+    lhu a0, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    la t0, serial_control_tx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+    la t0, serial_api_rx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+    la t0, serial_api_tx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+    la t0, serial_pad_rx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+    la t0, serial_pad_tx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+.ifdef DEBUG
+    la t0, serial_debug_tx_queue
+    lhu t1, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    add a0, a0, t1
+.endif
+    ret
+
+serial_fault:
+    la t0, serial_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 .global api_up

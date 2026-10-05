@@ -177,7 +177,8 @@ Each period's status record, written by the device.
 
 ## sound_state
 
-`u64`: 0 until opened, then sound_open's answer plus 1.
+`u64`: 0 until opened, then sound_open's answer plus 1, and 3 once the
+stream stalls or its source stuck (aia.S).
 
 ## sound_live
 

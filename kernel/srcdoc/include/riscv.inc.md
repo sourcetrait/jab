@@ -89,6 +89,24 @@ Smstateen gates supervisor mode's reach of senvcfg, so without this bit
 kmain's write of it is an illegal instruction. The RVA23 CPU always carries
 Smstateen, so boot.S writes mstateen0 unconditionally.
 
+## .set MSTATEEN0_SVSLCT
+## .set MSTATEEN0_AIA
+## .set MSTATEEN0_IMSIC
+
+`u64`: siselect and sireg, the AIA's other supervisor state, and stopei
+reachable from supervisor mode (Smstateen).
+
+Under Smstateen each is an illegal instruction in supervisor mode until
+machine mode sets its bit (QEMU's target/riscv/tcg/csr.c, aia_smode), so
+boot.S sets the three beside ENVCFG.
+
+## .set CSR_SISELECT
+## .set CSR_SIREG
+## .set CSR_STOPEI
+
+`u32`: the CSR numbers of siselect, sireg, and stopei, the supervisor's
+interrupt file reached through them (aia.S).
+
 ## .set MCOUNTEREN_ALL
 
 `u32`: every counter the hart has readable below machine mode.

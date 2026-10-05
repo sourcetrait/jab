@@ -8,11 +8,9 @@ call virtio_init_with base addr,features u32 > refused a0 bool [35:58] :virtio_i
 call virtio_queue_setup base addr,queue u32,virtqueue addr > refused a0 bool [59:85] :gives the queue the virtqueue record's rings, VIRTQ_SIZE entries, interrupts wanted
  refused :1 when the device offers fewer entries
 call virtio_driver_ok base addr [86:91] :the device may now be driven
-call virtio_irq_enable base addr > clobber a0 [92:100] :lets the transport's line through the PLIC to hart 0's supervisor context
-call plic_enable line u64 [101:121] :lets the PLIC line through to hart 0's supervisor context, priority 1 and threshold 0
-call plic_service > clobber a0 [122:159] :takes every line the PLIC holds for hart 0's supervisor context, acknowledging what raised it and completing it so the line drops
-call virtio_wait_used virtqueue addr [160:188] :halts until the virtqueue's used ring moves past what the kernel last saw, the line serviced before returning
-call virtio_request base addr,queue u32,virtqueue addr,request_length u32,request addr,response addr,response_length u32 > last VQ_LAST_USED(virtqueue) u64,clobber a0 [189:222] :runs one request through the queue, returning once the device has used it with the hart halted meanwhile
+call virtio_wait_used virtqueue addr,source u64 > stuck a1 bool [92:134] :halts until the virtqueue's used ring moves past what the kernel last saw or its source is masked, draining and reporting before returning
+ stuck :1 when its source stuck and no completion is coming
+call virtio_request base addr,queue u32,virtqueue addr,request_length u32,request addr,response addr,response_length u32 > stuck a1 bool,last VQ_LAST_USED(virtqueue) u64,clobber a0 [135:172] :runs one request through the queue, returning once the device has used it with the hart halted meanwhile
  request :the bytes the device reads
  response :where the device writes its answer
- last :moved on past the request
+ last :moved on past the request, unless its source stuck

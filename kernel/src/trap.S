@@ -65,7 +65,8 @@ trap_vector:
     jr t0
 
 interrupt:
-    call plic_service
+    call irq_drain
+    call irq_report
     j interrupt_return
 
 bad_syscall:

@@ -21,7 +21,7 @@ _start:
     csrw mie, zero
     li t0, (MENVCFG_STCE | MENVCFG_CBZE | MENVCFG_CBCFE | MENVCFG_CBIE_FLUSH)
     csrs menvcfg, t0
-    li t0, MSTATEEN0_ENVCFG
+    li t0, (MSTATEEN0_ENVCFG | MSTATEEN0_SVSLCT | MSTATEEN0_AIA | MSTATEEN0_IMSIC)
     csrs mstateen0, t0
     li t0, MCOUNTEREN_ALL
     csrw mcounteren, t0
@@ -42,6 +42,9 @@ _start:
 2:
     mv a0, s1
     call harts_topology
+    mv a0, s1
+    call aia_topology
+    call aia_root
     la t0, kmain
     csrw mepc, t0
     csrr a0, mhartid                        # kmain's hart

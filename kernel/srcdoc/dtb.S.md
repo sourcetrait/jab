@@ -52,6 +52,12 @@ stops at the first child or the node's end.
 The whole structure, every property named phandle of four bytes against
 the value, the owner the node opened last.
 
+## dtb_listed
+
+A string list's entries, compatible's among them, each NUL-ended inside
+the value; an entry running past the value is none, and a string matches an
+entry whole, never a prefix of one.
+
 ## dtb_word_phandle
 
 `8 u8`: the property dtb_phandle looks for.

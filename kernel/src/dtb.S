@@ -471,6 +471,36 @@ dtb_equals:
     li a0, 0
     ret
 
+.global dtb_listed
+dtb_listed:
+    add t0, a0, a1                          # the value's end
+1:
+    bgeu a0, t0, 9f                         # no entry left
+    mv t1, a0                               # the entry
+    mv t2, a2                               # the string
+2:
+    bgeu t1, t0, 9f                         # an entry running past the value is none
+    lbu t3, 0(t1)
+    lbu t4, 0(t2)
+    bne t3, t4, 3f
+    beqz t3, 8f                             # both ended together
+    addi t1, t1, 1
+    addi t2, t2, 1
+    j 2b
+3:
+    bgeu t1, t0, 9f
+    lbu t3, 0(t1)                           # on past the entry's NUL
+    addi t1, t1, 1
+    bnez t3, 3b
+    mv a0, t1
+    j 1b
+8:
+    li a0, 1
+    ret
+9:
+    li a0, 0
+    ret
+
 .section .rodata
 dtb_word_phandle:
     .asciz "phandle"

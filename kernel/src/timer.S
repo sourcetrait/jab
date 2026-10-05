@@ -143,7 +143,10 @@ sys_await:
 62:
     bnez s1, 7f
     wfi
-    call plic_service
+    call irq_drain
+    mv s1, a0
+    call irq_report
+    bnez s1, 1b                             # a source stuck: what is awaited opened again
     j 4b
 7:
     andi t0, s1, JAB_AWAIT_DISPLAY

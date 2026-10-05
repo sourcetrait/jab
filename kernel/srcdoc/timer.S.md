@@ -4,7 +4,7 @@ The frame clock and the wait: a tick every 1/JAB_DISPLAY_FPS_CAP of a
 second, kept as the time of the next tick. jab.sys.display.flip moves it,
 jab.sys.display.ready reads it, and jab.sys.await halts the hart until it,
 or until a key arrives, through the supervisor timer (stimecmp) and the
-PLIC, with the interrupts enabled only while waiting and taken by wfi
+interrupt file (aia.S), with the interrupts enabled only while waiting and taken by wfi
 rather than by the trap vector. A tick that has passed is reported by the
 next wait as it stands and moved on by the flip, so a program that woke on
 an input and comes back after the tick loses nothing; the wait moves a
@@ -48,6 +48,10 @@ flip stays where it is, so the wait reports it at once, while the program
 was handling a key or a pad event, and the flip after it lands one period
 on from the tick rather than a period late; then the timer is armed, and a
 tick already past ends the wait before it halts.
+
+A source masked as stuck during the wait sends the wait back to its start,
+where each device's open answers again and one whose source stuck drops
+out of the mask, so no wait holds on a device that will never answer.
 
 A stream that has stopped returning is declared dead and its bit dropped;
 with nothing else in the mask the wait ends with 0. The sound line raises

@@ -15,9 +15,10 @@ set them. A handler finds its arguments in slots 80 on (a0 to a5) or in the
 live registers, leaves its results in slots 80 on (a0, and a1 to a3 where a
 call has more), and jumps to trap_return. An external interrupt lands here
 too, from the program only, since the kernel runs with interrupts off and
-takes its own through wfi: the PLIC is serviced, which is where the sound
-stream is refilled on the device's clock (sound.S), and the program resumes
-where it was.
+takes its own through wfi: one bounded drain runs (aia.S's irq_drain),
+which is where the sound stream is refilled on the device's clock
+(sound.S), a source masked since is reported on the UART, and the program
+resumes where it was.
 
 ## .set SYSCALL_LAST
 

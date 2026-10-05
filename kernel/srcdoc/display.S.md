@@ -187,7 +187,8 @@ The GPU's control queue record.
 
 ## display_state
 
-`u64`: 1 once open.
+`u64`: 1 once open, 3 once its source stuck (aia.S), every call then
+answering that the device refuses and jab.sys.print going to the UART.
 
 ## console_col
 

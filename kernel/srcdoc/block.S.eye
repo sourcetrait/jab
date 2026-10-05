@@ -23,7 +23,9 @@ call block_record index u64 > record a0 addr [174:181]
  record :the disk's JAB_BLOCK_* record
 call block_count_of > count a0 u64 [182:187]
  count :the disks the machine carries, once probed
-call block_probe > count block_count u64,records block_records,clobber a0-a6 [188:314] :scans the PCI bus and brings every virtio-blk disk up, once, in slot order, filling its record
-call block_request record addr,virtqueue addr,type u32,sector u64,buffer addr,length u32,flags u16 > status a0 u8,last VQ_LAST_USED(virtqueue) u64,clobber a1 [315:370] :runs one request on the disk, the hart halted until the device answers
+call block_probe > count block_count u64,records block_records,clobber a0-a6 [188:316] :scans the PCI bus and brings every virtio-blk disk up, once, in slot order, filling its record
+call block_request record addr,virtqueue addr,type u32,sector u64,buffer addr,length u32,flags u16 > status a0 u8,last VQ_LAST_USED(virtqueue) u64,clobber a1 [317:376] :runs one request on the disk, the hart halted until the device answers or its line is masked, the status then 0xff
  flags :VIRTQ_DESC_F_WRITE when the device writes the buffer, 0 when it reads it
  status :the device's status byte, VIRTIO_BLK_S_OK for success
+call local block_progress line u64 > progress a0 u64 [378:402] :the used indexes of every disk on the PCI line summed
+call local block_fault line u64 [404:425] :every disk on the line down, its calls answering 2

@@ -27,7 +27,7 @@ keyboard_open:
     la t0, keyboard_state
     ld t0, 0(t0)
     beqz t0, 1f
-    li a0, 0
+    addi a0, t0, -1             # 3, its source stuck, answers 2
     ret
 1:
     addi sp, sp, -16
@@ -87,6 +87,8 @@ msg_keyboard_at:
     la t0, keyboard_base
     ld a0, 0(t0)
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
+    la a1, keyboard_progress
+    la a2, keyboard_fault
     call virtio_irq_enable
     la t0, keyboard_state
     li t1, 1
@@ -223,6 +225,17 @@ keyboard_pending:
     ret
 1:
     li a0, 1
+    ret
+
+keyboard_progress:
+    la t0, keyboard_queue
+    lhu a0, (VQ_USED + VIRTQ_USED_IDX)(t0)
+    ret
+
+keyboard_fault:
+    la t0, keyboard_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 keyboard_take:

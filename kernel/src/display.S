@@ -40,6 +40,9 @@ sys_display_flip:
     ld t0, 0(t0)
     li a0, 2
     beqz t0, 1f
+    li a0, 3                    # its source stuck: the device refuses
+    li t1, 1
+    bne t0, t1, 1f
     call frame_ready
     beqz a0, 2f
     li a0, 0
@@ -67,6 +70,9 @@ sys_display_flip_rect:
     ld t0, 0(t0)
     li a0, 2
     beqz t0, 9f
+    li a0, 3
+    li t1, 1
+    bne t0, t1, 9f
     ld t1, 80(sp)
     ld t2, 88(sp)
     ld t3, 96(sp)
@@ -109,6 +115,9 @@ sys_display_flip_rects:
     ld t0, 0(t0)
     li a0, 2
     beqz t0, 9f
+    li a0, 3
+    li t1, 1
+    bne t0, t1, 9f
     ld s0, 80(sp)               # the rectangles
     ld s1, 88(sp)               # how many
     li a0, 4
@@ -379,6 +388,7 @@ gpu_batch_run:
     ld t2, 0(t2)
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t2)
     call gpu_wait_batch
+    bnez a0, 6f                 # its source stuck
     la t0, gpu_queue
     ld t1, GPUQ_PENDING(t0)
     ld t2, GPUQ_LAST_USED(t0)
@@ -396,6 +406,9 @@ gpu_batch_run:
     addi t2, t2, GPU_RESP_BYTES
     addi t1, t1, -1
     j 1b
+6:
+    la t0, gpu_queue
+    sd zero, GPUQ_PENDING(t0)
 7:
     li a0, 1
     j 9f
@@ -409,6 +422,7 @@ gpu_batch_run:
 gpu_wait_batch:
     addi sp, sp, -16
     sd ra, 8(sp)
+    sd zero, 0(sp)              # whether its source stuck
     li t4, SIE_SEIE
     csrs sie, t4
 1:
@@ -421,19 +435,44 @@ gpu_wait_batch:
     li t3, 0xffff
     and t2, t2, t3
     beq t1, t2, 2f
+    la t0, gpu_base
+    ld a0, 0(t0)
+    call irq_mmio_source
+    la t0, irq_faulted
+    ld t0, 0(t0)
+    srl t0, t0, a0
+    andi t0, t0, 1
+    bnez t0, 11f                # masked: no completion is coming
     wfi
-    call plic_service
+    call irq_drain
+    call irq_report
     j 1b
+11:
+    li t0, 1
+    sd t0, 0(sp)
 2:
-    call plic_service
+    call irq_drain
+    call irq_report
     la t4, sound_live
     ld t4, 0(t4)
     bnez t4, 3f
     li t4, SIE_SEIE
     csrc sie, t4
 3:
+    ld a0, 0(sp)
     ld ra, 8(sp)
     addi sp, sp, 16
+    ret
+
+gpu_progress:
+    la t0, gpu_queue
+    lhu a0, (GPUQ_USED + VIRTQ_USED_IDX)(t0)
+    ret
+
+gpu_fault:
+    la t0, display_state
+    li t1, 3
+    sd t1, 0(t0)
     ret
 
 gpu_queue_setup:
@@ -472,6 +511,9 @@ sys_display_print:
     mv s1, a1
     la t0, display_state
     ld t0, 0(t0)
+    li a0, 3
+    li t1, 3
+    beq t0, t1, 2f              # its source stuck: the device refuses
     bnez t0, 1f
     call display_open
     bnez a0, 2f
@@ -488,7 +530,8 @@ sys_display_print:
 sys_print:
     la t0, display_state
     ld t0, 0(t0)
-    bnez t0, sys_display_print
+    li t1, 1
+    beq t0, t1, sys_display_print
     j sys_uart_print
 
 .global sys_display_text
@@ -625,6 +668,10 @@ display_open:
     ld t0, 0(t0)
     beqz t0, 1f
     li a0, 0
+    li t1, 1
+    beq t0, t1, 0f
+    li a0, 3                    # its source stuck
+0:
     ret
 1:
     addi sp, sp, -16
@@ -658,6 +705,8 @@ msg_gpu_at:
     call virtio_driver_ok
     la t0, gpu_base
     ld a0, 0(t0)
+    la a1, gpu_progress
+    la a2, gpu_fault
     call virtio_irq_enable
     call gpu_get_display_info
     bnez a0, 7f
@@ -892,6 +941,7 @@ gpu_submit:
     ld t1, 0(t1)
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t1)
     call gpu_wait_batch
+    bnez a0, 31f                # its source stuck: no answer
     la t0, gpu_queue
     ld t1, GPUQ_LAST_USED(t0)
     addi t1, t1, 1
@@ -924,11 +974,16 @@ msg_gpu_resp:
     ld t2, 16(sp)
     li a0, 0
     beq t1, t2, 1f
+3:
     li a0, 1
 1:
     ld ra, 24(sp)
     addi sp, sp, 32
     ret
+31:
+    la t0, gpu_queue
+    sd zero, GPUQ_PENDING(t0)
+    j 3b
 
 .global console_write
 console_write:

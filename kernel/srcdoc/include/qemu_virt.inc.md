@@ -26,7 +26,8 @@ Eight transports one page apart, modern with
 
 ## .set QEMU_VIRT_VIRTIO_IRQ0
 
-`u64`: transport 0's PLIC line, transport n's this plus n.
+`u64`: transport 0's interrupt source at the APLIC, transport n's this
+plus n.
 
 ## .set QEMU_VIRT_PCIE_ECAM
 
@@ -53,51 +54,28 @@ A 1 GiB window from which the kernel gives each device its BARs, since with
 
 ## .set QEMU_VIRT_PCIE_IRQ0
 
-`u64`: the first INTx line at the PLIC, a device's this plus its slot and pin modulo four.
+`u64`: the first INTx line, an APLIC source, a device's this plus its slot
+and pin modulo four.
 
 ## .set QEMU_VIRT_PCIE_IRQ_COUNT
 
 `u64`: the INTx lines.
 
-## .set QEMU_VIRT_PLIC
+## .set QEMU_VIRT_APLIC_M
+## .set QEMU_VIRT_APLIC_S
 
-`addr`: the platform interrupt controller.
+`addr`: the APLIC's machine and supervisor domains, the machine's the
+root.
 
-## .set QEMU_VIRT_PLIC_PRIORITY
+The tree's APLIC nodes are held to these (aia.S's aia_topology), since
+the page tables map the supervisor domain's page at assembly; the root
+domain is never mapped in supervisor mode.
 
-`u64`: offset of the priority words, one per line.
+## .set QEMU_VIRT_IMSIC_M
+## .set QEMU_VIRT_IMSIC_S
 
-## .set QEMU_VIRT_PLIC_ENABLE
-
-`u64`: offset of the enable words, one block per context.
-
-## .set QEMU_VIRT_PLIC_ENABLE_STRIDE
-
-`u64`: bytes between contexts' enable blocks.
-
-## .set QEMU_VIRT_PLIC_CONTEXT
-
-`u64`: offset of the threshold and claim words, one block per context.
-
-## .set QEMU_VIRT_PLIC_CONTEXT_STRIDE
-
-`u64`: bytes between contexts' blocks.
-
-## .set QEMU_VIRT_PLIC_THRESHOLD
-
-`u64`: the threshold word within a context's block.
-
-## .set QEMU_VIRT_PLIC_CLAIM
-
-`u64`: the claim word within a context's block.
-
-## .set QEMU_VIRT_HART0_S_CONTEXT
-
-`u64`: hart 0's supervisor context.
-
-## .set QEMU_VIRT_PLIC_SIZE
-
-`u64`.
+`addr`: the IMSIC's machine interrupt files and supervisor ones, a page a
+hart with no guest files.
 
 ## .set QEMU_VIRT_TEST
 

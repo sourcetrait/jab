@@ -253,7 +253,7 @@ the virtio id in the subsystem device id.
 
 ## .set PCI_DEV_LINE
 
-`u8`: the PLIC line the pin lands on.
+`u8`: the INTx line the pin lands on, its APLIC source.
 
 ## .set PCI_DEV_VIRTIO_ID
 

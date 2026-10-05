@@ -5,11 +5,12 @@ are the only ones Jab puts there. Under -bios none no firmware has run, so
 the kernel does what firmware would: each device's BARs are sized by the
 write-ones probe and given a base out of the 1 GiB MMIO window in order,
 memory decoding and bus mastering are turned on, and the device's INTx pin
-is followed by the host bridge's swizzle to its PLIC line. Then the virtio
+is followed by the host bridge's swizzle to its INTx line, an APLIC
+source. Then the virtio
 capabilities in its configuration space are read for where its regions sit,
 and the device is kept in a record for whoever drives it (block.S). A
 device's interrupt is a level held until its ISR register is read, which
-plic_service does for every device on a PCI line it takes.
+the drain does for every device on a line it claims (aia.S).
 
 ## pci_bring_up
 

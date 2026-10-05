@@ -62,7 +62,8 @@ The disks' virtqueue records, VQ_STRIDE apart.
 
 ## block_records
 
-The disks' JAB_BLOCK_* records, the program-facing list.
+The disks' JAB_BLOCK_* records, the program-facing list. A disk whose
+PCI line stuck (aia.S) has its kind 0, as one that never came up.
 
 ## block_bases
 
