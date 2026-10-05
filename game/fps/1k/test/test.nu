@@ -2073,9 +2073,9 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # drawing's other parts leave, packet bytes other than the commands' and
 # span records', and packets prepared from another frame's simulation are
 # each invalid for that alone; and one image's captures at cadences 0 and
-# 1 compare as two builds. A run on a diagnostic machine is refused as diagnostic
-# and admitted marked under --diagnostic; runs on two machines refuse
-# the comparison, and under --diagnostic each build's row names its
+# 1 compare as two builds. A run on a diagnostic machine is refused as
+# diagnostic and admitted marked under --diagnostic; runs on two machines
+# refuse the comparison, and under --diagnostic each build's row names its
 # machine; one name's runs on two machines are two builds; a run whose
 # identity carries QEMU words of its launch's own is refused as
 # diagnostic, its machine the one the launch marked or the one asked
@@ -2504,8 +2504,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 # The program's three cadences on its own clock records, one
 # launch a cadence of each fixture, the debug build's S frames standing
 # stalls in place of the drawing, each window held complete and valid at
-# the program's schema before anything is read from it. CadenceSchedule, on Render
-# One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
+# the program's schema before anything is read from it. CadenceSchedule,
+# on Render One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
 # 500 us spin inside every consume; ten trigger reports from 1.8 s, 400
 # ms apart, each pressed and released in one report; at 5.9 s a frame
 # whose flip is tried before its wait; at 6.3 s a frame stalled 30 ms;

@@ -40,11 +40,11 @@
 # simulation, and passes when it is valid and every frame in it passes.
 # A capture holding no record of the clock's kinds, 7, 8, 9, 10, or 12,
 # is a build older than them: it holds no measurement and is read from
-# its state records alone, the drawing's and the game's microseconds. `bench-report` reads a run of a bench
-# whose steps are this script's, every cadence's frames pooled. `just
-# adv gauge`, `just adv gauge-play`, `just adv gauge-read`, and `just adv
-# gauge-compare` run it, and `just bench game/fps/1k/cadence` runs
-# `play`, `run`, and `bench-report`.
+# its state records alone, the drawing's and the game's microseconds.
+# `bench-report` reads a run of a bench whose steps are this script's,
+# every cadence's frames pooled. `just adv gauge`, `just adv gauge-play`,
+# `just adv gauge-read`, and `just adv gauge-compare` run it, and `just
+# bench game/fps/1k/cadence` runs `play`, `run`, and `bench-report`.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
