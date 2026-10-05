@@ -9,6 +9,7 @@ programs = [
   'example/walk',
   'example/techno',
   'example/piano',
+  'example/workers',
   'test/exitstatus',
   'test/badstore',
   'test/badstack',

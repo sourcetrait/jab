@@ -1,0 +1,15 @@
+# workers's scaling over its workers: the proof's fixed frame for four
+# seconds by one, two, then three workers on the same four-hart image, on
+# a release build: `just bench example/workers/scaling` runs it and
+# reports, `just watch bench example/workers/scaling` in a second terminal
+# records it.
+{
+  summary: "one, two, then three workers on the proof's fixed frame: frames, hashes, rows, per-hart CPU, and the bands' overlap"
+  tree: "release"
+  steps: [
+    { label: "one", run: ["test/scaling.nu" "run" "--tree" "release" "--workers" "1"] }
+    { label: "two", run: ["test/scaling.nu" "run" "--tree" "release" "--workers" "2"] }
+    { label: "three", run: ["test/scaling.nu" "run" "--tree" "release" "--workers" "3"] }
+  ]
+  report: ["test/scaling.nu" "report"]
+}

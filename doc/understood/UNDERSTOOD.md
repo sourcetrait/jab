@@ -352,6 +352,19 @@ before it is written. A job can be cancelled between the bands of its work.
 rounds each, and `just bench test/jobs/costs` measures what a job costs
 around its work, at four job sizes, with one worker and with three.
 
+`example/workers` puts the jobs to work. Hart 0 deals the rows of the
+Mandelbrot set in bands of eight to one, two, then three workers, five
+seconds each, while the view zooms in by the clock. A bar at the left edge
+shows which hart computed each row, and the frame's time is drawn as text.
+With the API the program proves itself. The letter `p` draws one fixed
+frame with each count of workers and hashes each image before its bars and
+text, so the three hashes agree when the work is right, and it sends three
+rows for the host to compute again. A digit, `1` to `3`, draws that frame
+over and over for four seconds with that many workers. `just bench
+example/workers/scaling` runs one, two, and three workers on a release
+build and reports the frames, the hashes, each worker's rows, each hart's
+CPU, and how much the bands overlapped in time.
+
 A device that holds its interrupt raised while it makes no progress for
 three seconds is cut off. The kernel masks that interrupt and resets the
 device, so it stops using any buffer of the program's that it still
