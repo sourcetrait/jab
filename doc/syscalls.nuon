@@ -6,7 +6,9 @@
 # the call). sdk/src/jab.inc carries the same numbers under the jab.sys.*
 # macros, every one a trap into the kernel; the mathematics of
 # jab_f32.inc, jab_f64.inc, and jab_rng.inc beside it is carried code
-# the program expands in place and never traps. Every call is made on
+# the program expands in place and never traps, and jab_jobs.inc's job
+# mailboxes trap only in their waits, through jab.sys.worker.wait.
+# Every call is made on
 # hart 0, where the program runs, except on a worker's hart: a worker
 # may call jab.sys.harts, jab.sys.worker.wait, jab.sys.worker.wake, and
 # jab.sys.worker.exit, and any other call it makes answers JAB_DENIED,

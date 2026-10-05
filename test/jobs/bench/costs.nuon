@@ -1,0 +1,12 @@
+# jab_jobs.inc's costs around a job's work, at four job sizes, one worker
+# and then three, elapsed by rdtime on a release build: `just bench
+# test/jobs/costs` runs it and reports, `just watch bench test/jobs/costs`
+# in a second terminal records it.
+{
+  summary: "jab_jobs.inc's dispatch and barrier costs at 10 us, 100 us, 1 ms, and 10 ms jobs, one worker then three"
+  tree: "release"
+  steps: [
+    { label: "costs", run: ["test/costs.nu" "run" "--tree" "release"] }
+  ]
+  report: ["test/costs.nu" "report"]
+}

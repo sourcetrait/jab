@@ -15,7 +15,9 @@ runs only under QEMU's `virt` machine.
   the kernel's calls, each a trap into it; `jab_f32.inc`,
   `jab_f64.inc`, and `jab_rng.inc`, mathematics and chance as macros
   the program carries and expands in place, never a call and never a
-  trap; the program link script; and `nu/jab.nu` for its test.
+  trap; `jab_jobs.inc`, jobs for workers as macros over mailboxes the
+  program owns, whose waits are the kernel's; the program link script;
+  and `nu/jab.nu` for its test.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `example/<name>/`, `test/<name>/` programs by category, each with
@@ -337,6 +339,18 @@ sound plays out. A debug kernel reads two settings for the worker tests:
 `jab.claimhold=<ms>` holds the first fault's shutdown for that long before
 it stops the other harts. `test/workers` and `test/workerfault` prove each
 rule.
+
+`sdk/src/jab_jobs.inc` gives workers jobs. Each worker has a mailbox in the
+program's memory, two cache lines: hart 0 writes a job into one, and the
+worker writes its completion into the other. `jab.job.publish` writes a job
+and its generation, `jab.job.await` is a worker's sleep until one comes,
+`jab.job.complete` marks it done, and `jab.job.join` is hart 0's sleep until
+it is. The macros carry the memory ordering the hardware needs, so a worker
+never reads a job before it is whole, and hart 0 never reads a result
+before it is written. A job can be cancelled between the bands of its work.
+`test/jobs` races every order a job and its wake can come in, a thousand
+rounds each, and `just bench test/jobs/costs` measures what a job costs
+around its work, at four job sizes, with one worker and with three.
 
 A device that holds its interrupt raised while it makes no progress for
 three seconds is cut off. The kernel masks that interrupt and resets the
