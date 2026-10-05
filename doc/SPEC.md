@@ -9,6 +9,8 @@ System specifications for Jab
 - VRAM: None
 - Display: 1080p (1920x1080, 16:9)
 - FPS: 60
+### 1K8
+- CPU: 8 Cores
 ## 2K
 - CPU: RISC-V (RVA23), 4 Cores, 2Ghz
 - RAM: 8GB
