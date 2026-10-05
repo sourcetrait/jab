@@ -298,8 +298,8 @@ the program. It also releases every other hart from where it waits. Each
 of those sets itself up on its own stack, checks in, and sleeps until it
 is given work. `jab.sys.harts` answers the discovered, online, and failed
 harts as masks, bit n for hart n. A hart that has no interrupt file, does
-not check in within 100 ms, or fails its own self-check is failed, and the
-run goes on without it. A cpu the kernel cannot use, an id past
+not check in within 100 ms, fails its own self-check, or does not take a
+worker's start within 100 ms is failed, and the run goes on without it. A cpu the kernel cannot use, an id past
 `JAB_HARTS_MAX` among them, keeps the kernel on hart 0 with every other
 hart failed, named on the debug channel; a tree
 the kernel cannot read, a timer other than QEMU's 10 MHz, or an interrupt
@@ -311,7 +311,32 @@ and `jab dump-tree` writes the tree QEMU builds for a machine. A debug
 kernel reads two more settings there for `test/harts`: `jab.late=<hart>`
 holds that hart back until it has been failed, and `jab.stray=1` makes a
 kernel fault. A fault in the kernel, on any hart, prints its line on the
-console and ends the run with status 1.
+console, naming the hart, and ends the run with status 1.
+
+A program puts work on the other harts through workers. `jab.sys.worker.start
+hart, entry, argument, stack, size` starts one on an online hart, and only
+hart 0 may call it. The hart enters the program at the entry with the
+argument in a0, its own id in a1, and sp at the top of the stack the program
+gave it. That stack must lie inside the program's window, on 16 bytes, and
+clear of both the main stack's reservation, `JAB_MAIN_STACK` under the
+window's top, and every running worker's stack. A start the kernel refuses
+answers a code and changes nothing. A worker sleeps with
+`jab.sys.worker.wait word, value` while a 32-bit word holds a value, wakes
+the harts sleeping on a word it changed with `jab.sys.worker.wake mask`, and
+ends with `jab.sys.worker.exit`. Hart 0 waits and wakes the same way, and its
+devices keep working while it waits. `jab.sys.worker.stop mask` stops
+workers: a waiting worker's wait answers 1, and one still running 50 ms
+later is interrupted where it is. When the stop returns, the workers' stacks
+and buffers are free. A worker may call only `jab.sys.harts` and the worker
+calls; any other call answers `JAB_DENIED`, all ones, and does nothing. A
+worker's fault ends the run with a line naming its hart, `jab: worker fault:
+hart=N argument=... cause=... epc=... tval=...`, once every other hart has
+stopped at a safe point, and `jab.sys.exit` stops every worker before the
+sound plays out. A debug kernel reads two settings for the worker tests:
+`jab.noack=<hart>` keeps that hart from taking its start, and
+`jab.claimhold=<ms>` holds the first fault's shutdown for that long before
+it stops the other harts. `test/workers` and `test/workerfault` prove each
+rule.
 
 A device that holds its interrupt raised while it makes no progress for
 three seconds is cut off. The kernel masks that interrupt and resets the

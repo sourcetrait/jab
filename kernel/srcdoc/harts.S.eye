@@ -7,18 +7,17 @@ call local timebase_of tree addr,node u32 > hz a0 u64,present a1 bool,clobber a2
  hz :0 when absent or of another length
  present :1 when the node has one, of any length
 call hart_record hart u64 > record a0 addr [317:326] :a hart's record, at the top of its kernel stack in hart_areas
-call hart_self_check hart u64 > broken a0 bool,id HART_ID u64,result HART_RESULT u64 [327:344] :tp the hart's record: its id written to the record and its canary, HART_CANARY xored with its id, to its stack's bottom, both read back
+call hart_self_check hart u64 > broken a0 bool,id HART_ID u64,result HART_RESULT u64 [327:346] :tp the hart's record: its id written to the record and its canary, HART_CANARY xored with its id, to its stack's bottom, both read back
  broken :1 when either reads back wrong, also the record's result
-call local hart_swap record addr,from u64,to u64 > moved a0 bool [346:359] :the record's state moved from one value to another by compare and swap, lr and sc
+call hart_swap record addr,from u64,to u64 > moved a0 bool [347:360] :the record's state moved from one value to another by compare and swap, lr and sc
  moved :0 when the state was not from, which it keeps
-call harts_masks > online a0 u64,failed a1 u64,released a2 u64 [360:400] :the discovered harts' masks by the states in their records
+call harts_masks > online a0 u64,failed a1 u64,released a2 u64 [361:401] :the discovered harts' masks by the states in their records
  released :released and not yet in
-call harts_release > clobber a0-a2 [401:538] :supervisor mode, hart 0, after serial_open: each discovered hart refused by the tree or without an interrupt file failed, every other released, its state, its slot, and the wake into its supervisor file, one whose release store faults failed with no file; then the check-in waited for, a hart still released after HART_CHECKIN_TICKS failed; under DEBUG a jab.stray knob of 1 makes a stray store access fault
-j hart_main hart u64 [539:596] :a secondary's supervisor entry from hart_park's mret, sp its record: its supervisor setup and self-check, its state swapped from released to online and hart 0 woken, then idle on the drain; a hart hart 0 failed first parks for the run touching nothing; under DEBUG a jab.late knob naming it holds it until hart 0 has failed it
+call harts_release > clobber a0-a2 [402:539] :supervisor mode, hart 0, after serial_open: each discovered hart refused by the tree or without an interrupt file failed, every other released, its state, its slot, and the wake into its supervisor file, one whose release store faults failed with no file; then the check-in waited for, a hart still released after HART_CHECKIN_TICKS failed; under DEBUG a jab.stray knob of 1 makes a stray store access fault
+j hart_main hart u64 [540:596] :a secondary's supervisor entry from hart_park's mret, sp its record: its supervisor setup and self-check, its state swapped from released to online and hart 0 woken, then hart_idle; a hart hart 0 failed first parks for the run touching nothing; under DEBUG a jab.late knob naming it holds it until hart 0 has failed it
  hart :mhartid, as hart_park's mret hands it in a0
-call local hart_wake_boot > clobber a0 [598:611] :the wake's identity into hart 0's supervisor file, the hart's own writes ordered before it
-call harts_report > clobber a0-a3 [612:787] :under DEBUG, on the debug channel: the masks, every problem kept, the bootargs, and every discovered hart's line, an online hart's id, result, and canary read back
-call knob_value name addr > value a0 u64 [788:843] :under DEBUG, a knob's decimal value from /chosen's bootargs
+call harts_report > clobber a0-a3 [597:772] :under DEBUG, on the debug channel: the masks, every problem kept, the bootargs, and every discovered hart's line, an online hart's id, result, and canary read back
+call knob_value name addr > value a0 u64 [773:828] :under DEBUG, a knob's decimal value from /chosen's bootargs
  name :the knob with its '=', matched at a token's start
  value :-1 when absent or not a run of digits alone
-ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [844:851] :the discovered mask and, read from the records, the online and failed
+ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [829:836] :the discovered mask and, read from the records, the online and failed

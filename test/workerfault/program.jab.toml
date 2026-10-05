@@ -1,0 +1,5 @@
+name = 'workerfault'
+sdk = '../../sdk'
+includes = ['../../sdk/src']
+link = '../../sdk/src/program.ld'
+display = 'none'

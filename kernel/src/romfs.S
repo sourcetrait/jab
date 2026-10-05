@@ -681,52 +681,28 @@ romfs_name_equal:
     ret
 
 romfs_fault_disk_id:
-    mv s0, a0
-    call uart_lock_fatal
+    mv a1, a0
     la a0, msg_romfs_disk_id
-    call uart_puts
-    mv a0, s0
-    call uart_put_dec
-    j romfs_fault_end
+    j fatal_dec
 
 romfs_fault_not_romfs:
-    mv s0, a0
-    call uart_lock_fatal
+    mv a1, a0
     la a0, msg_romfs_not_romfs
-    call uart_puts
-    mv a0, s0
-    call uart_put_dec
-    j romfs_fault_end
+    j fatal_dec
 
 romfs_fault_header:
-    mv s0, a0
-    call uart_lock_fatal
+    mv a1, a0
     la a0, msg_romfs_header
-    call uart_puts
-    mv a0, s0
-    call uart_put_hex
-    j romfs_fault_end
+    j fatal_hex
 
 romfs_fault_kind:
-    mv s0, a0
-    call uart_lock_fatal
+    mv a1, a0
     la a0, msg_romfs_kind
-    call uart_puts
-    mv a0, s0
-    call uart_put_hex
-    j romfs_fault_end
+    j fatal_hex
 
 romfs_fault_disk:
-    call uart_lock_fatal
     la a0, msg_romfs_disk_error
-    call uart_puts
-    j romfs_fault_end
-
-romfs_fault_end:
-    li a0, '\n'
-    call uart_putc
-    li a0, 1
-    j qemu_exit
+    j fatal_plain
 
 .section .bss
 .balign 8

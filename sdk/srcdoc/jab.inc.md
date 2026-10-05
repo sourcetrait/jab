@@ -304,11 +304,63 @@ table of record.
 
 `u64`.
 
+## .set JAB_SYS_WORKER_START
+
+`u64`.
+
+## .set JAB_SYS_WORKER_WAIT
+
+`u64`.
+
+## .set JAB_SYS_WORKER_WAKE
+
+`u64`.
+
+## .set JAB_SYS_WORKER_EXIT
+
+`u64`.
+
+## .set JAB_SYS_WORKER_STOP
+
+`u64`.
+
 ## .set JAB_HARTS_MAX
 
 `u64`: the most harts the ABI names, 8, the 4K tier's cores: a hart id is
 under it, every hart mask fits its bits, and the kernel keeps a record a
 hart up to it. A tree listing a hart past it is a topology problem.
+
+## .set JAB_MAIN_STACK
+
+`u64`: the main program's stack reservation, 8 MiB under JAB_STACK_TOP,
+where hart 0's sp starts. No worker's stack may reach into it, so the main
+stack has that much room before it meets a stack the kernel gave a worker.
+
+## .set JAB_DENIED
+
+`u64`: all ones, a call's answer on a hart that may not make it: on a
+worker, every call but jab.sys.harts and the worker calls a worker makes;
+on hart 0, jab.sys.worker.exit. Nothing is done.
+
+## .set JAB_START_OK
+## .set JAB_START_HART
+## .set JAB_START_BUSY
+## .set JAB_START_ENTRY
+## .set JAB_START_STACK
+## .set JAB_START_OVERLAP
+## .set JAB_START_NO_ACK
+
+`u64`: jab.sys.worker.start's answers: started; the hart is not an online
+secondary; it runs a worker already; the entry outside the program's window
+or odd; the stack empty, not on 16 bytes, or outside the window; the stack
+reaching into JAB_MAIN_STACK's reservation or a running worker's stack; the
+hart did not take the start within its bound and is failed for the run.
+
+## .set JAB_WAIT_CHANGED
+## .set JAB_WAIT_STOP
+
+`u64`: jab.sys.worker.wait's answers: the word differs from the value; a
+stop is asked of the calling worker.
 
 ## .set JAB_TEXT_WIDTH
 
@@ -1103,6 +1155,40 @@ and samples are read in place. Not a SoundFont 2 file: no RIFF sfbk form, a
 list or a hydra chunk missing or out of order, no sample data. Unsound: a
 chunk past the end, a chunk no whole number of its records fills, the buffer
 off a 4-byte boundary.
+
+## .macro jab.sys.worker.start
+
+A worker runs the program's own code on a hart past hart 0, in the same
+memory, from the entry the start names until it calls jab.sys.worker.exit;
+returning from the entry faults, since ra is 0, and the fault's line names
+the worker's hart. The stack is the program's to give, inside its window, on
+16 bytes, clear of the main stack's reservation and of every running
+worker's stack, and it stays the worker's until the worker ends or a stop
+returns. A worker may call jab.sys.harts and the worker calls alone; any
+other call answers JAB_DENIED and does nothing. A worker's fault ends the
+run, every other hart stopped first.
+
+## .macro jab.sys.worker.wait
+
+The sleeper's half of a handoff: sleep on a word while it holds a value,
+until another hart changes it and wakes the sleeper. The kernel orders the
+sleep against the wake, so a wake sent between the caller's look at the
+word and its sleep is never lost. A caller that reads what the waker wrote
+before the word does so after `fence r, rw`.
+
+## .macro jab.sys.worker.wake
+
+The waker's half: the program stores the word first, with whatever the
+sleeper will read stored before it and `fence rw, w` between, then wakes the
+harts. Only a hart asleep in jab.sys.worker.wait is woken.
+
+## .macro jab.sys.worker.stop
+
+Hart 0's way to take its workers back: when the call returns, none of the
+mask's workers runs or will store again, so their stacks and buffers are
+free to reuse. A worker sees the stop as its wait's answer 1 and ends with
+jab.sys.worker.exit; one that never waits is interrupted where it is after
+50 ms.
 
 ## .macro jab.sys.api.write
 

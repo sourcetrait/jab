@@ -343,6 +343,7 @@ hart_self_check:
     sd a0, HART_RESULT(tp)
     ret
 
+.global hart_swap
 hart_swap:
     addi t0, a0, HART_STATE
 1:
@@ -581,31 +582,15 @@ knob_late:
 3:
     call hart_swap
     beqz a0, 8f                             # FAILED by hart 0 first: the race lost
-    call hart_wake_boot
+    li a0, 0
+    call hart_wake                          # its record before the wake
     bnez s1, 8f
-    li t0, SIE_SEIE
-    csrs sie, t0
-4:
-    wfi                                     # idle until a start request
-    call irq_drain
-    j 4b
+    j hart_idle                             # until a start request
 8:
     csrw sie, zero                          # parked for the run, touching nothing
 9:
     wfi
     j 9b
-
-hart_wake_boot:
-    addi sp, sp, -16
-    sd ra, 8(sp)
-    li a0, 0
-    call aia_file_page
-    li t1, AIA_WAKE
-    fence w, o                              # its record before the wake
-    sw t1, 0(a0)
-    ld ra, 8(sp)
-    addi sp, sp, 16
-    ret
 
 .ifdef DEBUG
 .global harts_report

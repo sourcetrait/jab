@@ -181,7 +181,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal $stray.status 1 $"a stray store access fault ends the run with status 1: ($stray.status), ($stray.serial)"
         let fault = ($stray.serial | lines)
         assert equal ($fault | length) 1 $"the kernel fault line alone, nothing of the program's: ($stray.serial)"
-        assert ($fault.0 =~ '^jab: kernel fault: cause=0x0000000000000007 epc=0x[0-9a-f]{16} tval=0x0000000028100000$') $"a store access fault at the stray address: ($stray.serial)"
+        assert ($fault.0 =~ '^jab: kernel fault: hart=0 cause=0x0000000000000007 epc=0x[0-9a-f]{16} tval=0x0000000028100000$') $"a store access fault on hart 0 at the stray address: ($stray.serial)"
         $knobs = [$"late: ($late.serial | str trim)" $"stray: ($stray.serial | str trim)"]
     }
 

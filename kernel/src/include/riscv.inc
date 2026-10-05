@@ -7,6 +7,8 @@
 
 .set SSTATUS_FS_INITIAL, (1 << 13)
 .set SSTATUS_VS_INITIAL, (1 << 9)
+.set SSTATUS_FS_MASK, (3 << 13)
+.set SSTATUS_VS_MASK, (3 << 9)
 
 .set SIE_STIE, (1 << 5)
 .set SIE_SEIE, (1 << 9)

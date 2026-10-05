@@ -109,19 +109,16 @@ floating point and vectors Initial, sie clear, stimecmp at its maximum,
 every counter readable, the cache-block operations, sscratch 0, and tp its
 record, worked out from the id machine mode hands over. Its interrupt file
 stays open from the park. Its self-check, then its swap: from released to
-online, or to failed when the self-check broke, hart 0 woken either way.
-An online hart sleeps on the drain, the external interrupt alone enabled,
-until a start request. A hart whose swap lost, hart 0 having failed it
-first, parks for the run with sie and sstatus.SIE clear in a wfi loop,
-touching nothing, and since mie then holds no bit, nothing wakes it.
+online, or to failed when the self-check broke, hart 0 woken either way
+(workers.S's hart_wake, after `fence w, o`, so the hart's record is out
+before hart 0 reads it). An online hart goes to its kernel idle,
+workers.S's hart_idle, until a start. A hart whose swap lost, hart 0
+having failed it first, parks for the run with sie and sstatus.SIE clear in
+a wfi loop, touching nothing, and since mie then holds no bit, nothing
+wakes it.
 
 Under DEBUG a jab.late knob naming the hart holds it before its swap until
 its state reads failed, so the losing swap runs every time.
-
-## hart_wake_boot
-
-The wake's identity into hart 0's file, after `fence w, o`, so the hart's
-record is out before hart 0 reads it.
 
 ## harts_report
 

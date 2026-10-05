@@ -41,9 +41,8 @@ call local romfs_strnlen at addr,limit u64 > length a0 i64 [644:658]
  length :-1 when no terminator is within reach
 call local romfs_name_equal name addr,length u64 > equal a0 bool [660:681]
  equal :1 when the scratch record carries the same name
-j local romfs_fault_disk_id id u64 [683:690] :ends the run with a line naming the disk id the machine lacks
-j local romfs_fault_not_romfs id u64 [692:699] :ends the run with a line naming the disk that carries no romfs
-j local romfs_fault_header offset u64 [701:708] :ends the run with a line naming the bad header
-j local romfs_fault_kind offset u64 [710:717] :ends the run with a line naming the header of the wrong kind
-j local romfs_fault_disk [719:723] :ends the run with a line for a disk error
-j local romfs_fault_end [725:729] :ends a fault line and the run with 1
+j local romfs_fault_disk_id id u64 [683:686] :ends the run with a line naming the disk id the machine lacks
+j local romfs_fault_not_romfs id u64 [688:691] :ends the run with a line naming the disk that carries no romfs
+j local romfs_fault_header offset u64 [693:696] :ends the run with a line naming the bad header
+j local romfs_fault_kind offset u64 [698:701] :ends the run with a line naming the header of the wrong kind
+j local romfs_fault_disk [703:705] :ends the run with a line for a disk error

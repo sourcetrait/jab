@@ -34,7 +34,9 @@ programs = [
   'test/profile',
   'test/dtb',
   'test/harts',
-  'test/stuck'
+  'test/stuck',
+  'test/workers',
+  'test/workerfault'
 ]
 
 # A word standing for a program's path wherever the tool takes one:

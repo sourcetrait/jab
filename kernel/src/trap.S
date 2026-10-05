@@ -1,8 +1,9 @@
 .include "riscv.inc"
 .include "qemu_virt.inc"
 .include "jab.inc"
+.include "hart.inc"
 
-.set SYSCALL_LAST, JAB_SYS_HARTS
+.set SYSCALL_LAST, JAB_SYS_WORKER_STOP
 .set UART_PRINT_TICK, 1024
 
 .section .text
@@ -56,30 +57,44 @@ trap_vector:
     bne t0, t1, program_fault
     ld a7, 136(sp)
     ld a0, 80(sp)
+    ld t0, HART_ID(tp)
+    bnez t0, worker_call
     beqz a7, bad_syscall
     li t0, SYSCALL_LAST
     bgtu a7, t0, bad_syscall
+call_table:
     la t0, syscall_table
     slli t1, a7, 3
     add t0, t0, t1
     ld t0, 0(t0)
     jr t0
 
+worker_call:
+    li t0, JAB_SYS_HARTS                    # a worker's calls: the masks and the worker calls it may make
+    beq a7, t0, call_table
+    li t0, JAB_SYS_WORKER_WAIT
+    beq a7, t0, call_table
+    li t0, JAB_SYS_WORKER_WAKE
+    beq a7, t0, call_table
+    li t0, JAB_SYS_WORKER_EXIT
+    beq a7, t0, call_table
+.global sys_denied
+sys_denied:
+    li t0, JAB_DENIED                       # every other call hart 0's: nothing entered
+    sd t0, 80(sp)
+    j trap_return
+
 interrupt:
     call irq_drain
+    ld t0, HART_ID(tp)
+    bnez t0, interrupt_return               # the stalled lines are hart 0's to print
     call irq_report
     j interrupt_return
 
 bad_syscall:
-    call uart_lock_fatal
     la a0, msg_bad_syscall
-    call uart_puts
-    ld a0, 136(sp)
-    call uart_put_dec
-    li a0, '\n'
-    call uart_putc
-    li a0, 1
-    j qemu_exit
+    ld a1, 136(sp)
+    j fatal_dec
 
 .global message_bounds
 message_bounds:
@@ -149,14 +164,12 @@ zero_bytes:
 
 .global bad_address
 bad_address:
-    call uart_lock_fatal
     la a0, msg_bad_address
-    call uart_puts
-    li a0, 1
-    j qemu_exit
+    j fatal_plain
 
 sys_exit:
     mv s0, a0
+    call shutdown_enter                     # every worker stopped where it is, or this hart parked behind a fault
     call sound_flush
 .ifdef DEBUG
     la a0, msg_exit
@@ -171,26 +184,17 @@ msg_exit:
 .popsection
 .endif
     mv a0, s0
-    j qemu_exit
+    j fatal_exit
 
 program_fault:
-    call uart_lock_fatal
-    la a0, msg_program_fault
-    call uart_puts
-    csrr a0, scause
-    call uart_put_hex
-    la a0, msg_epc
-    call uart_puts
-    csrr a0, sepc
-    call uart_put_hex
-    la a0, msg_tval
-    call uart_puts
-    csrr a0, stval
-    call uart_put_hex
-    li a0, '\n'
-    call uart_putc
-    li a0, 1
-    j qemu_exit
+    csrr t0, scause
+    sd t0, HART_CAUSE(tp)
+    csrr t0, sepc
+    sd t0, HART_EPC(tp)
+    csrr t0, stval
+    sd t0, HART_TVAL(tp)
+    li t0, FAULT_PROGRAM
+    j fault_recorded
 
 kernel_trap:
     csrrw sp, sscratch, sp
@@ -223,36 +227,162 @@ kernel_trap:
     ld t1, 8(sp)
     addi sp, sp, 16
 kernel_fault:
-    call uart_lock_fatal
-    la a0, msg_kernel_fault
-    call uart_puts
-    csrr a0, scause
-    call uart_put_hex
-    la a0, msg_epc
-    call uart_puts
-    csrr a0, sepc
-    call uart_put_hex
-    la a0, msg_tval
-    call uart_puts
-    csrr a0, stval
-    call uart_put_hex
-    li a0, '\n'
-    call uart_putc
+    mv sp, tp                               # its stack from the top, whatever the fault left of it
+    ld t0, HART_FAULT(tp)
+    bnez t0, 1f                             # a fault inside a fault's own report: nothing left to trust
+    csrr t0, scause
+    sd t0, HART_CAUSE(tp)
+    csrr t0, sepc
+    sd t0, HART_EPC(tp)
+    csrr t0, stval
+    sd t0, HART_TVAL(tp)
+    li t0, FAULT_KERNEL
+    j fault_recorded
+1:
     li a0, 1
     j qemu_exit
 
 .ifdef DEBUG
 timer_left_enabled:
-    call uart_lock_fatal
     la a0, msg_timer_left
-    call uart_puts
-    li a0, 1
-    j qemu_exit
+    j fatal_plain
 .pushsection .rodata
 msg_timer_left:
-    .asciz "jab: timer left enabled\n"
+    .asciz "jab: timer left enabled"
 .popsection
 .endif
+
+.global fatal_plain
+fatal_plain:                                # a0 the fault's line
+    li t0, FAULT_LINE
+    j 1f
+.global fatal_dec
+fatal_dec:                                  # a0 the fault's line, a1 a value in decimal after it
+    li t0, FAULT_LINE_DEC
+    j 1f
+.global fatal_hex
+fatal_hex:                                  # a0 the fault's line, a1 a value in hex after it
+    li t0, FAULT_LINE_HEX
+1:
+    sd a0, HART_LINE(tp)
+    sd a1, HART_VALUE(tp)
+fault_recorded:                             # t0 the kind, its fields in the hart's record
+    fence w, w                              # the fields before the kind that vouches for them
+    sd t0, HART_FAULT(tp)
+    call shutdown_enter                     # parks this hart behind another's shutdown
+    li a0, 1
+.global fatal_exit
+fatal_exit:                                 # a0 the status: every recorded fault's line, this hart's first, then the end
+    mv s0, a0
+    call uart_lock_fatal
+    mv a0, tp
+    call fault_line
+    ld s1, HART_ID(tp)
+    li s2, 0                                # the hart
+1:
+    li t0, JAB_HARTS_MAX
+    bgeu s2, t0, 3f
+    beq s2, s1, 2f
+    mv a0, s2
+    call hart_record
+    call fault_line
+    beqz a0, 2f
+    li s0, 1                                # another hart's fault: the run failed
+2:
+    addi s2, s2, 1
+    j 1b
+3:
+    la t0, shutdown_unanswered
+    ld s1, 0(t0)
+4:
+    beqz s1, 5f
+    ctz s2, s1
+    li t0, 1
+    sll t0, t0, s2
+    xor s1, s1, t0
+    la a0, msg_unanswered
+    call uart_puts
+    mv a0, s2
+    call uart_put_dec
+    li a0, '\n'
+    call uart_putc
+    j 4b
+5:
+    mv a0, s0
+    j qemu_exit
+
+fault_line:                                 # a0 a hart's record: its fault's line, a0 1 when it had one
+    ld t0, HART_FAULT(a0)
+    bnez t0, 1f
+    li a0, 0
+    ret
+1:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd s0, 0(sp)
+    mv s0, a0
+    fence r, r                              # the kind before the fields it vouches for
+    li t1, FAULT_PROGRAM
+    beq t0, t1, 3f
+    li t1, FAULT_KERNEL
+    beq t0, t1, 5f
+    ld a0, HART_LINE(s0)
+    call uart_puts
+    ld t0, HART_FAULT(s0)
+    li t1, FAULT_LINE_DEC
+    bne t0, t1, 2f
+    ld a0, HART_VALUE(s0)
+    call uart_put_dec
+    j 8f
+2:
+    li t1, FAULT_LINE_HEX
+    bne t0, t1, 8f
+    ld a0, HART_VALUE(s0)
+    call uart_put_hex
+    j 8f
+3:
+    ld t0, HART_ID(s0)
+    bnez t0, 4f
+    la a0, msg_program_fault                # hart 0's: the program's own
+    call uart_puts
+    j 7f
+4:
+    la a0, msg_worker_fault
+    call uart_puts
+    ld a0, HART_ID(s0)
+    call uart_put_dec
+    la a0, msg_argument
+    call uart_puts
+    ld a0, HART_ARG(s0)
+    call uart_put_hex
+    j 6f
+5:
+    la a0, msg_kernel_fault
+    call uart_puts
+    ld a0, HART_ID(s0)
+    call uart_put_dec
+6:
+    la a0, msg_cause
+    call uart_puts
+7:
+    ld a0, HART_CAUSE(s0)
+    call uart_put_hex
+    la a0, msg_epc
+    call uart_puts
+    ld a0, HART_EPC(s0)
+    call uart_put_hex
+    la a0, msg_tval
+    call uart_puts
+    ld a0, HART_TVAL(s0)
+    call uart_put_hex
+8:
+    li a0, '\n'
+    call uart_putc
+    li a0, 1
+    ld ra, 8(sp)
+    ld s0, 0(sp)
+    addi sp, sp, 16
+    ret
 
 .global trap_return
 trap_return:
@@ -265,6 +395,24 @@ interrupt_return:
     andi t0, t0, SIE_STIE
     bnez t0, timer_left_enabled             # user mode would take it as a fault
 .endif
+    la t0, shutdown_owner                   # the boundary, where a hart stops when it must
+    ld t0, 0(t0)
+    beqz t0, 3f
+    j shutdown_park                         # another hart's: an owner never comes back this way
+3:
+    ld t0, HART_ID(tp)
+    beqz t0, 1f
+    ld t0, HART_CONTROL(tp)
+    andi t0, t0, WORK_FORCED
+    beqz t0, 2f
+    j worker_leave                          # stopped where it is, out of the program for good
+1:
+    la t0, workers_live
+    ld t0, 0(t0)
+    beqz t0, 2f
+    li t0, SIE_SEIE
+    csrs sie, t0                            # hart 0 open to its workers' faults and wakes while they run
+2:
     ld t0, 16(sp)
     csrw sscratch, t0
     ld x1, 8(sp)
@@ -373,15 +521,28 @@ syscall_table:
     .quad sys_midi_playing
     .quad sys_midi_soundfont
     .quad sys_harts
+    .quad sys_worker_start
+    .quad sys_worker_wait
+    .quad sys_worker_wake
+    .quad sys_worker_exit
+    .quad sys_worker_stop
 msg_bad_syscall:
     .asciz "jab: unknown system call "
 msg_bad_address:
-    .asciz "jab: address outside the program\n"
+    .asciz "jab: address outside the program"
 msg_program_fault:
     .asciz "jab: program fault: cause="
+msg_worker_fault:
+    .asciz "jab: worker fault: hart="
 msg_kernel_fault:
-    .asciz "jab: kernel fault: cause="
+    .asciz "jab: kernel fault: hart="
+msg_argument:
+    .asciz " argument="
+msg_cause:
+    .asciz " cause="
 msg_epc:
     .asciz " epc="
 msg_tval:
     .asciz " tval="
+msg_unanswered:
+    .asciz "jab: shutdown unanswered: hart "

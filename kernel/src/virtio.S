@@ -110,16 +110,9 @@ virtio_reset:
 
 .global device_reset_refused
 device_reset_refused:
-    mv s0, a0                               # the source; the run ends, so nothing is kept
-    call uart_lock_fatal
+    mv a1, a0                               # the source
     la a0, msg_reset_refused
-    call uart_puts
-    mv a0, s0
-    call uart_put_dec
-    li a0, '\n'
-    call uart_putc
-    li a0, 1
-    j qemu_exit
+    j fatal_dec
 
 .global virtio_wait_used
 virtio_wait_used:

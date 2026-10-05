@@ -35,6 +35,12 @@ instruction an illegal instruction.
 
 `u64`: sstatus's vector state as Initial.
 
+## .set SSTATUS_FS_MASK
+## .set SSTATUS_VS_MASK
+
+`u64`: sstatus's floating-point and vector state fields whole, cleared
+before a worker's start writes them Initial again.
+
 ## .set SIE_STIE
 
 `u64`: sie's supervisor timer interrupt enable.

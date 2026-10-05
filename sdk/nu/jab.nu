@@ -653,7 +653,10 @@ export def strings [path: path, prefix: string]: nothing -> list<string> {
 
 # The named functions of a program's ELF as QEMU's translator sees
 # them: each one's start and end from the ELF's symbols, the end being
-# the next symbol's address, whether it lies within one page of code,
+# the next symbol's address, an assembler constant passed over (`nm`
+# lists a `.set` as an absolute symbol, its value no address, and one
+# valued inside the code would cut a function short; JAB_DENIED's all
+# ones would not even parse), whether it lies within one page of code,
 # since a translation block ends at a page boundary and chains within
 # a page only, so a loop straddling one runs several times slower, and
 # how many ecalls its code holds, read from the disassembly, since a
@@ -663,7 +666,7 @@ export def hot [elf: path, names: list<string>]: nothing -> table<name: string, 
     let elf = ($elf | path expand)
     let built = ($elf | path dirname)
     let prefix = (open --raw ($built | path join "flags") | lines | first | split row " " | last)
-    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
+    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | where {|s| $s.kind not-in ["a" "A"] } | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
     let ecalls = (^$"($prefix)objdump" -d $elf | lines | parse --regex '^\s*(?P<addr>[0-9a-f]+):\s+[0-9a-f]+\s+ecall\b' | each {|d| $d.addr | into int --radix 16 })
     $names | each {|name|
         let at = ($symbols | enumerate | where {|s| $s.item.name == $name } | get -o 0.index)

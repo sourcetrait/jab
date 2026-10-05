@@ -67,6 +67,13 @@ flip answers it first. The external lines stay enabled while the sound
 stream is live, so its interrupt keeps reaching the vector as the program
 runs.
 
+While workers run (workers.S's workers_live) the external enable is set for
+every wait, whatever the mask, so a worker's fault reaches hart 0 here. A
+claimed shutdown is checked before each wfi and sends the wait out through
+its teardown, and the boundary it returns through parks the hart; the wake
+that announced the shutdown stays pending in the hart's file until the wfi
+if it lands after the check, so the wait never sleeps past it.
+
 ## frame_tick
 
 `u64`: the time of the next tick.

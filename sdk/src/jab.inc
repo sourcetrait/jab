@@ -72,8 +72,26 @@
 .set JAB_SYS_MIDI_PLAYING, 49
 .set JAB_SYS_MIDI_SOUNDFONT, 50
 .set JAB_SYS_HARTS, 51
+.set JAB_SYS_WORKER_START, 52
+.set JAB_SYS_WORKER_WAIT, 53
+.set JAB_SYS_WORKER_WAKE, 54
+.set JAB_SYS_WORKER_EXIT, 55
+.set JAB_SYS_WORKER_STOP, 56
 
 .set JAB_HARTS_MAX, 8
+.set JAB_MAIN_STACK, 0x800000
+.set JAB_DENIED, -1
+
+.set JAB_START_OK, 0
+.set JAB_START_HART, 1
+.set JAB_START_BUSY, 2
+.set JAB_START_ENTRY, 3
+.set JAB_START_STACK, 4
+.set JAB_START_OVERLAP, 5
+.set JAB_START_NO_ACK, 6
+
+.set JAB_WAIT_CHANGED, 0
+.set JAB_WAIT_STOP, 1
 
 .set JAB_TEXT_WIDTH, 12
 .set JAB_TEXT_HEIGHT, 24
@@ -479,6 +497,40 @@
 
 .macro jab.sys.harts
     li a7, JAB_SYS_HARTS
+    ecall
+.endm
+
+.macro jab.sys.worker.start hart, entry, argument, stack, size
+    mv a4, \size
+    mv a3, \stack
+    mv a2, \argument
+    la a1, \entry
+    mv a0, \hart
+    li a7, JAB_SYS_WORKER_START
+    ecall
+.endm
+
+.macro jab.sys.worker.wait word, value
+    mv a1, \value
+    mv a0, \word
+    li a7, JAB_SYS_WORKER_WAIT
+    ecall
+.endm
+
+.macro jab.sys.worker.wake mask
+    mv a0, \mask
+    li a7, JAB_SYS_WORKER_WAKE
+    ecall
+.endm
+
+.macro jab.sys.worker.exit
+    li a7, JAB_SYS_WORKER_EXIT
+    ecall
+.endm
+
+.macro jab.sys.worker.stop mask
+    mv a0, \mask
+    li a7, JAB_SYS_WORKER_STOP
     ecall
 .endm
 

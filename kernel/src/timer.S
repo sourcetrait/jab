@@ -89,7 +89,11 @@ sys_await:
     csrs sie, t4
 3:
     andi t0, s0, JAB_AWAIT_KEYBOARD | JAB_AWAIT_API | JAB_AWAIT_PAD | JAB_AWAIT_SOUND
-    beqz t0, 4f
+    bnez t0, 31f
+    la t0, workers_live
+    ld t0, 0(t0)
+    beqz t0, 4f                             # no device awaited, and no worker whose fault must reach it
+31:
     li t4, SIE_SEIE
     csrs sie, t4
 4:
@@ -142,6 +146,9 @@ sys_await:
     csrs sie, t4
 62:
     bnez s1, 7f
+    la t0, shutdown_owner
+    ld t0, 0(t0)
+    bnez t0, 7f                             # a shutdown: back to the boundary, which parks
     wfi
     call irq_drain
     mv s1, a0

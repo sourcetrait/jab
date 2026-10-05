@@ -22,9 +22,9 @@ than leave a device running that the kernel has given up on.
 
 ## device_reset_refused
 
-Takes the line lock as a fault's (uart_lock_fatal), since the hart may hold
-nothing it could wait on, and ends the run with status 1. Shared by
-vpci_reset, which passes its PCI line as the source.
+Its line, naming the source, is the hart's fault (trap.S's fatal_dec): the
+shutdown runs, every other hart stops, and the run ends with status 1.
+Shared by vpci_reset, which passes its PCI line as the source.
 
 ## virtio_wait_used
 
