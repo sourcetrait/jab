@@ -196,6 +196,14 @@ macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
 
+A test reads the threads itself with `jab launch --threads <at>`: every
+QEMU thread's CPU at that time and again a second on, each reading timed
+as it is taken, since the launch's loop polls and the span is a second
+give or take a poll. Each thread comes back with the CPU seconds it used
+between the readings and those over the span, its share of a core, the
+span beside them. `test/harts` and `test/jobs` hold an idle hart under
+0.05 of a core that way.
+
 `just bench <program>/<bench>` runs a program's bench, the NUON file of
 that name under the program's `bench/`: `just bench game/fps/1k/cadence`
 (or `fps/cadence`) is `game/fps/1k/bench/cadence.nuon`. The program is
@@ -369,7 +377,9 @@ and each publish drops any other, so a cancel left over from an older job
 never ends a newer one, even when the generation count wraps.
 `test/jobs` races every order a job and its wake can come in, a thousand
 rounds each, and `just bench test/jobs/costs` measures what a job costs
-around its work, at four job sizes, with one worker and with three.
+around its work, at four job sizes, with one worker and with three: the
+dispatch to a worker, the barrier back to hart 0, and the least a round of
+jobs costs beyond its work, its slowest dispatch plus its barrier.
 
 `example/workers` puts the jobs to work. Hart 0 deals the rows of the
 Mandelbrot set in bands of eight to one, two, then three workers, five
@@ -382,7 +392,8 @@ rows for the host to compute again. A digit, `1` to `3`, draws that frame
 over and over for four seconds with that many workers. `just bench
 example/workers/scaling` runs one, two, and three workers on a release
 build and reports the frames, the hashes, each worker's rows, each hart's
-CPU, and how much the bands overlapped in time.
+share of a core over a timed second, and how much the bands overlapped in
+time.
 
 A device that holds its interrupt raised while it makes no progress for
 three seconds is cut off. The kernel masks that interrupt and resets the
