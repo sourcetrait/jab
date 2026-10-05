@@ -276,6 +276,7 @@ aia_topology:
     li a1, AIA_NO_FILE
 90:
     mv s1, a1
+    call uart_lock_fatal
     la a0, msg_platform_refused
     call uart_puts
     mv a0, s1
@@ -393,6 +394,8 @@ aia_supervisor:
     li t0, QEMU_VIRT_APLIC_S
     li t1, APLIC_DOMAINCFG_IE
     sw t1, APLIC_DOMAINCFG(t0)
+.global aia_file_open
+aia_file_open:
     li t1, IMSIC_EIDELIVERY
     csrw CSR_SISELECT, t1
     li t1, 1
@@ -404,6 +407,24 @@ aia_supervisor:
     csrw CSR_SISELECT, t1
     li t1, (1 << AIA_WAKE)
     csrw CSR_SIREG, t1
+    ret
+
+.global aia_file_page
+aia_file_page:
+    la t0, aia_file
+    add t0, t0, a0
+    lbu t0, 0(t0)
+    li t1, 0xff
+    beq t0, t1, 1f
+    la t1, aia_lhxs
+    ld t1, 0(t1)
+    addi t1, t1, 12
+    sll t0, t0, t1
+    li t1, QEMU_VIRT_IMSIC_S
+    add a0, t0, t1
+    ret
+1:
+    li a0, 0                                # no file in the tree
     ret
 
 .global irq_mmio_source
@@ -672,12 +693,14 @@ irq_report:
     li t0, 1
     sll t0, t0, s1
     xor s0, s0, t0
+    call uart_lock
     la a0, msg_source
     call uart_puts
     mv a0, s1
     call uart_put_dec
     la a0, msg_stalled
     call uart_puts
+    call uart_unlock
     j 1b
 8:
     ld ra, 24(sp)

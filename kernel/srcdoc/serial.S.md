@@ -125,7 +125,7 @@ DEBUG include.
 
 The UART stands in when the machine carries no virtio-serial device or the
 device came without the debug port, so a debug kernel on a bare line still
-reports.
+reports, each line under the line lock (uart.S).
 
 ## serial_control_rx_queue
 

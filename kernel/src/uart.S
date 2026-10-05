@@ -1,5 +1,7 @@
 .include "qemu_virt.inc"
 
+.set UART_FATAL_WAIT, QEMU_VIRT_TIMEBASE
+
 .macro uart_wait base
 uart_wait_\@:
     lbu t1, 5(\base)
@@ -82,3 +84,41 @@ uart_put_dec:
 3:
     addi sp, sp, 32
     ret
+
+.global uart_lock
+uart_lock:
+    la t0, uart_line_lock
+1:
+    li t1, 1
+    amoswap.w.aq t1, t1, (t0)
+    beqz t1, 2f
+    pause
+    j 1b
+2:
+    ret
+
+.global uart_unlock
+uart_unlock:
+    la t0, uart_line_lock
+    amoswap.w.rl zero, zero, (t0)
+    ret
+
+.global uart_lock_fatal
+uart_lock_fatal:
+    rdtime t2
+    li t3, UART_FATAL_WAIT
+    add t2, t2, t3
+    la t0, uart_line_lock
+1:
+    li t1, 1
+    amoswap.w.aq t1, t1, (t0)
+    beqz t1, 2f
+    rdtime t1
+    bltu t1, t2, 1b                         # still held at the wait's end: the line goes out regardless
+2:
+    ret
+
+.section .data
+.balign 4
+uart_line_lock:
+    .4byte 0

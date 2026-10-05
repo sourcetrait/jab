@@ -119,14 +119,21 @@ IMSIC files, a page a hart.
 
 `u64`: how much more PTE the next 2 MiB page is.
 
-## page_init
+## page_build
 
 The root's entry for the first GiB points to the devices' table, then an
 entry per GiB of RAM points to its table; the PCI MMIO window is a GiB leaf
 in the root. The devices and the kernel's page are supervisor only, the
 framebuffer user read-write, and the program's pages user
 read-write-execute to the end of RAM, running on from one GiB's table into
-the next.
+the next. Hart 0 builds them once; every hart shares them, and a change
+after the secondaries are released would need a shootdown across the harts.
+
+## page_activate
+
+The tables in satp, Sv39, and sfence.vma: each hart's own, hart 0 in kmain
+and a secondary in machine mode before its mret, where satp takes effect for
+supervisor mode.
 
 ## page_root
 

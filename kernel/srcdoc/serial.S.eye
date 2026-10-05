@@ -27,8 +27,8 @@ call serial_pad_read buffer addr,capacity u64 > copied a0 u64,clobber a2-a5 [566
 call serial_pad_pending > pending a0 bool [624:634]
  pending :1 when the pad's port holds bytes serial_pad_read has not taken
 call debug_putc char u8 > clobber a0-a3 [635:649] :adds the character to the debug line, sending the line at a newline or when full; under DEBUG only
-call debug_flush > clobber a0-a3 [650:695] :sends the debug line to the debug port, or to the UART when that port is not up; under DEBUG only
-call debug_puts string addr > clobber a0-a3 [696:713]
+call debug_flush > clobber a0-a3 [650:697] :sends the debug line to the debug port, or to the UART when that port is not up; under DEBUG only
+call debug_puts string addr > clobber a0-a3 [698:715]
  string :NUL-terminated
-call debug_put_hex value u64 > clobber a0-a3 [714:746] :writes 0x and sixteen hex digits to the debug line
-call debug_put_dec value u64 > clobber a0-a3 [747:773] :writes in decimal to the debug line
+call debug_put_hex value u64 > clobber a0-a3 [716:748] :writes 0x and sixteen hex digits to the debug line
+call debug_put_dec value u64 > clobber a0-a3 [749:775] :writes in decimal to the debug line

@@ -42,9 +42,22 @@ here, under -bios none their only writer. sourcecfg[i] sits at 4i.
 ## aia_supervisor
 
 The supervisor domain's sources stay inactive until a driver enables one.
-eidelivery 1 lets hart 0's file signal SEIP; eithreshold 0 admits every
-enabled identity; eie0 holds identities 0 to 63, the wake's (AIA_WAKE)
-enabled from the start.
+Hart 0's own file then opens through aia_file_open, which it falls into.
+
+## aia_file_open
+
+The hart's own supervisor file, through siselect and sireg, which machine
+mode reaches too, so a parked hart opens its own before it sleeps (boot.S's
+hart_park): eidelivery 1 lets the file signal SEIP; eithreshold 0 admits
+every enabled identity; eie0 holds identities 0 to 63, the wake's
+(AIA_WAKE) alone enabled, each device's joining on hart 0 as its driver
+comes up (irq_enable).
+
+## aia_file_page
+
+A message to a hart is a 32-bit write of the identity to its file's page:
+the supervisor files' base plus the hart's file index shifted by 12 and
+LHXS bits.
 
 ## irq_enable
 
@@ -84,7 +97,8 @@ fixture.
 ## irq_report
 
 The waits and the vector call it after a drain, where printing interrupts
-nothing: the line is `jab: interrupt source N stalled` on the UART.
+nothing: the line is `jab: interrupt source N stalled` on the UART, under
+the line lock (uart.S).
 
 ## path_soc
 

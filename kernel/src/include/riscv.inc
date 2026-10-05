@@ -10,6 +10,7 @@
 
 .set SIE_STIE, (1 << 5)
 .set SIE_SEIE, (1 << 9)
+.set MIE_SEIE, (1 << 9)
 
 .set MENVCFG_STCE, (1 << 63)
 .set MENVCFG_CBZE, (1 << 7)
@@ -35,6 +36,7 @@
 .set MEDELEG_ALL, 0xffff
 .set MIDELEG_S_ALL, 0x222
 
+.set SCAUSE_STORE_ACCESS, 7
 .set SCAUSE_ECALL_U, 8
 .set SCAUSE_S_EXTERNAL, ((1 << 63) | 9)
 

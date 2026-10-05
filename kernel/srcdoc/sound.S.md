@@ -111,7 +111,8 @@ time of the last.
 
 A dead stream's refills stop, the calls answer 2 from then on, the wait
 drops its bit, and "jab: sound stalled" goes to the UART in every build,
-since a program that hears nothing deserves the reason.
+under the line lock (uart.S), since a program that hears nothing deserves
+the reason.
 
 ## sound_tick
 

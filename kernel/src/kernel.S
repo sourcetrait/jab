@@ -1,11 +1,17 @@
 .include "riscv.inc"
 .include "qemu_virt.inc"
 .include "jab.inc"
+.include "hart.inc"
 
 .section .text
 .global kmain
 kmain:
-    call page_init
+    mv s0, a0                               # its hart, as machine mode hands it
+    call hart_record
+    mv tp, a0
+    csrw sscratch, zero                     # 0 while the kernel runs
+    call page_build
+    call page_activate
     call frame_clock_init
     la t0, trap_vector
     csrw stvec, t0
@@ -18,8 +24,13 @@ kmain:
     csrw scounteren, t0
     li t0, (SENVCFG_CBZE | SENVCFG_CBCFE | SENVCFG_CBIE_FLUSH)
     csrs senvcfg, t0
+    mv a0, s0
+    call hart_self_check                    # its id and canary
+    li t0, HART_ONLINE
+    sd t0, HART_STATE(tp)
     call aia_supervisor
     call serial_open
+    call harts_release
 .ifdef DEBUG
     la a0, msg_banner
     call debug_puts
@@ -29,8 +40,7 @@ msg_banner:
 .popsection
     call harts_report
 .endif
-    la t0, kernel_stack_top
-    csrw sscratch, t0
+    csrw sscratch, tp                       # its record while the program runs
     li t0, JAB_PROGRAM_BASE
     csrw sepc, t0
     li t0, SSTATUS_SPP | SSTATUS_SPIE
@@ -85,10 +95,3 @@ sys_kernel_flags:
 .global kernel_flags
 kernel_flags:
     .4byte KERNEL_FLAG_DEBUG
-
-.section .bss
-.balign 16
-kernel_stack:
-    .skip 16384
-.global kernel_stack_top
-kernel_stack_top:

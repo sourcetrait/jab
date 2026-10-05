@@ -1,8 +1,15 @@
 .include "jab.inc"
 
+.set HOLD_TICKS, 120
+
 .section .text
 .global _start
 _start:
+    li s4, HOLD_TICKS
+1:
+    jab.sys.display.await
+    addi s4, s4, -1
+    bnez s4, 1b
     jab.sys.harts
     mv s0, a0                               # discovered
     mv s1, a1                               # online

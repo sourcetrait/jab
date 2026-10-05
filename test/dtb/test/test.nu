@@ -101,7 +101,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the debug kernel's own reading of its tree
     if ($set | str contains "DEBUG") {
         let debug = ($run.debug | lines)
-        assert ($debug | any {|l| $l == "jab: harts discovered 0x000000000000000f online 0x0000000000000001 failed 0x0000000000000000" }) $"the kernel discovered four harts: ($run.debug)"
+        assert ($debug | any {|l| $l == "jab: harts discovered 0x000000000000000f online 0x000000000000000f failed 0x0000000000000000" }) $"the kernel discovered four harts, every one online: ($run.debug)"
         assert ($debug | any {|l| $l == $"jab: bootargs ($BOOTARGS)" }) $"the kernel read its command line from /chosen: ($run.debug)"
     }
     print $"dtb: ($cases | length) trees, each answering its code; QEMU's ($h.totalsize)-byte tree read through every lookup"

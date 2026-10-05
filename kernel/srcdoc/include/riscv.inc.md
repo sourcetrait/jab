@@ -43,6 +43,11 @@ instruction an illegal instruction.
 
 `u64`: sie's supervisor external interrupt enable.
 
+## .set MIE_SEIE
+
+`u64`: mie's supervisor external interrupt enable, the same bit as sie's,
+which a parked hart's wfi wakes on in machine mode.
+
 ## .set MENVCFG_STCE
 
 `u64`: stimecmp (Sstc) usable in supervisor mode.
@@ -136,6 +141,11 @@ frame's work by.
 ## .set MIDELEG_S_ALL
 
 `u64`: the three supervisor interrupts delegated.
+
+## .set SCAUSE_STORE_ACCESS
+
+`u64`: scause of a store or AMO access fault, a store nothing decodes on
+QEMU.
 
 ## .set SCAUSE_ECALL_U
 

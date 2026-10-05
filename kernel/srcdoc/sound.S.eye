@@ -22,12 +22,12 @@ call local sound_mix samples addr > clobber a0-a7 [359:426] :fills a period's sa
  samples :where the period's samples go
 call local sound_submit period u64 > busy sound_busy u8,submitted sound_submitted u64 [428:452] :offers the period, full, to the device
 call local sound_drain > returned sound_returned u64,failed sound_failed u64,last sound_last_return u64 [454:496] :frees every period the device has returned, reading each one's status
-call sound_stalled > stalled a0 bool,live sound_live u64,state sound_state u64 [497:535]
+call sound_stalled > stalled a0 bool,live sound_live u64,state sound_state u64 [497:537]
  stalled :1 when the live stream has a period in flight and no return for SOUND_STALL_TICKS, the stream then dead with a line on the UART
-call sound_tick [536:569] :a checkpoint for a long loop inside a call, draining the interrupts when the device has returned a period; keeps every register, t ones included
-call local sound_wait > clobber a0 [571:591] :halts until the device's line or the poll timer, then drains the interrupts and reports
-call sound_flush > live sound_live u64,clobber a0-a3 [592:699] :plays the stream out for a program's exit; nothing with no live stream, and done once it dies
-call local sound_progress > progress a0 u64 [701:707] :the control and transmit queues' used indexes summed
-call local sound_fault > live sound_live u64,state sound_state u64 [709:717] :its source stuck: the stream dead, as sound_stalled leaves it
-call sound_pending > room a0 bool [718:727]
+call sound_tick [538:571] :a checkpoint for a long loop inside a call, draining the interrupts when the device has returned a period; keeps every register, t ones included
+call local sound_wait > clobber a0 [573:593] :halts until the device's line or the poll timer, then drains the interrupts and reports
+call sound_flush > live sound_live u64,clobber a0-a3 [594:703] :plays the stream out for a program's exit; nothing with no live stream, and done once it dies
+call local sound_progress > progress a0 u64 [705:711] :the control and transmit queues' used indexes summed
+call local sound_fault > live sound_live u64,state sound_state u64 [713:721] :its source stuck: the stream dead, as sound_stalled leaves it
+call sound_pending > room a0 bool [722:731]
  room :1 when the ring has room for a period, so a write can take more

@@ -293,17 +293,25 @@ count is refused before QEMU starts; every launch's record carries its
 machine, the harts asked for, diagnostic or not, `-machine`, the CPU, and
 the accelerator. QEMU hands every hart the device tree it built, and the
 kernel reads it once, on hart 0 in machine mode before anything else
-runs: every cpu the tree lists is discovered, hart 0 runs the kernel and
-the program, and the others park. `jab.sys.harts` answers the discovered,
-online, and failed harts as masks, bit n for hart n. A cpu the kernel
-cannot use, an id past `JAB_HARTS_MAX` among them, keeps the kernel on
-hart 0 with every other hart failed, named on the debug channel; a tree
+runs. Every cpu the tree lists is discovered. Hart 0 runs the kernel and
+the program. It also releases every other hart from where it waits. Each
+of those sets itself up on its own stack, checks in, and sleeps until it
+is given work. `jab.sys.harts` answers the discovered, online, and failed
+harts as masks, bit n for hart n. A hart that has no interrupt file, does
+not check in within 100 ms, or fails its own self-check is failed, and the
+run goes on without it. A cpu the kernel cannot use, an id past
+`JAB_HARTS_MAX` among them, keeps the kernel on hart 0 with every other
+hart failed, named on the debug channel; a tree
 the kernel cannot read, a timer other than QEMU's 10 MHz, or an interrupt
 platform other than QEMU's ends the run before the program starts, its
 line on the console and status 1. `jab
 launch --dtb <file>` hands the machine a tree of its own, `--bootargs
 <text>` puts QEMU's `-append` in the tree, which a debug kernel prints,
-and `jab dump-tree` writes the tree QEMU builds for a machine.
+and `jab dump-tree` writes the tree QEMU builds for a machine. A debug
+kernel reads two more settings there for `test/harts`: `jab.late=<hart>`
+holds that hart back until it has been failed, and `jab.stray=1` makes a
+kernel fault. A fault in the kernel, on any hart, prints its line on the
+console and ends the run with status 1.
 
 A device that holds its interrupt raised while it makes no progress for
 three seconds is cut off. The kernel masks that interrupt and prints

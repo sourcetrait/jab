@@ -13,7 +13,8 @@ Headers and the partial ends of a read go through one bounce buffer, which
 remembers the sectors it holds, so a listing walking a chain inside it costs
 one read rather than one per entry; the whole sectors of a file's data go
 straight from the device into the program's own buffer. What the image
-cannot support ends the run with a line on the UART - a bad checksum, a
+cannot support ends the run with a line on the UART, under the line lock
+(uart.S) - a bad checksum, a
 handle that is not a header, a header whose kind is wrong for the call -
 since every handle the kernel hands out is none of those and a program that
 invents one has a bug.

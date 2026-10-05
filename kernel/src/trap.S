@@ -45,6 +45,7 @@ trap_vector:
     csrr t0, sscratch
     sd t0, 16(sp)
     csrw sscratch, zero
+    addi tp, sp, 256                        # the hart's record, above its frame
     csrr t0, sstatus
     andi t0, t0, SSTATUS_SPP
     bnez t0, kernel_fault
@@ -70,6 +71,7 @@ interrupt:
     j interrupt_return
 
 bad_syscall:
+    call uart_lock_fatal
     la a0, msg_bad_syscall
     call uart_puts
     ld a0, 136(sp)
@@ -92,6 +94,7 @@ sys_uart_print:
     call message_bounds
     mv s0, a0
     mv s1, a1
+    call uart_lock                          # the call's bytes together
     li s2, UART_PRINT_TICK
 1:
     bgeu s0, s1, 2f
@@ -105,6 +108,7 @@ sys_uart_print:
     call sound_tick
     j 1b
 2:
+    call uart_unlock
     sd zero, 80(sp)
     j trap_return
 
@@ -145,6 +149,7 @@ zero_bytes:
 
 .global bad_address
 bad_address:
+    call uart_lock_fatal
     la a0, msg_bad_address
     call uart_puts
     li a0, 1
@@ -169,6 +174,7 @@ msg_exit:
     j qemu_exit
 
 program_fault:
+    call uart_lock_fatal
     la a0, msg_program_fault
     call uart_puts
     csrr a0, scause
@@ -188,7 +194,36 @@ program_fault:
 
 kernel_trap:
     csrrw sp, sscratch, sp
+    addi sp, sp, -16
+    sd t0, 0(sp)
+    sd t1, 8(sp)
+    csrr t0, sepc
+    la t1, hart_wake_store
+    ld t1, 0(t1)
+    bne t0, t1, 1f
+    csrr t0, scause
+    li t1, SCAUSE_STORE_ACCESS
+    bne t0, t1, 1f
+    csrr t0, stval
+    la t1, hart_wake_target
+    ld t1, 0(t1)
+    bne t0, t1, 1f
+    la t0, hart_wake_faulted                # the release's store, no file at its address
+    li t1, 1
+    sd t1, 0(t0)
+    csrr t0, sepc
+    addi t0, t0, 4
+    csrw sepc, t0
+    ld t0, 0(sp)
+    ld t1, 8(sp)
+    addi sp, sp, 16
+    sret
+1:
+    ld t0, 0(sp)
+    ld t1, 8(sp)
+    addi sp, sp, 16
 kernel_fault:
+    call uart_lock_fatal
     la a0, msg_kernel_fault
     call uart_puts
     csrr a0, scause
@@ -203,7 +238,8 @@ kernel_fault:
     call uart_put_hex
     li a0, '\n'
     call uart_putc
-    j halt
+    li a0, 1
+    j qemu_exit
 
 .global trap_return
 trap_return:

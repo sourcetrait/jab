@@ -41,8 +41,8 @@
 .endif
 
 .section .text
-.global page_init
-page_init:
+.global page_build
+page_build:
     la t0, page_root
     la t1, page_l1_devices
     srli t1, t1, 12
@@ -115,6 +115,10 @@ page_init:
     addi t0, t0, 8
     addi t2, t2, -1
     bnez t2, 4b
+    ret
+
+.global page_activate
+page_activate:
     la t0, page_root
     srli t0, t0, 12
     li t1, SATP_MODE_SV39

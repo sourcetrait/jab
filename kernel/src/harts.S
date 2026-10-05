@@ -2,6 +2,8 @@
 .include "qemu_virt.inc"
 .include "jab.inc"
 .include "dtb.inc"
+.include "aia.inc"
+.include "hart.inc"
 
 .set HARTS_PROBLEMS, 8
 .set HARTS_PROBLEM_BYTES, 16
@@ -10,6 +12,7 @@
 .set PROBLEM_PAST_MAX, 3
 .set PROBLEM_NO_BOOT, 4
 .set BOOT_ARGS_BYTES, 256
+.set STRAY_FILE, (QEMU_VIRT_IMSIC_S + 0x100000)
 
 .section .text
 
@@ -27,9 +30,6 @@ harts_topology:
     li a1, DTB_MAX
     call dtb_check
     bnez a0, 90f
-    li t0, 1
-    la t1, harts_online
-    sd t0, 0(t1)                            # hart 0 runs
     mv a0, s0
     la a1, path_cpus
     call dtb_path
@@ -170,7 +170,7 @@ harts_topology:
     la t0, harts_discovered
     ld t1, 0(t0)
     andi t1, t1, -2
-    la t0, harts_failed
+    la t0, harts_refused
     sd t1, 0(t0)                            # a problem keeps every other hart parked
 72:
 .ifdef DEBUG
@@ -211,6 +211,7 @@ harts_topology:
     ret
 90:
     mv s1, a0
+    call uart_lock_fatal
     la a0, msg_tree_refused
     call uart_puts
     mv a0, s1
@@ -223,6 +224,7 @@ harts_topology:
     li t1, 0                                # no /cpus: no timebase at all
 92:
     mv s1, t1
+    call uart_lock_fatal
     la a0, msg_timer
     call uart_puts
     mv a0, s1
@@ -311,6 +313,300 @@ timebase_of:
     addi sp, sp, 16
     ret
 
+.global hart_record
+hart_record:
+    li t0, HART_AREA_BYTES
+    mul t0, a0, t0
+    la a0, hart_areas
+    add a0, a0, t0
+    li t0, HART_STACK_BYTES
+    add a0, a0, t0
+    ret
+
+.global hart_self_check
+hart_self_check:
+    sd a0, HART_ID(tp)
+    li t0, HART_CANARY
+    xor t0, t0, a0
+    li t1, HART_STACK_BYTES
+    sub t1, tp, t1                          # its stack's bottom
+    sd t0, 0(t1)
+    ld t2, 0(t1)
+    bne t2, t0, 1f
+    ld t2, HART_ID(tp)
+    bne t2, a0, 1f
+    li a0, 0
+    j 2f
+1:
+    li a0, 1
+2:
+    sd a0, HART_RESULT(tp)
+    ret
+
+hart_swap:
+    addi t0, a0, HART_STATE
+1:
+    lr.d.aqrl t1, (t0)
+    bne t1, a1, 2f
+    sc.d.rl t2, a2, (t0)
+    bnez t2, 1b
+    li a0, 1
+    ret
+2:
+    li a0, 0
+    ret
+
+.global harts_masks
+harts_masks:
+    la t0, harts_discovered
+    ld t0, 0(t0)
+    li a0, 0                                # online
+    li a1, 0                                # failed
+    li a2, 0                                # released, not yet in
+    li t1, 0                                # the hart
+    la t2, hart_areas
+    li t3, HART_STACK_BYTES
+    add t2, t2, t3                          # its record
+1:
+    li t3, JAB_HARTS_MAX
+    bgeu t1, t3, 9f
+    srl t3, t0, t1
+    andi t3, t3, 1
+    beqz t3, 5f
+    li t4, 1
+    sll t4, t4, t1
+    ld t3, HART_STATE(t2)
+    li t5, HART_ONLINE
+    bne t3, t5, 2f
+    or a0, a0, t4
+    j 5f
+2:
+    li t5, HART_FAILED
+    bne t3, t5, 3f
+    or a1, a1, t4
+    j 5f
+3:
+    li t5, HART_RELEASED
+    bne t3, t5, 5f
+    or a2, a2, t4
+5:
+    addi t1, t1, 1
+    li t3, HART_AREA_BYTES
+    add t2, t2, t3
+    j 1b
+9:
+    ret
+
+.global harts_release
+harts_release:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s0, 32(sp)
+    sd s1, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
+    la t0, harts_discovered
+    ld s0, 0(t0)
+    la t0, harts_refused
+    ld s3, 0(t0)                            # parked by the tree's problem
+    li s1, 1                                # the hart
+1:
+    li t0, JAB_HARTS_MAX
+    bgeu s1, t0, 5f
+    srl t0, s0, s1
+    andi t0, t0, 1
+    beqz t0, 4f                             # not in the tree
+    mv a0, s1
+    call hart_record
+    mv s2, a0                               # its record
+    srl t0, s3, s1
+    andi t0, t0, 1
+    beqz t0, 2f
+    li t0, HART_WHY_TOPOLOGY
+    j 31f
+2:
+    mv a0, s1
+    call aia_file_page
+    bnez a0, 3f
+    li t0, HART_WHY_NO_FILE
+31:
+    sd t0, HART_WHY(s2)
+    li t0, HART_FAILED
+    sd t0, HART_STATE(s2)
+    j 4f
+3:
+    li t0, HART_RELEASED
+    sd t0, HART_STATE(s2)
+    fence w, w                              # the state before the slot, whatever wakes the hart
+    la t0, hart_release
+    slli t1, s1, 3
+    add t0, t0, t1
+    sd s2, 0(t0)                            # the release: its record, its stack's top
+    la t0, hart_wake_target
+    sd a0, 0(t0)
+    la t0, hart_wake_faulted
+    sd zero, 0(t0)
+    li t1, AIA_WAKE
+    fence w, o                              # the record and the slot before the wake
+.option push
+.option norvc
+33:
+    sw t1, 0(a0)                            # no file there: a store access fault, which kernel_trap steps over
+.option pop
+.pushsection .rodata
+.balign 8
+.global hart_wake_store
+hart_wake_store:
+    .quad 33b
+.popsection
+    la t0, hart_wake_faulted
+    ld t0, 0(t0)
+    beqz t0, 4f
+    mv a0, s2
+    li a1, HART_RELEASED
+    li a2, HART_FAILED
+    call hart_swap
+    beqz a0, 4f                             # in after all
+    li t0, HART_WHY_NO_FILE
+    sd t0, HART_WHY(s2)
+4:
+    addi s1, s1, 1
+    j 1b
+5:
+    rdtime t0
+    li t1, HART_CHECKIN_TICKS
+    add s3, t0, t1                          # the check-in's bound
+6:
+    call harts_masks
+    beqz a2, 8f                             # every released hart in
+    rdtime t0
+    bgeu t0, s3, 7f
+    csrw stimecmp, s3
+    li t0, (SIE_STIE | SIE_SEIE)
+    csrs sie, t0
+    wfi
+    call irq_drain
+    call irq_report
+    j 6b
+7:
+    mv s0, a2                               # still released at the bound
+    li s1, 1
+71:
+    li t0, JAB_HARTS_MAX
+    bgeu s1, t0, 8f
+    srl t0, s0, s1
+    andi t0, t0, 1
+    beqz t0, 72f
+    mv a0, s1
+    call hart_record
+    mv s2, a0
+    li a1, HART_RELEASED
+    li a2, HART_FAILED
+    call hart_swap
+    beqz a0, 72f                            # in at the last
+    li t0, HART_WHY_NO_CHECKIN
+    sd t0, HART_WHY(s2)
+72:
+    addi s1, s1, 1
+    j 71b
+8:
+    li t0, (SIE_STIE | SIE_SEIE)
+    csrc sie, t0
+    li t0, -1
+    csrw stimecmp, t0
+.ifdef DEBUG
+    la a0, knob_stray
+    call knob_value
+    li t0, 1
+    bne a0, t0, 9f
+    li t0, STRAY_FILE
+    sw zero, 0(t0)                          # the release's fault at another store and address
+.pushsection .rodata
+knob_stray:
+    .asciz "jab.stray="
+.popsection
+9:
+.endif
+    ld ra, 40(sp)
+    ld s0, 32(sp)
+    ld s1, 24(sp)
+    ld s2, 16(sp)
+    ld s3, 8(sp)
+    addi sp, sp, 48
+    ret
+
+.global hart_main
+hart_main:
+    mv s0, a0                               # its hart, as machine mode hands it
+    call hart_record
+    mv tp, a0
+    la t0, trap_vector
+    csrw stvec, t0
+    li t0, SSTATUS_SUM
+    csrs sstatus, t0
+    li t0, (SSTATUS_FS_INITIAL | SSTATUS_VS_INITIAL)
+    csrs sstatus, t0
+    csrw sie, zero
+    li t0, -1
+    csrw stimecmp, t0
+    li t0, SCOUNTEREN_ALL
+    csrw scounteren, t0
+    li t0, (SENVCFG_CBZE | SENVCFG_CBCFE | SENVCFG_CBIE_FLUSH)
+    csrs senvcfg, t0
+    csrw sscratch, zero                     # its interrupt file open since the park
+    mv a0, s0
+    call hart_self_check
+    mv s1, a0                               # 0, or its id or canary read back wrong
+.ifdef DEBUG
+    la a0, knob_late
+    call knob_value
+    bne a0, s0, 2f
+1:
+    ld t0, HART_STATE(tp)                   # held until hart 0 gives up on it
+    li t1, HART_FAILED
+    beq t0, t1, 2f
+    pause
+    j 1b
+.pushsection .rodata
+knob_late:
+    .asciz "jab.late="
+.popsection
+2:
+.endif
+    mv a0, tp
+    li a1, HART_RELEASED
+    li a2, HART_ONLINE
+    beqz s1, 3f
+    li a2, HART_FAILED                      # its self-check failed: out by its own hand
+3:
+    call hart_swap
+    beqz a0, 8f                             # FAILED by hart 0 first: the race lost
+    call hart_wake_boot
+    bnez s1, 8f
+    li t0, SIE_SEIE
+    csrs sie, t0
+4:
+    wfi                                     # idle until a start request
+    call irq_drain
+    j 4b
+8:
+    csrw sie, zero                          # parked for the run, touching nothing
+9:
+    wfi
+    j 9b
+
+hart_wake_boot:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    li a0, 0
+    call aia_file_page
+    li t1, AIA_WAKE
+    fence w, o                              # its record before the wake
+    sw t1, 0(a0)
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
 .ifdef DEBUG
 .global harts_report
 harts_report:
@@ -318,6 +614,10 @@ harts_report:
     sd ra, 24(sp)
     sd s0, 16(sp)
     sd s1, 8(sp)
+    sd s2, 0(sp)
+    call harts_masks
+    mv s1, a0
+    mv s2, a1
     la a0, msg_harts
     call debug_puts
     la t0, harts_discovered
@@ -325,13 +625,11 @@ harts_report:
     call debug_put_hex
     la a0, msg_online
     call debug_puts
-    la t0, harts_online
-    ld a0, 0(t0)
+    mv a0, s1
     call debug_put_hex
     la a0, msg_failed
     call debug_puts
-    la t0, harts_failed
-    ld a0, 0(t0)
+    mv a0, s2
     call debug_put_hex
     li a0, '\n'
     call debug_putc
@@ -388,9 +686,65 @@ harts_report:
     li a0, '\n'
     call debug_putc
 8:
+    li s1, 0                                # every discovered hart's line
+81:
+    li t0, JAB_HARTS_MAX
+    bgeu s1, t0, 89f
+    la t0, harts_discovered
+    ld t0, 0(t0)
+    srl t0, t0, s1
+    andi t0, t0, 1
+    beqz t0, 88f
+    mv a0, s1
+    call hart_record
+    mv s2, a0
+    la a0, msg_hart
+    call debug_puts
+    mv a0, s1
+    call debug_put_dec
+    ld t0, HART_STATE(s2)
+    fence r, r                              # its state before what its swap published
+    li t1, HART_ONLINE
+    bne t0, t1, 84f
+    ld t0, HART_ID(s2)
+    bne t0, s1, 83f
+    ld t0, HART_RESULT(s2)
+    bnez t0, 83f
+    li t0, HART_CANARY
+    xor t0, t0, s1
+    li t1, HART_STACK_BYTES
+    sub t1, s2, t1
+    ld t1, 0(t1)
+    bne t0, t1, 83f
+    la a0, msg_hart_online
+    j 87f
+83:
+    la a0, msg_hart_overwritten
+    j 87f
+84:
+    la a0, msg_hart_unsettled
+    li t1, HART_FAILED
+    bne t0, t1, 87f
+    ld t0, HART_WHY(s2)
+    la a0, msg_hart_self_check              # no reason of hart 0's: out by its own hand
+    beqz t0, 87f
+    la a0, msg_hart_topology
+    li t1, HART_WHY_TOPOLOGY
+    beq t0, t1, 87f
+    la a0, msg_hart_no_file
+    li t1, HART_WHY_NO_FILE
+    beq t0, t1, 87f
+    la a0, msg_hart_no_checkin
+87:
+    call debug_puts
+88:
+    addi s1, s1, 1
+    j 81b
+89:
     ld ra, 24(sp)
     ld s0, 16(sp)
     ld s1, 8(sp)
+    ld s2, 0(sp)
     addi sp, sp, 32
     ret
 .pushsection .rodata
@@ -412,6 +766,20 @@ msg_no_boot:
     .asciz "jab: hart 0 not in the device tree\n"
 msg_bootargs:
     .asciz "jab: bootargs "
+msg_hart_online:
+    .asciz " online\n"
+msg_hart_overwritten:
+    .asciz " online, its record or canary wrong\n"
+msg_hart_topology:
+    .asciz " failed: topology\n"
+msg_hart_no_file:
+    .asciz " failed: no interrupt file\n"
+msg_hart_no_checkin:
+    .asciz " failed: no check-in\n"
+msg_hart_self_check:
+    .asciz " failed: self-check\n"
+msg_hart_unsettled:
+    .asciz " unsettled\n"
 .popsection
 .endif
 
@@ -474,15 +842,12 @@ knob_value:
 
 .global sys_harts
 sys_harts:
+    call harts_masks
+    sd a0, 88(sp)
+    sd a1, 96(sp)
     la t0, harts_discovered
     ld t1, 0(t0)
     sd t1, 80(sp)
-    la t0, harts_online
-    ld t1, 0(t0)
-    sd t1, 88(sp)
-    la t0, harts_failed
-    ld t1, 0(t0)
-    sd t1, 96(sp)
     j trap_return
 
 .section .rodata
@@ -517,16 +882,18 @@ word_bootargs:
     .asciz "bootargs"
 .endif
 
+.section .data
+.balign 8
+.global hart_release
+hart_release:
+    .skip (JAB_HARTS_MAX * 8)
+
 .section .bss
 .balign 8
 .global harts_discovered
 harts_discovered:
     .skip 8
-.global harts_online
-harts_online:
-    .skip 8
-.global harts_failed
-harts_failed:
+harts_refused:
     .skip 8
 .global harts_intc
 harts_intc:
@@ -535,7 +902,17 @@ harts_problem_count:
     .skip 8
 harts_problems:
     .skip (HARTS_PROBLEMS * HARTS_PROBLEM_BYTES)
+.global hart_wake_target
+hart_wake_target:
+    .skip 8
+.global hart_wake_faulted
+hart_wake_faulted:
+    .skip 8
 .ifdef DEBUG
 boot_args:
     .skip BOOT_ARGS_BYTES
 .endif
+.balign 16
+.global hart_areas
+hart_areas:
+    .skip (JAB_HARTS_MAX * HART_AREA_BYTES)

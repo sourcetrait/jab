@@ -676,6 +676,7 @@ debug_flush:
     la t2, debug_line
     sd t2, 0(sp)
     sd a3, 8(sp)
+    call uart_lock
 6:
     ld t2, 0(sp)
     lbu a0, 0(t2)
@@ -687,6 +688,7 @@ debug_flush:
     addi t3, t3, -1
     sd t3, 8(sp)
     bnez t3, 6b
+    call uart_unlock
     ld ra, 24(sp)
     addi sp, sp, 32
 9:

@@ -522,8 +522,10 @@ sound_stalled:
     sd t1, 0(t0)
     addi sp, sp, -16
     sd ra, 8(sp)
+    call uart_lock
     la a0, msg_sound_stalled
     call uart_puts
+    call uart_unlock
     ld ra, 8(sp)
     addi sp, sp, 16
     li a0, 1
@@ -663,8 +665,10 @@ sound_flush:
     call sound_wait
     j 41b
 44:
+    call uart_lock
     la a0, msg_sound_stalled
     call uart_puts
+    call uart_unlock
 5:
 .ifdef DEBUG
     la a0, msg_sound_counts

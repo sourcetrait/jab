@@ -386,7 +386,11 @@ def image-manifest [image: path]: nothing -> record {
 # carries the machine's line, `qemu_binary` and `qemu`, with the
 # `window` and the `audio` backend it ran with, and `machine`, the
 # record of the harts it had (machine-of); `--harts`, `--bootargs`, and
-# `--dtb` are plan's.
+# `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
+# that long after the start and again a second later (threads-of), and
+# `threads` carries each thread's name and the CPU seconds it used in
+# between, the harts' threads named `CPU N/TCG` on Linux; empty when the
+# run ended before the second reading.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -410,7 +414,8 @@ export def launch [
     --harts: int = 4           # the machine's harts, 1 or 2 for a diagnostic run
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>> {
+    --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second later, the result's `threads`; 0 never
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, cpu: float>>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
     let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
@@ -444,6 +449,8 @@ export def launch [
     mut sent_data = 0
     mut sent_pad = 0
     mut header_sent = (not $gamepad.port)
+    mut threads_first: any = null
+    mut threads_held: list<record<name: string, cpu: float>> = []
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
         # QEMU deletes its pid file as it exits, so the read is tried, never
@@ -485,6 +492,19 @@ export def launch [
                 if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
             }
         }
+        # each thread's CPU over the held second: a reading at `threads`,
+        # another a second on, the difference by thread id
+        if $threads != 0sec and $alive {
+            if $threads_first == null and $elapsed >= $threads {
+                $threads_first = (threads-of ($pid | into int))
+            } else if $threads_first != null and ($threads_held | is-empty) and $elapsed >= ($threads + 1sec) {
+                let first = $threads_first
+                $threads_held = (threads-of ($pid | into int) | each {|t|
+                    let before = ($first | where id == $t.id | get -o 0)
+                    if $before == null { null } else { { name: $t.name, cpu: ($t.cpu - $before.cpu) } }
+                } | compact)
+            }
+        }
     }
     if $bridge != null { try { job kill $bridge } }
     {
@@ -503,6 +523,7 @@ export def launch [
         window: $machine.window,
         audio: $machine.audio,
         machine: $machine.machine,
+        threads: $threads_held,
     }
 }
 
