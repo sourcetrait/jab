@@ -343,11 +343,13 @@ surfaces read baked maps, say what the frame still evaluates, and the
 samples against the pixels' blocks of sixteen say how often the lit spans
 read their maps. The load line carries the maps baked, and the bake's own
 line their lumels and time. The tiles built that frame and the pixels read
-from tiles close the line: the first is the build's share of the frame,
-zero once the view has settled, and the second against the lit pixels is
-the near blocks' share, the far and edge ones staying on the lit loop
-(tile.S). The tile arena is reset after the bake, since a map's maps are
-the tiles' frame.
+from tiles follow: the first is the build's share of the frame, zero once
+the view has settled, and the second against the lit pixels is the near
+blocks' share, the far and edge ones staying on the lit loop (tile.S). The
+tile arena is reset after the bake, since a map's maps are the tiles'
+frame. The packet closes the line: the raster's microseconds among the
+phases, and at the end the commands the frame's packets held, the flushes,
+and the bindings a reset invalidated (raster.S).
 
 ## count_report
 
@@ -600,7 +602,7 @@ carries none.
 
 `14 u8`.
 
-The debug lines' text, from here to word_resets, is in a debug build alone,
+The debug lines' text, from here to word_invalidated, is in a debug build alone,
 and the count line's after it, msg_count to word_count_mismatches, in a
 COUNT build alone.
 
@@ -694,7 +696,7 @@ COUNT build alone.
 
 ## word_uncovered
 
-`55 u8`.
+`63 u8`.
 
 ## word_comma
 
@@ -739,6 +741,18 @@ COUNT build alone.
 ## word_resets
 
 `10 u8`.
+
+## word_commands
+
+`12 u8`.
+
+## word_flushes
+
+`11 u8`.
+
+## word_invalidated
+
+`15 u8`.
 
 ## msg_count
 

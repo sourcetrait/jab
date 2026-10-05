@@ -14,28 +14,43 @@ call local surface_axis gradient addr,field u64,first u64,size fa1 f32,hz fs4 f6
  first :the first of the three polygon fields written
  size :the texture's size along the coordinate
  a :1/z's A from surface_setup, with b its B and c its C
-call local lumap_bind > coefficients POLY_UZA(poly) 6 i64,read POLY_LUMEL(poly) u64 [464:525] :the lit, mapped polygon in hand bound to its lumel map, the map's texel origin folded into the u/z and v/z coefficients and the read's one word set; a polygon unlit or without a map is left alone
-call local row_crossings row f32 > count a0 u64,crossings crossings MAX_EDGES f32 [526:562] :the edges the row's centre crosses, their x in crossings sorted ascending
+call local lumap_bind > coefficients POLY_UZA(poly) 6 i64,read POLY_LUMEL(poly) u64 [464:537] :the lit, mapped polygon in hand bound to its lumel map, the map's texel origin folded into the u/z and v/z coefficients and the read's one word set; a polygon unlit or without a map is left alone
+macro span_cap dst reg,scratch reg > cap dst u64,scratch scratch [525:535] :the spans a packet holds, SPAN_RECORDS, or on a debug build the console's cap where it is smaller
+call local row_crossings row f32 > count a0 u64,crossings crossings MAX_EDGES f32 [538:574] :the edges the row's centre crosses, their x in crossings sorted ascending
  row :the row's centre
-call local span_bound x f32 > pixel a0 i32 [564:576] :the first pixel whose centre is at or past x, within the screen's columns
-call local row_range > first a0 i32,last a1 i32 [578:596] :the rows the edges cover, within the screen
+call local span_bound x f32 > pixel a0 i32 [576:588] :the first pixel whose centre is at or past x, within the screen's columns
+call local row_range > first a0 i32,last a1 i32 [590:608] :the rows the edges cover, within the screen
  last :the row past the last
-call local poly_fill > serial poly_serial u64,records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7,fa0 [598:676] :the polygon in hand filled by scanlines with the surface in hand, its rows and each span held within the rectangle in hand, each span recorded before it is drawn
-call local span_record first i32,end i32,row i32 > record span_records 16 u8,count span_count u64 [678:700] :the span recorded before it is drawn, its row, its pixels, the mode, the surface, and the polygon's serial, into the frame's table while it has room
+call local poly_fill > records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,commands commands MAX_COMMANDS*POLY_SIZE u8,held command_count u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 26 u64,clobber a0-a7,fa0 [610:700] :the polygon in hand's spans by scanlines into the packet, its rows and each span held within the rectangle in hand, the polygon copied into the packet as a command at its first span; a full packet rendered whole first
+ screen :only through a full packet's render, as is depth
+call local span_record first i32,end i32,row i32,command u32 > record span_records 16 u8,count span_count u64 [702:719] :the span recorded into the packet, its row, its pixels, the polygon's mode and surface, and its command's index, the caller holding room for it
  end :the pixel past the last
- record :the entry at the count before, written while the count is under SPAN_RECORDS
- count :running on past the table, which a reader takes as the frame's records being incomplete
-call local poly_rect count u64 > x0 a0 i32,x1 a1 i32,y0 a2 i32,y1 a3 i32 [702:842] :the screen rectangle of the projected polygon in hand, a pixel of slack each side, held within the screen
+ command :its index in the packet
+ record :the entry at the count before
+call local packet_room held a3 i64 > command a0 u64,clobber a1-a7 [721:739] :room in the packet for the polygon in hand's next span: the packet rendered whole first when its spans are full, and the polygon's command emitted when it has none there
+ held :the polygon's command in the packet, -1 when it has none there
+ command :its index in the packet
+call local command_emit > command a0 u64,commands commands MAX_COMMANDS*POLY_SIZE u8,held command_count u64,emitted STAT_COMMANDS(stats) u64,clobber a1-a7 [741:782] :the polygon in hand copied whole into the packet as its next command, the packet rendered whole first when its commands are full
+ command :its index in the packet
+call local packet_flush > flushes STAT_FLUSHES(stats) u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,clobber a0-a7 [784:789] :a full packet rendered whole before preparation goes on, counted; packet_render's tail
+call local packet_resolve > modes POLY_MODE(commands) u64,invalidated STAT_INVALIDATED(stats) u64 [791:817] :every command of the packet whose tiles were bound in a generation of the arena before its last reset taken off its tiles, onto the chain at each block's level, and counted
+call local context_counts context tp addr > stats stats 26 u64,counters CTX_SPANS(tp) 7 u64 [819:873] :the raster context's counters added into the frame's stats and zeroed, and on a COUNT build its counts into count_stats
+call local scratch_poison > poisoned poly u64 [874:883] :on a debug build, the producer's scratch overwritten with SCRATCH_POISON once the frame's packet is published, so a read of it from the raster draws wrong or faults
+ poisoned :every word from poly to scratch_end
+call local poly_rect count u64 > x0 a0 i32,x1 a1 i32,y0 a2 i32,y1 a3 i32 [885:1025] :the screen rectangle of the projected polygon in hand, a pixel of slack each side, held within the screen
  count :the projected point count
  x1 :the column past the last, with y1 the row past the last
-macro lumel_sample u a5 i64,v a6 i64 > bright a5 u64,scratch a0,a6-a7,t3-t4 [751:814] :the brightness at a texel coordinate of the surface in hand from its lumel map, the coordinate held within the map, the four lumels about it summed under weights adding to 256
+macro lumel_sample u a5 i64,v a6 i64 > bright a5 u64,scratch a0,a6-a7,t3-t4 [934:997] :the brightness at a texel coordinate of the context's command from its lumel map, the coordinate held within the map, the four lumels about it summed under weights adding to 256
  u :16.16 texels from the map's origin
  v :16.16 texels from the map's origin
  bright :the three channels in 16.16 packed CHANNEL_BITS apart
-macro mip_bind level 192(sp) u64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,shift s5 u64,spill 40(sp) u64,scratch a5-a7 [816:831] :the texture's level for the block in hand bound for the loops, its texels, masks, and row shift into the texture's registers and the shift from a 16.16 coordinate to its texel at the level, u, v, and their steps left at level 0 as the tiles read them
+macro mip_bind level 192(sp) u64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshift a4 u64,shift s5 u64,spill 40(sp) u64,scratch a5-a7 [999:1014] :the context's command's texture level for the block in hand bound for the loops, its texels, masks, and row shift into the texture's registers and the shift from a 16.16 coordinate to its texel at the level, u, v, and their steps left at level 0 as the tiles read them
  level :the block's level in span_fill's frame, the chain's last at most
  shift :the level plus 16
  spill :s5 as it was, v/z, which the block's end takes back
-macro count_add field imm,scratch reg,base reg,n=1 imm > counter field(count_stats) u64,base base addr,scratch scratch [834:839] :on a COUNT build alone, the counter at field in count_stats raised by n, the two registers named changed
-call local span_fill first i32,end i32,row i32 > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 22 u64,clobber a0-a7 [843:1736] :the pixels of a row filled with the surface in hand, textured, masked, sky, or lit from its lumel map or flat by one brightness, each block at one level from its footprint held under the chain's last, read from the tiles where that level is built whole, else from the chain; no float in the loop
+macro count_add field imm,scratch reg,base reg,n=1 imm > counter field(CTX_COUNT(tp)) u64,base base addr,scratch scratch [1017:1022] :on a COUNT build alone, the raster context's counter at field raised by n, the two registers named changed
+call local packet_render > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 26 u64,context tp addr,clobber a0-a7 [1026:1072] :the packet rendered on hart 0's context: every command's tiles resolved against the arena's generation, then every span in order through span_fill with its command in the context, the context's counters into the frame's stats, the packet emptied, and the render's ticks added to the raster's
+ context :raster_context
+call local span_fill first i32,end i32,row i32,context tp addr > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,counters CTX_SPANS(tp) 7 u64,clobber a0-a7 [1074:1963] :the pixels of a row filled with the context's command, textured, masked, sky, or lit from its lumel map or flat by one brightness, each block at one level from its footprint held under the chain's last, read from the tiles where that level is built whole, else from the chain; no float in the loop
  end :the pixel past the last
+ context :the raster context, its command the polygon as preparation published it

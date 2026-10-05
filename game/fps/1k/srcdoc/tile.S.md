@@ -93,6 +93,14 @@ padding); the program's bss costs nothing until touched, RAM being zero
 at QEMU's start and the kernel zeroing only its own. The frame line
 counts the resets since the load; the gauge's views read none.
 
+A reset advances the arena's generation, and a binding holds the
+generation it was made in (POLY_TILE_GENERATION), so a command of the
+frame's packet bound before a reset in the same frame is known stale when
+the packet renders (raster.S's packet_resolve) and takes the chain at its
+own level, never an atlas a later surface may have rebuilt over its own.
+Nothing resets while a packet renders: construction and reservation are
+preparation's.
+
 ## tiles_bind
 
 A surface is built whole, a level at a time from the finest, the cells
@@ -133,6 +141,22 @@ On a debug build the console's L frame caps the levels a surface builds
 (its byte 6, tile_level_cap), so a fixture can hold a surface at level 0
 alone while its blocks ask level 1, and read that they take the chain at
 level 1 rather than a sharper tile; a release build carries none of it.
+
+On a debug build the console's K frame resets the arena after the frame's
+first binds, every frame (tile_reset_after, counted in tile_binds), the
+arena in use poisoned first: the stale binding's fixture, whose commands
+bound before the reset must draw the chain and never the poison. The
+forced reset counts with the arena's own.
+
+The binding takes the arena's generation with the tiled flag, so the
+command copied from the polygon carries it.
+
+## tiles_poison
+
+TILE_POISON is written two a word over the arena up to its cursor, so a
+stale read through an atlas the forced reset took back draws the poison
+where the tiled and the lit pictures hold the surface's own colours; the
+fixture counts such pixels.
 
 ## tiles_alloc
 
@@ -366,9 +390,21 @@ room's light changes too little across a texel to tell the two.
 
 `u64`: the most the arena has held since the load, in bytes.
 
+## tile_generation
+
+`u64`: the arena's generation, advanced by every reset.
+
 ## tile_level_cap
 
 `u64`: on a debug build alone, the levels a surface builds, the console's L frame's byte 6, 0 for every level.
+
+## tile_binds
+
+`u64`: on a debug build alone, the frame's binds so far, for the console's forced reset.
+
+## tile_reset_after
+
+`u32`: on a debug build alone, the binds each frame before the forced reset, the console's K frame's, 0 for none.
 
 ## tilemaps
 

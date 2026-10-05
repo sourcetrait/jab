@@ -31,8 +31,18 @@ right before its fill (tiles_bind, tile.S): after the mode and the map's
 bind, since the tiled flag rides the lit one, and after the loops'
 projection, which is why the plane's bind sits at the end of its loop
 rather than beside the map's. The frame's tile budget is set beside the
-stats' zeroing, so the first polygons drawn build first; a COUNT build
+stats' zeroing, so the first polygons prepared build first; a COUNT build
 zeroes its count_stats there too (raster.S).
+
+The frame is prepared, then rendered: the flow, the sectors, the sprites,
+and the actors fill their polygons into the frame's packet, and the
+packet is rendered after the actors (raster.S), the depth buffer and on a
+debug build the magenta prepaint laid before preparation as before, since
+preparation reads neither. The phases are preparation's: the planes', the
+walls', and the sprites' ticks are marked by phase_mark, the clock less
+the raster's ticks, so a full packet rendered inside a phase is the
+raster's and no phase's; the raster's ticks are the frame line's last
+phase.
 
 ## k_near_sq_d
 
@@ -67,8 +77,15 @@ The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached;
 the release build leaves the frame before. The flow is timed as the portals'
-phase; the sectors are drawn in the order the flow reached them, then the
-sprites and the actors of the sectors drawn.
+phase; the sectors are prepared in the order the flow reached them, then the
+sprites and the actors of the sectors reached, into a packet emptied at the
+frame's start, a debug build's bind count with it; on a debug build the
+producer's scratch is poisoned before the last render.
+
+## phase_mark
+
+A phase's ticks are one mark less another; with no flush in a phase the
+raster's ticks do not move inside it and the mark is the clock's.
 
 ## world_flow
 
@@ -207,7 +224,7 @@ is.
 
 ## stats
 
-`22 u64`: the frame's counts and its ticks by phase, STAT_* fields.
+`26 u64`: the frame's counts and its ticks by phase, STAT_* fields.
 
 ## walk_fifo
 

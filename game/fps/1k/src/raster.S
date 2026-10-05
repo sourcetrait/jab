@@ -522,6 +522,18 @@ lumap_bind:
 9:
     ret
 
+.macro span_cap dst, scratch
+    li \dst, SPAN_RECORDS
+.ifdef DEBUG
+    la \scratch, packet_span_cap
+    lwu \scratch, 0(\scratch)
+    beqz \scratch, .Lspan_cap\@
+    bgeu \scratch, \dst, .Lspan_cap\@
+    mv \dst, \scratch               # the console's cap on the spans a packet holds
+.Lspan_cap\@:
+.endif
+.endm
+
 .balign CODE_PAGE
 row_crossings:
     li a0, 0
@@ -596,14 +608,10 @@ row_range:
     ret
 
 poly_fill:
-    addi sp, sp, -48
-    sd ra, 40(sp)
-    sd s0, 32(sp)
-    sd s1, 24(sp)
-    la t0, poly_serial
-    ld t1, 0(t0)
-    addi t1, t1, 1
-    sd t1, 0(t0)                    # the polygon's serial in the frame
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s0, 48(sp)
+    sd s1, 40(sp)
     la t0, edge_count
     ld t0, 0(t0)
     beqz t0, 9f
@@ -619,6 +627,8 @@ poly_fill:
 232:
     mv s0, a0                       # the row
     mv s1, a1                       # the row past the last
+    li t0, -1
+    sd t0, 32(sp)                   # the polygon's command in the packet, none before its first span
 1:
     bge s0, s1, 9f
     fcvt.s.w fa0, s0
@@ -657,9 +667,23 @@ poly_fill:
     mv a1, t3
 234:
     bge a0, a1, 3f
+    ld a3, 32(sp)                   # the command
+    la t0, span_count
+    ld t1, 0(t0)
+    span_cap t2, t3
+    bltz a3, 235f                   # the polygon's first span: its command first
+    bltu t1, t2, 236f               # room in the packet for the span
+235:
+    sd a0, 0(sp)
+    sd a1, 24(sp)
+    call packet_room
+    sd a0, 32(sp)
+    mv a3, a0
+    ld a0, 0(sp)
+    ld a1, 24(sp)
+236:
     mv a2, s0
     call span_record
-    call span_fill
 3:
     ld t0, 8(sp)
     addi t0, t0, 2
@@ -669,10 +693,10 @@ poly_fill:
     addi s0, s0, 1
     j 1b
 9:
-    ld ra, 40(sp)
-    ld s0, 32(sp)
-    ld s1, 24(sp)
-    addi sp, sp, 48
+    ld ra, 56(sp)
+    ld s0, 48(sp)
+    ld s1, 40(sp)
+    addi sp, sp, 64
     ret
 
 span_record:
@@ -680,8 +704,6 @@ span_record:
     ld t1, 0(t0)
     addi t2, t1, 1
     sd t2, 0(t0)
-    li t2, SPAN_RECORDS
-    bgeu t1, t2, 9f
     la t2, span_records
     slli t1, t1, 4
     add t2, t2, t1
@@ -693,11 +715,172 @@ span_record:
     sh t1, SPAN_MODE(t2)
     ld t1, POLY_SURFACE(t3)
     sw t1, SPAN_SURFACE(t2)
-    la t3, poly_serial
-    ld t3, 0(t3)
-    sw t3, SPAN_POLY(t2)
-9:
+    sw a3, SPAN_POLY(t2)
     ret
+
+packet_room:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd a3, 0(sp)
+    la t0, span_count
+    ld t1, 0(t0)
+    span_cap t2, t3
+    bltu t1, t2, 1f
+    call packet_flush               # the packet's spans full: rendered whole, emptied
+    li t0, -1
+    sd t0, 0(sp)                    # the polygon's command gone with it
+1:
+    ld a0, 0(sp)
+    bgez a0, 2f
+    call command_emit
+2:
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
+command_emit:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, command_count
+    ld t1, 0(t0)
+    li t2, MAX_COMMANDS
+.ifdef DEBUG
+    la t3, packet_command_cap
+    lwu t3, 0(t3)
+    beqz t3, 1f
+    bgeu t3, t2, 1f
+    mv t2, t3                       # the console's cap on the commands a packet holds
+1:
+.endif
+    bltu t1, t2, 2f
+    call packet_flush               # the packet's commands full: rendered whole, emptied
+    la t0, command_count
+    ld t1, 0(t0)
+2:
+    addi t2, t1, 1
+    sd t2, 0(t0)
+    li t2, POLY_SIZE
+    mul t2, t1, t2
+    la t3, commands
+    add t3, t3, t2                  # the command
+    la t4, poly
+    li t5, (POLY_SIZE / 8)
+3:
+    ld t6, 0(t4)
+    sd t6, 0(t3)
+    addi t4, t4, 8
+    addi t3, t3, 8
+    addi t5, t5, -1
+    bnez t5, 3b
+    la t0, stats
+    ld t2, STAT_COMMANDS(t0)
+    addi t2, t2, 1
+    sd t2, STAT_COMMANDS(t0)
+    mv a0, t1
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
+packet_flush:
+    la t0, stats
+    ld t1, STAT_FLUSHES(t0)
+    addi t1, t1, 1
+    sd t1, STAT_FLUSHES(t0)
+    j packet_render
+
+packet_resolve:
+    la t0, commands
+    la t1, command_count
+    ld t1, 0(t1)
+    la t2, tile_generation
+    ld t2, 0(t2)
+    li t5, 0                        # the bindings invalidated
+1:
+    beqz t1, 9f
+    ld t3, POLY_MODE(t0)
+    andi t4, t3, POLY_TILED
+    beqz t4, 2f
+    ld t4, POLY_TILE_GENERATION(t0)
+    beq t4, t2, 2f
+    andi t3, t3, ~POLY_TILED        # bound before a reset: the chain at each block's level
+    sd t3, POLY_MODE(t0)
+    addi t5, t5, 1
+2:
+    addi t0, t0, POLY_SIZE
+    addi t1, t1, -1
+    j 1b
+9:
+    la t0, stats
+    ld t1, STAT_INVALIDATED(t0)
+    add t1, t1, t5
+    sd t1, STAT_INVALIDATED(t0)
+    ret
+
+context_counts:
+    la t0, stats
+    ld t1, CTX_SPANS(tp)
+    ld t2, STAT_SPANS(t0)
+    add t2, t2, t1
+    sd t2, STAT_SPANS(t0)
+    ld t1, CTX_PIXELS(tp)
+    ld t2, STAT_PIXELS(t0)
+    add t2, t2, t1
+    sd t2, STAT_PIXELS(t0)
+    ld t1, CTX_LIT_SPANS(tp)
+    ld t2, STAT_LIT_SPANS(t0)
+    add t2, t2, t1
+    sd t2, STAT_LIT_SPANS(t0)
+    ld t1, CTX_LIT_PIXELS(tp)
+    ld t2, STAT_LIT_PIXELS(t0)
+    add t2, t2, t1
+    sd t2, STAT_LIT_PIXELS(t0)
+    ld t1, CTX_REJECTED(tp)
+    ld t2, STAT_REJECTED(t0)
+    add t2, t2, t1
+    sd t2, STAT_REJECTED(t0)
+    ld t1, CTX_SAMPLES(tp)
+    ld t2, STAT_SAMPLES(t0)
+    add t2, t2, t1
+    sd t2, STAT_SAMPLES(t0)
+    ld t1, CTX_TILED_PIXELS(tp)
+    ld t2, STAT_TILED_PIXELS(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILED_PIXELS(t0)
+.ifdef COUNT
+    la t0, count_stats
+    li t3, 0
+1:
+    add t4, tp, t3
+    ld t1, CTX_COUNT(t4)
+    sd zero, CTX_COUNT(t4)
+    add t4, t0, t3
+    ld t2, 0(t4)
+    add t2, t2, t1
+    sd t2, 0(t4)
+    addi t3, t3, 8
+    li t4, COUNT_SIZE
+    bltu t3, t4, 1b
+.endif
+    sd zero, CTX_SPANS(tp)
+    sd zero, CTX_PIXELS(tp)
+    sd zero, CTX_LIT_SPANS(tp)
+    sd zero, CTX_LIT_PIXELS(tp)
+    sd zero, CTX_REJECTED(tp)
+    sd zero, CTX_SAMPLES(tp)
+    sd zero, CTX_TILED_PIXELS(tp)
+    ret
+
+.ifdef DEBUG
+scratch_poison:
+    la t0, poly
+    la t1, scratch_end
+    li t2, SCRATCH_POISON
+1:
+    sd t2, 0(t0)
+    addi t0, t0, 8
+    bltu t0, t1, 1b
+    ret
+.endif
 
 poly_rect:
     la t0, pverts
@@ -749,7 +932,7 @@ poly_rect:
     ret
 
 .macro lumel_sample
-    la t3, poly
+    ld t3, CTX_COMMAND(tp)
     ld t3, POLY_LUMEL(t3)           # the arena offset, a row's bytes, the rows, k
     srli a7, t3, LUMEL_K_SHIFT
     addi a7, a7, 16                 # k + 16
@@ -815,7 +998,7 @@ poly_rect:
 
 .macro mip_bind
     ld a5, 192(sp)                  # the block's level, the chain's last at most
-    la a6, poly
+    ld a6, CTX_COMMAND(tp)
     ld a1, POLY_MIPS(a6)
     slli a7, a5, 3
     add a1, a1, a7
@@ -832,7 +1015,7 @@ poly_rect:
 
 .ifdef COUNT
 .macro count_add field, scratch, base, n=1
-    la \base, count_stats
+    addi \base, tp, CTX_COUNT
     ld \scratch, \field(\base)
     addi \scratch, \scratch, \n
     sd \scratch, \field(\base)
@@ -840,6 +1023,54 @@ poly_rect:
 .endif
 
 .balign CODE_PAGE
+packet_render:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s2, 32(sp)
+    sd s3, 24(sp)
+    sd s4, 16(sp)
+    rdtime t0
+    sd t0, 0(sp)                    # the render's start
+    call packet_resolve
+    la tp, raster_context
+    la s2, span_records
+    la t0, span_count
+    ld s3, 0(t0)                    # the spans
+    la s4, commands
+    beqz s3, 2f
+1:
+    lwu t0, SPAN_POLY(s2)
+    li t1, POLY_SIZE
+    mul t0, t0, t1
+    add t0, t0, s4
+    sd t0, CTX_COMMAND(tp)          # the span's command, which span_fill reads through the context
+    lhu a0, SPAN_X0(s2)
+    lhu a1, SPAN_X1(s2)
+    lhu a2, SPAN_ROW(s2)
+    call span_fill
+    addi s2, s2, SPAN_RECORD_SIZE
+    addi s3, s3, -1
+    bnez s3, 1b
+2:
+    call context_counts
+    la t0, span_count
+    sd zero, 0(t0)
+    la t0, command_count
+    sd zero, 0(t0)                  # the packet emptied
+    rdtime t0
+    ld t1, 0(sp)
+    sub t0, t0, t1
+    la t1, stats
+    ld t2, STAT_RASTER_TICKS(t1)
+    add t2, t2, t0
+    sd t2, STAT_RASTER_TICKS(t1)
+    ld ra, 40(sp)
+    ld s2, 32(sp)
+    ld s3, 24(sp)
+    ld s4, 16(sp)
+    addi sp, sp, 48
+    ret
+
 span_fill:
     addi sp, sp, -240
     sd ra, 136(sp)
@@ -858,11 +1089,11 @@ span_fill:
     sd zero, 144(sp)                # the pixels the depth test rejected, as entered less passed
     sd zero, 176(sp)                # the lumel samples
 .ifdef OWNER
-    la t0, poly
+    ld t0, CTX_COMMAND(tp)
     ld t0, POLY_SURFACE(t0)
     sd t0, 32(sp)                   # the surface, stored as the pixel
 .endif
-    la t0, poly
+    ld t0, CTX_COMMAND(tp)          # the command, the polygon as preparation published it
     ld s3, POLY_IZA(t0)
     ld t1, POLY_IZB(t0)
     ld t2, POLY_IZC(t0)
@@ -885,24 +1116,22 @@ span_fill:
     add s5, s5, t1
     add s5, s5, t2                  # v/z
     sub s10, a1, a0                 # the pixels left
-    la t3, stats
-    ld t4, STAT_SPANS(t3)
+    ld t4, CTX_SPANS(tp)
     addi t4, t4, 1
-    sd t4, STAT_SPANS(t3)
-    ld t4, STAT_PIXELS(t3)
+    sd t4, CTX_SPANS(tp)
+    ld t4, CTX_PIXELS(tp)
     add t4, t4, s10
-    sd t4, STAT_PIXELS(t3)
-    la t3, poly
+    sd t4, CTX_PIXELS(tp)
+    ld t3, CTX_COMMAND(tp)
     ld t4, POLY_MODE(t3)
     andi t4, t4, POLY_LIT
     beqz t4, 5f
-    la t6, stats
-    ld t5, STAT_LIT_SPANS(t6)
+    ld t5, CTX_LIT_SPANS(tp)
     addi t5, t5, 1
-    sd t5, STAT_LIT_SPANS(t6)
-    ld t5, STAT_LIT_PIXELS(t6)
+    sd t5, CTX_LIT_SPANS(tp)
+    ld t5, CTX_LIT_PIXELS(tp)
     add t5, t5, s10
-    sd t5, STAT_LIT_PIXELS(t6)
+    sd t5, CTX_LIT_PIXELS(tp)
 5:
     li t1, SCREEN_PITCH
     mul t1, a2, t1
@@ -915,7 +1144,7 @@ span_fill:
     mv a2, t1
     mv t1, t2
     mv t0, a2
-    la t3, poly
+    ld t3, CTX_COMMAND(tp)
     ld a1, POLY_TEX(t3)
     ld a2, POLY_VMASK(t3)
     ld a3, POLY_UMASK(t3)
@@ -942,7 +1171,7 @@ span_fill:
     srai s9, s9, 16                 # v
     li t3, -1
     sd t3, 200(sp)                  # no tiles for the span
-    la a0, poly
+    ld a0, CTX_COMMAND(tp)
     mul t3, s10, s3
     add t3, s2, t3                  # 1/z at the end, kept for the row below it
     li t4, IZ_MIN
@@ -1081,7 +1310,7 @@ span_fill:
     addi t3, t3, -1
     sd t3, 200(sp)
 29:
-    la a0, poly
+    ld a0, CTX_COMMAND(tp)
     ld t3, POLY_MIP_COUNT(a0)
     addi t3, t3, -1
     sd t3, 224(sp)                  # the chain's last level, every block's bound
@@ -1092,7 +1321,7 @@ span_fill:
     ld t3, 16(sp)
     andi t3, t3, POLY_LIT
     beqz t3, 30f
-    la t3, poly
+    ld t3, CTX_COMMAND(tp)
     ld t4, POLY_LUMAP(t3)
     bnez t4, 20f
     ld t4, POLY_FLAT_BRIGHT(t3)
@@ -1264,7 +1493,7 @@ span_fill:
     bge a0, a6, 441f
     mv a0, a6
 441:
-    la a5, poly
+    ld a5, CTX_COMMAND(tp)
     ld a5, POLY_LUMEL(a5)
     srli a5, a5, LUMEL_K_SHIFT      # k
     addi a7, a5, (15 - INTERVAL_SHIFT_MAX)
@@ -1497,7 +1726,7 @@ span_fill:
 80:
     li t4, 0
     sd s5, 40(sp)
-    la a0, poly
+    ld a0, CTX_COMMAND(tp)
     ld a5, 192(sp)                  # the block's level
     slli a6, a5, 3
     add a6, a6, a0
@@ -1580,10 +1809,9 @@ span_fill:
     addi t2, t2, -1
     bnez t2, 85b
 83:
-    la a5, stats
-    ld a6, STAT_TILED_PIXELS(a5)
+    ld a6, CTX_TILED_PIXELS(tp)
     add a6, a6, s11
-    sd a6, STAT_TILED_PIXELS(a5)
+    sd a6, CTX_TILED_PIXELS(tp)
     sd zero, 152(sp)
     li a5, -1
     sd a5, 160(sp)
@@ -1662,7 +1890,7 @@ span_fill:
 .ifdef COUNT
     count_add COUNT_DIVIDES, a5, a6, 2
 .endif
-    la t3, poly
+    ld t3, CTX_COMMAND(tp)
     lwu t4, POLY_TEXWI(t3)
     slli t3, t4, 16
     li t5, SCREEN_W
@@ -1672,7 +1900,7 @@ span_fill:
     mul s8, s8, t4                  # the offset in texels
     mul t3, t5, a0
     add s8, s8, t3                  # u at the first pixel
-    la t3, poly
+    ld t3, CTX_COMMAND(tp)
     lwu t4, POLY_TEXHI(t3)
     slli t3, t4, 16
     li t6, SCREEN_W
@@ -1711,15 +1939,14 @@ span_fill:
     sub t3, s10, t4
     sd t3, 144(sp)
 90:
-    la t3, stats
-    ld t4, STAT_REJECTED(t3)
+    ld t4, CTX_REJECTED(tp)
     ld t5, 144(sp)
     add t4, t4, t5
-    sd t4, STAT_REJECTED(t3)
-    ld t4, STAT_SAMPLES(t3)
+    sd t4, CTX_REJECTED(tp)
+    ld t4, CTX_SAMPLES(tp)
     ld t5, 176(sp)
     add t4, t4, t5
-    sd t4, STAT_SAMPLES(t3)
+    sd t4, CTX_SAMPLES(tp)
     ld ra, 136(sp)
     ld s2, 128(sp)
     ld s3, 120(sp)
@@ -1775,13 +2002,26 @@ edges:
     .skip (MAX_EDGES * EDGE_SIZE)
 crossings:
     .skip (MAX_EDGES * 4)
+scratch_end:
 .balign 16
 span_records:
     .skip (SPAN_RECORDS * SPAN_RECORD_SIZE)
 span_count:
     .skip 8
-poly_serial:
+command_count:
     .skip 8
+.ifdef DEBUG
+packet_command_cap:
+    .skip 4
+packet_span_cap:
+    .skip 4
+.endif
+.balign 64
+raster_context:
+    .skip CTX_SIZE
+.balign 16
+commands:
+    .skip (MAX_COMMANDS * POLY_SIZE)
 .balign 16
 zbuf:
     .skip ZBUF_BYTES

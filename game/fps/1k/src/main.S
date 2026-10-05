@@ -885,6 +885,13 @@ frame_report:
     li t0, US_TICKS
     divu a1, a1, t0
     call append_dec
+    la a1, word_comma
+    call append_str
+    la t0, stats
+    ld a1, STAT_RASTER_TICKS(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
     la a1, word_spans
     call append_str
     la t0, stats
@@ -936,6 +943,21 @@ frame_report:
     call append_str
     la t0, stats
     ld a1, STAT_TILE_RESETS(t0)
+    call append_dec
+    la a1, word_commands
+    call append_str
+    la t0, stats
+    ld a1, STAT_COMMANDS(t0)
+    call append_dec
+    la a1, word_flushes
+    call append_str
+    la t0, stats
+    ld a1, STAT_FLUSHES(t0)
+    call append_dec
+    la a1, word_invalidated
+    call append_str
+    la t0, stats
+    ld a1, STAT_INVALIDATED(t0)
     call append_dec
     call line_end
     ld ra, 8(sp)
@@ -1381,7 +1403,7 @@ word_planes:
 word_openings:
     .asciz " openings, "
 word_uncovered:
-    .asciz " uncovered; clear, planes, walls, portals, sprites us "
+    .asciz " uncovered; clear, planes, walls, portals, sprites, raster us "
 word_comma:
     .asciz ", "
 word_spans:
@@ -1404,6 +1426,12 @@ word_tiled:
     .asciz ", tiled "
 word_resets:
     .asciz ", resets "
+word_commands:
+    .asciz ", commands "
+word_flushes:
+    .asciz ", flushes "
+word_invalidated:
+    .asciz ", invalidated "
 .ifdef COUNT
 msg_count:
     .asciz "fps: count "

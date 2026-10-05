@@ -341,9 +341,13 @@ The chain's table is mip.S's.
 
 `u64`: the levels the chain has, which a block's level is held under.
 
+## .set POLY_TILE_GENERATION
+
+`u64`: the tile arena's generation when the tiled flag was set, which the packet's resolve holds against the arena's.
+
 ## .set POLY_SIZE
 
-The polygon in hand's bytes.
+The polygon in hand's bytes, and a command's, the packet's copy of it.
 
 ## .set LUMEL_OFFSET_BITS
 
@@ -490,16 +494,14 @@ The ring's index mask.
 
 `u16`: a span record's row.
 
-A span the fill emits before drawing it. SPAN_RECORDS of them a frame; the
-count runs on past the table when a frame has more, and a reader of a frame
-whose count passed the table falls back, since the prefix it holds is not the
-frame.
+A span the fill records into the frame's packet, which the packet's render
+draws in order. SPAN_RECORDS of them a packet; a full packet is rendered
+whole and emptied before the fill goes on, so a frame of more spans is
+several packets and every span is drawn, never a prefix.
 
-The span record is the fill's output before drawing, its row and ends in
-sixteen bits with the mode beside them and the surface and the polygon's
-serial in a word each, sized for the frames measured and counted past its
-end rather than stopped, the count past the table meaning a reader falls
-back for that frame.
+The span record is the fill's output, its row and ends in sixteen bits with
+the mode beside them and the surface and the command's index in a word
+each.
 
 ## .set SPAN_X0
 
@@ -519,7 +521,7 @@ back for that frame.
 
 ## .set SPAN_POLY
 
-`u32`: the polygon's serial in the frame, telling a masked opening's fill from its wall's pieces.
+`u32`: the span's command, its index in the packet's table, telling a masked opening's fill from its wall's pieces.
 
 ## .set SPAN_RECORD_SIZE
 
@@ -527,7 +529,7 @@ A span record's bytes.
 
 ## .set SPAN_RECORDS
 
-The records a frame holds, the count running on past them.
+The records a packet holds.
 
 ## .set GRID_O
 
@@ -983,6 +985,27 @@ each cell built or shrunk, and is never added to them.
 
 `u64`: the tiles' ticks, reserving, building, and shrinking, within the planes' and the walls'.
 
+## .set STAT_RASTER_TICKS
+
+`u64`: the packets' renders' ticks, a flush's with the last's, no preparation phase's.
+
+The spans', pixels', lit, rejected, samples', and tiled counts are the
+contexts' summed after each render; the phases before the raster are
+preparation's, the planes', the walls', and the sprites' marked so a flush
+inside one is no part of it (world.S's phase_mark).
+
+## .set STAT_COMMANDS
+
+`u64`: the commands the frame's packets held, a polygon's again after a flush in its spans.
+
+## .set STAT_FLUSHES
+
+`u64`: the packets rendered before preparation ended, full of commands or spans.
+
+## .set STAT_INVALIDATED
+
+`u64`: the commands whose tiles a reset took back before their render, drawn on the chain.
+
 ## .set STAT_SIZE
 
 The stats' bytes.
@@ -1028,6 +1051,69 @@ divides span_fill made before a change are the made plus the avoided.
 
 The count record's bytes.
 
+## .set MAX_COMMANDS
+
+The commands a packet holds, a packet full of them rendered and emptied before the next.
+
+The packet is the frame's draw commands and spans as preparation publishes
+them (raster.S): a command a polygon's record copied whole, POLY_SIZE bytes,
+a span record its row, ends, mode, surface, and command. A frame fills a
+polygon a plane, a wall piece, an opening, and a sprite in view; the bound
+is the table's, and a frame past it flushes.
+
+## .set CTX_COMMAND
+
+`addr`: the raster context's command in hand, which span_fill reads in place of the polygon.
+
+A raster context is a renderer's own: the command in hand and the counts
+span_fill keeps, so contexts share nothing span_fill writes but the pixels
+and the depths of the rows each owns. Hart 0's is raster_context, reached
+through tp.
+
+## .set CTX_SPANS
+
+`u64`: the context's spans since its counts were last summed.
+
+## .set CTX_PIXELS
+
+`u64`: the pixels they entered.
+
+## .set CTX_LIT_SPANS
+
+`u64`: the lit spans among them.
+
+## .set CTX_LIT_PIXELS
+
+`u64`: the lit pixels among them.
+
+## .set CTX_REJECTED
+
+`u64`: the pixels the depth test rejected.
+
+## .set CTX_SAMPLES
+
+`u64`: the lumel samples read.
+
+## .set CTX_TILED_PIXELS
+
+`u64`: the pixels read from tiles.
+
+## .set CTX_COUNT
+
+`COUNT_SIZE u8`: a COUNT build's counts, COUNT_* fields, the context's.
+
+## .set CTX_SIZE
+
+A raster context's bytes.
+
+## .set SCRATCH_POISON
+
+`u64`: the word a debug build writes over the producer's scratch once the packet is published, an address no page maps.
+
+## .set TILE_POISON
+
+`u32`: the texel a debug build writes over the tile arena before the console's forced reset.
+
 ## .set REPORT_KIND
 
 `u32`: a record's kind over the API, a REPORT_*.
@@ -1072,8 +1158,8 @@ tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
 fallback loop took, which holds blocks off the tile grid as well as cells
 not yet built. DRAW_TILE_BYTES is the arena in use at the frame's end and
 DRAW_TILE_PEAK the most it has held since the load, which a reset lowers
-the first and never the second. DRAW_SPANS counts every span, recorded or
-not past SPAN_RECORDS.
+the first and never the second. DRAW_SPANS counts every span the frame
+drew, over all its packets.
 
 ## .set REPORT_SECTOR
 
@@ -1285,7 +1371,7 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_SPANS
 
-`u32`: the spans drawn, against SPAN_RECORDS.
+`u32`: the spans drawn, every packet's.
 
 ## .set PRESENT_SIMULATION
 

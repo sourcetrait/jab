@@ -4,8 +4,9 @@ The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
 with the lumels bright or set by parity, the tiles held off, or the levels built
 capped, R the generator seeded, E the gauge's measurement closed, C the
-cadence chosen, S on a debug build the cadence fixture's stalls, each reported
-back as REPORT_CONSOLE.
+cadence chosen, S on a debug build the cadence fixture's stalls, K on a debug
+build the packet's bounds and a forced reset, each reported back as
+REPORT_CONSOLE.
 
 C takes byte 4 as the cadence, render.inc's CADENCE_*, from the reading
 frame's flip on (main.S's CLOCK_CADENCE); a value past the three leaves the
@@ -22,6 +23,14 @@ pacing step try its flip once before waiting; bytes 16 to 19 are a spin in
 microseconds inside every consume from this frame on (main.S's
 draw_or_stall, pacing_step, and pad_consume). An S sets every knob at once,
 so a fixture carries the standing stall and the spin in each.
+
+K is the packet's knob, on a debug build alone, standing from the frame
+that reads it: bytes 4 to 7 the commands a packet holds and bytes 8 to 11
+the spans, each 0 for the engine's own bound, so a fixture makes a frame
+flush many times (raster.S's command_emit and span_cap); bytes 12 to 15 the
+binds each frame after which the tile arena is reset, poisoned first, 0
+for none (tile.S), the stale binding's fixture. The test's `packet-frame`
+builds it.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start

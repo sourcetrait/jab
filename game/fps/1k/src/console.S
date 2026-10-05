@@ -150,7 +150,7 @@ console_frame:
 12:
 .ifdef DEBUG
     li t1, 'S'
-    bne t0, t1, 8f
+    bne t0, t1, 13f
     lbu t1, 4(s2)
     la t2, stall_on
     sb t1, 0(t2)                    # the standing stall on, or the drawing back
@@ -166,6 +166,19 @@ console_frame:
     lwu t1, 16(s2)
     la t2, consume_spin
     sw t1, 0(t2)                    # the spin inside every consume
+    j 8f
+13:
+    li t1, 'K'
+    bne t0, t1, 8f
+    lwu t1, 4(s2)
+    la t2, packet_command_cap
+    sw t1, 0(t2)                    # the commands a packet holds, 0 for MAX_COMMANDS
+    lwu t1, 8(s2)
+    la t2, packet_span_cap
+    sw t1, 0(t2)                    # the spans a packet holds, 0 for SPAN_RECORDS
+    lwu t1, 12(s2)
+    la t2, tile_reset_after
+    sw t1, 0(t2)                    # the binds each frame before a forced reset, 0 for none
 .endif
 8:
     la t0, console_record

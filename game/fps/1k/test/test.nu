@@ -39,12 +39,17 @@
 # level 0 alone built the mid pose's blocks taking the chain at their
 # own level and agreeing too, fewer tiles built and read than with
 # every level, the same poses under the room's own light within
-# TheUser's bound, tiled against lit; the texel-centre rule, a white
+# TheUser's bound, tiled against lit, and the near pose with the tile
+# arena reset after the frame's first binds every frame, each pixel the
+# tiled picture's or the lit loop's and none the poison a stale binding
+# would read; the texel-centre rule, a white
 # texture on that wall under lumels set as a checkerboard, each texel
 # beside a node read from its tile at the light of its centre by the
 # test's own bilinear; one level a block, the still copy's spawn view
 # with every level built against the tiles held off, identical over the
-# screen with the far floor's blocks past the tiles' levels; the flow's
+# screen with the far floor's blocks past the tiles' levels, and drawn in
+# packets of a few commands and spans, flushed many times, identical
+# again; the flow's
 # eye on the line two sectors share reaching the sector behind it, and
 # a map where a hall's rectangle grows through a later path before the
 # room beyond it can be reached; a map whose magic is wrong, which exits
@@ -58,7 +63,7 @@ use ./gauge.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}"
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -326,22 +331,46 @@ const RENDER_0_START_BOUND = 100000
 const SKY_PIXEL = [960, 100]
 const SKY_TOP = 0x[3a 6f b0]
 const CROSSHAIR = [960, 540]
-# the functions whose loops run a pixel or a sample, and the span loop
-# with the helpers it calls, each within one page of code (render.inc's
-# CODE_PAGE) and trapping only where the mixer's two calls a frame are
+# the functions whose loops run a pixel or a sample, the span loop with
+# the helpers it calls, and the packet's render with the span it calls,
+# each within one page of code (render.inc's CODE_PAGE) and trapping
+# only where the mixer's two calls a frame are
 const HOT_FUNCTIONS = [
     span_fill span_light tile_build mixer_update
     row_crossings span_bound row_range poly_fill span_record
+    packet_render
 ]
 const HOT_ECALLS = {
     span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2,
     row_crossings: 0, span_bound: 0, row_range: 0, poly_fill: 0, span_record: 0,
+    packet_render: 0,
 }
-# the span loop's family, together on one page: poly_fill's loop runs
-# once a span and calls span_bound twice a span, so a member on another
-# page costs every span a lookup, which each member within a page of its
-# own does not catch
-const HOT_FAMILY = [row_crossings span_bound row_range poly_fill span_record]
+# the families, each together on one page: poly_fill's loop runs once a
+# span and calls span_bound twice a span, and packet_render's loop calls
+# span_fill once a span, so a member on another page costs every span a
+# lookup, which each member within a page of its own does not catch
+const HOT_FAMILIES = [
+    { name: "the span loop's", members: [row_crossings span_bound row_range poly_fill span_record] }
+    { name: "the packet's render", members: [packet_render span_fill] }
+]
+# The packet's bounds and the stale binding, through the console's K
+# frame on a debug build. The still copy of Render Zero's spawn view,
+# every level built, drawn in packets of at most PACKET_CAPS' commands and
+# spans, so a frame flushes many times, each full packet rendered whole
+# before preparation goes on: the capture the uncapped one's. The alpha
+# fixture's near pose under the room's own light with the tile arena
+# reset after the frame's first STALE_BINDS binds every frame and every
+# surface after the reset rebuilt whole, the commands bound before it
+# holding atlases the reset took back, which a debug build poisons with
+# TILE_POISON: those commands take the chain at their own level, so every
+# pixel is the tiled picture's or the lit loop's, some of each, and none
+# the poison a stale read would show. Measured: a reset after the near
+# pose's first three binds invalidates nothing on screen, every pixel the
+# tiled picture's; after five, two commands on screen take the chain,
+# 793,002 pixels the lit loop's and 514,469 the tiled picture's
+const PACKET_CAPS = { commands: 7, spans: 500 }
+const STALE_BINDS = 5
+const TILE_POISON = 0x[01 fe 02]
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -445,6 +474,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let sprite_sends = [{ at: 1500ms, bytes: (pose pose-frame $SPRITE_POSE) }]
     let plain_run = (jab launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --api --disk (romfs $plain_tree ($out | path join "plain.romfs")) --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $plain_run.qemu_log) "" "QEMU has no complaint about the guest on the plain run"
+    # the first frames drawn: a debug build poisons the producer's scratch
+    # once a frame's packet is published (raster.S), so a render reading
+    # it through a pointer faults here
+    assert (not ($plain_run.serial | str contains "jab: program fault")) $"no program fault drawing the plain run's frames: ($plain_run.serial | lines | where {|l| $l starts-with 'jab: ' })"
     assert ($plain_run.screen != "") "a screen was taken on the plain run"
     let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
@@ -924,6 +957,25 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let spawn_rows = (rows-differ $spawn_captures.tiled.bytes $spawn_captures.held.bytes [0 0 1920 1080])
     assert ($spawn_rows | is-empty) $"the spawn view the same whether its tiles are built or held off: rows ($spawn_rows | first 5) differ, ($spawn_rows | length) in all"
 
+    # the packet bounded: the same view, every level built, drawn in
+    # packets of a few commands and spans (PACKET_CAPS), each full packet
+    # rendered whole before preparation goes on, the capture the uncapped
+    # one's over the whole screen
+    let capped_sends = [
+        { at: 1300ms, bytes: (packet-frame $PACKET_CAPS.commands $PACKET_CAPS.spans 0) }
+        { at: 1400ms, bytes: (level-frame true false 0) }
+        { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
+    ]
+    let capped_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_capped") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $capped_sends --capture 3000ms --seconds 5)
+    assert equal (open --raw $capped_run.qemu_log) "" "QEMU has no complaint about the guest on the spawn view in capped packets"
+    let capped_frames = ($capped_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+    assert equal ($capped_frames | length) 2 $"the first frame and the pose's reported on the spawn view in capped packets: ($capped_run.serial)"
+    let capped_frame = ($capped_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+    assert ($capped_frame.flushes > 0) $"the spawn view's packets flushed under the caps: ($capped_frame)"
+    assert ($capped_run.screen != "") "a screen was taken on the spawn view in capped packets"
+    let capped_rows = (rows-differ (open --raw $capped_run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
+    assert ($capped_rows | is-empty) $"the spawn view drawn in packets of ($PACKET_CAPS.commands) commands and ($PACKET_CAPS.spans) spans, ($capped_frame.flushes) flushed, the uncapped one's: rows ($capped_rows | first 5) differ, ($capped_rows | length) in all"
+
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
     # every lumel full bright and the tiles rebuilt whole by the
@@ -1044,6 +1096,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # pixels that differ and the largest difference in a channel, held
     # within TheUser's bound, each run proven on its path
     mut light_report = []
+    mut light_captures = {}
     for fp in $FIXTURE_POSES {
         let eye = ($fixture_runs | get $"($fp.name)_tiled" | get eye)
         let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
@@ -1068,11 +1121,36 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let opening = (fixture-opening $fixture_read $fixture_wall $eye)
         let delta = (region-delta $lit_captures.tiled $lit_captures.lit $opening)
         $light_report = ($light_report | append ($delta | insert pose $fp.name | insert level $fp.level))
+        $light_captures = ($light_captures | insert $fp.name ($lit_captures | insert placed $placed))
     }
     print $"fps: the alpha poses under the room's light, tiled against lit over the opening: ($light_report | each {|r| $'($r.pose) at level ($r.level), ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most' } | str join '; ')"
     for r in $light_report {
         assert ($r.largest <= $REAL_LIGHT_BOUND) $"the ($r.pose) pose under the room's light, tiled against lit over the opening, within ($REAL_LIGHT_BOUND) of 255 a channel: ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most"
     }
+
+    # a stale binding: the near pose under the room's light with the tile
+    # arena reset after the frame's first STALE_BINDS binds every frame
+    # (the K frame), every surface after the reset rebuilt whole under the
+    # lifted budget; the commands bound before the reset take the chain at
+    # their own level, so every pixel is the tiled picture's or the lit
+    # loop's, some of each, none the poison of the arena they held
+    let near = ($light_captures | get near)
+    let stale_sends = [
+        { at: 1300ms, bytes: (packet-frame 0 0 $STALE_BINDS) }
+        { at: 1400ms, bytes: (level-frame false false 0) }
+        { at: 1500ms, bytes: (pose pose-frame $near.placed) }
+    ]
+    let stale_run = (jab launch --kernel $kernel --image $image --out ($out | path join "alpha_light_near_stale") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $stale_sends --capture 3500ms --seconds 5)
+    assert equal (open --raw $stale_run.qemu_log) "" "QEMU has no complaint about the guest on the near pose with stale bindings"
+    let stale_frames = ($stale_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+    assert equal ($stale_frames | length) 2 $"the first frame and the pose's reported on the near pose with stale bindings: ($stale_run.serial)"
+    let stale_frame = ($stale_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+    assert ($stale_run.screen != "") "a screen was taken on the near pose with stale bindings"
+    let stale = (pixels-from (open --raw $stale_run.screen | into binary) $near.tiled $near.lit [0 0 1920 1080])
+    assert equal $stale.neither 0 $"every pixel of the near pose with stale bindings the tiled picture's or the lit loop's: ($stale.neither) neither, ($stale.poisoned) of them the poison"
+    assert ($stale.second > 0) $"the commands bound before the reset on the chain, the lit loop's pixels: ($stale)"
+    assert ($stale.first > 0) $"the commands bound after it on their tiles, the tiled picture's pixels: ($stale)"
+    assert ($stale_frame.invalidated > 0 and $stale_frame.resets > 0) $"the reset counted and the bindings before it invalidated: ($stale_frame)"
 
     # the texel-centre rule (CENTRE_FIXTURE): the fixture's wall white
     # under lumels set by their nodes' parity, posed head-on at level 0
@@ -1249,11 +1327,13 @@ def hot-functions [image: path]: nothing -> nothing {
         assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
         assert equal $h.ecalls ($HOT_ECALLS | get $h.name) $"($h.name) traps inside its page"
     }
-    let family = ($hot | where {|h| $h.name in $HOT_FAMILY })
-    assert equal ($family | length) ($HOT_FAMILY | length) "every member of the span loop's family among the hot functions"
-    let lowest = ($family | get start | math min)
-    let highest = (($family | get end | math max) - 1)
-    assert equal ($lowest // 4096) ($highest // 4096) $"the span loop's family within one page of code together: ($lowest) to ($highest)"
+    for f in $HOT_FAMILIES {
+        let family = ($hot | where {|h| $h.name in $f.members })
+        assert equal ($family | length) ($f.members | length) $"every member of ($f.name) family among the hot functions"
+        let lowest = ($family | get start | math min)
+        let highest = (($family | get end | math max) - 1)
+        assert equal ($lowest // 4096) ($highest // 4096) $"($f.name) family within one page of code together: ($lowest) to ($highest)"
+    }
 }
 
 # A release build carries none of the program's debug text, every
@@ -1432,6 +1512,46 @@ def chain-levels [w: int, h: int]: nothing -> int {
 def level-frame [bright: bool, held: bool, cap: int, --parity]: nothing -> binary {
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
     [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's K frame, a debug build's: the commands and the spans a
+# packet holds, 0 for the engine's own bounds, and the binds each frame
+# before the tile arena is reset, 0 for none, each a word from byte 4.
+def packet-frame [commands: int, spans: int, reset: int]: nothing -> binary {
+    let word = {|v: int| $v | into binary | bytes at 0..<4 }
+    [("K" | into binary), 0x[00 00 00], (do $word $commands), (do $word $spans), (do $word $reset), (0..<48 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# Where a capture's pixels come from over a rectangle, [x0, y0, x1, y1]
+# with the pixel past the last, given two pictures of the same view: the
+# pixels, those equal to the first's alone where the two differ, to the
+# second's alone, to neither, and among those the poison's.
+def pixels-from [c: binary, a: binary, b: binary, rect: list<int>]: nothing -> record<pixels: int, first: int, second: int, neither: int, poisoned: int> {
+    let hc = (ppm-head $c)
+    let ha = (ppm-head $a)
+    let hb = (ppm-head $b)
+    let rows = ($rect.1..<$rect.3 | each {|y|
+        let from = ((($y * 1920) + $rect.0) * 3)
+        let to = ((($y * 1920) + $rect.2) * 3)
+        let rc = ($c | bytes at ($hc + $from)..<($hc + $to))
+        let ra = ($a | bytes at ($ha + $from)..<($ha + $to))
+        let rb = ($b | bytes at ($hb + $from)..<($hb + $to))
+        if $rc == $ra and $rc == $rb { { first: 0, second: 0, neither: 0, poisoned: 0 } } else {
+            let px = ($rc | chunks 3 | zip ($ra | chunks 3) | zip ($rb | chunks 3) | each {|t| { c: $t.0.0, a: $t.0.1, b: $t.1 } } | where {|t| $t.a != $t.b or $t.c != $t.a })
+            let neither = ($px | where {|t| $t.c != $t.a and $t.c != $t.b })
+            {
+                first: ($px | where {|t| $t.c == $t.a and $t.c != $t.b } | length),
+                second: ($px | where {|t| $t.c == $t.b and $t.c != $t.a } | length),
+                neither: ($neither | length),
+                poisoned: ($neither | where {|t| $t.c == $TILE_POISON } | length),
+            }
+        }
+    })
+    {
+        pixels: (($rect.2 - $rect.0) * ($rect.3 - $rect.1)),
+        first: ($rows | get first | math sum), second: ($rows | get second | math sum),
+        neither: ($rows | get neither | math sum), poisoned: ($rows | get poisoned | math sum),
+    }
 }
 
 # How two captures differ over a rectangle, [x0, y0, x1, y1] with the

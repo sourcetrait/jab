@@ -71,6 +71,10 @@ world_draw:
     sd zero, STAT_TILES_BUILT(t1)
     sd zero, STAT_TILED_PIXELS(t1)
     sd zero, STAT_TILE_TICKS(t1)
+    sd zero, STAT_RASTER_TICKS(t1)
+    sd zero, STAT_COMMANDS(t1)
+    sd zero, STAT_FLUSHES(t1)
+    sd zero, STAT_INVALIDATED(t1)
 .ifdef COUNT
     la t1, count_stats
     sd zero, COUNT_DIVIDES(t1)
@@ -89,8 +93,12 @@ world_draw:
     call sky_setup
     la t0, span_count
     sd zero, 0(t0)
-    la t0, poly_serial
+    la t0, command_count
+    sd zero, 0(t0)                  # the frame's first packet empty
+.ifdef DEBUG
+    la t0, tile_binds
     sd zero, 0(t0)
+.endif
     rdtime s2
     call world_flow
     rdtime t0
@@ -110,13 +118,18 @@ world_draw:
     call sector_draw
     j 8b
 9:
-    rdtime s2
+    call phase_mark
+    mv s2, a0
     call sprites_draw
     call actors_draw
-    rdtime t0
-    sub t0, t0, s2
+    call phase_mark
+    sub t0, a0, s2
     la t1, stats
     sd t0, STAT_SPRITE_TICKS(t1)
+.ifdef DEBUG
+    call scratch_poison             # nothing reads the producer's scratch once the packet is published
+.endif
+    call packet_render              # the frame's last packet, every polygon prepared
     ld ra, 40(sp)
     ld s2, 32(sp)
     ld s3, 24(sp)
@@ -558,8 +571,8 @@ sector_draw:
     ld t1, STAT_SECTORS(t0)
     addi t1, t1, 1
     sd t1, STAT_SECTORS(t0)
-    rdtime t0
-    sd t0, 0(sp)
+    call phase_mark
+    sd a0, 0(sp)
     li s3, 0
 1:
     li t0, 2
@@ -590,15 +603,15 @@ sector_draw:
     addi s3, s3, 1
     j 1b
 4:
-    rdtime t0
+    call phase_mark
     ld t1, 0(sp)
-    sub t0, t0, t1
+    sub t0, a0, t1
     la t1, stats
     ld t2, STAT_PLANE_TICKS(t1)
     add t2, t2, t0
     sd t2, STAT_PLANE_TICKS(t1)
-    rdtime t0
-    sd t0, 0(sp)
+    call phase_mark
+    sd a0, 0(sp)
     mv a0, s2
     call sector_at
     lwu s3, SECTOR_FIRST_LOOP(a0)
@@ -686,9 +699,9 @@ sector_draw:
     addi s3, s3, 1
     j 81b
 82:
-    rdtime t0
+    call phase_mark
     ld t1, 0(sp)
-    sub t0, t0, t1
+    sub t0, a0, t1
     la t1, stats
     ld t2, STAT_WALL_TICKS(t1)
     add t2, t2, t0
@@ -1304,6 +1317,13 @@ wall_draw:
     fld fs10, 16(sp)
     fld fs11, 8(sp)
     addi sp, sp, 192
+    ret
+
+phase_mark:
+    rdtime a0
+    la t0, stats
+    ld t0, STAT_RASTER_TICKS(t0)
+    sub a0, a0, t0                  # the clock less the raster's ticks, so a flush's render is no phase's
     ret
 
 uncovered:

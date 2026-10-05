@@ -1,8 +1,32 @@
 # raster.S
 
 The polygon rasteriser: world points into the camera's basis, clipped and
-projected into edges, the even-odd fill within a rectangle, the span record,
-the integer span.
+projected into edges, the even-odd fill within a rectangle into the frame's
+packet, a command a polygon and a record a span, the packet rendered on a
+raster context, the integer span.
+
+Preparation and rendering are apart. Preparation, hart 0's, walks the flow,
+sets up each polygon in `poly` and its edges, and fills it into the packet:
+at its first span the polygon is copied whole into the packet's command
+table, POLY_SIZE bytes, and each span is recorded with its command's index.
+The packet is immutable once published: a command's coefficients, modes,
+texture, chain, lumel word, flat brightness, and tile binding are its own
+copy, never a pointer into `poly`, whose next polygon overwrites it.
+packet_render then resolves every command's tile binding against the
+arena's generation and renders the spans in the order they were recorded
+through span_fill on a raster context, which holds the command in hand and
+the span's counters, so the depth test meets the surfaces in the order the
+immediate fill met them and the picture is the same. A packet full of
+commands or spans is rendered whole and emptied before preparation goes on,
+so a frame is never drawn short. The serial backend is one context, hart
+0's; a worker's context is the same record. On a debug build the producer's
+scratch is poisoned once the packet is published, so a read of it from the
+raster draws wrong or faults.
+
+The context rides tp: user mode's own register, which the kernel saves and
+restores across a trap and sets to zero entering the program and a worker,
+and which nothing else in the program uses. packet_render sets it; span_fill
+and its macros read the command and the counters through it.
 
 The pixel-centre rule everywhere, ceil(v - 0.5), so surfaces sharing an edge
 meet without a crack. Walking by rows matters under TCG: a column walk
@@ -120,6 +144,11 @@ the rows in 16 from bit 40, and k from bit 56, so the read can bound itself
 from the word alone; the offset rather than the address because a window
 on an 8 GB machine can sit past 2^32 and the rows need the bits.
 
+## .macro span_cap
+
+The span loop asks it once a span, so a release build pays one load
+immediate for SPAN_RECORDS and a debug build the console's cap besides.
+
 ## row_crossings
 
 The span loop's family, row_crossings through span_record, shares one page
@@ -127,23 +156,23 @@ for the same reason as span_fill at a smaller scale: poly_fill's inner loop
 runs once a span, sixteen thousand times a frame on the up flight, and calls
 span_bound twice a span, so a page boundary inside the loop or between it
 and its helpers costs a block lookup each way per span. The eighteen bytes of
-the polygon serial's increment at poly_fill's entry moved the loop's head to
-two bytes short of the boundary at 0x80a03000 and cost the up flight 1.2 ms
-a frame, read on two batteries against the build before and confirmed by
-an interleaved probe; the family on its own page returned the wall phase to
-24.2 ms from 25.5, where poly_fill aligned alone, its helpers still across
-the boundary, returned half of that. The family is 554 bytes from the
-directive, so the page holds it with room; the test guards each member as
-it guards span_fill and the five together on one page, since five members
-each within a page of its own would pass the first guard with the calls
-crossing again.
+a polygon serial's increment at poly_fill's entry, since gone, once moved
+the loop's head to two bytes short of the boundary at 0x80a03000 and cost
+the up flight 1.2 ms a frame, read on two batteries against the build before
+and confirmed by an interleaved probe; the family on its own page returned
+the wall phase to 24.2 ms from 25.5, where poly_fill aligned alone, its
+helpers still across the boundary, returned half of that. The family is 580
+bytes from the directive, so the page holds it with room; the test guards
+each member as it guards span_fill and the five together on one page, since
+five members each within a page of its own would pass the first guard with
+the calls crossing again.
 
 ## poly_fill
 
 The rows and every span are held within the rectangle in hand, the
-sector's from the flow (world.S), before the span is recorded and drawn:
-the row range against the rectangle's rows once a polygon, each span's
-ends against its columns. A span clipped starts its blocks at a different
+sector's from the flow (world.S), before the span is recorded: the row
+range against the rectangle's rows once a polygon, each span's ends
+against its columns. A span clipped starts its blocks at a different
 pixel from the whole span's, and its texel bytes can move by a rounding,
 which is why a clipped frame is compared by the surface each pixel
 belongs to rather than byte for byte. The portal test that sampled an
@@ -152,22 +181,78 @@ buffer is gone: a sampled test can miss an opening narrower than its
 stride, so it could order sectors but never reject one, and the flow's
 rectangles reject nothing either, the depth buffer resolving every pixel.
 
+A span goes into the packet against the polygon's command, which the
+first span emits; a polygon with no span emits none. Before a span the
+loop holds room for it in its own frame, one compare a span: the command
+held and the spans under the cap, else packet_room renders the full
+packet and emits the command again in the empty one, so the polygon's
+remaining spans follow it there. Its frame keeps the command at 32, the
+span's ends across the call at 0 and 24.
+
 ## span_record
 
-The span record, sixteen bytes a span in a table of SPAN_RECORDS, is the
-interface the tile pool and a sorted span renderer share: the pool will
-read the frame's records to learn which cells its spans touch, and a
-span sorter produces the same records from its own machinery. A record
-carries the row and the span's two ends in sixteen bits each, the
-polygon's mode, the surface index, and the polygon's serial in the
-frame: the surface is the stable identity the owner build shares, and
-the serial tells a masked opening's fill from its wall's solid pieces,
-which carry the same surface, so a consumer that orders primitives has
-each submission apart. The count runs past the table on a frame with
-more spans, and the contract is that a reader of such a frame falls back
-rather than reading the prefix as the frame, since the prefix is not the
-frame; the gauge's views run to twenty thousand spans against the
-table's sixty-five thousand.
+The span record, sixteen bytes a span, is the packet's work list and the
+interface the tile pool and a sorted span renderer share: packet_render
+draws the records in order, the pool will read them to learn which cells
+the spans touch, and a span sorter produces the same records from its own
+machinery. A record carries the row and the span's two ends in sixteen bits
+each, the polygon's mode, the surface index, and its command's index in the
+packet: the surface is the stable identity the owner build shares, and the
+command tells a masked opening's fill from its wall's solid pieces, which
+carry the same surface, so a consumer that orders primitives has each
+submission apart. The caller holds room for the record, so the table never
+runs past SPAN_RECORDS; a frame with more spans renders a full packet and
+goes on in the next, every span drawn. The mode and the surface are read
+from `poly`, the producer's own.
+
+## packet_room
+
+The cold path of the span loop, taken at a polygon's first span and when
+the packet's spans are full: a full packet is rendered and emptied, which
+takes the polygon's command with it, and a polygon with no command in the
+packet emits it there.
+
+## command_emit
+
+The whole record copied, thirty-nine words, so a command holds every field
+span_fill reads at its POLY_* offset, the tile binding's generation
+(POLY_TILE_GENERATION) among them, and fields only preparation reads
+besides; the frame line counts the frame's commands. A packet full of
+commands is rendered whole first. The command's index is its record's
+position in the table.
+
+## packet_flush
+
+A flush is a packet rendered before preparation ends, the commands or the
+spans full; STAT_FLUSHES counts them, the final render being none. The
+phases around it subtract its render's ticks (world.S's phase_mark).
+
+## packet_resolve
+
+A command bound to tiles in a generation of the arena before the last
+reset holds atlases the reset took back, which later binds may have
+rebuilt with other surfaces' cells: its tiled flag is cleared, so its
+blocks take the chain at their own level, the same-level fallback, and it
+is counted in STAT_INVALIDATED. A frame with no reset resolves nothing.
+The resolve runs at every render, so a flush before a reset keeps its
+commands' tiles, which were still the arena's.
+
+## context_counts
+
+span_fill counts into the context, so contexts never share a counter; the
+frame's stats take the sum after each render. A COUNT build's counts go the
+same way, the context's into count_stats.
+
+## scratch_poison
+
+A debug build's guard on the packet's contract: after preparation and
+before the frame's last render every word from `poly` to scratch_end, the
+polygon, the plane, the points, the edges, and the crossings, is
+SCRATCH_POISON, an address no page maps, so a stale `la poly` in the raster
+faults on its first pointer and reads garbage on any other field; the
+frame's next preparation writes every field it reads before reading it. A
+flush mid-polygon leaves the scratch whole, since preparation goes on with
+it.
 
 ## poly_rect
 
@@ -176,8 +261,9 @@ slack against the fill's rounding.
 
 ## .macro lumel_sample
 
-The read, about 60 integer ops and five loads a sample, one of them the
-packed word: the coordinates are held within the map first, a negative one
+The read, about 60 integer ops and six loads a sample, one of them the
+command's address from the context and one the packed word: the
+coordinates are held within the map first, a negative one
 to 0 and one past the last column or row to the greatest coordinate under
 it, both from the word's columns and rows; then the column and the row are
 the texel coordinate shifted by k plus 16, the fractions the next eight
@@ -233,14 +319,32 @@ back for every path.
 
 ## .macro count_add
 
-The COUNT build's one instrument, MapperDivides' proof: a counter in
-count_stats raised where span_fill divides, avoids a divide, or meets a
-case the proof must see exercised. The two registers it takes are the
-ones the site has free, each site's read off the code that follows it,
-since a count must change nothing the drawing reads; no build but COUNT
-assembles a line of it.
+The COUNT build's one instrument, MapperDivides' proof: a counter in the
+raster context's counts raised where span_fill divides, avoids a divide, or
+meets a case the proof must see exercised, summed into count_stats after
+each render. The two registers it takes are the ones the site has free,
+each site's read off the code that follows it, since a count must change
+nothing the drawing reads; no build but COUNT assembles a line of it.
+
+## packet_render
+
+The serial backend, and the reference a worker's backend scales against:
+one context, the spans in their order, so the frame is the immediate
+fill's to the byte wherever no reset invalidated a binding. Its per-span
+loop, a record's fields, the command's address by a multiply, and the
+call, shares span_fill's page, so the call chains within the page where
+poly_fill's call to span_fill crossed one every span. The render's ticks
+go to STAT_RASTER_TICKS, a flush's with the last render's.
 
 ## span_fill
+
+The polygon is the context's command, `CTX_COMMAND(tp)`, at every place
+the fill once read `poly`: the prologue's coefficients and modes, the
+lumel sample's word, the chain's bind, the tiled block's atlases, the
+sky's texture size. Its counts, the spans, the pixels entered, the lit
+ones, the rejected, the samples, and the tiled pixels, go to the context.
+A load through tp costs about what the `la` it replaced did, once a span
+or a block, never a pixel.
 
 span_fill holds no float: a float helper under TCG costs about 5 ns, and the
 probe measured the float span at 12 to 14 ms a megapixel against 5.4 for the
@@ -316,10 +420,11 @@ differently, hud.S's code 542 bytes shorter on the first such build, the
 images otherwise alike; without COUNT the release and debug images are
 byte for byte the build's before the instrument.
 
-span_fill is page-aligned and kept under a page: QEMU's translator ends a
-block at a page boundary and chains blocks within a page only, so a loop
-straddling one leaves the translated code every iteration, measured seven
-times slower. The test holds the alignment through the SDK's `jab hot`.
+span_fill shares a page with packet_render, the pair aligned to it and
+kept under it: QEMU's translator ends a block at a page boundary and chains
+blocks within a page only, so a loop straddling one leaves the translated
+code every iteration, measured seven times slower. The test holds both
+within their page, together, through the SDK's `jab hot`.
 
 ### The prologue and the blocks
 
@@ -562,7 +667,7 @@ cannot say once a span's blocks shift.
 
 ## count_stats
 
-`COUNT_SIZE u8`: on a COUNT build alone, the frame's counts of span_fill's divides, the COUNT_* fields (render.inc).
+`COUNT_SIZE u8`: on a COUNT build alone, the frame's counts of span_fill's divides, the COUNT_* fields (render.inc), every context's summed after each render.
 
 ## vert_count
 
@@ -624,17 +729,34 @@ cannot say once a span's blocks shift.
 
 `MAX_EDGES f32`: a row's crossings' x, ascending.
 
+## scratch_end
+
+The end of the producer's scratch from `poly`, the poison's bound.
+
 ## span_records
 
-`SPAN_RECORDS*SPAN_RECORD_SIZE u8`: the frame's spans as the fill emitted them.
+`SPAN_RECORDS*SPAN_RECORD_SIZE u8`: the packet's spans as the fill emitted them, SPAN_* fields.
 
 ## span_count
 
-`u64`: the frame's spans, running on past the table.
+`u64`: the packet's spans.
 
-## poly_serial
+## command_count
 
-`u64`: the polygons submitted so far this frame, the serial a record carries.
+`u64`: the packet's commands.
+
+## packet_command_cap
+## packet_span_cap
+
+`u32`: on a debug build alone, the console's K frame's caps on a packet, the commands and the spans it holds, 0 for MAX_COMMANDS and SPAN_RECORDS.
+
+## raster_context
+
+`CTX_SIZE u8`: hart 0's raster context, CTX_* fields.
+
+## commands
+
+`MAX_COMMANDS*POLY_SIZE u8`: the packet's commands, each a polygon's record as preparation published it, POLY_* fields.
 
 ## zbuf
 

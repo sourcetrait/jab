@@ -1,6 +1,10 @@
 .section .text
 
 tiles_reset:
+    la t0, tile_generation
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # every binding made before it stale
     la t0, tile_cursor
     la t1, tile_arena
     sd t1, 0(t0)
@@ -34,6 +38,24 @@ tiles_bind:
     mul t1, t1, t2
     la s3, tilemaps
     add s3, s3, t1
+.ifdef DEBUG
+    la t0, tile_binds
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # the frame's binds
+    la t0, tile_reset_after
+    lwu t2, 0(t0)
+    beqz t2, 1f
+    addi t2, t2, 1
+    bne t1, t2, 1f
+    call tiles_poison               # the console's reset after its binds, what the arena held poisoned first
+    call tiles_reset
+    la t0, stats
+    ld t1, STAT_TILE_RESETS(t0)
+    addi t1, t1, 1
+    sd t1, STAT_TILE_RESETS(t0)
+1:
+.endif
     ld t1, TILE_BASE(s3)
     bnez t1, 2f
     rdtime t1
@@ -126,6 +148,9 @@ tiles_bind:
     ori t2, t2, POLY_TILED
     sd t2, POLY_MODE(t0)
     sd t1, POLY_TILE_READY(t0)
+    la t2, tile_generation
+    ld t2, 0(t2)
+    sd t2, POLY_TILE_GENERATION(t0) # the arena's generation the binding holds for
     ld t1, TILE_COLS_SHIFT(s3)
     sd t1, POLY_TILE_COLS_SHIFT(t0)
     ld t1, TILE_COLS(s3)
@@ -149,6 +174,23 @@ tiles_bind:
     ld s3, 8(sp)
     addi sp, sp, 32
     ret
+
+.ifdef DEBUG
+tiles_poison:
+    la t0, tile_arena
+    la t1, tile_cursor
+    ld t1, 0(t1)                    # the arena in use
+    li t2, TILE_POISON
+    slli t3, t2, 32
+    or t2, t2, t3                   # two poison texels a word
+1:
+    bgeu t0, t1, 9f
+    sd t2, 0(t0)
+    addi t0, t0, 8
+    j 1b
+9:
+    ret
+.endif
 
 tiles_alloc:
     addi sp, sp, -16
@@ -928,9 +970,15 @@ tile_budget_frame:
     .skip 8
 tile_peak:
     .skip 8
+tile_generation:
+    .skip 8
 .ifdef DEBUG
 tile_level_cap:
     .skip 8
+tile_binds:
+    .skip 8
+tile_reset_after:
+    .skip 4
 .endif
 tilemaps:
     .skip (LUMAP_COUNT * TILE_SIZE)
