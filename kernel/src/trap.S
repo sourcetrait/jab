@@ -2,7 +2,7 @@
 .include "qemu_virt.inc"
 .include "jab.inc"
 
-.set SYSCALL_LAST, JAB_SYS_MIDI_SOUNDFONT
+.set SYSCALL_LAST, JAB_SYS_HARTS
 .set UART_PRINT_TICK, 1024
 
 .section .text
@@ -317,6 +317,7 @@ syscall_table:
     .quad sys_midi_stop
     .quad sys_midi_playing
     .quad sys_midi_soundfont
+    .quad sys_harts
 msg_bad_syscall:
     .asciz "jab: unknown system call "
 msg_bad_address:

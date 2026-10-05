@@ -71,6 +71,9 @@
 .set JAB_SYS_MIDI_STOP, 48
 .set JAB_SYS_MIDI_PLAYING, 49
 .set JAB_SYS_MIDI_SOUNDFONT, 50
+.set JAB_SYS_HARTS, 51
+
+.set JAB_HARTS_MAX, 8
 
 .set JAB_TEXT_WIDTH, 12
 .set JAB_TEXT_HEIGHT, 24
@@ -471,6 +474,11 @@
     mv a1, \length
     mv a0, \buffer
     li a7, JAB_SYS_MIDI_SOUNDFONT
+    ecall
+.endm
+
+.macro jab.sys.harts
+    li a7, JAB_SYS_HARTS
     ecall
 .endm
 

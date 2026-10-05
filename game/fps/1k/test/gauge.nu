@@ -13,11 +13,12 @@
 # frame; `play` puts the build in the host's window, audio, and gamepad
 # for a person to play and closes the measurement after `--seconds`;
 # `read` reads a capture either made; `compare` sets builds' captures
-# side by side, a build being an image at the cadence it played, a
-# walked leg per stretch of its path, refusing a run measured incomplete,
-# invalid, or before validity was recorded, one that cannot be paired,
-# or one missing a leg another run holds, unless `--diagnostic` admits
-# it, and a run with nothing to compare in it outright, every run's
+# side by side, a build being an image at the cadence it played on the
+# machine it ran on, a walked leg per stretch of its path, refusing a run
+# measured incomplete, invalid, or before validity was recorded, one that
+# cannot be paired, one on a diagnostic machine, one missing a leg another
+# run holds, or runs on more than one machine, unless `--diagnostic`
+# admits it, and a run with nothing to compare in it outright, every run's
 # standing and missing legs kept. Each run keeps the route it played and
 # its identity beside its capture, then gauge.nuon and the summary. The
 # measurement is the capture read in order through the first end marker;
@@ -98,7 +99,7 @@ const MET = [nothing geometry android]
 # the standings a comparison refuses unless admitted as a diagnostic, and
 # those it refuses even then, holding nothing a comparison can read; a
 # run missing a leg is refused unless admitted too, whatever its standing
-const REFUSED = [incomplete invalid unchecked unpaired]
+const REFUSED = [incomplete invalid unchecked unpaired diagnostic]
 const REJECTED = [empty unclassified unusable]
 
 def main [] {
@@ -127,8 +128,10 @@ def "main run" [
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
+    --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
+    jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_render_0.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
@@ -150,12 +153,12 @@ def "main run" [
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, end: $r.end, capture: $capture }
-        let id = (identity $at $set $map_name $route_file $mode)
+        let id = (identity $at $set $map_name $route_file $mode $harts)
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
@@ -181,8 +184,10 @@ def "main play" [
     --cadence: int = 1           # the cadence the run asks for, the program's own 1 unless given
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
+    --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
+    jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
     let disk = (romfs-of $at.game "render_0" $at.out)
     let set = (if $at.tree == "debug" { "debug" } else { "" })
@@ -193,10 +198,10 @@ def "main play" [
     mkdir $run_out
     let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }, { at: $end, bytes: (pose command-frame "E") }]
     let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $cadence, end: $end, capture: $capture }
-    let id = (identity $at $set "render_0" null $mode)
+    let id = (identity $at $set "render_0" null $mode $harts)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound)
+    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --harts $harts)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
     $id | upsert qemu (qemu-of $launched.qemu_binary) | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
@@ -280,11 +285,12 @@ export def cadence-frame [cadence: int]: nothing -> binary {
 # What a run was, written beside its capture before it starts: the
 # records' schemas this reader takes and the clock, the workspace the SDK
 # and kernel come from, the program's own source, the build, the assets,
-# the route, the cap, the host, the toolchain, and the mode: the window,
-# the sound, the pad, the seed, the cadence asked for, and when the
-# measurement closes. The QEMU is the one the launch ran, written in
-# when it returns.
-def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record]: nothing -> record {
+# the route, the cap, the machine (the harts asked for, a diagnostic run
+# or not, -machine, the CPU, and the accelerator with its thread mode),
+# the host, the toolchain, and the mode: the window, the sound, the pad,
+# the seed, the cadence asked for, and when the measurement closes. The
+# QEMU is the one the launch ran, written in when it returns.
+def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, harts: int]: nothing -> record {
     let built = ($at.image | path dirname)
     let flags_file = ($built | path join "flags")
     let flags = (if ($flags_file | path exists) { open --raw $flags_file | decode | lines | first } else { "" })
@@ -314,6 +320,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         assets: { map: $map, tree: $tree, digest: (tree-digest $tree) },
         route: (if $route == null { null } else { { file: $route, sha256: (digest $route) } }),
         cap: (if $cap == null { null } else { $cap | into int }),
+        machine: (jab machine-of $harts),
         qemu: null,
         host: {
             os: $nu.os-info.name,
@@ -387,7 +394,7 @@ def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
 }
 
 # What a launch came to: its status, a fault line on the UART, the CPU
-# and wall seconds, and the machine it ran on.
+# and wall seconds, and the machine it ran on, its line and its record.
 def outcome [launched: record]: nothing -> record {
     {
         status: $launched.status,
@@ -396,6 +403,7 @@ def outcome [launched: record]: nothing -> record {
         wall_seconds: $launched.wall_seconds,
         qemu_binary: $launched.qemu_binary,
         qemu: $launched.qemu,
+        machine: $launched.machine,
         window: $launched.window,
         audio: $launched.audio,
     }
@@ -914,37 +922,41 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 
 # Set builds' captures side by side: each run of each gauge.nuon a
 # measurement, a build an image at the cadence its runs played
-# (effective-cadence), its runs its batches, named by the label less a
-# trailing _<n>, one name a build and one build a name, each run keeping
-# the cadence its identity asked beside the one it played; for each leg a
-# value of `field` a run, a leg whose eye travels one bin or more taken
-# per bin of its path over the bins every run reached, a shorter one over
-# its frames, so a leg's value is its path's and not its frame count's.
-# Every run is classified before any leg is measured (standing-of): one
-# measured incomplete, invalid, or unchecked, or one that cannot be
-# paired, is refused unless `diagnostic` admits it, and one empty,
-# unclassified, or unusable is refused even then. A run's expected legs
-# are every leg any compared run holds, and one missing any is refused
-# unless `diagnostic` admits it, its missing legs then an explicit
-# missing result in its run and in its build's row in place of a value,
-# never a mean over fewer batches. The comparison fails with every
-# refused run's file, run, and reasons. The method, the bins, every run's
-# standing, cadences, missing legs, and bins with their medians, and the
-# table, each row naming its batches' standings and the batches missing
-# its leg, come back together.
+# (effective-cadence) on the machine their identities record, its runs
+# its batches, named by the label less a trailing _<n>, one name a build
+# and one build a name, each run keeping the cadence its identity asked
+# beside the one it played; for each leg a value of `field` a run, a leg
+# whose eye travels one bin or more taken per bin of its path over the
+# bins every run reached, a shorter one over its frames, so a leg's value
+# is its path's and not its frame count's. Every run is classified before
+# any leg is measured (standing-of): one measured incomplete, invalid, or
+# unchecked, one that cannot be paired, or one on a diagnostic machine is
+# refused unless `diagnostic` admits it, and one empty, unclassified, or
+# unusable is refused even then. A run's expected legs are every leg any
+# compared run holds, and one missing any is refused unless `diagnostic`
+# admits it, its missing legs then an explicit missing result in its run
+# and in its build's row in place of a value, never a mean over fewer
+# batches. The comparison fails with every refused run's file, run, and
+# reasons. Runs on more than one machine, a recorded one or none, are
+# refused unless `diagnostic` admits them. The method with the machines,
+# the bins, every run's standing, cadences, machine, missing legs, and
+# bins with their medians, and the table, each row naming its build's
+# machine, its batches' standings, and the batches missing its leg, come
+# back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let g = (open ($f | path expand))
         let build = ($g.label | str replace --regex '_\d+$' '')
         let image = ($g.identity | get -o build.image_sha256 | default "")
         let requested = ($g.identity | get -o mode.cadence)
+        let machine = ($g.identity | get -o machine)
         let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
-            let standing = (standing-of $measured $rows $field $requested)
+            let standing = (standing-of $measured $rows $field $requested $machine)
             {
-                file: ($f | path expand), label: $g.label, build: $build, image: $image,
+                file: ($f | path expand), label: $g.label, build: $build, image: $image, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
                 held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
@@ -965,11 +977,16 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     if not ($stopped | is-empty) {
         let head = ([
             $"the comparison refuses ($stopped | length) runs: an empty, unclassified, or unusable run always,"
-            "an incomplete, invalid, unchecked, or unpaired one, or one missing a leg another run holds, unless"
-            "--diagnostic admits it, marked"
+            "an incomplete, invalid, unchecked, unpaired, or diagnostic one, or one missing a leg another run"
+            "holds, unless --diagnostic admits it, marked"
         ] | str join " ")
         let named = ($stopped | get causes | flatten)
         error make { msg: ([$head] | append $named | str join "\n  ") }
+    }
+    let machines = ($covered | get machine | uniq)
+    if ($machines | length) > 1 and (not $diagnostic) {
+        let head = $"the runs ran on ($machines | length) machines, a comparison's runs on one unless --diagnostic admits them"
+        error make { msg: ([$head] | append ($machines | each {|m| machine-text $m }) | str join "\n  ") }
     }
     let runs = ($covered | each {|r|
         let legs = ($r.held | each {|leg|
@@ -979,12 +996,13 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         $r | reject rows held | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
+    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine } }
     for b in $builds {
-        let made = ($runs | where build == $b | each {|r| { image: $r.image, cadence: $r.effective_cadence } } | uniq)
-        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence each: ($made | to nuon); a build's batches are one build" } }
+        let made = ($runs | where build == $b | each {|r| do $made_of $r } | uniq)
+        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence on a machine each: ($made | to nuon); a build's batches are one build" } }
     }
-    for made in ($runs | each {|r| { image: $r.image, cadence: $r.effective_cadence } } | uniq) {
-        let names = ($runs | where {|r| $r.image == $made.image and $r.effective_cadence == $made.cadence } | get build | uniq)
+    for made in ($runs | each {|r| do $made_of $r } | uniq) {
+        let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
         if ($names | length) > 1 { error make { msg: $"one build, ($made | to nuon), is labelled ($names | str join ' and '); a build has one name" } }
     }
     let common = ($expected | each {|leg|
@@ -1013,7 +1031,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let values = ($entries | get value | compact)
             let whole = ($missing == 0 and (not ($values | is-empty)))
             {
-                build: $b, leg: $leg,
+                build: $b, leg: $leg, machine: ($batches | get 0.machine),
                 value_us: (if $whole { $values | math avg } else { null }),
                 half_spread_us: (if $whole { (($values | math max) - ($values | math min)) / 2 } else { null }),
                 batches: ($batches | length), missing: $missing, standings: ($batches | get standing | uniq),
@@ -1030,10 +1048,16 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             leg_value: "a walked leg's value is the mean of its bin values over the bins every run in the comparison reached; a standing leg's is its frames' median by nearest rank",
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: ([
-                "a build is an image's SHA-256 at the cadence its runs played: the one asked at schema 2, and 0"
-                "below it, where a request other than 0 leaves the run unpaired; a capture's label less a trailing"
-                "_<n> names it, one name a build and one build a name, and its runs are its batches; each run"
-                "keeps the cadence asked and the cadence played"
+                "a build is an image's SHA-256 at the cadence its runs played on the machine their identities"
+                "record: the cadence the one asked at schema 2, and 0 below it, where a request other than 0 leaves"
+                "the run unpaired; a capture's label less a trailing _<n> names it, one name a build and one build"
+                "a name, and its runs are its batches; each run keeps the cadence asked and the cadence played"
+            ] | str join " "),
+            machine: ([
+                "a run's machine is the one its identity records, its harts, whether it is diagnostic, -machine,"
+                "the CPU, and the accelerator, or none for a capture older than the record; a run on a diagnostic"
+                "machine stands diagnostic, runs on more than one machine are refused unless --diagnostic admits"
+                "them, and each table row names its build's machine"
             ] | str join " "),
             table: ([
                 "a build's value for a leg is the mean of its runs' values and the half spread is half their range,"
@@ -1048,8 +1072,9 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "never takes, or a run not seeded before its first frame or seeded again after it, or below schema"
                 "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or at schema 2"
                 "one whose cadence was not asked before its first frame or was asked again after it, whose identity"
-                "asks no cadence from 0 to 2, or with a frame at another cadence; those four refused unless"
-                "--diagnostic admits it; or valid; each table row names its batches' standings"
+                "asks no cadence from 0 to 2, or with a frame at another cadence; diagnostic, a run on a machine its"
+                "identity records as diagnostic, fewer harts than the specification's four; those five refused"
+                "unless --diagnostic admits it; or valid; each table row names its batches' standings"
             ] | str join " "),
             coverage: ([
                 "a run's expected legs are every leg any compared run holds; a run missing one is refused unless"
@@ -1057,6 +1082,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "its build's row is missing in place of a value, never a mean over fewer batches"
             ] | str join " "),
             admitted: $diagnostic,
+            machines: $machines,
         },
         common: $common,
         runs: $valued,
@@ -1071,12 +1097,14 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
 # build older than the clock records, read from its states alone;
 # incomplete, with the problems; unchecked, complete but measured before
 # the analyzer recorded validity; invalid, with the reasons; unpaired, a
-# run that cannot be paired with another (unpaired-reasons); or valid.
+# run that cannot be paired with another (unpaired-reasons); diagnostic,
+# a run on a machine its identity records as diagnostic; or valid.
 def standing-of [
     m: oneof<record, nothing>    # the run's measurement as its gauge.nuon holds it
     rows: list<any>              # the run's rows
     field: string                # the column compared
     requested: any               # the cadence the run's identity asked for, null when it names none
+    machine: any                 # the machine the run's identity records, null when it records none
 ]: nothing -> record<standing: string, reasons: list<string>> {
     let clocked = ($m | get -o clocked)
     if ($clocked | describe) != "bool" {
@@ -1102,6 +1130,10 @@ def standing-of [
     if not $m.valid { return { standing: "invalid", reasons: ($m.invalid? | default []) } }
     let unpaired = (unpaired-reasons $m $requested)
     if not ($unpaired | is-empty) { return { standing: "unpaired", reasons: $unpaired } }
+    if $machine != null and ($machine | get -o diagnostic) == true {
+        let why = $"a diagnostic machine of ($machine | get -o harts) harts, not the specification's four"
+        return { standing: "diagnostic", reasons: [$why] }
+    }
     { standing: "valid", reasons: [] }
 }
 
@@ -1314,21 +1346,22 @@ def column-of [rows: list<any>, name: string]: nothing -> list<any> {
 
 # One step of a bench's run as its gauge.nuon holds it: a play when its
 # identity names the host's own pad, else a batch of the route; its
-# cadence and period; and every run with its standing and reasons as a
-# comparison classifies it (standing-of), its CPU seconds over wall
-# seconds, its outcomes, and its frames (presented-calls). A step with
-# no gauge.nuon holds no runs.
+# cadence and period; the machine and the QEMU its identity records; and
+# every run with its standing and reasons as a comparison classifies it
+# (standing-of), its CPU seconds over wall seconds, its outcomes, and its
+# frames (presented-calls). A step with no gauge.nuon holds no runs.
 def bench-step [dir: path, label: string, state: any]: nothing -> record {
     let file = ($dir | path join $label "gauge.nuon")
-    if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, file: null, runs: [] } }
+    if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, machine: null, qemu: null, file: null, runs: [] } }
     let g = (open $file)
     let period = (1000000 / ($g.identity | get -o cap | default $CAP))
     let requested = ($g.identity | get -o mode.cadence)
+    let machine = ($g.identity | get -o machine)
     let all_rows = ($g.rows? | default [])
     let runs = ($g.runs | each {|r|
         let m = ($r | get -o measured)
         let rows = ($all_rows | where run == $r.run)
-        let standing = (standing-of $m $rows "critical_us" $requested)
+        let standing = (standing-of $m $rows "critical_us" $requested $machine)
         let ran = ($r | get -o ran | default {})
         let wall = ($ran | get -o wall_seconds | default 0)
         let cpu = ($ran | get -o cpu_seconds)
@@ -1342,14 +1375,16 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
             rows: (presented-calls $rows $period),
         }
     })
-    { label: $label, state: $state, kind: (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" }), cadence: $requested, period_us: $period, file: $file, runs: $runs }
+    let kind = (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" })
+    let qemu = ($g.identity | get -o qemu.version)
+    { label: $label, state: $state, kind: $kind, cadence: $requested, period_us: $period, machine: $machine, qemu: $qemu, file: $file, runs: $runs }
 }
 
 # A cadence's steps of one kind: the valid runs (standing-of) pooled,
 # their CPU seconds over wall seconds and their frames (bench-frames);
-# every other run kept apart with its standing, its reasons, and its own
-# frames, a diagnostic outside the pool; and each run's standing and
-# outcomes.
+# every other run, one on a diagnostic machine among them, kept apart
+# with its standing, its reasons, and its own frames, a diagnostic
+# outside the pool; and each run's standing and outcomes.
 def bench-cadence [steps: list<any>, cadence: any]: nothing -> record {
     let runs = ($steps | each {|s| $s.runs | each {|r| $r | insert label $s.label } } | flatten)
     let period = ($steps | first | get period_us)
@@ -1392,14 +1427,28 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     ] ++ $apart
 }
 
-# A bench's report as text: the steps, each kind's cadences, then the
-# comparisons.
-def bench-text [doc: record]: nothing -> string {
+# A machine as a run's identity records it, in words: its harts and
+# whether it is diagnostic, -machine, the CPU, and the accelerator, or
+# unrecorded for an identity older than the record.
+def machine-text [m: any]: nothing -> string {
+    if $m == null { return "unrecorded" }
+    let kind = (if ($m | get -o diagnostic) == true { ", diagnostic" } else { "" })
+    $"($m | get -o harts) harts($kind), -machine ($m | get -o machine), -cpu ($m | get -o cpu), -accel ($m | get -o accel)"
+}
+
+# A bench's report as text: the steps, the machines and QEMUs they ran
+# on, each kind's cadences, then the comparisons.
+export def bench-text [doc: record]: nothing -> string {
     let named = (if $doc.bench == null { "" } else { $"($doc.bench) " })
+    let ran = ($doc.steps | where file != null)
+    let machines = ($ran | each {|s| { machine: $s.machine, qemu: $s.qemu } } | uniq | each {|m|
+        let labels = ($ran | where {|s| $s.machine == $m.machine and $s.qemu == $m.qemu } | get label)
+        $"machine: (machine-text $m.machine); ($m.qemu | default 'QEMU unrecorded'): ($labels | str join ' ')"
+    })
     let head = [
         $"bench ($named)run ($doc.stamp | default '-') in ($doc.dir)"
         $"steps: ($doc.steps | each {|s| $'($s.label) (if $s.file == null { 'no capture' } else { $s.state | default 'read' })' } | str join ', ')"
-    ]
+    ] ++ $machines
     let kinds = ($doc.groups | each {|g|
         let title = (if $g.kind == "play" { "your play" } else { "the route" })
         [$"($title), per cadence, ms as least / median / 95th / 99th / greatest:"] ++ ($g.cadences | each {|c| bench-cadence-text $c } | flatten)
@@ -1423,18 +1472,17 @@ def bench-text [doc: record]: nothing -> string {
     $head ++ $kinds ++ $compared | str join "\n"
 }
 
-# A bench's report, `nu gauge.nu bench-report <dir>`, over the steps a
-# run of the bench wrote in `dir`, each a directory holding its
-# gauge.nuon, in the order bench.nuon lists them, else every directory's
-# by name: the plays, each on the host's own pad, and the route's
-# batches apart, each per cadence with its valid runs pooled, untrimmed,
-# and every other run kept apart as a diagnostic (bench-cadence); then
-# the route's batches compared at 50 cm on critical_us and draw_us, a
-# build a cadence, its batches its steps (compare), and when the
-# comparison refuses a run, compared again as a diagnostic admitting
-# it, marked. report.nuon and report.txt are written in `dir`, any there
-# before retired, and the text printed.
-def "main bench-report" [dir: path] {
+# A bench's report over the steps a run of the bench wrote in `dir`,
+# each a directory holding its gauge.nuon, in the order bench.nuon lists
+# them, else every directory's by name: each step with its machine and
+# QEMU (bench-step); the plays, each on the host's own pad, and the
+# route's batches apart, each per cadence with its valid runs pooled,
+# untrimmed, and every other run kept apart as a diagnostic
+# (bench-cadence); then the route's batches compared at 50 cm on
+# critical_us and draw_us, a build a cadence, its batches its steps
+# (compare), and when the comparison refuses a run, compared again as a
+# diagnostic admitting it, marked.
+export def bench-doc [dir: path]: nothing -> record {
     let dir = ($dir | path expand)
     let listed = ($dir | path join "bench.nuon")
     let bench = (if ($listed | path exists) { open $listed } else { null })
@@ -1455,7 +1503,7 @@ def "main bench-report" [dir: path] {
             }
         }
     })
-    let doc = {
+    {
         bench: ($bench | get -o bench),
         stamp: ($bench | get -o stamp),
         dir: $dir,
@@ -1463,6 +1511,14 @@ def "main bench-report" [dir: path] {
         groups: $groups,
         compared: $compared,
     }
+}
+
+# A bench's report, `nu gauge.nu bench-report <dir>` (bench-doc):
+# report.nuon and report.txt written in `dir`, any there before retired,
+# and the text printed.
+def "main bench-report" [dir: path] {
+    let dir = ($dir | path expand)
+    let doc = (bench-doc $dir)
     let text = (bench-text $doc)
     let nuon_file = ($dir | path join "report.nuon")
     let text_file = ($dir | path join "report.txt")

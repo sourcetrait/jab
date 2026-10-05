@@ -1,0 +1,5 @@
+name = 'dtb'
+sdk = '../../sdk'
+includes = ['../../sdk/src', '../../kernel/src', '../../kernel/src/include']
+link = '../../sdk/src/program.ld'
+display = 'none'

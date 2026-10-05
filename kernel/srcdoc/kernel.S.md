@@ -1,7 +1,8 @@
 # kernel.S
 
-Supervisor-mode entry. Zeroes bss, turns on paging, starts the frame clock,
-installs the trap vector, and enters the program at JAB_PROGRAM_BASE in user
+Supervisor-mode entry, bss already cleared and the device tree read in
+machine mode (boot.S). Turns on paging, starts the frame clock, installs the
+trap vector, and enters the program at JAB_PROGRAM_BASE in user
 mode with its stack at JAB_STACK_TOP and every other register cleared. The
 display comes up when the program asks for it. The ports come up before the
 program, the API when the run put its port on the machine (serial.S). The
@@ -20,8 +21,9 @@ flush (riscv.inc), which boot.S opened below machine mode.
 
 The ports come up before the program starts: the API when the run put its
 port on the machine, and under DEBUG the debug channel, first, so the banner
-and everything after it go there. sscratch holds the kernel stack top while
-the program runs.
+and everything after it go there, the harts as the tree gave them first
+(harts.S's harts_report). sscratch holds the kernel stack top while the
+program runs.
 
 ## msg_banner
 

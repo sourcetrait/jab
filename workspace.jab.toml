@@ -31,7 +31,9 @@ programs = [
   'test/png',
   'test/sprite',
   'test/purity',
-  'test/profile'
+  'test/profile',
+  'test/dtb',
+  'test/harts'
 ]
 
 # A word standing for a program's path wherever the tool takes one:

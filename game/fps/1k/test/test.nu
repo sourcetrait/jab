@@ -1939,7 +1939,12 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # one build under two names, keeps one image's two cadences apart as two
 # builds, and takes one image's schema 1 captures asking none and 0 as
 # one build at cadence 0, each comparison it must make wrapped and held
-# to no refusal.
+# to no refusal. A run on a diagnostic machine is refused as diagnostic
+# and admitted marked under --diagnostic; runs on two machines refuse
+# the comparison, and under --diagnostic each build's row names its
+# machine; one name's runs on two machines are two builds; and a bench
+# pools the specification's machine's run alone, keeps the diagnostic
+# machine's apart, and names every step's machine in its report.
 export def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -2251,6 +2256,45 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($legacy.runs | get standing) [valid valid] $"both schema 1 captures stand valid: ($legacy.runs | get reasons)"
     assert equal ($legacy.runs | get effective_cadence) [0 0] $"both played cadence 0: ($legacy.runs | get effective_cadence)"
     assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
+
+    # machines: the specification's four harts, two harts diagnostic, and
+    # four harts on another -machine, as the AIA line will be
+    let four = (jab machine-of 4)
+    let two = (jab machine-of 2)
+    let aia = ($four | update machine "virt,aia=aplic-imsic,aclint=on")
+    let on_four = (fx-gauge $dir "machine_four" "four" "four" 0 $good2 --machine $four)
+    let on_two = (fx-gauge $dir "machine_two" "two" "two" 0 $good2 --machine $two)
+    let on_aia = (fx-gauge $dir "machine_aia" "aia" "aia" 0 $good2 --machine $aia)
+    let diag_refused = (try { gauge compare [$on_four $on_two] "draw_us" 50; "" } catch {|e| $e.msg })
+    let diag_says = $"a run on a diagnostic machine is refused as diagnostic: ($diag_refused)"
+    assert ($diag_refused | str contains $"($on_two) run 1, diagnostic: a diagnostic machine of 2 harts") $diag_says
+    let diag_admitted = (gauge compare [$on_four $on_two] "draw_us" 50 --diagnostic)
+    assert equal ($diag_admitted.table | where build == "two" | get 0.standings) ["diagnostic"] "--diagnostic admits it marked"
+    let across = (try { gauge compare [$on_four $on_aia] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($across | str contains "the runs ran on 2 machines") $"runs on two machines refuse the comparison: ($across)"
+    let across_admitted = (gauge compare [$on_four $on_aia] "draw_us" 50 --diagnostic)
+    let rows = ($across_admitted.table | each {|t| [$t.build $t.machine.machine] })
+    assert equal $rows [[four virt] [aia "virt,aia=aplic-imsic,aclint=on"]] $"each build's row names its machine: ($rows)"
+    let one_name = (try {
+        gauge compare [(fx-gauge $dir "mixed_1" "mixed_1" "mixed" 0 $good2 --machine $four) (fx-gauge $dir "mixed_2" "mixed_2" "mixed" 0 $good2 --machine $aia)] "draw_us" 50 --diagnostic
+        ""
+    } catch {|e| $e.msg })
+    assert ($one_name | str contains "come from 2 builds") $"one name's runs on two machines are two builds: ($one_name)"
+
+    # a bench of two route steps at cadence 0, one on each machine
+    let bench = ($dir | path join "bench")
+    for step in [[four $on_four] [two $on_two]] {
+        mkdir ($bench | path join $step.0)
+        cp $step.1 ($bench | path join $step.0 "gauge.nuon")
+    }
+    let doc = (gauge bench-doc $bench)
+    let pool = ($doc.groups | where kind == "route" | get 0.cadences.0)
+    assert equal [$pool.runs $pool.valid] [2 1] $"the bench pools the specification's machine's run alone: ($pool.standings)"
+    assert equal ($pool.apart | get standing) ["diagnostic"] $"the diagnostic machine's run kept apart: ($pool.apart)"
+    assert equal ($doc.steps | get machine.harts) [4 2] $"every step names its machine: ($doc.steps)"
+    let text = (gauge bench-text $doc | lines)
+    let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two"
+    assert ($line in $text) $"the report names the step's machine, ($line): ($text)"
 }
 
 # The program's three cadences on its own clock records, one
@@ -2524,15 +2568,17 @@ def fx-late [items: list<any>, item: record]: nothing -> list<any> {
 }
 
 # A gauge.nuon for a comparison, as `run` writes one, from a synthetic
-# capture measured: its label, an identity of the image and the cadence
-# asked, none when null, the run's measurement, and its rows.
-def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>]: nothing -> string {
+# capture measured: its label, an identity of the image, the cadence
+# asked, none when null, and the machine when given, the run's
+# measurement, and its rows.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record]: nothing -> string {
     let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
     let mode = (if $cadence == null { {} } else { { cadence: $cadence } })
     let file = ($dir | path join $"pair_($name).nuon")
+    let id = { build: { image_sha256: $image }, mode: $mode }
     {
         label: $label,
-        identity: { build: { image_sha256: $image }, mode: $mode },
+        identity: (if $machine == null { $id } else { $id | insert machine $machine }),
         runs: [{ run: 1, measured: ($m | reject rows) }],
         rows: ($m.rows | each {|r| $r | insert run 1 }),
     } | to nuon | save --raw -f $file

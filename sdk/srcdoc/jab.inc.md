@@ -300,6 +300,16 @@ table of record.
 
 `u64`.
 
+## .set JAB_SYS_HARTS
+
+`u64`.
+
+## .set JAB_HARTS_MAX
+
+`u64`: the most harts the ABI names, 8, the 4K tier's cores: a hart id is
+under it, every hart mask fits its bits, and the kernel keeps a record a
+hart up to it. A tree listing a hart past it is a topology problem.
+
 ## .set JAB_TEXT_WIDTH
 
 `u64`: a text cell's width in pixels at JAB_TEXT_SCALE_ONE.

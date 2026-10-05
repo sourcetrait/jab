@@ -177,10 +177,14 @@ and the main loop under the process name, which is where the host's
 copy and paint of each flip lands; on macOS, whose threads carry no
 names, the first row is the thread that draws the window and the rest
 are numbered. When the run ends it prints one NUON record on the
-recording, the run as it was (host, QEMU, window, the symbols the
-kernel was built with) and per thread the steady CPU seconds a second
-after the first five, which `--skip` changes, a run too short for them
-reported over all it has, ready to paste. On
+recording, the run as it was (host, QEMU, the harts, `-machine`, the
+CPU, and the accelerator off QEMU's command line, window, the symbols
+the kernel was built with), the translator's mode as `tcg`,
+single-threaded when one `ALL CPUs/TCG` thread runs every hart, which
+is never evidence of multicore performance, and multi-threaded with a
+`CPU N/TCG` thread a hart, and per thread the steady CPU seconds a
+second after the first five, which `--skip` changes, a run too short for
+them reported over all it has, ready to paste. On
 macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
@@ -194,8 +198,10 @@ person attends is announced and counted down first, and a step that
 fails is recorded and the rest run. The bench's report then reads every
 step, and a bench with a failed step or a failed report exits 1 once
 all of it is recorded. The cadence bench's report, `gauge.nu
-bench-report`, pools only the runs a comparison would take as valid
-and lists every other run apart, as a diagnostic with its reasons. Each
+bench-report`, names the machine and the QEMU each step ran on, pools
+only the runs a comparison would take as valid, and lists every other
+run apart, as a diagnostic with its reasons, a run on a diagnostic
+machine among them. Each
 run of a bench is a stamped directory in the program's `bench/` shard
 of the target, with `bench.nuon` recording each step's outcome, and a
 state file beside the stamps says what runs. `just watch bench
@@ -274,6 +280,26 @@ the hart has. `time`, at `JAB_TIME_HZ`, is the clock to measure a frame's
 work by; under QEMU's TCG, `cycle` and `instret` both read the host's tick
 counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
 0, since no event is selected and selecting one stays machine mode's.
+
+Every machine has four harts, `-smp 4`, on multithreaded TCG, `-accel
+tcg,thread=multi`, a host thread a hart. `--harts 1` or `--harts 2` on
+`just run`, `jab.nu plan`, or `jab launch` gives a diagnostic machine of
+one or two harts, which every record of the run labels so, and any other
+count is refused before QEMU starts; every launch's record carries its
+machine, the harts asked for, diagnostic or not, `-machine`, the CPU, and
+the accelerator. QEMU hands every hart the device tree it built, and the
+kernel reads it once, on hart 0 in machine mode before anything else
+runs: every cpu the tree lists is discovered, hart 0 runs the kernel and
+the program, and the others park. `jab.sys.harts` answers the discovered,
+online, and failed harts as masks, bit n for hart n. A cpu the kernel
+cannot use, an id past `JAB_HARTS_MAX` among them, keeps the kernel on
+hart 0 with every other hart failed, named on the debug channel; a tree
+the kernel cannot read, or a timer other than QEMU's 10 MHz, ends the run
+before the program starts, its line on the console and status 1. `jab
+launch --dtb <file>` hands the machine a tree of its own, `--bootargs
+<text>` puts QEMU's `-append` in the tree, which a debug kernel prints,
+and `jab dump-tree` writes the tree QEMU builds for a machine.
+
 `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,
 such as `-trace alsa_* -D trace.log`; the value is split as a shell

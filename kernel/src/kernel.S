@@ -5,14 +5,6 @@
 .section .text
 .global kmain
 kmain:
-    la t0, _bss_start
-    la t1, _bss_end
-1:
-    bgeu t0, t1, 2f
-    sd zero, 0(t0)
-    addi t0, t0, 8
-    j 1b
-2:
     call page_init
     call frame_clock_init
     la t0, trap_vector
@@ -34,6 +26,7 @@ kmain:
 msg_banner:
     .asciz "jab: kernel up on qemu virt\n"
 .popsection
+    call harts_report
 .endif
     la t0, kernel_stack_top
     csrw sscratch, t0

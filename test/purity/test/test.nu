@@ -30,6 +30,11 @@ const debug_text = [
     "jab: gpu at "
     "jab: gpu cmd="
     "jab: display "
+    "jab: harts discovered "
+    "jab: hart "
+    "jab: cpus refused: "
+    "jab: cpu refused: "
+    "jab: bootargs "
 ]
 
 # What every kernel says, because a fault has to be reported whatever
@@ -45,6 +50,9 @@ const fault_text = [
     "jab: romfs: wrong kind at "
     "jab: romfs: disk error"
     "jab: sound stalled"
+    "jab: device tree refused: code "
+    "jab: timer unsupported: timebase-frequency "
+    "jab: machine trap: cause="
 ]
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {

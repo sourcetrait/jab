@@ -69,11 +69,18 @@ const cpu_profile = "rva23s64,pmp=true"
 # and the supervisor profile for the kernel.
 const march_program = "-march=rva23u64"
 const march_kernel = "-march=rva23s64"
+# Multithreaded TCG, a host thread a hart, stated on every line: QEMU
+# 11.1.2 already takes it for riscv64 when no instruction counting is
+# asked, and the line says so whatever the host's QEMU would choose.
+const accel = "tcg,thread=multi"
+# The harts a machine takes: the specification's four, and one or two
+# for a diagnostic run, which its record labels so.
+const harts_allowed = [1 2 4]
+const harts_default = 4
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
 # on every refresh its cursor blinks.
 const machine_rest = [
-    "-accel" "tcg" "-smp" "4"
     "-global" "virtio-mmio.force-legacy=false"
     "-parallel" "none"
 ]
@@ -141,10 +148,23 @@ def cpu-model [qemu: string]: nothing -> string {
     $cpu_profile
 }
 
-# The machine on `qemu`: virt, the RVA23 CPU, four harts, every
+# What a machine of that many harts is, the record a run keeps of it: the
+# harts asked for, whether the run is diagnostic (fewer than the
+# specification's four), the -machine options, the CPU model, and the
+# accelerator with its thread mode. A count outside 1, 2, and 4 is
+# refused.
+export def machine-of [harts: int]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
+    if $harts not-in $harts_allowed { error make {msg: $"--harts takes 1, 2, or 4, the specification's four or a diagnostic one or two, not ($harts)"} }
+    { harts: $harts, diagnostic: ($harts != $harts_default), machine: "virt", cpu: $cpu_profile, accel: $accel }
+}
+
+# The machine on `qemu`: virt with `options` after it when given, the
+# RVA23 CPU, multithreaded TCG, that many harts (machine-of), every
 # transport modern.
-def machine-args [qemu: string]: nothing -> list<string> {
-    ["-machine" "virt" "-cpu" (cpu-model $qemu)] ++ $machine_rest
+def machine-args [qemu: string, harts: int, --options: string = ""]: nothing -> list<string> {
+    let m = (machine-of $harts)
+    let machine = (if $options == "" { $m.machine } else { $"($m.machine),($options)" })
+    ["-machine" $machine "-cpu" (cpu-model $qemu) "-accel" $m.accel "-smp" ($m.harts | into string)] ++ $machine_rest
 }
 # The guest is named for the program, `jab <program>`, which is what
 # QEMU's window shows inside its own prefix, hardcoded in every front
@@ -228,7 +248,13 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # pad beside a scripted one. A previous run's files in `out` are retired
 # into the retire home of `target`, the workspace's target or else the
 # program's, wherever `out` lies (retire), its pipes kept; `target` is
-# handed back for a harness that clears away files of its own.
+# handed back for a harness that clears away files of its own. The
+# machine has `harts` harts, 1, 2, or 4, and `machine` is its record
+# (machine-of); `bootargs` goes to the kernel through QEMU's -append,
+# into the device tree's /chosen, where a debug kernel reads its test
+# knobs and a release kernel reads nothing; `dtb` hands the kernel that
+# tree through -dtb in place of the one QEMU builds, QEMU checking its
+# header before any hart runs.
 export def plan [
     --kernel: path
     --image: path
@@ -244,7 +270,11 @@ export def plan [
     --window
     --live-sound
     --host-pad
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
+    --harts: int = 4
+    --bootargs: string = ""
+    --dtb: path = ""
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string> {
+    let machine = (machine-of $harts)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
     let out = ($out | path expand)
@@ -270,12 +300,13 @@ export def plan [
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
     let shown = (if $window { display (image-manifest $image) } else { "none" })
-    let args = ((machine-args $qemu) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
+    let args = ((machine-args $qemu $harts) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" $shown "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
-    ] ++ (disks-args (machine-disks $disk $serial true $ws)))
+    ] ++ $append ++ (disks-args (machine-disks $disk $serial true $ws)))
     {
         qemu_binary: $qemu,
         qemu: $args,
@@ -299,6 +330,8 @@ export def plan [
         window: $shown,
         audio: $backend,
         bridge: $hosted.bridge,
+        machine: $machine,
+        bootargs: $bootargs,
     }
 }
 
@@ -348,7 +381,9 @@ def image-manifest [image: path]: nothing -> record {
 # where the pad needs one and ended after; the screen and the timed
 # actions go through the monitor and the pipes as headless. The result
 # carries the machine's line, `qemu_binary` and `qemu`, with the
-# `window` and the `audio` backend it ran with.
+# `window` and the `audio` backend it ran with, and `machine`, the
+# record of the harts it had (machine-of); `--harts`, `--bootargs`, and
+# `--dtb` are plan's.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -369,10 +404,13 @@ export def launch [
     --window                   # the window a run of the program opens, in place of none
     --live-sound               # the sound device over the host's audio as a run discovers it, in place of the --sound recording
     --host-pad                 # the host's own gamepad as a run attaches it, in place of a --pad table
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string> {
+    --harts: int = 4           # the machine's harts, 1 or 2 for a diagnostic run
+    --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
+    --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
-    let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad)
+    let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
     let out = $machine.out
     let log = $machine.serial_log
     let qemu_log = $machine.qemu_log
@@ -461,7 +499,28 @@ export def launch [
         qemu: $machine.qemu,
         window: $machine.window,
         audio: $machine.audio,
+        machine: $machine.machine,
     }
+}
+
+# The device tree QEMU builds for a launch's machine of that many harts,
+# written to the file `out` through -machine dumpdtb, QEMU exiting once
+# it is written and before any hart runs, `bootargs` in /chosen as a
+# launch's -append puts it; the kernel and the image place the line as
+# plan places it, and a previous file there is retired. The file's path.
+export def dump-tree [--kernel: path, --image: path, --out: path, --harts: int = 4, --bootargs: string = ""]: nothing -> string {
+    let file = ($out | path expand)
+    let dir = ($file | path dirname)
+    mkdir $dir
+    let ws = (launch-workspace $kernel $image $dir)
+    let root = (target-root (if $ws != null { $ws } else { image-home $image }))
+    retire $file $root
+    let qemu = (qemu-binary (image-home $image) $ws)
+    let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] })
+    let args = ((machine-args $qemu $harts --options $"dumpdtb=($file)") ++ $memory ++ ["-bios" "none" "-kernel" ($kernel | path expand) "-display" "none"] ++ $append)
+    let made = (^$qemu ...$args | complete)
+    if $made.exit_code != 0 or not ($file | path exists) { error make {msg: $"QEMU wrote no device tree to ($file): ($made.stderr | str trim)"} }
+    $file
 }
 
 # Read a wav QEMU's wav backend recorded: its rate, channels, and bits
@@ -1030,19 +1089,24 @@ def watch-file [ws: path]: nothing -> string {
 }
 
 # What a recording says first about the QEMU it records: the host, the
-# QEMU's version, the window, the kernel and the symbols it was built
-# with, read from its tree's flags stamp, its pid, and when the
+# QEMU's version, the machine from its line (the harts, -machine, the
+# CPU, and the accelerator), the window, the kernel and the symbols it
+# was built with, read from its tree's flags stamp, its pid, and when the
 # recording started.
 def watch-header [pid: int, started: datetime]: nothing -> record {
     let command = (ps -l | where pid == $pid | get -o 0.command | default "")
     let window = ($command | parse --regex '-display (?P<w>\S+)' | get -o 0.w | default "")
     let kernel = ($command | parse --regex '-kernel (?P<k>\S+)' | get -o 0.k | default "")
+    let smp = ($command | parse --regex '-smp (?P<n>\d+)' | get -o 0.n | default "")
+    let machine = ($command | parse --regex '-machine (?P<m>\S+)' | get -o 0.m | default "")
+    let cpu = ($command | parse --regex '-cpu (?P<c>\S+)' | get -o 0.c | default "")
+    let accel = ($command | parse --regex '-accel (?P<a>\S+)' | get -o 0.a | default "")
     let stamp_file = (if $kernel == "" { "" } else { $kernel | path dirname | path join "flags" })
     let stamp = (if $stamp_file != "" and ($stamp_file | path exists) { open --raw $stamp_file | decode | str trim } else { "" })
     let symbols = ($stamp | parse --regex '--defsym (?P<s>[A-Z0-9_]+)=1' | get s)
     let binary = (command-binary $command)
     let qemu = (try { ^$binary --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" })
-    { os: $nu.os-info.name, arch: $nu.os-info.arch, qemu: $qemu, window: $window, kernel: $kernel, symbols: $symbols, pid: $pid, started: ($started | format date "%Y-%m-%dT%H:%M:%S") }
+    { os: $nu.os-info.name, arch: $nu.os-info.arch, qemu: $qemu, harts: (if $smp == "" { null } else { $smp | into int }), machine: $machine, cpu: $cpu, accel: $accel, window: $window, kernel: $kernel, symbols: $symbols, pid: $pid, started: ($started | format date "%Y-%m-%dT%H:%M:%S") }
 }
 
 # Record the running Jab QEMU per thread, once a second, to the
@@ -1096,7 +1160,11 @@ def "main watch" [ws: path, --skip: float = 5.0] {
 # row, and QEMU's worker threads come and go, so a row can change
 # identity between samples: a row whose second-by-second rate is
 # impossible for one thread, negative or past one, is reported with
-# `stable: false` and no peak, its steady figure a mix.
+# `stable: false` and no peak, its steady figure a mix. `tcg` names the
+# translator's mode from the threads' names: a lone `ALL CPUs/TCG` thread
+# runs every hart on one host thread, single-threaded and never evidence
+# of multicore performance, `CPU N/TCG` threads a thread a hart; null
+# where the names say neither, as on macOS.
 def watch-report-of [file: path, skip: float]: nothing -> record {
     let lines = (open --raw $file | decode | lines | where {|l| ($l | str trim) != "" })
     let header = ($lines | first | from nuon)
@@ -1120,11 +1188,14 @@ def watch-report-of [file: path, skip: float]: nothing -> record {
             { name: ($series | last).name, id: $id, steady: ($steady | math round -p 3), peak: (if $stable { $rates | math max | math round -p 3 } else { null }), stable: $stable }
         }
     } | compact | where steady >= 0.005 | sort-by steady --reverse)
+    let names = ($last.threads | get name)
+    let tcg = (if ($names | any {|n| $n == "ALL CPUs/TCG" }) { "single-threaded" } else if ($names | any {|n| $n =~ '^CPU \d+/TCG$' }) { "multi-threaded" } else { null })
     {
         run: $header.run,
         skipped: $skipped,
         seconds: ($seconds | math round -p 1),
         samples: ($samples | length),
+        tcg: $tcg,
         process: (if ($threads | is-empty) { 0.0 } else { $threads | get steady | math sum | math round -p 3 }),
         threads: $threads,
     }
@@ -1542,13 +1613,14 @@ def test-args [ready: record]: nothing -> list<string> {
 # has one else the blank image that has always been there, the debug
 # channel to a file when DEBUG is set, the API's port when `api` asks,
 # the window given (null for the one a run would open), the UART where
-# `serial` says (`stdio` or `none`), and no monitor. The ports' files sit
-# beside the build output, named in the README.
-def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string> {
+# `serial` says (`stdio` or `none`), and no monitor, on a machine of
+# `harts` harts (machine-of). The ports' files sit beside the build
+# output, named in the README.
+def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --harts: int = 4]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string> {
     let ready = (prepared $dir $names)
     let c = $ready.context
     let qemu = (qemu-binary $c.here $c.workspace)
-    let machine = (machine-args $qemu)
+    let machine = (machine-args $qemu $harts)
     let assets = (assets-image $c)
     let disk = (if $assets == "" {
         let blank = ($c.target | path join "disk.img")
@@ -1713,8 +1785,8 @@ def tool-build [ws: path, package: string, without: string]: nothing -> string {
 # With a pad on the port, the bridge runs beside QEMU, started first
 # so it is writing the header as the kernel comes up, and ended with
 # it; the bridge ends itself as well once its pipe has no reader.
-def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool, sound: bool]: nothing -> nothing {
-    let line = (run-line $dir $names $api null "stdio" $kbm $pad $sound)
+def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool, sound: bool, --harts: int = 4]: nothing -> nothing {
+    let line = (run-line $dir $names $api null "stdio" $kbm $pad $sound --harts $harts)
     if ($line.window | str starts-with "vnc=") {
         print "no display server here, so this is a development run: the display is served over VNC on 127.0.0.1:5930; tunnel it with `ssh -N -L 5930:127.0.0.1:5930 <this host>` and view it with `vncviewer 127.0.0.1:5930`"
     }
@@ -2488,13 +2560,13 @@ def pad-choice [pad: bool, no_pad: bool]: nothing -> bool {
 # harness in another language to run and drive: `nu jab.nu plan <dir>
 # --disk <romfs> --serial fps --api --gamepad --set debug`, the kernel and
 # the image the program's own builds, `out` under the program's build tree
-# unless given.
-def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound] {
+# unless given, `--harts` and `--bootargs` plan's.
+def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --harts: int = 4, --bootargs: string = ""] {
     let names = (symbols $set)
     let c = (context ($dir | path expand) "program" $names)
     let ready = (prepared ($dir | path expand) $names)
     let out = (if $out == "" { $c.out | path join "machine" } else { $out | path expand })
-    plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound | to json
+    plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --harts $harts --bootargs $bootargs | to json
 }
 
 # Build: at a workspace's root the kernel and every program, or the
@@ -2527,12 +2599,14 @@ def "main test" [dir: path, ...words: string, --set: string = ""] {
 # at a program's directory that program. Release unless --set says
 # otherwise; the API's port on the machine with --api; the keyboard and
 # the tablet off with --no-kbm, the gamepad the host has off with
-# --no-pad, the sound device off with --no-sound. QEMU's exit code is
-# the program's status.
-def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound] {
+# --no-pad, the sound device off with --no-sound; four harts, or one or
+# two for a diagnostic run with --harts. QEMU's exit code is the
+# program's status.
+def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --harts: int = 4] {
     let program = (if (is-workspace $dir) { run-target $dir $words } else { $dir | path expand })
+    machine-of $harts | ignore
     prepare $program "run"
-    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound)
+    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound) --harts $harts
 }
 
 # Probe one program under a window for --seconds and print one NUON
@@ -2558,5 +2632,5 @@ def "main retire" [ws: path] {
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1|2|4]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }

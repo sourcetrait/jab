@@ -40,7 +40,8 @@ test *args:
 # `just run example/bounce`, `just run fps`; release, or `--set
 # debug`; `--api` puts the API's port on the machine; the host's gamepad
 # and sound come along unless `--no-pad` or `--no-sound`, the keyboard
-# and the tablet unless `--no-kbm`
+# and the tablet unless `--no-kbm`; four harts, or `--harts 1` or `2` for
+# a diagnostic machine
 # Build, then run one program in its window
 [script("nu")]
 run +args:

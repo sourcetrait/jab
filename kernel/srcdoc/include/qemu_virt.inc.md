@@ -1,7 +1,8 @@
 # qemu_virt.inc
 
 QEMU's virt machine, the only machine Jab runs on. The map is fixed, so it
-is written down here rather than read from a device tree.
+is written down here; the device tree QEMU hands the kernel is read for the
+harts alone and held to these where it says the same (harts.S).
 
 ## .set QEMU_VIRT_UART0
 
@@ -124,3 +125,7 @@ the bottom, the framebuffer next, and the program's window the rest.
 ## .set QEMU_VIRT_TIMEBASE
 
 `u64`: how many times the time counter ticks a second.
+
+Every usable cpu's timebase-frequency in the tree, its own else /cpus's,
+is held to it at boot, and another ends the run before the program
+starts, since the frame clock and every program's time count in it.
