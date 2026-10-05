@@ -2337,6 +2337,21 @@ def bench-save-state [file: path, state: record]: nothing -> nothing {
     mv -f $next $file
 }
 
+# A bench's run packed whole into one tar beside its directory in the
+# bench's home, so the run travels as one file: named for the bench, its
+# path's slashes as underscores, and the stamp, `<bench>-<stamp>.tar`,
+# the run's directory at the archive's top under its stamp. A tar of the
+# run already there, an earlier packing, is retired first (retire), since
+# nothing is deleted. The tar's path. Untyped because it can end in an
+# error.
+def bench-tar [home: path, stamp: string, name: string, root: path] {
+    let file = ($home | path join $"($name | str replace --all '/' '_')-($stamp).tar")
+    retire $file $root
+    let r = (do { cd $home; ^tar -cf ($file | path basename) $stamp | complete })
+    if $r.exit_code != 0 { error make {msg: $"tar of ($home | path join $stamp) ended with ($r.exit_code): ($r.stderr | str trim)"} }
+    $file
+}
+
 # Run a bench, `just bench <program>/<bench>`: the NUON file of that name
 # under the program's bench/ directory, with a summary, the tree, the
 # steps, each a label and the program's script with its arguments and,
@@ -2348,10 +2363,14 @@ def bench-save-state [file: path, state: record]: nothing -> nothing {
 # the report. A run is a stamped directory in the program's bench shard
 # of the target, its bench.nuon recording every step's outcome as it
 # lands, and state.nuon beside the stamps says what the run is doing,
-# for `just watch bench`. A run with a failed step or a failed report
-# exits 1 once everything is recorded, reported, and said. `--only` runs
-# the steps its comma-separated labels name; with no bench, the list.
-# Nothing is deleted: a run writes its own directory and the state.
+# for `just watch bench`. At the end the run is packed whole into one tar
+# beside its directory (bench-tar), the file to copy off the host, and
+# the last line names it; a watch recording the run packs it again when
+# it ends, its recording included. A run with a failed step or a failed
+# report exits 1 once everything is recorded, reported, packed, and said.
+# `--only` runs the steps its comma-separated labels name; with no bench,
+# the list. Nothing is deleted: a run writes its own directory, its tar,
+# and the state.
 def "main bench" [ws: path, name?: string, --only: string = ""] {
     let ws = ($ws | path expand)
     if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
@@ -2429,10 +2448,13 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     let final = (if ($failed | is-empty) and ($reported == null or $reported == 0) { "done" } else { "failed" })
     $record = ($record | merge { report: $reported, state: $final })
     $record | to nuon --indent 2 | save --raw -f $record_file
+    let packed = (try { { tar: (bench-tar $home $stamp $b.name (target-root $ws)), error: "" } } catch {|e| { tar: null, error: $e.msg } })
     bench-save-state $state_file ($base | merge { step: $total, label: "", state: $final })
     let failures = (if ($failed | is-empty) { "" } else { $"; failed: ($failed | str join ', ')" })
     let unreported = (if $reported == null or $reported == 0 { "" } else { $"; the report failed with exit ($reported)" })
-    print $"jab bench: ($b.name) ($final), ($total) steps($failures)($unreported); everything in ($dir)"
+    if $packed.tar == null { print $"jab bench: the run is left unpacked in its directory: ($packed.error)" }
+    if ($dir | path join "watch" | path exists) { print "jab bench: the watch recording this run packs it again, its recording included, when it ends" }
+    print $"jab bench: ($b.name) ($final), ($total) steps($failures)($unreported); everything in (if $packed.tar == null { $dir } else { $packed.tar })"
     if $final != "done" { exit 1 }
 }
 
@@ -2485,8 +2507,10 @@ def watch-rates [file: path, span: int]: nothing -> string {
 # starts and ends and the rates every five seconds. When the bench has
 # finished and no QEMU of it is left, it prints the bench's report and
 # its own per QEMU, the steady CPU seconds a second after the first
-# `--skip` (watch-report-of), and writes them together as watch.nuon in
-# the run's directory. Interrupted, it ends with no report.
+# `--skip` (watch-report-of), writes them together as watch.nuon in the
+# run's directory, then packs the run again, its recording included
+# (bench-tar), and names that tar last, the file to copy off the host.
+# Interrupted, it ends with no report.
 def "main watch bench" [...words: string, --skip: float = 5.0] {
     if ($words | is-empty) { error make {msg: "nu jab.nu watch bench <program>/<bench> <workspace>"} }
     let ws = ($words | last | path expand)
@@ -2578,7 +2602,8 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     let out = ($run | path join "watch.nuon")
     retire $out $root
     $whole | to nuon --indent 2 | save --raw $out
-    print $"jab watch: ($out)"
+    let packed = (try { { tar: (bench-tar ($run | path dirname) $stamp $b.name $root), error: "" } } catch {|e| { tar: null, error: $e.msg } })
+    print (if $packed.tar == null { $"jab watch: ($out); the run is left unpacked in its directory: ($packed.error)" } else { $"jab watch: everything in ($packed.tar)" })
 }
 
 # The keyboard and the tablet on the line: on unless --no-kbm, and

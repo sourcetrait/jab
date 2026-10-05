@@ -206,13 +206,18 @@ run apart, as a diagnostic with its reasons, a run on a diagnostic
 machine among them. Each
 run of a bench is a stamped directory in the program's `bench/` shard
 of the target, with `bench.nuon` recording each step's outcome, and a
-state file beside the stamps says what runs. `just watch bench
-<program>/<bench>`, in a second terminal before the bench starts or
-while it runs, records every QEMU of the run per thread under the step
-its own command line names; when the bench has finished it prints the
-bench's report and its own per QEMU, and writes them together as
-`watch.nuon` in the run. `just bench` alone lists the benches, and
-`--only` runs the steps its comma-separated labels name.
+state file beside the stamps says what runs. At its end the run is
+packed into one tar beside its directory, named for the bench and the
+stamp, `example_workers_scaling-<stamp>.tar` for
+`example/workers/scaling`, and the bench's last line names it: the one
+file to copy off the host. `just watch bench <program>/<bench>`, in a
+second terminal before the bench starts or while it runs, records every
+QEMU of the run per thread under the step its own command line names;
+when the bench has finished it prints the bench's report and its own per
+QEMU, writes them together as `watch.nuon` in the run, then packs the run
+again with its recording into that same tar, the old one moved aside,
+and names it last. `just bench` alone lists the benches, and `--only`
+runs the steps its comma-separated labels name.
 
 `just adv probe sdl example/walk` looks at the window itself: it runs
 the program under SDL with OpenGL for twelve seconds (`--seconds N`)

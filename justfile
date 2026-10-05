@@ -1,10 +1,13 @@
 # Jab. The repository's one justfile: every recipe hands off to the SDK's
 # nushell tool, sdk/nu/jab.nu, which reads workspace.jab.toml and does
 # every lookup and up-to-date check in one process. Needs nushell, just
-# with script recipes, a riscv64 GNU toolchain, and a QEMU with the RVA23
-# model, rva23s64. A program is named by its path from here, its words
-# spaced or joined by slashes, example/bounce, game/fps/1k, or by a
-# shortcut workspace.jab.toml names, fps. `--set debug,stats` after a
+# 1.32 or later for script recipes, a riscv64 GNU toolchain, and a QEMU
+# with the RVA23 model, rva23s64. Script recipes are stable from just
+# 1.44; `set unstable` below runs them on 1.32 to 1.43 without
+# `--unstable`, and changes nothing on a later just. A program is named
+# by its path from here, its words spaced or joined by slashes,
+# example/bounce, game/fps/1k, or by a shortcut workspace.jab.toml
+# names, fps. `--set debug,stats` after a
 # recipe names the build symbols. A recipe's arguments reach the tool
 # each as it was given, spaces and all. Everything the tool writes goes
 # to one target, .target here, or $XDG_CACHE_HOME/jab/target/<checkout>
@@ -17,6 +20,7 @@ set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]
 set quiet := true
 set positional-arguments := true
+set unstable := true
 
 here := justfile_directory()
 jab := here / "sdk" / "nu" / "jab.nu"
@@ -51,7 +55,8 @@ run +args:
 # on it to paste, per thread the steady CPU seconds a second after the
 # first five, or `--skip N`. `just watch bench game/fps/1k/cadence`, in
 # a second terminal before or during that bench, records every run of it
-# and reports the whole bench when it ends
+# and reports the whole bench when it ends, packing the run again with
+# its recording into the one .tar it names last
 # Record the running Jab QEMU per thread, once a second
 [script("nu")]
 watch *args:
@@ -59,7 +64,9 @@ watch *args:
 
 # `just bench` lists them; `just bench game/fps/1k/cadence` runs one,
 # `--only play0,cadence0_1` the steps named; nothing is deleted, and
-# everything is written to the target
+# everything is written to the target, the run packed at the end into
+# one .tar beside it, whose path the last line prints, the file to copy
+# off the host
 # Run a program's bench, every step one after another, then its report
 [script("nu")]
 bench *args:
