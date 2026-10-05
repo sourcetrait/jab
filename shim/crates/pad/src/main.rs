@@ -3,7 +3,7 @@
 //! jab.pad port's header and then every event into the port's pipe,
 //! in evdev's shapes as doc/padport.md lays them out. Run beside QEMU
 //! by the SDK's tool: `jabshim_pad <pipe> <name> [vendor] [product]`,
-//! the identity as lowkickdisco printed it. Ends when the pipe has no
+//! the identity as jabdisco printed it. Ends when the pipe has no
 //! reader left, QEMU gone, or the pad disconnects.
 //!
 //! gilrs's standard gamepad maps onto Linux's layout: the sticks as

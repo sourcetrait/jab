@@ -80,12 +80,12 @@ msg_keyboard_at:
     bltu t2, t3, 2b
     fence w, w
     sh t2, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t0, keyboard_base
     ld a0, 0(t0)
     call virtio_driver_ok
     la t0, keyboard_base
     ld a0, 0(t0)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
     la a1, keyboard_progress
     la a2, keyboard_fault
@@ -157,6 +157,7 @@ keyboard_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
+    fence r, r                  # the entry and its event after the index that names them
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -202,9 +203,9 @@ keyboard_drain:
     j 1b
 6:
     beqz t6, 7f
-    fence rw, rw
     la t0, keyboard_base
     ld t0, 0(t0)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
 7:
     ret

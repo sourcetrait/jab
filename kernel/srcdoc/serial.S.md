@@ -127,7 +127,9 @@ never notified, so the send stays outstanding until the console's source
 is masked: the abandoned write the api fixture asks for (test/stuck), the
 control and debug traffic flowing. An abandoned send answers 1 with an
 unknown share of the bytes already at the host, which sys_api_write
-passes on as 2.
+passes on as 2. The doorbell's `fence ow, o` follows the knob's branch and
+its label, directly before the store, so no path reaches the doorbell
+around it (virtio.S).
 
 ## sys_api_write
 

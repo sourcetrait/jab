@@ -97,7 +97,12 @@ and any other in its `release/`, so the two coexist. `just test` always
 sets `DEBUG`, so a program's own debug reporting is there for its test;
 `just build` and `just run` are release unless asked otherwise, and a
 release kernel carries no debug code and no debug text, which
-`test/purity` checks.
+`test/purity` checks. The same test reads the kernel's sources for the
+ordering its devices need: every virtio doorbell, and every write that
+turns a queue or a device on, comes straight after a fence that puts the
+driver's earlier writes before it. QEMU runs every fence as a full
+barrier, so no run could show one missing, and reading the sources is how
+the rule is kept.
 
 The kernel reports what it was built with to a program through
 `jab.sys.kernel.flags`, a mask with `JAB_KERNEL_DEBUG` at bit 0, the same
@@ -136,7 +141,7 @@ the ring, the voices, and then silence enough that the host has played
 the last of it, and a device that returns nothing for three seconds is
 declared dead, `jab: sound stalled` on the console, the calls
 answering 2 from then on rather than a wait that never ends. A run plays through the output the host's own sound
-system calls its default, which `lowkickdisco` finds (below): on Linux
+system calls its default, which `jabdisco` finds (below): on Linux
 the sound server's default sink, reached through ALSA's `default`
 device and the server's ALSA plugin, on macOS the system's output
 through coreaudio, on Windows through dsound; a host with no output

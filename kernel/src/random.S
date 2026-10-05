@@ -29,9 +29,9 @@ sys_random:
     fence w, w
     addi t1, t1, 1
     sh t1, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t0, random_base
     ld a0, 0(t0)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
     call irq_mmio_source
     mv a1, a0

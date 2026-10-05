@@ -368,10 +368,9 @@ block_request:
     fence w, w
     addi t4, t4, 1
     sh t4, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t3)
-    fence rw, rw
     ld a0, 0(sp)
     li a1, 0
-    call vpci_notify
+    call vpci_notify                        # fence ow, o before its store
     ld t0, 0(sp)
     lbu a1, PCI_DEV_LINE(t0)    # its source
     ld a0, 8(sp)

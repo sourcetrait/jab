@@ -383,9 +383,9 @@ gpu_batch_run:
     lhu t2, (GPUQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     add t2, t2, t1
     sh t2, (GPUQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t2, gpu_base
     ld t2, 0(t2)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t2)
     call gpu_wait_batch
     bnez a0, 6f                 # its source stuck
@@ -510,6 +510,7 @@ gpu_queue_setup:
     sw t0, VIRTIO_MMIO_QUEUE_DEVICE_LOW(a0)
     sw t1, VIRTIO_MMIO_QUEUE_DEVICE_HIGH(a0)
     li t0, 1
+    fence ow, o
     sw t0, VIRTIO_MMIO_QUEUE_READY(a0)
     li a0, 0
     ret
@@ -949,9 +950,9 @@ gpu_submit:
     lhu t1, (GPUQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
     addi t1, t1, 1
     sh t1, (GPUQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t1, gpu_base
     ld t1, 0(t1)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t1)
     call gpu_wait_batch
     bnez a0, 31f                # its source stuck: no answer

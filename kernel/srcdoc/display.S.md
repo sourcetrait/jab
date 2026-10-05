@@ -106,7 +106,9 @@ on every pass, and again after the final drain on the completion path, as
 virtio.S's virtio_wait_used reads it: the reset in gpu_fault can complete
 the batch, and a completion read after the failure must not count. The
 external enable is cleared after unless the sound stream is live, whose
-line must keep reaching the vector while the program runs (sound.S).
+line must keep reaching the vector while the program runs (sound.S). Its
+callers read the responses with no fence of their own: the drain after
+the index moved carries the acquire (aia.S's irq_drain).
 
 ## sys_display_text
 

@@ -65,6 +65,7 @@ vpci_queue_setup:
     sw t1, VIRTIO_PCI_COMMON_QUEUE_DEVICE_LOW(t0)
     sw t2, VIRTIO_PCI_COMMON_QUEUE_DEVICE_HIGH(t0)
     li t1, 1
+    fence ow, o
     sh t1, VIRTIO_PCI_COMMON_QUEUE_ENABLE(t0)
     lhu t1, VIRTIO_PCI_COMMON_QUEUE_NOTIFY_OFF(t0)
     ld t2, PCI_DEV_NOTIFY_MULTIPLIER(a0)
@@ -82,12 +83,14 @@ vpci_queue_setup:
 vpci_driver_ok:
     ld t0, PCI_DEV_COMMON(a0)
     li t1, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK
+    fence ow, o
     sb t1, VIRTIO_PCI_COMMON_STATUS(t0)
     ret
 
 .global vpci_notify
 vpci_notify:
     ld t0, PCI_DEV_QUEUE_NOTIFY(a0)
+    fence ow, o
     sh a1, 0(t0)
     ret
 

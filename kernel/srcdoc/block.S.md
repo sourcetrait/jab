@@ -62,7 +62,8 @@ the debug channel (block_report).
 ## block_request
 
 Three descriptors are offered as one chain, the chain's head in the next
-slot of the available ring. The status byte is set to 0xff first, so an
+slot of the available ring; the doorbell's fence is vpci_notify's own
+(virtio_pci.S). The status byte is set to 0xff first, so an
 unanswered request cannot read OK. An abandoned request answers 0xff
 without reading the status byte, which the reset's drain may have written
 OK while the line was failing.

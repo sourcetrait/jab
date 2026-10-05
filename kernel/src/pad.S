@@ -187,12 +187,12 @@ msg_pad_at:
     bltu t2, t3, 2b
     fence w, w
     sh t2, (PADQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t0, pad_base
     ld a0, 0(t0)
     call virtio_driver_ok
     la t0, pad_base
     ld a0, 0(t0)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
     la a1, pad_progress
     la a2, pad_fault
@@ -413,6 +413,7 @@ pad_queue_setup:
     sw t0, VIRTIO_MMIO_QUEUE_DEVICE_LOW(a0)
     sw t1, VIRTIO_MMIO_QUEUE_DEVICE_HIGH(a0)
     li t0, 1
+    fence ow, o
     sw t0, VIRTIO_MMIO_QUEUE_READY(a0)
     li a0, 0
     ret
@@ -626,6 +627,7 @@ pad_input_drain:
     fence rw, rw
     lhu t2, (PADQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
+    fence r, r                  # the entry and its event after the index that names them
     andi t2, t1, PADQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -659,9 +661,9 @@ pad_input_drain:
 6:
     ld t2, 16(sp)
     beqz t2, 7f
-    fence rw, rw
     la t0, pad_base
     ld t0, 0(t0)
+    fence ow, o
     sw zero, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
 7:
     ld ra, 24(sp)

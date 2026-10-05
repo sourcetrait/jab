@@ -75,6 +75,7 @@ virtio_queue_setup:
     sw t0, VIRTIO_MMIO_QUEUE_DEVICE_LOW(a0)
     sw t1, VIRTIO_MMIO_QUEUE_DEVICE_HIGH(a0)
     li t0, 1
+    fence ow, o
     sw t0, VIRTIO_MMIO_QUEUE_READY(a0)
     li a0, 0
     ret
@@ -85,6 +86,7 @@ virtio_queue_setup:
 .global virtio_driver_ok
 virtio_driver_ok:
     li t0, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK
+    fence ow, o
     sw t0, VIRTIO_MMIO_STATUS(a0)
     ret
 
@@ -189,7 +191,7 @@ virtio_request:
     fence w, w
     addi t0, t0, 1
     sh t0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a2)
-    fence rw, rw
+    fence ow, o
     sw a1, VIRTIO_MMIO_QUEUE_NOTIFY(a0)
     call irq_mmio_source
     mv a1, a0

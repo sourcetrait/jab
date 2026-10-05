@@ -84,7 +84,12 @@ source assert again with no fault routine behind it.
 A claim is `csrrw rd, stopei, x0`, read and cleared in one instruction,
 since a separate read and write can clear an identity that became pending
 between them and lose it. The fence after the claims orders them, CSR
-device input, before any memory read that depends on them. The sound's
+device input, before any memory read that depends on them. It runs on
+every call, a claim or none, and the synchronous waits rely on it
+(virtio.S's virtio_wait_used, display.S's gpu_wait_batch): each drains
+once more after its used index has moved, so the fence orders that
+index's read before the caller's reads of the entry and the response,
+the receive side's acquire (virtio.S). The sound's
 identity is serviced first, its stream refilled on the device's clock
 (sound.S), then the rest in identity order; the wake's is dropped, its
 waking done. One pass and no more: the caller checks its own condition

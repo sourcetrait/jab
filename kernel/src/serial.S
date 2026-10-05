@@ -106,14 +106,17 @@ serial_open:
     la t0, serial_base
     ld t0, 0(t0)
     li t1, VIRTIO_CONSOLE_CONTROL_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     la t0, serial_base
     ld t0, 0(t0)
     li t1, SERIAL_API_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     la t0, serial_base
     ld t0, 0(t0)
     li t1, SERIAL_PAD_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     li a0, VIRTIO_CONSOLE_DEVICE_READY
     li a1, 0
@@ -244,6 +247,7 @@ serial_control_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 9f
+    fence r, r                  # the entry and its message after the index that names them
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -268,10 +272,10 @@ serial_control_drain:
     li t2, 0xffff
     and t1, t1, t2
     sd t1, VQ_LAST_USED(t0)
-    fence rw, rw
     la t0, serial_base
     ld t0, 0(t0)
     li t1, VIRTIO_CONSOLE_CONTROL_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     ld t6, 8(sp)
     li t0, VIRTIO_CONSOLE_PORT_ADD
@@ -321,7 +325,6 @@ serial_send:
     fence w, w
     addi t0, t0, 1
     sh t0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a0)
-    fence rw, rw
 .ifdef DEBUG
     li t0, SERIAL_API_TX_QUEUE
     bne a1, t0, 11f
@@ -332,6 +335,7 @@ serial_send:
 .endif
     la t0, serial_base
     ld t0, 0(t0)
+    fence ow, o                 # after the knob's branch, so it lies on the doorbell's every path
     sw a1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
 12:
     sd a0, 0(sp)
@@ -483,6 +487,7 @@ api_drain:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
+    fence r, r                  # the entry and its bytes after the index that names them
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -531,10 +536,10 @@ api_drain:
     j 1b
 6:
     beqz t6, 7f
-    fence rw, rw
     la t0, serial_base
     ld t0, 0(t0)
     li t1, SERIAL_API_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
 7:
     ret
@@ -551,6 +556,7 @@ api_waiting:
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
 1:
     beq t2, t1, 2f
+    fence r, r                  # each entry's length after the index that names it
     andi t3, t1, VIRTQ_SIZE - 1
     slli t3, t3, 3
     add t3, t3, t0
@@ -616,6 +622,7 @@ serial_pad_read:
     fence rw, rw
     lhu t2, (VQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 6f
+    fence r, r                  # the entry and its bytes after the index that names them
     andi t2, t1, VIRTQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
@@ -653,10 +660,10 @@ serial_pad_read:
     j 1b
 6:
     beqz a5, 7f
-    fence rw, rw
     la t0, serial_base
     ld t0, 0(t0)
     li t1, SERIAL_PAD_RX_QUEUE
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
 7:
     mv a0, a4

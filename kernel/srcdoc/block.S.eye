@@ -24,9 +24,9 @@ call block_record index u64 > record a0 addr [175:182]
 call block_count_of > count a0 u64 [183:188]
  count :the disks the machine carries, once probed
 call block_probe > count block_count u64,records block_records,clobber a0-a6 [189:330] :scans the PCI bus and brings every virtio-blk disk up, once, in slot order, filling its record: each counted before its first request, one on a failed line sent none, a failed or abandoned request ending its probe at kind 0
-call block_request record addr,virtqueue addr,type u32,sector u64,buffer addr,length u32,flags u16 > status a0 u8,last VQ_LAST_USED(virtqueue) u64,clobber a1 [331:393] :runs one request on the disk, the hart halted until the device answers or its line is masked, the status then 0xff
+call block_request record addr,virtqueue addr,type u32,sector u64,buffer addr,length u32,flags u16 > status a0 u8,last VQ_LAST_USED(virtqueue) u64,clobber a1 [331:392] :runs one request on the disk, the hart halted until the device answers or its line is masked, the status then 0xff
  flags :VIRTQ_DESC_F_WRITE when the device writes the buffer, 0 when it reads it
  status :the device's status byte, VIRTIO_BLK_S_OK for success
-call local block_progress line u64 > progress a0 u64 [395:419] :the used indexes of every disk on the PCI line summed
-call local block_fault line u64 [421:483] :every disk on the line down, its calls answering 2: whether each had a request in flight recorded first, then each reset (vpci_reset)
-call local block_report > clobber a0-a3 [484:569] :under DEBUG, a line per probed disk on the debug channel: its kind, its device status read back, the requests offered, whether one was in flight when its line failed, and its source's enable read back from the APLIC
+call local block_progress line u64 > progress a0 u64 [394:418] :the used indexes of every disk on the PCI line summed
+call local block_fault line u64 [420:482] :every disk on the line down, its calls answering 2: whether each had a request in flight recorded first, then each reset (vpci_reset)
+call local block_report > clobber a0-a3 [483:568] :under DEBUG, a line per probed disk on the debug channel: its kind, its device status read back, the requests offered, whether one was in flight when its line failed, and its source's enable read back from the APLIC

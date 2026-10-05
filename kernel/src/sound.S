@@ -266,6 +266,7 @@ sound_queue_setup:
     sw t0, VIRTIO_MMIO_QUEUE_DEVICE_LOW(a0)
     sw t1, VIRTIO_MMIO_QUEUE_DEVICE_HIGH(a0)
     li t0, 1
+    fence ow, o
     sw t0, VIRTIO_MMIO_QUEUE_READY(a0)
     li a0, 0
     ret
@@ -444,10 +445,10 @@ sound_submit:
     fence w, w
     addi t1, t1, 1
     sh t1, (SNDQ_AVAIL + VIRTQ_AVAIL_IDX)(t0)
-    fence rw, rw
     la t0, sound_base
     ld t0, 0(t0)
     li t1, VIRTIO_SND_VQ_TX
+    fence ow, o
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     ret
 
@@ -459,6 +460,7 @@ sound_drain:
     fence rw, rw
     lhu t2, (SNDQ_USED + VIRTQ_USED_IDX)(t0)
     beq t2, t1, 2f
+    fence r, r                  # the entry and its status after the index that names them
     andi t2, t1, SNDQ_SIZE - 1
     slli t2, t2, 3
     add t2, t2, t0
