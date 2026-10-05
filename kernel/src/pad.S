@@ -727,7 +727,22 @@ pad_fault:
     la t0, pad_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j virtio_reset
+
+.global pad_port_fault
+pad_port_fault:
+    la t0, pad_source
+    ld t0, 0(t0)
+    li t1, PAD_SOURCE_PORT
+    bne t0, t1, 1f
+    la t0, pad_state
+    ld t1, 0(t0)
+    li t2, 1
+    bne t1, t2, 1f
+    li t1, 3
+    sd t1, 0(t0)                # a pad on the port fails with it
+1:
+    j virtio_reset
 
 .global pad_pending
 pad_pending:

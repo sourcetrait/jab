@@ -105,7 +105,10 @@ it.
 
 The status sits after the samples, written by the device; a status other
 than OK is counted as failed, and every return is counted and stamps the
-time of the last.
+time of the last. Global for aia.S's irq_serve, which under DEBUG takes a
+held live stream's returns back through it and offers none again, so the
+stream holds nothing in flight while its source's window runs, and holds
+the line only once nothing is (sound_in_flight).
 
 ## sound_stalled
 

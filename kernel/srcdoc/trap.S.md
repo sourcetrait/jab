@@ -77,12 +77,26 @@ any other goes on to kernel_fault.
 Fatal: the line goes out under the line lock and the run ends with 1,
 since a halted hart would leave the others running.
 
+## timer_left_enabled
+
+Under DEBUG, the check at every return to user mode found the timer's
+enable set: the program would take the next timer interrupt as a fault, so
+the run ends here at the cause with its line, `jab: timer left enabled`,
+rather than later at a fault far from it.
+
+## msg_timer_left
+
+`25 u8`: timer_left_enabled's line, under DEBUG only.
+
 ## interrupt_return
 
 The program resumes at the instruction the interrupt came before, not past
 it. The program's sp goes back into sscratch first, so the swap out hands it
 over and leaves the hart's record, its kernel stack's top, behind for the
-next entry.
+next entry. Under DEBUG the timer's enable is read clear first, every
+system call's return falling into this path too (timer_left_enabled); the
+external enable is left out, since it legitimately stays set where a sound
+stream died inside another call.
 
 ## syscall_table
 

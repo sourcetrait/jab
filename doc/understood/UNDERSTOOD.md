@@ -314,11 +314,29 @@ kernel fault. A fault in the kernel, on any hart, prints its line on the
 console and ends the run with status 1.
 
 A device that holds its interrupt raised while it makes no progress for
-three seconds is cut off. The kernel masks that interrupt and prints
-`jab: interrupt source N stalled` on the console. From then on the
-device's calls answer with its error, and a wait on it ends. A debug
-kernel reads `jab.hold=<virtio device id>` from `--bootargs` and holds
-that device's interrupt raised; `test/stuck` uses it to prove the rule.
+three seconds is cut off. The kernel masks that interrupt and resets the
+device, so it stops using any buffer of the program's that it still
+holds, and only then marks it failed and prints `jab: interrupt source N
+stalled` on the console. From then on the device's calls answer with its
+error, and a wait on it ends with the failure, even if the reset finished
+the request it was waiting for. A device that will not read back its
+reset within 100 ms ends the run with `jab: device reset refused: source
+N` and status 1. A disk reset in QEMU finishes every disk's requests on
+the machine before it returns, so the kernel notes what each disk on a
+failed line had in flight before it resets any of them. A pad on the
+serial port fails with the serial device, and an API write the failure
+interrupts answers 2, some of its bytes perhaps already at the host. A
+debug kernel reads `jab.hold=<virtio device id>` from `--bootargs` and
+holds that device's interrupt raised, `jab.hold=2` every disk's, and
+`jab.unsent=3` leaves the API's writes unannounced to the device;
+`test/stuck` uses them to prove each rule, one scenario a launch.
+
+`jab launch --qemu <words>` appends words of its own to the machine's
+QEMU line, a device or a property a test needs that no option gives; the
+run is then diagnostic, its machine record marked so and the words
+returned apart as `overrides`. The gauge's `run` and `play` take the same
+option, and a comparison refuses such runs unless `--diagnostic` admits
+them, naming the words.
 
 `JAB_QEMU_ARGS` appends its words to a run's QEMU line after
 everything else, for QEMU's own instruments on a run that misbehaves,

@@ -11,10 +11,18 @@ vpci_init:
     li a1, 0
 vpci_init_with:
     ld t0, PCI_DEV_COMMON(a0)
+    beqz t0, 2f                 # no common region: nothing to drive
     sb zero, VIRTIO_PCI_COMMON_STATUS(t0)
+    rdtime t2
+    li t1, VIRTIO_RESET_TICKS
+    add t2, t2, t1
 1:
     lbu t1, VIRTIO_PCI_COMMON_STATUS(t0)
-    bnez t1, 1b                 # until the reset has taken
+    beqz t1, 3f                 # the reset has taken
+    rdtime t3
+    bltu t3, t2, 1b
+    j 2f                        # a device that will not reset refuses the kernel
+3:
     li t1, VIRTIO_STATUS_ACKNOWLEDGE
     sb t1, VIRTIO_PCI_COMMON_STATUS(t0)
     li t1, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER
@@ -81,4 +89,22 @@ vpci_driver_ok:
 vpci_notify:
     ld t0, PCI_DEV_QUEUE_NOTIFY(a0)
     sh a1, 0(t0)
+    ret
+
+.global vpci_reset
+vpci_reset:
+    ld t0, PCI_DEV_COMMON(a0)
+    beqz t0, 2f                 # no common region: nothing was ever driven
+    sb zero, VIRTIO_PCI_COMMON_STATUS(t0)
+    rdtime t2
+    li t1, VIRTIO_RESET_TICKS
+    add t2, t2, t1              # the readback's bound, from the write's end
+1:
+    lbu t1, VIRTIO_PCI_COMMON_STATUS(t0)
+    beqz t1, 2f
+    rdtime t3
+    bltu t3, t2, 1b
+    lbu a0, PCI_DEV_LINE(a0)
+    j device_reset_refused
+2:
     ret

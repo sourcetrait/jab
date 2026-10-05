@@ -3,6 +3,7 @@
 .include "virtio.inc"
 .include "pci.inc"
 .include "jab.inc"
+.include "aia.inc"
 
 .section .text
 
@@ -226,6 +227,11 @@ block_probe:
     add t1, t1, t0
     ld t2, 8(sp)
     sd t2, 0(t1)
+    ld t0, 16(sp)
+    addi t0, t0, 1
+    sd t0, 16(sp)
+    la t1, block_count
+    sd t0, 0(t1)                # counted before its first request, so its line's fault reaches it
 .ifdef DEBUG
     la a0, msg_disk_pci
     call debug_puts
@@ -238,15 +244,26 @@ block_probe:
 msg_disk_pci:
     .asciz "jab: disk on pci slot "
 .popsection
+    ld t0, 8(sp)
+    lbu a0, PCI_DEV_LINE(t0)
+    li a1, VIRTIO_ID_BLOCK
+    call irq_hold
 .endif
+    ld t0, 8(sp)
+    lbu t0, PCI_DEV_LINE(t0)
+    la t1, irq_faulted
+    ld t1, 0(t1)
+    srl t1, t1, t0
+    andi t1, t1, 1
+    bnez t1, 7f                 # its line failed: no request, kind 0
     ld a0, 8(sp)
     call vpci_init
-    bnez a0, 6f
+    bnez a0, 7f
     ld a0, 8(sp)
     li a1, 0
     ld a2, 32(sp)
     call vpci_queue_setup
-    bnez a0, 6f
+    bnez a0, 7f
     ld a0, 8(sp)
     call vpci_driver_ok
     ld t0, 8(sp)
@@ -277,6 +294,7 @@ msg_disk_pci:
     li a5, VIRTIO_BLK_ID_BYTES
     li a6, VIRTQ_DESC_F_WRITE
     call block_request
+    bnez a0, 7f                 # failed or abandoned: its probe ends, kind 0
     ld a0, 8(sp)
     ld a1, 32(sp)
     li a2, VIRTIO_BLK_T_IN
@@ -285,29 +303,25 @@ msg_disk_pci:
     li a5, JAB_BLOCK_SECTOR
     li a6, VIRTQ_DESC_F_WRITE
     call block_request
+    bnez a0, 7f
     ld t3, 24(sp)
     li t0, JAB_BLOCK_KIND_RAW
     sb t0, JAB_BLOCK_KIND(t3)
-    bnez a0, 6f
     la a0, block_bounce
     call romfs_magic
-    beqz a0, 6f
+    beqz a0, 7f
     ld t3, 24(sp)
     li t0, JAB_BLOCK_KIND_ROMFS
     sb t0, JAB_BLOCK_KIND(t3)
-6:
-    ld t0, 16(sp)
-    addi t0, t0, 1
-    sd t0, 16(sp)
 7:
     ld t0, 0(sp)
     addi t0, t0, 1
     sd t0, 0(sp)
     j 1b
 8:
-    ld t0, 16(sp)
-    la t1, block_count
-    sd t0, 0(t1)
+.ifdef DEBUG
+    call block_report
+.endif
     ld ra, 40(sp)
     addi sp, sp, 48
 9:
@@ -362,15 +376,18 @@ block_request:
     lbu a1, PCI_DEV_LINE(t0)    # its source
     ld a0, 8(sp)
     call virtio_wait_used
-    bnez a1, 1f                 # its line stuck: the status unanswered
+    bnez a1, 1f                 # its line failed: the request abandoned
     ld t2, VQ_LAST_USED(a0)
     addi t2, t2, 1
     li t0, 0xffff
     and t2, t2, t0
     sd t2, VQ_LAST_USED(a0)
-1:
     la t0, block_status
     lbu a0, 0(t0)
+    j 2f
+1:
+    li a0, 0xff                 # never the status byte, which a reset's drain may have written OK
+2:
     ld ra, 24(sp)
     addi sp, sp, 32
     ret
@@ -402,27 +419,154 @@ block_progress:
     ret
 
 block_fault:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd a0, 0(sp)                # the line
     la t0, block_count
     ld t0, 0(t0)
     li t1, 0                    # the disk
 1:
+    bgeu t1, t0, 3f
+    slli t2, t1, 3
+    la t3, block_bases
+    add t3, t3, t2
+    ld t3, 0(t3)                # its PCI record
+    lbu t2, PCI_DEV_LINE(t3)
+    bne t2, a0, 2f
+    li t2, VQ_STRIDE
+    mul t2, t2, t1
+    la t4, block_queues
+    add t4, t4, t2              # its queue
+    lhu t5, (VQ_USED + VIRTQ_USED_IDX)(t4)
+    lhu t6, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(t4)
+    xor t5, t5, t6
+    snez t5, t5                 # a request in flight when its line failed
+    la t6, block_outstanding
+    add t6, t6, t1
+    sb t5, 0(t6)
+2:
+    addi t1, t1, 1
+    j 1b
+3:
+    fence r, o                  # every disk's queue read before the first reset, which drains them all
+    sd zero, 8(sp)              # the disk
+4:
+    ld t1, 8(sp)
+    la t0, block_count
+    ld t0, 0(t0)
     bgeu t1, t0, 9f
     slli t2, t1, 3
     la t3, block_bases
     add t3, t3, t2
-    ld t3, 0(t3)
+    ld t3, 0(t3)                # its PCI record
     lbu t2, PCI_DEV_LINE(t3)
-    bne t2, a0, 2f
+    ld t4, 0(sp)
+    bne t2, t4, 5f
+    mv a0, t3
+    call vpci_reset
+    ld t1, 8(sp)
     li t2, JAB_BLOCK_ENTRY
     mul t2, t2, t1
     la t3, block_records
     add t3, t3, t2
     sb zero, JAB_BLOCK_KIND(t3) # down: its calls answer that it never came up
-2:
+5:
+    ld t1, 8(sp)
     addi t1, t1, 1
+    sd t1, 8(sp)
+    j 4b
+9:
+    ld ra, 24(sp)
+    addi sp, sp, 32
+    ret
+
+.ifdef DEBUG
+block_report:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd zero, 0(sp)              # the disk
+1:
+    ld t1, 0(sp)
+    la t0, block_count
+    ld t0, 0(t0)
+    bgeu t1, t0, 9f
+    la a0, msg_disk
+    call debug_puts
+    ld a0, 0(sp)
+    call block_record
+    lbu a0, JAB_BLOCK_ID(a0)
+    call debug_put_dec
+    la a0, msg_disk_kind
+    call debug_puts
+    ld a0, 0(sp)
+    call block_record
+    lbu a0, JAB_BLOCK_KIND(a0)
+    call debug_put_dec
+    la a0, msg_disk_status
+    call debug_puts
+    ld a0, 0(sp)
+    call block_base
+    ld t0, PCI_DEV_COMMON(a0)
+    li a0, 0
+    beqz t0, 2f
+    lbu a0, VIRTIO_PCI_COMMON_STATUS(t0)    # its device status, read back now
+2:
+    call debug_put_dec
+    la a0, msg_disk_offered
+    call debug_puts
+    ld a0, 0(sp)
+    call block_queue
+    lhu a0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a0)
+    call debug_put_dec
+    la a0, msg_disk_outstanding
+    call debug_puts
+    ld t1, 0(sp)
+    la t0, block_outstanding
+    add t0, t0, t1
+    lbu a0, 0(t0)
+    call debug_put_dec
+    la a0, msg_disk_enabled
+    call debug_puts
+    ld a0, 0(sp)
+    call block_base
+    lbu t1, PCI_DEV_LINE(a0)
+    li a0, 0
+    beqz t1, 3f                 # no line: nothing to enable
+    srli t2, t1, 5
+    slli t2, t2, 2
+    li t0, (QEMU_VIRT_APLIC_S + APLIC_SETIE)
+    add t0, t0, t2
+    lwu t0, 0(t0)
+    andi t1, t1, 31
+    srl t0, t0, t1
+    andi a0, t0, 1              # its source's enable, read back from the APLIC
+3:
+    call debug_put_dec
+    li a0, '\n'
+    call debug_putc
+    ld t1, 0(sp)
+    addi t1, t1, 1
+    sd t1, 0(sp)
     j 1b
 9:
+    ld ra, 8(sp)
+    addi sp, sp, 16
     ret
+.pushsection .rodata
+msg_disk:
+    .asciz "jab: disk "
+msg_disk_kind:
+    .asciz " kind "
+msg_disk_status:
+    .asciz " status "
+msg_disk_offered:
+    .asciz " offered "
+msg_disk_outstanding:
+    .asciz " outstanding "
+msg_disk_enabled:
+    .asciz " enabled "
+.popsection
+.endif
 
 .section .bss
 .balign 16
@@ -433,6 +577,9 @@ block_records:
     .skip JAB_BLOCK_LIST_SIZE
 block_bases:
     .skip JAB_BLOCK_MAX * 8
+block_outstanding:
+    .skip JAB_BLOCK_MAX
+.balign 8
 block_count:
     .skip 8
 block_probed:

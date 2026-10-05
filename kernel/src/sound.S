@@ -451,6 +451,7 @@ sound_submit:
     sw t1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
     ret
 
+.global sound_drain
 sound_drain:
     la t0, sound_queue
     ld t1, SNDQ_LAST_USED(t0)
@@ -716,7 +717,7 @@ sound_fault:
     la t0, sound_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j virtio_reset
 
 .global sound_pending
 sound_pending:
@@ -729,6 +730,22 @@ sound_pending:
     sltu a0, t1, t0
     xori a0, a0, 1
     ret
+
+.ifdef DEBUG
+.global sound_in_flight
+sound_in_flight:
+    la t0, sound_busy
+    li t1, JAB_SOUND_PERIODS
+    li a0, 0
+1:
+    lbu t2, 0(t0)
+    or a0, a0, t2
+    addi t0, t0, 1
+    addi t1, t1, -1
+    bnez t1, 1b
+    snez a0, a0
+    ret
+.endif
 
 .section .bss
 .balign 16

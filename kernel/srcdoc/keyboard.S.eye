@@ -10,6 +10,6 @@ call keyboard_drain > head key_head u64,clobber a0 [152:212] :moves every event 
 call keyboard_pending > pending a0 bool [213:228]
  pending :1 when a key event waits in the ring or with the device
 call local keyboard_progress > progress a0 u64 [230:233] :the keyboard's queue's used index
-call local keyboard_fault > state keyboard_state u64 [235:239] :its source stuck: 3
+call local keyboard_fault > state keyboard_state u64 [235:239] :its source stuck: 3, the device reset (virtio_reset)
 call local keyboard_take > code a0 u16,value a1 u16,tail key_tail u64 [241:259]
  code :the oldest key event's, both 0 with the ring empty

@@ -141,6 +141,16 @@ transport's registers are 32 bits wide.
 
 `u32`.
 
+## .set VIRTIO_RESET_TICKS
+
+`u64`: how long a device's status may read back nonzero after the write of
+0 that resets it, 100 ms of the time counter, counted from the write's end.
+QEMU resets a device inside that write (virtio-mmio.c, virtio-pci.c), and a
+virtio-blk reset there drains every disk's requests on the machine before
+the write returns, so the write itself is unbounded and the readback is
+the part a bound can hold (virtio 1.2, 2.4's reset handshake). A device
+still nonzero past it refuses the reset: device_reset_refused ends the run.
+
 ## .set VIRTIO_F_VERSION_1_WORD
 
 `u32`: the feature word holding VIRTIO_F_VERSION_1, offered to every device.

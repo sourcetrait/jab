@@ -236,7 +236,7 @@ keyboard_fault:
     la t0, keyboard_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j virtio_reset
 
 keyboard_take:
     la t0, key_head

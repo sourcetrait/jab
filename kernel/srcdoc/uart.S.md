@@ -27,12 +27,21 @@ The digits are built backwards in 32 bytes of stack, then written.
 ## uart_lock
 
 An amoswap with acquire ordering takes the lock; a hart that finds it held
-spins on it with a pause hint.
+spins on it with a pause hint. Then `fence rw, io`: an AMO's acquire orders
+the memory domain alone, and the line's bytes are device writes, which
+only a fence orders after the lock (the RISC-V A extension's ordering
+rules).
 
 ## uart_unlock
 
-An amoswap of 0 with release ordering, so the line's bytes are out before
-another hart takes the lock.
+`fence io, w` first, then an amoswap of 0 with release ordering, so the
+line's device writes are out before another hart can take the lock; the
+release alone would order only the memory accesses before it.
+
+## uart_lock_fatal
+
+Takes the lock as uart_lock does, its fence included, when it gets it
+within UART_FATAL_WAIT; past the wait the line goes out without it.
 
 ## uart_line_lock
 

@@ -101,9 +101,12 @@ the batch runs.
 
 ## gpu_wait_batch
 
-The wait wakes on the transport's line. The external enable is cleared after
-unless the sound stream is live, whose line must keep reaching the vector
-while the program runs (sound.S).
+The wait wakes on the transport's line. The source's failure is read first
+on every pass, and again after the final drain on the completion path, as
+virtio.S's virtio_wait_used reads it: the reset in gpu_fault can complete
+the batch, and a completion read after the failure must not count. The
+external enable is cleared after unless the sound stream is live, whose
+line must keep reaching the vector while the program runs (sound.S).
 
 ## sys_display_text
 

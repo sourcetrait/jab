@@ -12,7 +12,7 @@ ecall sys_pad_name buffer addr > status a0 u64,length a1 u64 [115:136] :writes t
  status :0, or 1 with no pad
  length :0 with no pad
 call pad_open > status a0 u64,state pad_state u64,source pad_source u64,clobber a1-a5 [137:244] :brings the pad up, a virtio-input pad with its queue stocked, its line let through, its ranges and name read, or with none the pad's port with its header taken
- status :0, 1 with no pad, 2 when the device refuses the kernel or the port's header is not one the kernel knows, asked again answering as before at once
+ status :0, 1 with no pad, 2 when the device refuses the kernel, the port's header is not one the kernel knows, or the pad's source failed, asked again answering as before at once
 call local pad_port_open > status a0 u64,clobber a1-a5 [246:327] :takes the pad's port as the pad once its header has arrived whole, the hart halted on the serial device's line meanwhile, refused once that line is masked
  status :0 with the pad open on the port, 1 with no port, 2 with a header that is not the kernel's or a stuck port
 call local pad_port_fill > length pad_stream_length u64,clobber a0-a5 [329:345] :takes what the port has delivered into the stream buffer after what it holds, whole port buffers only
@@ -30,10 +30,11 @@ call pad_drain > clobber a0-a5 [613:617] :moves every event the pad has delivere
 j local pad_input_drain > clobber a0-a2 [619:669] :the device's events out of its used buffers, each buffer handed back once taken
 call local pad_accept type u16,code u16,value i32 > keys pad_keys u32,raw pad_raw,head pad_head u64 [671:719] :takes one event into the state and the ring, EV_KEY and EV_ABS only
 call local pad_progress > progress a0 u64 [721:724] :the pad's queue's used index
-call local pad_fault > state pad_state u64 [726:732] :its source stuck: 3
-call pad_pending > pending a0 bool [733:751]
+call local pad_fault > state pad_state u64 [726:732] :its source stuck: 3, the device reset (virtio_reset)
+j pad_port_fault source u64 > state pad_state u64 [733:747] :serial_fault's tail, the serial device's source in a0: a pad open on the port goes to 3 with it, then the serial device reset (virtio_reset)
+call pad_pending > pending a0 bool [748:766]
  pending :1 when a pad event waits in the ring or with the device, or bytes wait on the port
-call local pad_take > type a0 u16,code a1 u16,value a2 i32,tail pad_tail u64 [753:773]
+call local pad_take > type a0 u16,code a1 u16,value a2 i32,tail pad_tail u64 [768:788]
  type :the oldest event's, all three 0 with the ring empty
-call local pad_normalise code u64 > value a0 i16 [775:852]
+call local pad_normalise code u64 > value a0 i16 [790:867]
  value :the axis normalised from its own range to JAB_PAD_FULL either way, 0 for an axis the pad lacks

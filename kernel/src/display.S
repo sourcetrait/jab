@@ -422,10 +422,12 @@ gpu_batch_run:
 gpu_wait_batch:
     addi sp, sp, -16
     sd ra, 8(sp)
-    sd zero, 0(sp)              # whether its source stuck
+    sd zero, 0(sp)              # whether its source failed
     li t4, SIE_SEIE
     csrs sie, t4
 1:
+    call gpu_failed
+    bnez a0, 11f                # failed: whatever the used ring says
     la t0, gpu_queue
     fence rw, rw
     lhu t1, (GPUQ_USED + VIRTQ_USED_IDX)(t0)
@@ -435,14 +437,6 @@ gpu_wait_batch:
     li t3, 0xffff
     and t2, t2, t3
     beq t1, t2, 2f
-    la t0, gpu_base
-    ld a0, 0(t0)
-    call irq_mmio_source
-    la t0, irq_faulted
-    ld t0, 0(t0)
-    srl t0, t0, a0
-    andi t0, t0, 1
-    bnez t0, 11f                # masked: no completion is coming
     wfi
     call irq_drain
     call irq_report
@@ -453,6 +447,11 @@ gpu_wait_batch:
 2:
     call irq_drain
     call irq_report
+    call gpu_failed
+    beqz a0, 21f
+    li t0, 1
+    sd t0, 0(sp)                # failed in the last drain: the completion does not count
+21:
     la t4, sound_live
     ld t4, 0(t4)
     bnez t4, 3f
@@ -460,6 +459,20 @@ gpu_wait_batch:
     csrc sie, t4
 3:
     ld a0, 0(sp)
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
+gpu_failed:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, gpu_base
+    ld a0, 0(t0)
+    call irq_mmio_source
+    la t0, irq_faulted
+    ld t0, 0(t0)
+    srl t0, t0, a0
+    andi a0, t0, 1
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
@@ -473,7 +486,7 @@ gpu_fault:
     la t0, display_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j virtio_reset
 
 gpu_queue_setup:
     la t2, gpu_base

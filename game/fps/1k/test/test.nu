@@ -1942,7 +1942,10 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # to no refusal. A run on a diagnostic machine is refused as diagnostic
 # and admitted marked under --diagnostic; runs on two machines refuse
 # the comparison, and under --diagnostic each build's row names its
-# machine; one name's runs on two machines are two builds; and a bench
+# machine; one name's runs on two machines are two builds; a run whose
+# identity carries QEMU words of its launch's own is refused as
+# diagnostic, its machine the one the launch marked or the one asked
+# for, the reason naming the words and no hart count; and a bench
 # pools the specification's machine's run alone, keeps the diagnostic
 # machine's apart, and names every step's machine in its report.
 export def gauge-rules [dir: path]: nothing -> nothing {
@@ -2281,6 +2284,25 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     } catch {|e| $e.msg })
     assert ($one_name | str contains "come from 2 builds") $"one name's runs on two machines are two builds: ($one_name)"
 
+    # QEMU words of the launch's own: the machine the launch returns, the
+    # specification's four marked diagnostic, and the one asked for before
+    # it, unmarked, each with the words beside it; both stand diagnostic,
+    # the reason naming the words and no hart count
+    let words = ["-global" "virtio-rng-device.period=6000"]
+    let worded = [
+        { name: "words_launched", machine: (jab machine-of 4 --overrides $words) }
+        { name: "words_asked", machine: $four }
+    ]
+    for w in $worded {
+        let file = (fx-gauge $dir $w.name $w.name $w.name 0 $good2 --machine $w.machine --overrides $words)
+        let refused = (try { gauge compare [$on_four $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        let refused_says = $"the ($w.name) run is refused as diagnostic, the words named: ($refused)"
+        assert ($refused | str contains $"($file) run 1, diagnostic: QEMU words of its launch's own: ($words | str join ' ')") $refused_says
+        assert (not ($refused | str contains "harts")) $"the ($w.name) run's reason names no hart count: ($refused)"
+        let admitted = (gauge compare [$on_four $file] "draw_us" 50 --diagnostic)
+        assert equal ($admitted.table | where build == $w.name | get 0.standings) ["diagnostic"] $"--diagnostic admits the ($w.name) run marked"
+    }
+
     # a bench of two route steps at cadence 0, one on each machine
     let bench = ($dir | path join "bench")
     for step in [[four $on_four] [two $on_two]] {
@@ -2569,16 +2591,17 @@ def fx-late [items: list<any>, item: record]: nothing -> list<any> {
 
 # A gauge.nuon for a comparison, as `run` writes one, from a synthetic
 # capture measured: its label, an identity of the image, the cadence
-# asked, none when null, and the machine when given, the run's
-# measurement, and its rows.
-def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record]: nothing -> string {
+# asked, none when null, the machine when given, and the launch's QEMU
+# words when given, the run's measurement, and its rows.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --overrides: list<string> = []]: nothing -> string {
     let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
     let mode = (if $cadence == null { {} } else { { cadence: $cadence } })
     let file = ($dir | path join $"pair_($name).nuon")
     let id = { build: { image_sha256: $image }, mode: $mode }
+    let machined = (if $machine == null { $id } else { $id | insert machine $machine })
     {
         label: $label,
-        identity: (if $machine == null { $id } else { $id | insert machine $machine }),
+        identity: (if ($overrides | is-empty) { $machined } else { $machined | insert overrides $overrides }),
         runs: [{ run: 1, measured: ($m | reject rows) }],
         rows: ($m.rows | each {|r| $r | insert run 1 }),
     } | to nuon | save --raw -f $file

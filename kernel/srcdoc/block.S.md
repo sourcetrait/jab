@@ -44,7 +44,16 @@ configuration, since the region answers four bytes at a time. The serial
 goes straight into the record: QEMU writes the terminator only when it fits,
 so the field is cleared first. What is on the disk is found by asking each
 format known about the first sector; anything unrecognised is raw sectors
-and nothing more.
+and nothing more, a kind set only once the sector's read answered OK.
+
+A disk goes into the tables, block_count covering it, before its first
+request, so a fault on its line during the probe reaches it (block_fault
+iterates the count). A disk on a line already failed is counted at kind 0
+and sent nothing, never brought up: its requests would be abandoned at once
+on a device no fault routine reset. A failed or abandoned request ends that
+disk's probe at kind 0, with no request after it. Under DEBUG a disk's line
+can be held (aia.S's irq_hold), and the probe ends with a line per disk on
+the debug channel (block_report).
 
 ## msg_disk_pci
 
@@ -54,7 +63,39 @@ and nothing more.
 
 Three descriptors are offered as one chain, the chain's head in the next
 slot of the available ring. The status byte is set to 0xff first, so an
-unanswered request cannot read OK.
+unanswered request cannot read OK. An abandoned request answers 0xff
+without reading the status byte, which the reset's drain may have written
+OK while the line was failing.
+
+## block_fault
+
+Two passes over the disks on the line. The first records, for each, whether
+a request was in flight (its used index short of its available index) into
+block_outstanding; then `fence r, o`; then the second resets each one
+(vpci_reset) and sets its kind 0. A virtio-blk reset in QEMU drains every
+disk's requests on the machine inside its status write, completing them, so
+a disk reset first would complete the requests of the disks after it and
+their record would read nothing in flight; every queue is read before the
+first reset. The record is the fixture's per-run proof that a request was
+in flight when its line failed (test/stuck).
+
+## block_report
+
+Under DEBUG, at the probe's end: `jab: disk <id> kind <k> status <s> offered
+<n> outstanding <0|1> enabled <0|1>`, the status the device's read back from
+its common configuration (0 once reset, or never brought up), the requests
+its available index counts, the outstanding record, and its line's enable
+read back from the APLIC's setie.
+
+## msg_disk
+## msg_disk_kind
+## msg_disk_status
+## msg_disk_offered
+## msg_disk_outstanding
+## msg_disk_enabled
+
+`u8` strings: block_report's line, its values between them, under DEBUG
+only.
 
 ## block_queues
 
@@ -68,6 +109,11 @@ PCI line stuck (aia.S) has its kind 0, as one that never came up.
 ## block_bases
 
 `8 addr`: each disk's PCI device record.
+
+## block_outstanding
+
+`JAB_BLOCK_MAX u8`: per disk, 1 when a request was in flight as its line
+failed, recorded by block_fault and read by block_report.
 
 ## block_count
 

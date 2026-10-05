@@ -24,6 +24,9 @@ const debug_text = [
     "jab: sound refused"
     "jab: sound submitted "
     "jab: disk on pci slot "
+    "jab: disk "
+    "jab: serial at "
+    "jab: timer left enabled"
     "jab: pad on port"
     "jab: pad port refused"
     "jab: no pad"
@@ -55,6 +58,7 @@ const fault_text = [
     "jab: machine trap: cause="
     "jab: interrupt platform refused: code "
     "jab: interrupt source "
+    "jab: device reset refused: source "
 ]
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {

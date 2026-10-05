@@ -119,7 +119,9 @@ serial_open:
     li a1, 0
     li a2, 1
     call serial_control_send
+    bnez a0, 6f                 # abandoned: its source failed
     call serial_control_drain
+    bnez a0, 6f
 .ifdef DEBUG
     la t0, serial_ports
     ld t0, 0(t0)
@@ -130,7 +132,9 @@ serial_open:
     li a1, SERIAL_DEBUG_PORT
     li a2, 1
     call serial_control_send
+    bnez a0, 6f
     call serial_control_drain
+    bnez a0, 6f
 3:
 .endif
     la t0, serial_ports
@@ -142,7 +146,9 @@ serial_open:
     li a1, SERIAL_API_PORT
     li a2, 1
     call serial_control_send
+    bnez a0, 6f
     call serial_control_drain
+    bnez a0, 6f
 4:
     la t0, serial_ports
     ld t0, 0(t0)
@@ -153,8 +159,23 @@ serial_open:
     li a1, SERIAL_PAD_PORT
     li a2, 1
     call serial_control_send
+    bnez a0, 6f
     call serial_control_drain
+    bnez a0, 6f
 41:
+.ifdef DEBUG
+    la a0, knob_unsent
+    call knob_value
+    li t0, VIRTIO_ID_CONSOLE
+    xor a0, a0, t0
+    seqz a0, a0
+    la t0, serial_unsent
+    sd a0, 0(t0)
+.pushsection .rodata
+knob_unsent:
+    .asciz "jab.unsent="
+.popsection
+.endif
     la t0, serial_state
     li t1, 1
     sd t1, 0(t0)
@@ -275,8 +296,11 @@ serial_control_drain:
     mv a1, t5
     li a2, 1
     call serial_control_send
-    j 1b
+    beqz a0, 1b
+    j 10f                       # abandoned: no more answers
 9:
+    li a0, 0
+10:
     ld ra, 24(sp)
     addi sp, sp, 32
     ret
@@ -298,21 +322,34 @@ serial_send:
     addi t0, t0, 1
     sh t0, (VQ_AVAIL + VIRTQ_AVAIL_IDX)(a0)
     fence rw, rw
+.ifdef DEBUG
+    li t0, SERIAL_API_TX_QUEUE
+    bne a1, t0, 11f
+    la t0, serial_unsent
+    ld t0, 0(t0)
+    bnez t0, 12f                # the knob: published, the device never told
+11:
+.endif
     la t0, serial_base
     ld t0, 0(t0)
     sw a1, VIRTIO_MMIO_QUEUE_NOTIFY(t0)
+12:
     sd a0, 0(sp)
     call serial_source
     mv a1, a0
     ld a0, 0(sp)
     call virtio_wait_used
-    bnez a1, 1f                 # its source stuck: the bytes abandoned
+    bnez a1, 1f                 # its source failed: the bytes abandoned
     ld t2, VQ_LAST_USED(a0)
     addi t2, t2, 1
     li t0, 0xffff
     and t2, t2, t0
     sd t2, VQ_LAST_USED(a0)
+    li a0, 0
+    j 2f
 1:
+    li a0, 1
+2:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
@@ -352,7 +389,7 @@ serial_fault:
     la t0, serial_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j pad_port_fault
 
 .global api_up
 api_up:
@@ -382,8 +419,13 @@ sys_api_write:
     la a0, serial_api_tx_queue
     li a1, SERIAL_API_TX_QUEUE
     call serial_send
+    bnez a0, 6f
 7:
     sd zero, 80(sp)
+    j trap_return
+6:
+    li a0, 2                    # interrupted: some of the bytes may have reached the host
+    sd a0, 80(sp)
     j trap_return
 8:
     li a0, 1
@@ -631,6 +673,29 @@ serial_pad_pending:
     ret
 
 .ifdef DEBUG
+.global serial_report
+serial_report:
+    la t0, serial_base
+    ld t0, 0(t0)
+    beqz t0, 9f                 # no serial device on the machine
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, msg_serial_at
+    call debug_puts
+    la t0, serial_base
+    ld a0, 0(t0)
+    call debug_put_hex
+    li a0, '\n'
+    call debug_putc
+    ld ra, 8(sp)
+    addi sp, sp, 16
+9:
+    ret
+.pushsection .rodata
+msg_serial_at:
+    .asciz "jab: serial at "
+.popsection
+
 .global debug_putc
 debug_putc:
     la t0, debug_length
@@ -802,6 +867,8 @@ serial_debug_tx_queue:
 debug_line:
     .skip DEBUG_LINE_BYTES
 debug_length:
+    .skip 8
+serial_unsent:
     .skip 8
 .endif
 .balign 8

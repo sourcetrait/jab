@@ -97,7 +97,15 @@ the log in one piece.
 The control queues and the ports' queues are set up and the receive queues
 stocked; the device is told the kernel is ready, names its ports, and each
 known one is noted and answered for as it is named; then each port that
-came is opened. Which ports came is a separate question, api_up's.
+came is opened. Which ports came is a separate question, api_up's. A
+control message abandoned, the device's source failing while it comes up,
+stops it there: state 3 and answer 2, the ports after it never opened.
+Under DEBUG the jab.unsent knob is read once here into serial_unsent.
+
+## knob_unsent
+
+`12 u8`: under DEBUG, the knob that leaves the API's sends unnotified, its
+value the console's virtio id, 3.
 
 ## serial_stock
 
@@ -108,11 +116,38 @@ The caller notifies once the device is driven.
 PORT_READY makes the device say more, taken in the same pass. What else the
 device says, a port's name or that its host side is open, changes nothing
 here, since the ports are fixed by number; a port the kernel does not know
-is left unanswered.
+is left unanswered. An abandoned answer ends the drain, answering 1, since
+the device takes nothing more.
+
+## serial_send
+
+One descriptor, the bytes the device reads, offered in the next slot. Under
+DEBUG with the jab.unsent knob an API send is published and the device
+never notified, so the send stays outstanding until the console's source
+is masked: the abandoned write the api fixture asks for (test/stuck), the
+control and debug traffic flowing. An abandoned send answers 1 with an
+unknown share of the bytes already at the host, which sys_api_write
+passes on as 2.
+
+## sys_api_write
+
+2 is an interrupted send, the console's source failing during it: a prefix
+of the bytes may have reached the host, nothing promised about how many.
+The calls after it answer 1, the port down with the device (api_up).
 
 ## serial_pad_read
 
 A buffer that does not fit stays with the device for the next read.
+
+## serial_report
+
+Under DEBUG, after the banner (kernel.S): `jab: serial at <hex>`, the
+transport's address, from which a fixture derives the console's interrupt
+source.
+
+## msg_serial_at
+
+`16 u8`: serial_report's line before the address, under DEBUG only.
 
 ## debug_putc
 
@@ -125,7 +160,9 @@ DEBUG include.
 
 The UART stands in when the machine carries no virtio-serial device or the
 device came without the debug port, so a debug kernel on a bare line still
-reports, each line under the line lock (uart.S).
+reports, each line under the line lock (uart.S). A line the port abandons
+is dropped, and the lines after it go to the UART, the device's state then
+3.
 
 ## serial_control_rx_queue
 
@@ -163,6 +200,11 @@ The debug channel's transmit queue record, under DEBUG only.
 
 `u64`: its bytes so far.
 
+## serial_unsent
+
+`u64`: under DEBUG, 1 when the jab.unsent knob names the console, read
+once at serial_open: the API's sends then go unnotified (serial_send).
+
 ## serial_api_buffers
 
 `2048 u8`: the API's receive buffers.
@@ -198,7 +240,8 @@ The debug channel's transmit queue record, under DEBUG only.
 ## serial_state
 
 `u64`: 0 until opened, then serial_open's answer plus 1, and 3 once its
-source stuck (aia.S), every port then down.
+source stuck (aia.S) or a control message was abandoned while it came up,
+every port then down.
 
 ## serial_ports
 

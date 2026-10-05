@@ -241,12 +241,30 @@ kernel_fault:
     li a0, 1
     j qemu_exit
 
+.ifdef DEBUG
+timer_left_enabled:
+    call uart_lock_fatal
+    la a0, msg_timer_left
+    call uart_puts
+    li a0, 1
+    j qemu_exit
+.pushsection .rodata
+msg_timer_left:
+    .asciz "jab: timer left enabled\n"
+.popsection
+.endif
+
 .global trap_return
 trap_return:
     csrr t0, sepc
     addi t0, t0, 4
     csrw sepc, t0
 interrupt_return:
+.ifdef DEBUG
+    csrr t0, sie
+    andi t0, t0, SIE_STIE
+    bnez t0, timer_left_enabled             # user mode would take it as a fault
+.endif
     ld t0, 16(sp)
     csrw sscratch, t0
     ld x1, 8(sp)

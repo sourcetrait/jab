@@ -106,7 +106,7 @@ macro jab.sys.pad.axis buffer addr,code imm > status a0 u64,range 0(buffer),scra
  status :0 with the record written; 1 when the machine carries no pad; 2 when the pad has no such axis
  range :min, max, fuzz, flat, and resolution as the pad reports them
 macro jab.sys.api.write buffer addr,length u64 > status a0 u64,scratch a1,a7 [492:497] :sends the bytes to the host, returning once the device has taken them
- status :0, or 1 when the machine has no API port
+ status :0; 1 when the machine has no API port; 2 when the port failed during the send, some of the bytes perhaps at the host, every write after it answering 1
 macro jab.sys.api.read buffer addr,capacity imm > count a0 u64,waiting a1 u64,data 0(buffer),scratch a7 [499:504] :takes the bytes the host has sent, oldest first, at most capacity of them; never waits
  count :the bytes written, 0 when none wait or the machine has no API port
  waiting :how many still wait after them

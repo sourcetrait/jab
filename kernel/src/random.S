@@ -143,7 +143,7 @@ random_fault:
     la t0, random_state
     li t1, 3
     sd t1, 0(t0)
-    ret
+    j virtio_reset
 
 .section .bss
 .balign 16

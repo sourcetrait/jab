@@ -95,11 +95,13 @@ uart_lock:
     pause
     j 1b
 2:
+    fence rw, io                            # the lock before the line's device writes
     ret
 
 .global uart_unlock
 uart_unlock:
     la t0, uart_line_lock
+    fence io, w                             # the line's device writes before the lock goes
     amoswap.w.rl zero, zero, (t0)
     ret
 
@@ -114,8 +116,10 @@ uart_lock_fatal:
     amoswap.w.aq t1, t1, (t0)
     beqz t1, 2f
     rdtime t1
-    bltu t1, t2, 1b                         # still held at the wait's end: the line goes out regardless
+    bltu t1, t2, 1b
+    ret                                     # still held at the wait's end: the line goes out regardless
 2:
+    fence rw, io                            # the lock before the line's device writes
     ret
 
 .section .data

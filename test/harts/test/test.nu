@@ -20,8 +20,9 @@
 # at /cpus booting and cpu@2's own slow rate beside /cpus's ending the
 # boot. Then the interrupt platform as the tree describes it, each a
 # refusal with its code: the supervisor IMSIC gone, the ACLINT's timer
-# gone, the supervisor APLIC domain gone, and the supervisor IMSIC at an
-# address other than QEMU's, which the page tables map. Then the
+# gone, the supervisor APLIC domain gone, the supervisor IMSIC at an
+# address other than QEMU's, which the page tables map, and the
+# supervisor domain's sources past the 1023 the APLIC has. Then the
 # secondaries' failures, each an explicit outcome and the run going on:
 # the missing hart, QEMU's four-hart tree on a two-hart machine, harts 2
 # and 3 discovered, their release stores caught, both failed with no
@@ -128,13 +129,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     })
 
     # the interrupt platform: aia.inc's AIA_NO_IMSIC_S, AIA_NO_TIMER,
-    # AIA_NO_DOMAINS, and AIA_NOT_QEMU
+    # AIA_NO_DOMAINS, AIA_NOT_QEMU, and AIA_TOO_MANY, the supervisor
+    # domain's sources past sourcecfg[1023], the last the APLIC has, where
+    # the root's delegation loop would run on into other registers
     let s_imsic = "/soc/interrupt-controller@28000000"
+    let s_domain = "/soc/interrupt-controller@d000000"
     let refused = ([
         { name: "no_imsic", tree: (nop-node $tree $s_imsic), code: 1 }
         { name: "no_timer", tree: (nop-node $tree "/soc/mtimer@2007ff8"), code: 4 }
-        { name: "no_domain", tree: (nop-node $tree "/soc/interrupt-controller@d000000"), code: 3 }
+        { name: "no_domain", tree: (nop-node $tree $s_domain), code: 3 }
         { name: "moved_imsic", tree: (put32 $tree ((prop-offset $tree $s_imsic "reg") + 4) 0x29000000), code: 5 }
+        { name: "many_sources", tree: (put32 $tree (prop-offset $tree $s_domain "riscv,num-sources") 2048), code: 9 }
     ] | each {|t|
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file

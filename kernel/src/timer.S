@@ -66,8 +66,8 @@ sys_await:
     beqz a0, 24f
     andi s0, s0, ~JAB_AWAIT_SOUND
 24:
-    li a0, 0
-    beqz s0, 9f
+    li s1, 0
+    beqz s0, 7f                             # nothing left to await: 0, through the teardown
     andi t0, s0, JAB_AWAIT_DISPLAY
     beqz t0, 3f
     la t2, frame_tick

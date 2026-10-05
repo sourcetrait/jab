@@ -16,8 +16,9 @@
 # side by side, a build being an image at the cadence it played on the
 # machine it ran on, a walked leg per stretch of its path, refusing a run
 # measured incomplete, invalid, or before validity was recorded, one that
-# cannot be paired, one on a diagnostic machine, one missing a leg another
-# run holds, or runs on more than one machine, unless `--diagnostic`
+# cannot be paired, one on a diagnostic machine or with QEMU words of its
+# launch's own, one missing a leg another run holds, or runs on more than
+# one machine, unless `--diagnostic`
 # admits it, and a run with nothing to compare in it outright, every run's
 # standing and missing legs kept. Each run keeps the route it played and
 # its identity beside its capture, then gauge.nuon and the summary. The
@@ -65,6 +66,8 @@ const CADENCES = [0 1 2]
 const CADENCE_AFTER_FLIP = 0
 # the cap a frame's period comes from when a capture's identity names none
 const CAP = 60
+# the specification's harts; a machine of another count is diagnostic
+const HARTS = 4
 # a frame's next start less its start less its critical path, wait, and
 # await: the microseconds the conversions drop, at most this
 const RESIDUAL_US = 4
@@ -103,8 +106,8 @@ const REFUSED = [incomplete invalid unchecked unpaired diagnostic]
 const REJECTED = [empty unclassified unusable]
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--host] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
@@ -115,7 +118,9 @@ def main [] {
 # the cadence before the first frame, the E at the route's end, the
 # capture when the final records have landed. Headless with the sound
 # recorded, or with `--host` in the window and the audio a run of the
-# program has.
+# program has. `--qemu` words go on each launch's line after its own, and
+# each run's identity then takes the machine and the words the launch
+# returns, a diagnostic run.
 def "main run" [
     --tree: string = "release"   # the build tree the kernel and the image come from, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
@@ -129,6 +134,7 @@ def "main run" [
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
     --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
+    --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     jab machine-of $harts | ignore
@@ -153,16 +159,16 @@ def "main run" [
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, end: $r.end, capture: $capture }
-        let id = (identity $at $set $map_name $route_file $mode $harts)
+        let id = (identity $at $set $map_name $route_file $mode $harts $qemu)
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
-        $id | upsert qemu (qemu-of $launched.qemu_binary) | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+        launched-identity $id $launched | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP))
         print (run-line $label $n $measured $ran)
         print (outcome-line $n $measured $ran)
@@ -175,6 +181,7 @@ def "main run" [
 # gamepad, for a person to play from the spawn: an R with the seed and a
 # C with the cadence before the first frame, the E after `seconds`, the
 # capture once the final records have landed, which closes the window.
+# `--qemu` as `run` takes it.
 def "main play" [
     --tree: string = "release"   # the build tree, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
@@ -185,6 +192,7 @@ def "main play" [
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
     --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
+    --qemu: list<string> = []    # words on the launch's line after its own, the run then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     jab machine-of $harts | ignore
@@ -198,13 +206,13 @@ def "main play" [
     mkdir $run_out
     let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }, { at: $end, bytes: (pose command-frame "E") }]
     let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $cadence, end: $end, capture: $capture }
-    let id = (identity $at $set "render_0" null $mode $harts)
+    let id = (identity $at $set "render_0" null $mode $harts $qemu)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --harts $harts)
+    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --harts $harts --qemu $qemu)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
-    $id | upsert qemu (qemu-of $launched.qemu_binary) | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+    launched-identity $id $launched | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     let legs = [{ name: "play", places: [], pad: [] }]
     let measured = (measure $launched.api $legs --cap ($id.cap | default $CAP))
     print (run-line $label 1 $measured $ran)
@@ -287,10 +295,12 @@ export def cadence-frame [cadence: int]: nothing -> binary {
 # and kernel come from, the program's own source, the build, the assets,
 # the route, the cap, the machine (the harts asked for, a diagnostic run
 # or not, -machine, the CPU, and the accelerator with its thread mode),
-# the host, the toolchain, and the mode: the window, the sound, the pad,
-# the seed, the cadence asked for, and when the measurement closes. The
-# QEMU is the one the launch ran, written in when it returns.
-def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, harts: int]: nothing -> record {
+# the QEMU words of the launch's own (`overrides`), the host, the
+# toolchain, and the mode: the window, the sound, the pad, the seed, the
+# cadence asked for, and when the measurement closes. The QEMU, the
+# machine, and the words are the launch's, written in when it returns
+# (launched-identity).
+def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, harts: int, qemu: list<string>]: nothing -> record {
     let built = ($at.image | path dirname)
     let flags_file = ($built | path join "flags")
     let flags = (if ($flags_file | path exists) { open --raw $flags_file | decode | lines | first } else { "" })
@@ -320,7 +330,8 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         assets: { map: $map, tree: $tree, digest: (tree-digest $tree) },
         route: (if $route == null { null } else { { file: $route, sha256: (digest $route) } }),
         cap: (if $cap == null { null } else { $cap | into int }),
-        machine: (jab machine-of $harts),
+        machine: (jab machine-of $harts --overrides $qemu),
+        overrides: $qemu,
         qemu: null,
         host: {
             os: $nu.os-info.name,
@@ -345,6 +356,13 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
 # version.
 def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<string, nothing>> {
     { binary: $binary, version: (try { ^$binary --version | complete | get stdout | lines | get -o 0 } catch { null }) }
+}
+
+# A run's identity once its launch returns: the QEMU it ran (qemu-of),
+# and the machine and the words the launch's result carries in place of
+# the ones asked for.
+def launched-identity [id: record, launched: record]: nothing -> record {
+    $id | upsert qemu (qemu-of $launched.qemu_binary) | upsert machine $launched.machine | upsert overrides $launched.overrides
 }
 
 # The workspace's commit and whether its tree held changes: where the
@@ -930,8 +948,9 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # bins every run reached, a shorter one over its frames, so a leg's value
 # is its path's and not its frame count's. Every run is classified before
 # any leg is measured (standing-of): one measured incomplete, invalid, or
-# unchecked, one that cannot be paired, or one on a diagnostic machine is
-# refused unless `diagnostic` admits it, and one empty, unclassified, or
+# unchecked, one that cannot be paired, or one on a diagnostic machine or
+# with QEMU words of its launch's own is refused unless `diagnostic`
+# admits it, and one empty, unclassified, or
 # unusable is refused even then. A run's expected legs are every leg any
 # compared run holds, and one missing any is refused unless `diagnostic`
 # admits it, its missing legs then an explicit missing result in its run
@@ -950,11 +969,12 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         let image = ($g.identity | get -o build.image_sha256 | default "")
         let requested = ($g.identity | get -o mode.cadence)
         let machine = ($g.identity | get -o machine)
+        let overrides = ($g.identity | get -o overrides)
         let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
-            let standing = (standing-of $measured $rows $field $requested $machine)
+            let standing = (standing-of $measured $rows $field $requested $machine $overrides)
             {
                 file: ($f | path expand), label: $g.label, build: $build, image: $image, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
@@ -1056,8 +1076,8 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             machine: ([
                 "a run's machine is the one its identity records, its harts, whether it is diagnostic, -machine,"
                 "the CPU, and the accelerator, or none for a capture older than the record; a run on a diagnostic"
-                "machine stands diagnostic, runs on more than one machine are refused unless --diagnostic admits"
-                "them, and each table row names its build's machine"
+                "machine or with QEMU words of its launch's own stands diagnostic, runs on more than one machine"
+                "are refused unless --diagnostic admits them, and each table row names its build's machine"
             ] | str join " "),
             table: ([
                 "a build's value for a leg is the mean of its runs' values and the half spread is half their range,"
@@ -1073,8 +1093,9 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or at schema 2"
                 "one whose cadence was not asked before its first frame or was asked again after it, whose identity"
                 "asks no cadence from 0 to 2, or with a frame at another cadence; diagnostic, a run on a machine its"
-                "identity records as diagnostic, fewer harts than the specification's four; those five refused"
-                "unless --diagnostic admits it; or valid; each table row names its batches' standings"
+                "identity records as diagnostic, fewer harts than the specification's four, or whose identity"
+                "carries QEMU words of its launch's own, each named; those five refused unless --diagnostic admits"
+                "it; or valid; each table row names its batches' standings"
             ] | str join " "),
             coverage: ([
                 "a run's expected legs are every leg any compared run holds; a run missing one is refused unless"
@@ -1098,13 +1119,16 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
 # incomplete, with the problems; unchecked, complete but measured before
 # the analyzer recorded validity; invalid, with the reasons; unpaired, a
 # run that cannot be paired with another (unpaired-reasons); diagnostic,
-# a run on a machine its identity records as diagnostic; or valid.
+# a run on a machine its identity records as diagnostic or whose identity
+# carries QEMU words of its launch's own, the words and a hart count other
+# than the specification's four named; or valid.
 def standing-of [
     m: oneof<record, nothing>    # the run's measurement as its gauge.nuon holds it
     rows: list<any>              # the run's rows
     field: string                # the column compared
     requested: any               # the cadence the run's identity asked for, null when it names none
     machine: any                 # the machine the run's identity records, null when it records none
+    overrides: any               # the QEMU words its identity records, null when it records none
 ]: nothing -> record<standing: string, reasons: list<string>> {
     let clocked = ($m | get -o clocked)
     if ($clocked | describe) != "bool" {
@@ -1130,9 +1154,16 @@ def standing-of [
     if not $m.valid { return { standing: "invalid", reasons: ($m.invalid? | default []) } }
     let unpaired = (unpaired-reasons $m $requested)
     if not ($unpaired | is-empty) { return { standing: "unpaired", reasons: $unpaired } }
-    if $machine != null and ($machine | get -o diagnostic) == true {
-        let why = $"a diagnostic machine of ($machine | get -o harts) harts, not the specification's four"
-        return { standing: "diagnostic", reasons: [$why] }
+    let words = ($overrides | default [])
+    let marked = ($machine != null and ($machine | get -o diagnostic) == true)
+    if $marked or (not ($words | is-empty)) {
+        let harts = ($machine | get -o harts)
+        let causes = ([
+            (if ($words | is-empty) { null } else { $"QEMU words of its launch's own: ($words | str join ' ')" }),
+            (if $harts == null or $harts == $HARTS { null } else { $"a diagnostic machine of ($harts) harts, not the specification's four" }),
+        ] | compact)
+        let why = (if ($causes | is-empty) { ["a machine its identity records as diagnostic"] } else { $causes })
+        return { standing: "diagnostic", reasons: $why }
     }
     { standing: "valid", reasons: [] }
 }
@@ -1357,11 +1388,12 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
     let period = (1000000 / ($g.identity | get -o cap | default $CAP))
     let requested = ($g.identity | get -o mode.cadence)
     let machine = ($g.identity | get -o machine)
+    let overrides = ($g.identity | get -o overrides)
     let all_rows = ($g.rows? | default [])
     let runs = ($g.runs | each {|r|
         let m = ($r | get -o measured)
         let rows = ($all_rows | where run == $r.run)
-        let standing = (standing-of $m $rows "critical_us" $requested $machine)
+        let standing = (standing-of $m $rows "critical_us" $requested $machine $overrides)
         let ran = ($r | get -o ran | default {})
         let wall = ($ran | get -o wall_seconds | default 0)
         let cpu = ($ran | get -o cpu_seconds)

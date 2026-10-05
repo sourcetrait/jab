@@ -1114,6 +1114,12 @@ record shape is the program's own.
 A host that stops reading holds the program here once what is between them
 is full: with jab.sys.await the one call that can wait.
 
+The write answers 2 when it was interrupted: the device behind the port
+stopped answering while the bytes were in flight, so it was reset and the
+write abandoned. A prefix of the bytes may already have reached the host and
+nothing says how many. Every write after that answers 1, as on a machine
+without the port.
+
 ## .macro jab.sys.api.read
 
 To sleep until bytes arrive, jab.sys.api.await.

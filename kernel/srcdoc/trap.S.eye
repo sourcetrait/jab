@@ -14,8 +14,9 @@ ecall local sys_exit status u64 [158:174] :ends the run once the sound stream ha
 j local program_fault [176:193] :a fault in the program, its cause, pc, and tval reported on the UART and the run ended with 1
 j local kernel_trap [195:224] :a trap the kernel took itself, sp put back: the release's wake store faulting at its file's address resumes past the store with hart_wake_faulted set, and anything else goes to kernel_fault
 j local kernel_fault [225:244] :a fault in the kernel, its cause, pc, and tval reported on the UART and the run ended with 1
-j trap_return [245:248] :the end of every system call, the program resumed past its ecall with the frame at sp restored
-j local interrupt_return [249:286] :the frame at sp restored and the program resumed at the instruction the interrupt came before
-j qemu_exit status u64 [287:298] :ends QEMU through the test device, halting if the write does not end it
+j local timer_left_enabled [245:257] :under DEBUG, a return to user mode with the timer's enable set, which user mode would take as a fault: its line on the UART and the run ended with 1
+j trap_return [258:261] :the end of every system call, the program resumed past its ecall with the frame at sp restored
+j local interrupt_return [262:304] :the frame at sp restored and the program resumed at the instruction the interrupt came before; under DEBUG the timer's enable checked clear first (timer_left_enabled)
+j qemu_exit status u64 [305:316] :ends QEMU through the test device, halting if the write does not end it
  status :0 passes, anything else fails with it as the exit code
-j halt [299:301] :the hart waits for good
+j halt [317:319] :the hart waits for good

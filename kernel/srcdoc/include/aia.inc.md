@@ -40,6 +40,11 @@ source.
 
 `u32`: in_clrip[k], read as 32 sources' rectified inputs.
 
+## .set APLIC_SETIE
+
+`u32`: setie[k], read as 32 sources' enables, source 32k plus the bit;
+the debug build reads a disk's enable back from it (block_report).
+
 ## .set APLIC_SETIENUM
 ## .set APLIC_CLRIENUM
 
@@ -71,6 +76,13 @@ source.
 
 `u64`: where the hart index's width and a file's spacing sit in a message
 address's high word.
+
+## .set APLIC_SOURCES_MAX
+
+`u64`: the most sources a domain has, sourcecfg[1] to sourcecfg[1023]
+(the AIA's APLIC register map); a riscv,num-sources past it would run
+aia_root's delegation loop into the registers after them, mmsiaddrcfg
+at the 1776th.
 
 ## .set IMSIC_EIDELIVERY
 ## .set IMSIC_EITHRESHOLD
@@ -123,8 +135,10 @@ masked, the sound's three seconds.
 ## .set AIA_TOO_FEW
 ## .set AIA_LAYOUT
 ## .set AIA_NO_FILE
+## .set AIA_TOO_MANY
 
 `u64`: aia_topology's refusal codes: no supervisor IMSIC, no machine
 IMSIC, no pair of APLIC domains delivering by MSI to their levels' IMSICs,
 no ACLINT timer, an address other than QEMU's, too few identities or
-sources, a layout the kernel does not take, and hart 0 with no file.
+sources, a layout the kernel does not take, hart 0 with no file, and a
+domain's sources past APLIC_SOURCES_MAX.

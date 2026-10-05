@@ -153,12 +153,12 @@ def cpu-model [qemu: string]: nothing -> string {
 
 # What a machine of that many harts is, the record a run keeps of it: the
 # harts asked for, whether the run is diagnostic (fewer than the
-# specification's four), the -machine options, the CPU model, and the
-# accelerator with its thread mode. A count outside 1, 2, and 4 is
-# refused.
-export def machine-of [harts: int]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
+# specification's four, or `overrides`, QEMU words of the launch's own on
+# its line), the -machine options, the CPU model, and the accelerator
+# with its thread mode. A count outside 1, 2, and 4 is refused.
+export def machine-of [harts: int, --overrides: list<string> = []]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
     if $harts not-in $harts_allowed { error make {msg: $"--harts takes 1, 2, or 4, the specification's four or a diagnostic one or two, not ($harts)"} }
-    { harts: $harts, diagnostic: ($harts != $harts_default), machine: $machine_name, cpu: $cpu_profile, accel: $accel }
+    { harts: $harts, diagnostic: ($harts != $harts_default or (not ($overrides | is-empty))), machine: $machine_name, cpu: $cpu_profile, accel: $accel }
 }
 
 # The machine on `qemu`: virt with `options` after it when given, the
@@ -390,7 +390,13 @@ def image-manifest [image: path]: nothing -> record {
 # that long after the start and again a second later (threads-of), and
 # `threads` carries each thread's name and the CPU seconds it used in
 # between, the harts' threads named `CPU N/TCG` on Linux; empty when the
-# run ended before the second reading.
+# run ended before the second reading. `--qemu` appends words of its own
+# to the line, unchanged, after the launch's: a device or a property a
+# test needs that no launch flag gives. Such a run is diagnostic, its
+# `machine` keeping the platform asked for and marked so (machine-of
+# with the words), and the words
+# come back apart as `overrides`, so the requested platform and the
+# custom command stay distinct; `qemu` is the line as it ran.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -415,7 +421,8 @@ export def launch [
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second later, the result's `threads`; 0 never
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, cpu: float>>> {
+    --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, cpu: float>>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
     let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
@@ -427,7 +434,8 @@ export def launch [
     let monitor = $machine.monitor
     let ports = { debug_log: $machine.debug_log }
     let wav = $machine.sound
-    let disked = (["--signal=TERM" $"($seconds)" $machine.qemu_binary] ++ $machine.qemu)
+    let line = ($machine.qemu ++ $qemu)
+    let disked = (["--signal=TERM" $"($seconds)" $machine.qemu_binary] ++ $line)
     let api_out = $machine.api_out
     let api_in = $machine.api_in
     let pad_in = $machine.pad_pipe_in
@@ -519,10 +527,11 @@ export def launch [
         wall_seconds: (((date now) - $started) / 1sec),
         sound: (if $wav != "" and ($wav | path exists) { $wav } else { "" }),
         qemu_binary: $machine.qemu_binary,
-        qemu: $machine.qemu,
+        qemu: $line,
+        overrides: $qemu,
         window: $machine.window,
         audio: $machine.audio,
-        machine: $machine.machine,
+        machine: (machine-of $harts --overrides $qemu),
         threads: $threads_held,
     }
 }
@@ -852,10 +861,12 @@ def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>,
 
 # A launch's pad table as the groups it plays: the rows grouped by their
 # time, each group one report the launch loop writes at that time; none
-# without a table.
+# without a table, and none for a table with no rows, which still puts
+# the pad on the machine with nothing played into it.
 def pad-table [table: path]: nothing -> record<groups: list<any>> {
     if ($table | is-empty) { return { groups: [] } }
     let rows = (open ($table | path expand))
+    if ($rows | is-empty) { return { groups: [] } }
     let wanted = [at type code value]
     if not ($wanted | all {|c| $c in ($rows | columns) }) {
         error make {msg: $"($table): a pad table has the columns at, type, code, value; this one has ($rows | columns | str join ', ')"}

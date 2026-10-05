@@ -152,6 +152,14 @@ an axis stores its raw value when its code is one the record indexes, and
 either goes into the ring unless the ring is full; any other type is
 dropped.
 
+## pad_port_fault
+
+A pad on the port fails with the serial device it rides on: its state goes
+to 3, so pad_open answers 2 and an await on the pad alone ends with its
+source masked, where it would otherwise sleep on a line that sends nothing
+more with no timer behind it. Only a pad open on the port changes; the
+serial device's reset follows either way.
+
 ## pad_normalise
 
 A centred axis: the flat band about the middle of the range reads 0, and
@@ -187,7 +195,8 @@ The events for sys_pad_input, PAD_RING entries.
 ## pad_state
 
 `u64`: 0 until opened, then pad_open's answer plus 1, and 3 once the
-device's source stuck (aia.S).
+device's source stuck (aia.S), or the serial device's for a pad on the port
+(pad_port_fault).
 
 ## pad_keys
 

@@ -38,6 +38,7 @@ kmain:
 msg_banner:
     .asciz "jab: kernel up on qemu virt\n"
 .popsection
+    call serial_report
     call harts_report
 .endif
     csrw sscratch, tp                       # its record while the program runs

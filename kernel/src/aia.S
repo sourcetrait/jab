@@ -186,6 +186,9 @@ aia_topology:
     beq a0, t0, 90f
     li t0, AIA_SOURCE_LAST_USED
     bltu a0, t0, 90f
+    li t0, APLIC_SOURCES_MAX
+    li a1, AIA_TOO_MANY
+    bgtu a0, t0, 90f                        # past sourcecfg[1023]: aia_root would write other registers
     la t0, aia_sources
     sd a0, 0(t0)
     mv a0, s0
@@ -444,20 +447,10 @@ virtio_irq_enable:
     sd a0, 0(sp)
     sd a1, 8(sp)
     sd a2, 16(sp)
-    la a0, knob_hold
-    call knob_value
-    ld t0, 0(sp)
-    lwu t1, VIRTIO_MMIO_DEVICE_ID(t0)
-    bne a0, t1, 1f
-    mv a0, t0
     call irq_mmio_source
-    li t1, 1
-    sll t1, t1, a0
-    la t0, irq_held
-    ld t2, 0(t0)
-    or t2, t2, t1
-    sd t2, 0(t0)
-1:
+    ld t0, 0(sp)
+    lwu a1, VIRTIO_MMIO_DEVICE_ID(t0)
+    call irq_hold
     ld a0, 0(sp)
     ld a1, 8(sp)
     ld a2, 16(sp)
@@ -471,11 +464,40 @@ virtio_irq_enable:
     addi a0, a0, QEMU_VIRT_VIRTIO_IRQ0
     j irq_enable
 
+.ifdef DEBUG
+.global irq_hold
+irq_hold:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd a0, 0(sp)
+    sd a1, 8(sp)
+    la a0, knob_hold
+    call knob_value
+    ld t1, 8(sp)
+    bne a0, t1, 1f                          # the knob names another device
+    ld t0, 0(sp)
+    li t1, 1
+    sll t1, t1, t0
+    la t0, irq_held
+    ld t2, 0(t0)
+    or t2, t2, t1
+    sd t2, 0(t0)
+1:
+    ld ra, 24(sp)
+    addi sp, sp, 32
+    ret
+.endif
+
 .global irq_enable
 irq_enable:
     beqz a0, 9f
     li t0, AIA_SOURCE_MAX
     bgtu a0, t0, 9f
+    la t0, irq_faulted
+    ld t0, 0(t0)
+    srl t0, t0, a0
+    andi t0, t0, 1
+    bnez t0, 9f                             # failed: masked for the run
     slli t1, a0, 3
     la t2, irq_progress_fns
     add t2, t2, t1
@@ -576,31 +598,54 @@ irq_serve:
     sd s0, 16(sp)
     sd s1, 8(sp)
     mv s0, a0                               # the source
-    li t0, QEMU_VIRT_PCIE_IRQ0
-    bltu s0, t0, 1f
-    addi t0, t0, QEMU_VIRT_PCIE_IRQ_COUNT
-    bgeu s0, t0, 3f
-    call pci_service_line                   # every device on the line
-    j 3f
-1:
 .ifdef DEBUG
     la t0, irq_held
     ld t0, 0(t0)
     srl t0, t0, s0
-    andi t0, t0, 1
-    bnez t0, 3f                             # a knob holds its line: no acknowledgement
+    andi s1, t0, 1                          # whether a knob holds its line
 .endif
+    li t0, QEMU_VIRT_PCIE_IRQ0
+    bltu s0, t0, 1f
+    addi t0, t0, QEMU_VIRT_PCIE_IRQ_COUNT
+    bgeu s0, t0, 3f
+.ifdef DEBUG
+    bnez s1, 3f                             # held: its devices' ISRs left unread
+.endif
+    call pci_service_line                   # every device on the line
+    j 3f
+1:
     addi t2, s0, -QEMU_VIRT_VIRTIO_IRQ0
     li t3, QEMU_VIRT_VIRTIO_STRIDE
     mul t2, t2, t3
     li t3, QEMU_VIRT_VIRTIO0
     add t2, t2, t3                          # its transport
+.ifdef DEBUG
+    bnez s1, 2f
+.endif
     lwu t3, VIRTIO_MMIO_INTERRUPT_STATUS(t2)
     sw t3, VIRTIO_MMIO_INTERRUPT_ACK(t2)
     la t3, sound_base
     ld t3, 0(t3)
     bne t2, t3, 3f
     call sound_service
+.ifdef DEBUG
+    j 3f
+2:
+    la t3, sound_base                       # held: no acknowledgement
+    ld t3, 0(t3)
+    bne t2, t3, 3f
+    la t3, sound_live
+    ld t3, 0(t3)
+    beqz t3, 21f                            # not live: its open's requests acknowledged
+    call sound_drain                        # its periods taken back and none offered
+    call sound_in_flight
+    beqz a0, 3f                             # none left with the device: held from here
+21:
+    la t2, sound_base
+    ld t2, 0(t2)
+    lwu t3, VIRTIO_MMIO_INTERRUPT_STATUS(t2)
+    sw t3, VIRTIO_MMIO_INTERRUPT_ACK(t2)
+.endif
 3:
     li t0, (QEMU_VIRT_APLIC_S + APLIC_IN_CLRIP)
     srli t1, s0, 5
@@ -651,6 +696,14 @@ irq_serve:
 7:
     li t0, (QEMU_VIRT_APLIC_S + APLIC_CLRIENUM)
     sw s0, 0(t0)                            # masked
+    la t0, irq_fault_fns
+    add t0, t0, s1
+    ld t0, 0(t0)
+    beqz t0, 71f
+    mv a0, s0
+    jalr t0                                 # its driver in its error state, its devices reset
+71:
+    fence io, rw                            # the reset read back before the failure shows
     li t1, 1
     sll t1, t1, s0
     la t0, irq_faulted
@@ -661,13 +714,6 @@ irq_serve:
     ld t2, 0(t0)
     or t2, t2, t1
     sd t2, 0(t0)
-    la t0, irq_fault_fns
-    add t0, t0, s1
-    ld t0, 0(t0)
-    beqz t0, 71f
-    mv a0, s0
-    jalr t0                                 # its driver in its error state
-71:
     li a0, 1
 9:
     ld ra, 24(sp)

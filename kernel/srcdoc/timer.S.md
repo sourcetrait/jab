@@ -56,7 +56,11 @@ out of the mask, so no wait holds on a device that will never answer.
 A stream that has stopped returning is declared dead and its bit dropped;
 with nothing else in the mask the wait ends with 0. The sound line raises
 nothing from a stalled device, so with no display tick armed the timer
-wakes the wait to look.
+wakes the wait to look. Every exit goes through the teardown, the timer's
+enable cleared, the external enable cleared without a live stream, and
+stimecmp set to all ones: a mask a stuck pass emptied included, which would
+otherwise leave a sound-only wait's poll timer armed to fire in user mode
+as a program fault.
 
 The display's tick, once reported, is moved on by the next wait unless a
 flip answers it first. The external lines stay enabled while the sound

@@ -31,8 +31,9 @@ ports come up before the secondaries are released, whose check-in hart 0
 waits for on the drain (harts.S's harts_release), and before the program
 starts: the API when the run put its port on the machine, and under DEBUG
 the debug channel, first, so the banner and everything after it go there,
-every hart's line after the release (harts.S's harts_report). sscratch
-holds the hart's record while the program runs.
+the serial device's transport right after the banner (serial.S's
+serial_report), every hart's line after the release (harts.S's
+harts_report). sscratch holds the hart's record while the program runs.
 
 ## msg_banner
 

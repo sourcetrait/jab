@@ -27,7 +27,9 @@ harts over more than one socket, is refused, and guest files beside each
 hart's are taken as the files' spacing. Each hart's file is the place of
 its controller's phandle (harts.S's harts_intc) in the supervisor IMSIC's
 interrupts-extended, a pair a file, and the hart index's width is the bits
-the files' count needs. A refusal prints `jab: interrupt platform refused:
+the files' count needs. The supervisor domain's sources past
+APLIC_SOURCES_MAX are refused (AIA_TOO_MANY), since aia_root writes a
+sourcecfg for each. A refusal prints `jab: interrupt platform refused:
 code N` on the UART, N an AIA_* code of aia.inc, and ends the run with
 status 1, since hart 0 alone repairs none of it.
 
@@ -59,12 +61,23 @@ A message to a hart is a 32-bit write of the identity to its file's page:
 the supervisor files' base plus the hart's file index shifted by 12 and
 LHXS bits.
 
+## irq_hold
+
+The stuck-source fixtures' injection: a held line is serviced by none of
+its devices (irq_serve), so a device's completion leaves its source
+asserted with no progress and its window runs out. virtio_irq_enable holds
+an mmio transport by its device id, block_probe a disk's PCI line by the
+block id, so `jab.hold=2` holds every disk's line.
+
 ## irq_enable
 
 A source's sourcecfg first, since its target is writable only while the
 source is active. Its identity is the source plus 1, the wake's 1 kept
 apart, so the sources the kernel uses, 1 to 8 and 32 to 35, fit eie0; a
-source past AIA_SOURCE_MAX is passed over.
+source past AIA_SOURCE_MAX is passed over, and so is one already in
+irq_faulted, which stays masked for the run: a driver coming up on a failed
+line, a disk probed after its line failed, would otherwise let a dead
+source assert again with no fault routine behind it.
 
 ## irq_drain
 
@@ -88,11 +101,21 @@ its message has gone sends no other until its input falls and rises, so it
 is pended again through setipnum. A source that stays high while none of
 its devices makes progress, its driver's measure (the used indexes of its
 queues) unchanged, for AIA_STALL_TICKS, the sound's own three seconds, is
-masked at the domain (clrienum), counted in irq_faulted, and its driver told
-through its fault routine; the line naming it waits for a safe point
-(irq_report). Under DEBUG a jab.hold knob (virtio_irq_enable) holds a
-transport's line by leaving its status unacknowledged, the stuck source's
-fixture.
+masked at the domain (clrienum), and its fault routine puts its driver in
+its error state and resets its devices (virtio.S's virtio_reset, block.S's
+block_fault) before the failure is published in irq_faulted and
+irq_unreported, with `fence io, rw` after the reset's readback: a wait sees
+the failure only once the device has stopped using the buffers it held. The
+line naming it waits for a safe point (irq_report). Under DEBUG a line the
+jab.hold knob holds (irq_hold) is serviced by none of its devices: a PCI
+line's ISRs go unread and an mmio transport's status unacknowledged, and a
+held live sound's returned periods are taken back (sound_drain) with none
+offered again, so the source's window fires before the stream's own stall
+check. The sound's transport is still acknowledged before the stream is
+live and while any period is with the device (sound_in_flight), so its
+hold begins at the stream's last return: a live stream keeps the external
+enable on in user mode, where a line held from the open would storm the
+program to a standstill and fail the source outside every wait.
 
 ## irq_report
 

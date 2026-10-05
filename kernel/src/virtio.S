@@ -88,27 +88,60 @@ virtio_driver_ok:
     sw t0, VIRTIO_MMIO_STATUS(a0)
     ret
 
+.global virtio_reset
+virtio_reset:
+    addi t0, a0, -QEMU_VIRT_VIRTIO_IRQ0
+    li t1, QEMU_VIRT_VIRTIO_STRIDE
+    mul t0, t0, t1
+    li t1, QEMU_VIRT_VIRTIO0
+    add t0, t0, t1                          # its transport
+    sw zero, VIRTIO_MMIO_STATUS(t0)
+    rdtime t2
+    li t1, VIRTIO_RESET_TICKS
+    add t2, t2, t1                          # the readback's bound, from the write's end
+1:
+    lwu t1, VIRTIO_MMIO_STATUS(t0)
+    beqz t1, 2f
+    rdtime t3
+    bltu t3, t2, 1b
+    j device_reset_refused
+2:
+    ret
+
+.global device_reset_refused
+device_reset_refused:
+    mv s0, a0                               # the source; the run ends, so nothing is kept
+    call uart_lock_fatal
+    la a0, msg_reset_refused
+    call uart_puts
+    mv a0, s0
+    call uart_put_dec
+    li a0, '\n'
+    call uart_putc
+    li a0, 1
+    j qemu_exit
+
 .global virtio_wait_used
 virtio_wait_used:
     addi sp, sp, -32
     sd ra, 24(sp)
     sd a0, 0(sp)
     sd a1, 8(sp)
-    sd zero, 16(sp)                         # whether its source stuck
+    sd zero, 16(sp)                         # whether its source failed
     li t4, SIE_SEIE
     csrs sie, t4
 1:
-    ld a0, 0(sp)
-    fence rw, rw
-    lhu t0, (VQ_USED + VIRTQ_USED_IDX)(a0)
-    ld t1, VQ_LAST_USED(a0)
-    bne t0, t1, 2f
     la t0, irq_faulted
     ld t0, 0(t0)
     ld t1, 8(sp)
     srl t0, t0, t1
     andi t0, t0, 1
-    bnez t0, 21f                            # masked: no completion is coming
+    bnez t0, 21f                            # failed: whatever the used ring says
+    ld a0, 0(sp)
+    fence rw, rw
+    lhu t0, (VQ_USED + VIRTQ_USED_IDX)(a0)
+    ld t1, VQ_LAST_USED(a0)
+    bne t0, t1, 2f
     wfi
     call irq_drain
     call irq_report
@@ -119,6 +152,15 @@ virtio_wait_used:
 2:
     call irq_drain
     call irq_report
+    la t0, irq_faulted
+    ld t0, 0(t0)
+    ld t1, 8(sp)
+    srl t0, t0, t1
+    andi t0, t0, 1
+    beqz t0, 22f
+    li t0, 1
+    sd t0, 16(sp)                           # failed in the last drain: the completion does not count
+22:
     la t4, sound_live
     ld t4, 0(t4)
     bnez t4, 3f
@@ -170,3 +212,7 @@ virtio_request:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
+
+.section .rodata
+msg_reset_refused:
+    .asciz "jab: device reset refused: source "
