@@ -76,6 +76,10 @@ The most read_file reads a call.
 
 The map name's buffer.
 
+## .set TITLE_BYTES
+
+The map title's buffer.
+
 ## .set PATH_BYTES
 
 A path's buffer.
@@ -210,9 +214,10 @@ frame_clock's bytes.
 ## _start
 
 The map's name is read with its trailing whitespace dropped and the map's
-path built from it, /map/<name>.jabfps.map; the title is drawn centred on the
-black screen; the map is read whole, then held to its format; loaded, the
-screen is cleared and a debug build reports the load.
+path built from it, /map/<name>.jabfps.map; the map's title is read the same
+way from /map/title and drawn centred on the black screen, the name in its
+place when the tree carries no title; the map is read whole, then held to its
+format; loaded, the screen is cleared and a debug build reports the load.
 
 ## frame
 
@@ -374,6 +379,11 @@ Falls into fill_screen with the colour 0.
 
 `NAME_BYTES u8`: the map's name, NUL-terminated.
 
+## title
+
+`TITLE_BYTES u8`: the map's title, NUL-terminated, empty when the tree
+carries none.
+
 ## map_path
 
 `PATH_BYTES u8`: the map's path, /map/<name>.jabfps.map.
@@ -485,6 +495,10 @@ Falls into fill_screen with the colour 0.
 ## path_name
 
 `10 u8`: the file naming the map.
+
+## path_title
+
+`11 u8`: the file holding the map's title.
 
 ## word_map_dir
 

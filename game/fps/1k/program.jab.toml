@@ -3,6 +3,6 @@ sdk = '../../../sdk'
 workspace = '../../..'
 includes = ['../../../sdk/src']
 link = '../../../sdk/src/program.ld'
-target_assets = 'factory'
+target_assets = 'render_0'
 prepare = 'nu/prepare.nu'
 adv = 'nu/adv.nu'

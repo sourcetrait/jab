@@ -1,47 +1,55 @@
-# fps's integration test: the loader and the renderer over both test
-# maps, then two broken maps. Each map's tree goes on the machine as a
-# romfs image built here, the manifest's image being the factory's:
+# fps's integration test, on our own content alone: Render One and
+# Render Zero, `render_1` and `render_0`, and copies of them the test
+# compiles with fixtures of its own. Each map's tree goes on the machine
+# as a romfs image built here, the manifest's image being Render Zero's:
 # the UART reports the load with its counts, which must be the tree's
 # from map.nuon and tile.nuon; then the first frame with its phases and
-# counts, every pixel of the start view reached by a surface but a
-# rounding's worth, and the same for the frames drawn from camera poses
-# the console places over the sloped sectors; the API's state records
-# carry the camera at the spawn, its eye over the floor there, facing
-# the spawn's way, then in each pose's sector after its console record;
-# the screen is drawn; QEMU has nothing to say. Then a sprite of the
-# test's own texture, a walk on the pad, the proof map of our own
-# content with its window, grate, door, and plan views and its android
-# drawn, the stair on it walked to the upper storey, the factory, the
-# game's map, from its spawn and three poses with the sky read off the
-# yard's capture and two traces answered, its flights and driveway
-# walked from placed starts with the ambient following and their clock
-# read, the three cadences on a schedule of stalls and trigger reports
-# and on a timed walk (cadence-holds), the fight: an
-# android roused and firing, struck down by four rounds from the
-# console and one from the trigger, fallen, its magazine taken on a
-# walk, the shots heard; the light's view independence, floor points
-# of the bay read from the spawn at two yaws on a still copy of the
-# factory and a lightless one, the light alone the same from both; the
-# alpha policy rendered, a texture of the test's own on the proof map's
-# grate wall read from poses at three levels, each patch present in its
-# exact colour where the oracle's scaled means pass, the weighted mean
-# of the shrink among those colours, and the solid backdrop behind
-# where they do not, the lit loop's picture from the same build
-# agreeing at every level, and with level 0 alone built the mid pose's
-# blocks taking the chain at their own level and agreeing too, fewer
-# tiles built and read than with every level, the same poses under the
-# room's own light within TheUser's bound, tiled against lit; the
-# texel-centre rule, a white texture on that wall under lumels set as a
-# checkerboard, each texel beside a node read from its tile at the
-# light of its centre by the test's own bilinear; one
-# level a block, the still factory's spawn view with every level built
-# against the tiles held off, identical over the screen with the far
-# floor's blocks past the tiles' levels; the flow's three fixtures, a sprite straddling a
-# doorway drawn whole beside it, the eye on the line two sectors share
-# reaching the sector behind it, and a map where a hall's rectangle
-# grows through a later path before the room beyond it can be reached;
-# a map whose magic is wrong, which exits 6, and one cut short, which
-# exits 7, each saying so on the UART.
+# counts, every pixel of a view reached by a surface but a rounding's
+# worth, and the same for the frames drawn from the poses the console
+# places; the API's state records carry the camera in each pose's
+# sector after its console record; QEMU has nothing to say. First the
+# load screen: Render One's title drawn there, and with no title in its
+# tree a map's name in its place. Then a sprite of the test's own
+# texture on a copy of Render One with its lights dropped, its
+# transparent half the wall behind as a copy without the sprite draws
+# it, the alpha policy at load over the test's own textures, and a quad
+# straddling the door sector's two portal walls drawn whole beside the
+# doorway, outside the door's rectangle; Render One with its counts,
+# the camera at the spawn with its eye over the floor there facing the
+# spawn's way, the window, the grate, the door's line, the door, the
+# ramp, and the hall's light, which lights the floor under it past the
+# far wall, the hum heard and the plan views read, then the stair on it
+# walked to the upper storey; Render Zero, the game's map, from its
+# spawn and four poses, one under the down flight's sloped ceiling,
+# with the sky read off the yard's capture and two traces answered, its
+# flights and driveway walked from placed starts with the ambient
+# following and their clock read, the three cadences on a schedule of
+# stalls and trigger reports and on a timed walk (cadence-holds), the
+# fight: an android roused and firing, struck down by four rounds from
+# the console and one from the trigger, fallen, its magazine taken on a
+# walk, the shots heard; the light's view independence, floor points of
+# the bay read from the spawn at two yaws on a still copy of Render
+# Zero, as lit and with every lumel full bright, the light alone the
+# same from both yaws; the alpha policy rendered, a texture of the
+# test's own on Render One's grate wall read from poses at three
+# levels, each patch present in its exact colour where the oracle's
+# scaled means pass, the weighted mean of the shrink among those
+# colours, and the solid backdrop behind where they do not, the lit
+# loop's picture from the same build agreeing at every level, and with
+# level 0 alone built the mid pose's blocks taking the chain at their
+# own level and agreeing too, fewer tiles built and read than with
+# every level, the same poses under the room's own light within
+# TheUser's bound, tiled against lit; the texel-centre rule, a white
+# texture on that wall under lumels set as a checkerboard, each texel
+# beside a node read from its tile at the light of its centre by the
+# test's own bilinear; one level a block, the still copy's spawn view
+# with every level built against the tiles held off, identical over the
+# screen with the far floor's blocks past the tiles' levels; the flow's
+# eye on the line two sectors share reaching the sector behind it, and
+# a map where a hall's rectangle grows through a later path before the
+# room beyond it can be reached; a map whose magic is wrong, which exits
+# 6, and Render One's map cut short, which exits 7, each saying so on
+# the UART.
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ../nu/png.nu
@@ -51,7 +59,6 @@ use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
 const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}"
-const PIXELS = (1920 * 1080)
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -74,7 +81,7 @@ const CLOCK_KINDS = [7 8 9 10]
 # A console record carries the command's byte where the state's sector
 # sits; the P frame's
 const CONSOLE_P = 80
-# The clock over the factory walk: the seed and the cadence sent before
+# The clock over Render Zero's walk: the seed and the cadence sent before
 # the first frame, the E closing the measurement half a second before
 # the capture, and the records' schema; a frame's next start less its
 # start less its critical path, wait, and await, the microseconds the
@@ -90,7 +97,7 @@ const FX_PERIOD = 20000
 # The cadence fixtures (cadence-holds): the cadences, the period at the
 # cap of 60 in microseconds, the S frame's command byte as a console
 # record carries it, and a sustained stage's first frames set aside.
-# CadenceSchedule on the proof map: the standing stall and the consume's
+# CadenceSchedule on Render One: the standing stall and the consume's
 # spin from 1.5 s, ten trigger reports, the frame whose flip is tried
 # before its wait, the frame stalled once, the slow stage's standing
 # stall, and the E. The once stall stands well past two periods: from the
@@ -105,7 +112,7 @@ const FX_PERIOD = 20000
 # once in a frame, as two S frames would act on one. The wakes a frame
 # stays under: a consume that takes nothing spins its 500 us again on
 # every wake, twenty or more in a period's wait. MotionByTime on the
-# still factory: the placement, north along the bay's east side clear of
+# still copy of Render Zero: the placement, north along the bay's east side clear of
 # the pillars, the standing stall, the stick held forward, the E, the
 # body's speed, and the clearance from every wall of a frame's sector its
 # frames keep
@@ -135,61 +142,48 @@ const DESTROYED = 4
 const FALLEN = 5
 const TRACE_PLANE = 1
 const TRACE_PIECE = 2
-# Fixtures for the current test content, the two sample maps: the sector
-# holding each map's spawn as the host-side read has it; camera poses
-# the console places after the load, the eye in metres with z up, each
-# over a sloped sector looking at its slope, with the sector the camera
-# lands in, cage2's third a unit under the lightbulb at (2.5, -5, 2) in
-# the start's hall, looking 60 degrees down, and doortest's third three
-# units north of its first sprite in the room south of the start; that
-# sprite's entity index, for the sprite launch; the blocks of cage2's
-# bulb pose read for the light, [x, y, w, h], the floor under the bulb
-# at the bottom of the screen and the far wall at the top; the
-# straddling sprite, a fixed two-sided quad of the opaque alpha case's
-# texture with its feet in the quarter-metre door sector north of the
-# sprite room and its quad along y through both of that sector's
-# portal walls, the pose in the room seeing it obliquely so the quad's
-# near end lies over the solid wall beside the doorway, outside the
-# sector's rectangle, and a point on that near end
-const CONTENT = {
-    start_sector: { cage2: 1, doortest: 2 },
-    poses: {
-        cage2: [
-            { name: "ramp", sector: 29, x: 22.0625, y: 0.5, z: 2.15625, yaw: 180, pitch: -30 },
-            { name: "ceiling", sector: 3, x: 11.875, y: -10.5, z: -0.734375, yaw: -90, pitch: 30 },
-            { name: "bulb", sector: 1, x: 2.5, y: -5.0, z: 1.0, yaw: 0, pitch: -60 },
-        ],
-        doortest: [
-            { name: "valley", sector: 24, x: 9.0625, y: -6.03125, z: 5.296875, yaw: 0, pitch: -30 },
-            { name: "pit", sector: 29, x: 4.645833, y: -19.104166, z: 8.483105, yaw: 45, pitch: -30 },
-            { name: "sprite", sector: 0, x: 0.0, y: -6.0, z: -0.25, yaw: -90, pitch: 0 },
-        ],
-    },
-    sprite: { entity: 1 },
-    lit: { near: [860, 980, 200, 100], far: [860, 0, 200, 100] },
-    straddle: {
-        entity: { x: -1.7, y: -4.9, z: -2.0, yaw: 0.0, width: 1.5, height: 1.0, sector: 17 },
-        pose: { name: "straddle", x: 1.5, y: -6.5, z: -0.4, yaw: 165, pitch: 0 },
-        point: [-1.7, -5.5, -1.5],
-    },
-}
-# The sprite launch: doortest's tree with its first sprite given a
-# material of the test's own, a texture whose left half is transparent
-# and right half red, and made to face the camera; seen from the
-# `sprite` pose the sprite fills the middle of the screen, its right
-# half red and its left half the wall behind
+# The load screen: the map's title in bold off-white at four times the
+# console's cell, centred (main.S's TITLE_*), read while the program
+# loads behind it, which here runs from before 0.1 s of a launch to
+# about 0.65 s
+const TITLE_AT = 300ms
+const TITLE_INK = "ebe6dc"
+const TITLE_CELL = 48
+const TITLE_HEIGHT = 96
+const TITLE_Y = 492
+# The sprite launches, on copies of Render One the test compiles with
+# its lights and its android dropped, so every texel reads as its
+# texture holds it (sprite-tree): the halves sprite, the test's own
+# texture whose left half is transparent and right half red, facing the
+# camera and two-sided, its feet in the hall three metres in front of
+# the `sprite` pose and two metres a side, so its halves fill the middle
+# of the screen with the hall's west wall behind; the same copy without
+# it draws that wall from the same pose
+const SPRITE_MAP = "render_1_sprite"
+const PLAIN_MAP = "render_1_plain"
 const SPRITE_MATERIAL = "sprite/test"
 const SPRITE_FLAGS = 5              # facing the camera, two-sided
+const SPRITE = { at: [1.5, 4.0, 0.6], size: [2.0, 2.0] }
+const SPRITE_POSE = { name: "sprite", x: 4.5, y: 4.0, z: 1.6, yaw: 180, pitch: 0 }
 const RED = 0x[ff 00 00]
 const SPRITE_LEFT = [760, 540]
 const SPRITE_RIGHT = [1160, 540]
-# The straddling sprite's texture, the uniform alpha case over the pass,
-# its colour as the unlit map draws it, and its flags: fixed, two-sided
-const STRADDLE_MATERIAL = "test/opaque"
+# The straddling sprite: a quad of the uniform alpha case over the pass,
+# its colour as the unlit copy draws it, fixed and two-sided, along y
+# through the door sector (x 3 to 5, y 8 to 9) with its feet in it and
+# its ends past both of its portal walls; the pose in the hall's
+# north-east sees it obliquely, so the quad's near end lies over the
+# hall's solid north wall beside the doorway, outside the door's
+# rectangle, where a clip to that rectangle would cut it; a point on
+# that near end
+const STRADDLE_MATERIAL = "sprite/test/opaque"
 const STRADDLE_COLOUR = 0x[40 80 c0]
 const STRADDLE_FLAGS = 4
-# The alpha cases, textures of the test's own laid in the sprite tree as
-# materials beside the sprite's: the sprite's halves; a uniform alpha
+const STRADDLE = { at: [3.3, 8.5, 0.6], size: [1.8, 1.0] }
+const STRADDLE_POSE = { name: "straddle", x: 7.0, y: 7.0, z: 1.6, yaw: 170, pitch: 0 }
+const STRADDLE_POINT = [3.3, 7.75, 1.2]
+# The alpha cases, textures of the test's own laid in the sprite tree,
+# every one a material of its map: the sprite's halves; a uniform alpha
 # over the pass, which the engine leaves at one and names no line for;
 # a uniform alpha under it; a checkerboard of opaque and transparent
 # texels, whose coarser levels go uniform; an 8 by 8 texture with one
@@ -208,11 +202,11 @@ const STRADDLE_FLAGS = 4
 # the oracle holds them exactly instead
 const ALPHA_CASES = [
     { name: "sprite/test", w: 64, h: 64, kind: "halves", alpha: 255 },
-    { name: "test/opaque", w: 64, h: 64, kind: "uniform", alpha: 200 },
-    { name: "test/faint", w: 64, h: 64, kind: "uniform", alpha: 100 },
-    { name: "test/checker", w: 64, h: 64, kind: "checker", alpha: 255 },
-    { name: "test/small", w: 8, h: 8, kind: "block", alpha: 255 },
-    { name: "test/edge", w: 4, h: 4, kind: "edge", alpha: 128 },
+    { name: "sprite/test/opaque", w: 64, h: 64, kind: "uniform", alpha: 200 },
+    { name: "sprite/test/faint", w: 64, h: 64, kind: "uniform", alpha: 100 },
+    { name: "sprite/test/checker", w: 64, h: 64, kind: "checker", alpha: 255 },
+    { name: "sprite/test/small", w: 8, h: 8, kind: "block", alpha: 255 },
+    { name: "sprite/test/edge", w: 4, h: 4, kind: "edge", alpha: 128 },
 ]
 const ALPHA_LINE = "fps: alpha {name}: coverage {coverage} of 10000, scale {scale} of 65536"
 const MIPS_LINE = "fps: mips {chains} chains, {levels} levels, {texels} texels in {ms} ms"
@@ -223,7 +217,7 @@ const ALPHA_SLACKS = { "texture/fence": 300, "texture/grate": 1200 }
 # MIP_LEVELS and ALPHA_PLANE_BYTES)
 const MIP_LEVELS = 10
 const ALPHA_PLANE_BYTES = 262144
-# The alpha policy rendered: the proof map's grate wall given a texture
+# The alpha policy rendered: Render One's grate wall given a texture
 # of the test's own, 256 square at two repeats a metre so a lumel cell
 # is one repeat, in patches of 64 texels of one kind each, a kind a 2
 # by 2 of alphas and colours indexed by a texel's parity on each axis:
@@ -244,7 +238,7 @@ const ALPHA_PLANE_BYTES = 262144
 # read level 0, 1, and 2 by the block's rule over 512 texels a metre,
 # each run again with the tiles held off for the lit loop's picture,
 # identical at every level; the opening compared inset from its edges
-const FIXTURE_MAP = "proof_alpha"
+const FIXTURE_MAP = "render_1_alpha"
 const ALPHA_FIXTURE = { name: "texture/alphafix", w: 256, h: 256, patch: 64, scale: 2.0 }
 const FIXTURE_BACKDROP = { name: "texture/alphaback", size: 16, colour: 0x[30 30 30] }
 const FIXTURE_KINDS = {
@@ -304,12 +298,18 @@ const GROW_MAP = "rectgrow"
 const GROW_POSE = { name: "grow", x: 3.7, y: 0.4, z: 1.6, yaw: 72, pitch: 0 }
 const GROW_POINT = [8.1, 13.0, 1.6]
 const GROW_FAR = "D"
-# The light: the bottom block's mean brightness over the top's, at
-# least; the top block is a metre and a half further from the bulb and
-# at a lower cosine, while the hall's other bulbs light both
-const LIT_RATIO = 1.1
-# The walk: from doortest's spawn south through the rooms until the
-# stick is released; the eye's height over the feet
+# The light: Render One's pose under the hall's light, its eye the
+# spawn's, facing west 45 degrees down, the floor under the light at the
+# bottom of the screen and the far wall at the top, blocks of [x, y, w,
+# h]; the bottom block's mean brightness over the top's at least
+# LIT_RATIO, measured 1.79 lit and 1.12 with the lit flag never set,
+# the floor's texture being the brighter
+const LIGHT_POSE = { name: "light", x: 4.0, y: 4.0, z: 1.6, yaw: 180, pitch: -45 }
+const LIGHT_BLOCKS = { near: [860, 980, 200, 100], far: [860, 0, 200, 100] }
+const LIT_RATIO = 1.4
+# The eye's height over the feet, and how far in the plan the spawn's
+# eye may stand from the spawn, a body's radius, the push off a wall
+# there, with a millimetre's slack
 const EYE_HEIGHT = 1.6
 const BODY_RADIUS = 0.351
 # The sound: a recording's peak sample under this is silence, and a
@@ -317,12 +317,12 @@ const BODY_RADIUS = 0.351
 # heard, out of 32767
 const SOUND_SILENCE = 8
 const SOUND_HEARD = 64
-# The factory: the spawn view's bound here, loose since a host's first
-# launch can read double the lane's 23 to 25 ms, the budget of 33 ms
-# being read by hand from the printed line; the pixel of the yard's
+# Render Zero: the spawn view's bound here, a sanity bound loose since a
+# host's first launch can read double the lane's 23 to 25 ms, the
+# frame's ceiling being the gauge's to read; the pixel of the yard's
 # capture read for the sky, near the top where the sky texture's solid
 # top band lands at pitch 0, and that band's colour
-const FACTORY_START_BOUND = 100000
+const RENDER_0_START_BOUND = 100000
 const SKY_PIXEL = [960, 100]
 const SKY_TOP = 0x[3a 6f b0]
 const CROSSHAIR = [960, 540]
@@ -387,7 +387,7 @@ const FIGHT_ACTOR = 0
 const FIGHT_HEALTHS = [75, 50, 25, 0]
 const FIGHT_SHOTS = { from: 3.2, to: 4.6, over: 8000 }
 const MAGAZINE_ROUNDS = 30
-# The traces from the factory's window and yard poses: the window's
+# The traces from Render Zero's window and yard poses: the window's
 # ray reaches the bay's floor, the yard's the street's far wall
 const TRACE_SLACK = 50
 # The light's view independence: six floor points of the bay under and
@@ -397,7 +397,7 @@ const VIEW_POINTS = [[26.0, 6.0], [15.0, 6.0], [18.0, 4.0], [22.0, 8.0], [20.0, 
 const VIEW_EYE = { x: 29.0, y: 2.5, z: 1.6 }
 const VIEW_YAWS = [170, 130]
 const VIEW_SLACK = 4
-# The factory's spawn view, the spawn's eye and yaw, for one level a
+# Render Zero's spawn view, the spawn's eye and yaw, for one level a
 # block: the bay's floor runs to some twenty metres from it, where a
 # block asks a level past the tiles' four
 const SPAWN_POSE = { name: "spawn", x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 }
@@ -410,93 +410,46 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     print "fps: the gauge's rules hold on synthetic captures"
     let game = ($env.FILE_PWD | path join ".." | path expand)
     let trees = (jab program-shard $game "asset")
-    mut runs = []
-    for map in [doortest cage2] {
-        let tree = ($trees | path join $map)
-        assert (($tree | path join "map.nuon") | path exists) $"a test tree for ($map)"
-        let expected = (open ($tree | path join "map.nuon"))
-        let tiles = (open ($tree | path join "tile.nuon"))
-        let disk = (romfs $tree ($out | path join $"($map).romfs"))
-        let poses = ($CONTENT.poses | get $map)
-        let sends = ($poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $map) --set $set --sound --api --disk $disk --serial "fps" --send $sends --capture 3000ms --seconds 8)
-        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($map)"
-        let lines = ($run.serial | lines)
+    let render_1_source = (open ($game | path join "content" "map" "render_1.nuon"))
+    let render_1_tree = ($trees | path join "render_1")
+    let render_1_index = {|name: string| $render_1_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
 
-        # the load
-        let reports = ($lines | where {|l| $l starts-with $"fps: ($map) loaded" })
-        assert equal ($reports | length) 1 $"the load reported once on ($map): ($run.serial)"
-        let parsed = ($reports | get 0 | parse $LOAD)
-        assert (not ($parsed | is-empty)) $"the load line's shape on ($map): ($reports | get 0)"
-        let load = ($parsed | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
-        for f in [sectors walls vertices portals entities lights sprites materials] {
-            assert equal ($load | get $f) ($expected | get $f) $"($map)'s ($f) as the tree has it: ($reports | get 0)"
-        }
-        assert equal $load.materials ($tiles | length) $"($map)'s materials as tile.nuon has them"
-        assert equal $load.textures ($expected.materials - $expected.unresolved) $"($map)'s textures, the materials the tree carries"
-        assert equal $load.missing $expected.unresolved $"($map)'s materials the tree lacks"
-        assert ($load.ms > 0 and $load.ms < 20000) $"($map) loaded in a plausible time: ($load.ms) ms"
-        let named = ($lines | where {|l| $l starts-with "fps: material " })
-        assert equal ($named | length) $expected.unresolved $"($map)'s missing materials named on the UART: ($named)"
-        let map_read = (map read ($tree | path join "map" $"($map).jabfps.map"))
+    # the load screen: Render One's title drawn there while the map loads
+    # behind it, and with no title in its tree a map's name in its place,
+    # the growth map's (grow-source)
+    let grow_tree = (grow-tree $game ($out | path join "grow"))
+    let titles = [
+        { text: $render_1_source.title, ink: (title-holds $kernel $image $out $set "render_1" $render_1_tree $render_1_source.title) }
+        { text: $GROW_MAP, ink: (title-holds $kernel $image $out $set "grow" $grow_tree $GROW_MAP) }
+    ]
 
-        # the first frame, then one a pose
-        let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) (1 + ($poses | length)) $"the first frame and each pose's reported on ($map): ($run.serial)"
-        let parsed = ($frames | each {|f| $f | parse $FRAME })
-        assert ($parsed | all {|f| not ($f | is-empty) }) $"the frame lines' shape on ($map): ($frames)"
-        let parsed = ($parsed | each {|f| $f | get 0 | update cells {|c| $c | into int } })
-        let frame = ($parsed | get 0)
-        assert ($frame.sectors > 0 and $frame.walls > 0 and $frame.pieces > 0 and $frame.planes > 0) $"the frame drew the world on ($map): ($frame)"
-        assert ($frame.us < 1000000) $"the frame within a bound here on ($map): ($frame.us) us"
-        for f in $parsed {
-            assert ($f.uncovered < $CRACKS) $"every pixel of the view reached by a surface but a rounding's worth on ($map): ($f)"
-        }
-
-        # the camera over the API: at the spawn, the eye over the floor
-        # there, facing the spawn's way
-        let records = (records $run.api)
-        let states = ($records | where kind == 1)
-        assert (($states | length) > 10) $"a state a frame over the API on ($map): ($states | length) records"
-        let first = ($states | get 0)
-        assert equal $first.sector ($CONTENT.start_sector | get $map) $"the camera in the spawn's sector on ($map): ($first.sector)"
-        let spawn = $expected.spawn
-        let shove = ((($first.x - $spawn.at.0) ** 2 + ($first.y - $spawn.at.1) ** 2) | math sqrt)
-        assert ($shove <= $BODY_RADIUS) $"the eye stands at the spawn, or a body's radius off a wall there, on ($map): ($first.x), ($first.y) against ($spawn.at), ($shove) off"
-        let floor = (map plane-z ($map_read.sectors | get $first.sector | get floor) $first.x $first.y)
-        assert ((($first.z - ($floor + $EYE_HEIGHT)) | math abs) < 0.01) $"the eye its height over the floor on ($map): ($first.z) over a floor at ($floor)"
-        assert ((($first.yaw - $spawn.yaw) | math abs) < 0.01 and (($first.pitch - $spawn.pitch) | math abs) < 0.01 and $first.roll == 0.0) $"the camera faces the spawn's way on ($map): ($first.yaw), ($first.pitch), ($first.roll) against ($spawn.yaw), ($spawn.pitch)"
-        # each pose's console record, then the camera in the pose's sector
-        let consoles = ($records | enumerate | where {|r| $r.item.kind == 11 })
-        assert equal ($consoles | length) ($poses | length) $"a console record a pose on ($map): ($consoles | length)"
-        for e in ($consoles | enumerate) {
-            let landed = ($records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
-            let pose_at = ($poses | get $e.index)
-            assert ($landed != null) $"a state after the pose ($pose_at.name) on ($map)"
-            assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on ($map): ($landed.sector)"
-        }
-
-        # the screen, drawn; cage2's lit, the floor under the bulb
-        # brighter than the far wall
-        assert ($run.screen != "") $"a screen was taken on ($map)"
-        assert (not (black-screen $run.screen)) $"the screen is drawn on ($map)"
-        if $map == "cage2" {
-            let near = (mean-brightness $run.screen $CONTENT.lit.near)
-            let far = (mean-brightness $run.screen $CONTENT.lit.far)
-            assert ($near > ($far * $LIT_RATIO)) $"the floor under the bulb is lit against the far wall: ($near) against ($far)"
-        }
-        $runs = ($runs | append { map: $map, load_ms: $load.ms, frame: $frame, poses: ($parsed | slice 1..), states: ($states | length), cpu: $run.cpu_seconds, screen: $run.screen })
+    # a sprite: a copy of Render One with its lights and its android
+    # dropped and the halves sprite facing the camera in the hall, seen
+    # from in front of it: its right half the texture's red and its
+    # transparent left half the wall behind, as the same copy without the
+    # sprite draws it from the same pose
+    let sprite_tree = (sprite-tree $render_1_source $SPRITE_MAP ($out | path join "sprite_tree") $game --halves)
+    let plain_tree = (sprite-tree $render_1_source $PLAIN_MAP ($out | path join "plain_tree") $game)
+    let sprite_read = (map read ($sprite_tree | path join "map" $"($SPRITE_MAP).jabfps.map"))
+    let material_index = {|name: string| $sprite_read.materials | enumerate | where {|m| $m.item.name == $name } | get 0.index }
+    for c in $ALPHA_CASES {
+        assert ($c.name in ($sprite_read.materials | get name)) $"the alpha case ($c.name) a material of the sprite tree"
     }
-
-    # a sprite: doortest's tree with its first sprite given the test
-    # texture and made to face the camera, seen from the sprite pose
-    let plain = ($runs | where map == "doortest" | get 0.screen)
-    let sprite_tree = (sprite-tree ($trees | path join "doortest") ($out | path join "sprite_tree"))
-    let sprite_pose = ($CONTENT.poses.doortest | last)
-    let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk (romfs $sprite_tree ($out | path join "sprite.romfs")) --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $sprite_pose) }] --capture 2500ms --seconds 5)
+    let halves = ($sprite_read.entities | where material == (do $material_index $SPRITE_MATERIAL) | get 0)
+    assert equal $halves.flags $SPRITE_FLAGS $"the halves sprite faces the camera, two-sided: ($halves)"
+    assert equal $halves.sector (do $render_1_index "hall") $"the halves sprite stands in the hall: ($halves)"
+    let straddler = ($sprite_read.entities | where material == (do $material_index $STRADDLE_MATERIAL) | get 0)
+    assert equal $straddler.flags $STRADDLE_FLAGS $"the straddler fixed, two-sided: ($straddler)"
+    assert equal $straddler.sector (do $render_1_index "door") $"the straddler's feet in the door sector: ($straddler)"
+    let sprite_disk = (romfs $sprite_tree ($out | path join "sprite.romfs"))
+    let sprite_sends = [{ at: 1500ms, bytes: (pose pose-frame $SPRITE_POSE) }]
+    let plain_run = (jab launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --api --disk (romfs $plain_tree ($out | path join "plain.romfs")) --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
+    assert equal (open --raw $plain_run.qemu_log) "" "QEMU has no complaint about the guest on the plain run"
+    assert ($plain_run.screen != "") "a screen was taken on the plain run"
+    let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
     let sprite_lines = ($sprite_run.serial | lines)
-    assert (($sprite_lines | where {|l| $l starts-with "fps: doortest loaded" } | length) == 1) $"the sprite tree loaded: ($sprite_run.serial)"
+    assert (($sprite_lines | where {|l| $l starts-with $"fps: ($SPRITE_MAP) loaded" } | length) == 1) $"the sprite tree loaded: ($sprite_run.serial)"
     let sprite_frames = ($sprite_lines | where {|l| $l starts-with "fps: frame in" })
     assert equal ($sprite_frames | length) 2 $"the first frame and the sprite pose's reported: ($sprite_run.serial)"
     let sprite_frame = ($sprite_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
@@ -504,7 +457,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($sprite_frame.uncovered < $CRACKS) $"the sprite view has no pixel uncovered: ($sprite_frame)"
     assert ($sprite_run.screen != "") "a screen was taken on the sprite run"
     assert equal (pixel $sprite_run.screen $SPRITE_RIGHT) $RED $"the sprite's right half is the texture's red: ($sprite_run.screen)"
-    assert equal (pixel $sprite_run.screen $SPRITE_LEFT) (pixel $plain $SPRITE_LEFT) $"the sprite's transparent left half shows the wall behind, as the plain run drew it"
+    assert equal (pixel $sprite_run.screen $SPRITE_LEFT) (pixel $plain_run.screen $SPRITE_LEFT) $"the sprite's transparent left half shows the wall behind, as the plain run drew it"
     # the alpha policy at load over the test's own textures, against the
     # same rule on the host: each level's share of texels at or above
     # the pass and the scale that holds it, a line a material under full
@@ -523,12 +476,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert ($line | is-empty) $"no alpha line for ($c.name), full at the pass: ($line)"
         }
     }
-    # the straddling sprite, seen obliquely from the room: its quad's
-    # near end over the solid wall beside the doorway reads the texture,
-    # the quad drawn over the whole screen as one not proven within its
-    # sector, where a clip to the sector's rectangle would cut it off
-    let straddle_pose = $CONTENT.straddle.pose
-    let straddle_run = (jab launch --kernel $kernel --image $image --out ($out | path join "straddle") --set $set --sound --api --disk ($out | path join "sprite.romfs") --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $straddle_pose) }] --capture 2500ms --seconds 5)
+    # the straddling sprite, seen obliquely from the hall: the door's
+    # rectangle as the flow hands it on, the hall's portal wall into the
+    # door sector, between its two ends' columns from the pose with the
+    # flow's pixel of slack, and the quad's near end left of it over the
+    # solid wall beside the doorway; there it reads the texture, the quad
+    # drawn over the whole screen as one not proven within its sector,
+    # where a clip to the sector's rectangle would cut it off
+    let straddle_run = (jab launch --kernel $kernel --image $image --out ($out | path join "straddle") --set $set --sound --api --disk $sprite_disk --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $STRADDLE_POSE) }] --capture 2500ms --seconds 5)
     assert equal (open --raw $straddle_run.qemu_log) "" "QEMU has no complaint about the guest on the straddle run"
     let straddle_frames = ($straddle_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
     assert equal ($straddle_frames | length) 2 $"the first frame and the straddle pose's reported: ($straddle_run.serial)"
@@ -536,276 +491,300 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($straddle_frame.sprites >= 1) $"the straddling sprite drawn: ($straddle_frame)"
     assert ($straddle_frame.uncovered < $CRACKS) $"the straddle view has no pixel uncovered: ($straddle_frame)"
     assert ($straddle_run.screen != "") "a screen was taken on the straddle run"
-    let straddle_at = (project { x: $straddle_pose.x, y: $straddle_pose.y, z: $straddle_pose.z } $straddle_pose.yaw $CONTENT.straddle.point)
-    assert ($straddle_at != null) $"the straddling quad's near end is on screen from ($straddle_pose)"
+    let straddle_eye = { x: $STRADDLE_POSE.x, y: $STRADDLE_POSE.y, z: $STRADDLE_POSE.z }
+    let straddle_at = (project $straddle_eye $STRADDLE_POSE.yaw $STRADDLE_POINT)
+    assert ($straddle_at != null) $"the straddling quad's near end is on screen from ($STRADDLE_POSE)"
+    let hall = (do $render_1_index "hall")
+    let door = (do $render_1_index "door")
+    let door_wall = ($sprite_read.walls | where {|w| $w.sector == $hall and $w.portal_count > 0 } | where {|w| ($sprite_read.portals | get $w.first_portal | get sector) == $door } | get 0)
+    let door_columns = ([$door_wall.a $door_wall.b] | each {|v| let p = ($sprite_read.vertices | get $v); project-x $straddle_eye $STRADDLE_POSE.yaw [$p.x, $p.y] })
+    assert ($door_columns | all {|c| $c != null }) $"the doorway in front of the straddle pose: ($door_columns)"
+    let door_left = (($door_columns | math min) - 1)
+    assert ($straddle_at.0 < $door_left) $"the straddling quad's near end at ($straddle_at) lies outside the door's rectangle, left of column ($door_left), so a clip to it would cut it"
     assert equal (pixel $straddle_run.screen $straddle_at) $STRADDLE_COLOUR $"the straddling quad's near end at ($straddle_at), beside the doorway, reads its texture: ($straddle_run.screen)"
 
-    # the walk: the left stick held forward from doortest's spawn, the
-    # body south through the doorway and the hall into the room beyond
-    # until its wall, the eye riding the floor
-    let walk_run = (jab launch --kernel $kernel --image $image --out ($out | path join "walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_walk.nuon") --disk ($out | path join "doortest.romfs") --serial "fps" --capture 6000ms --seconds 7)
-    assert equal (open --raw $walk_run.qemu_log) "" "QEMU has no complaint about the guest on the walk"
-    let walk_states = (records $walk_run.api | where kind == 1)
-    assert (($walk_states | length) > 100) $"states through the walk: ($walk_states | length)"
-    let walk_first = ($walk_states | first)
-    let walk_last = ($walk_states | last)
-    assert equal $walk_first.sector $CONTENT.start_sector.doortest "the walk starts in the spawn's sector"
-    assert ($walk_last.y < ($walk_first.y - 8.0)) $"the body walked south: from ($walk_first.y) to ($walk_last.y)"
-    let walk_map = (map read ($trees | path join "doortest" "map" "doortest.jabfps.map"))
-    let end_sector = (map sector-holding $walk_map $walk_last.x $walk_last.y ($walk_last.z - $EYE_HEIGHT))
-    assert equal $walk_last.sector $end_sector $"the body ended in the sector holding its feet, as the host reads the map: ($walk_last.x), ($walk_last.y) in ($walk_last.sector), the host's ($end_sector)"
-    let floor = (map plane-z ($walk_map.sectors | get $walk_last.sector | get floor) $walk_last.x $walk_last.y)
-    assert ((($walk_last.z - ($floor + $EYE_HEIGHT)) | math abs) < 0.05) $"the eye rides the floor: ($walk_last.z) over a floor at ($floor)"
-    let before_last = ($walk_states | get (($walk_states | length) - 2))
-    assert ((($walk_last.y - $before_last.y) | math abs) < 0.01) $"the body stands once the stick is released: ($before_last.y) then ($walk_last.y)"
-    let walk_sectors = ($walk_states | get sector | uniq)
-    assert (($walk_sectors | length) >= 3) $"the walk crossed sectors: ($walk_sectors)"
-    let walk_x_off = ($walk_states | each {|s| ($s.x - $walk_first.x) | math abs } | math max)
-    assert ($walk_x_off < 0.5) $"the walk held its line: ($walk_x_off) off in x"
-
-    # the proof map, our own content: loaded and held to its counts, the
-    # sign drawn from the spawn, the stairwell seen from the upper room
-    # through its window and the alcove through the grate, the door
-    # tagged, and a plan view a storey at the storey's bounds
-    let proof_tree = ($trees | path join "proof")
-    let proof_source = (open ($game | path join "content" "map" "proof.nuon"))
-    let proof_expected = (open ($proof_tree | path join "map.nuon"))
-    let proof_read = (map read ($proof_tree | path join "map" "proof.jabfps.map"))
-    let proof_index = {|name: string| $proof_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
-    # the line pose stands with the eye on the line the hall and the
-    # door sectors share, looking into the hall, which the flow reaches
-    # only by its facing slack, the eye's distance from the wall's line
-    # being zero there
-    let proof_poses = [
-        { name: "window", sector: (do $proof_index "upper_room"), x: 5.0, y: 4.0, z: 4.85, yaw: 0, pitch: -20, sees: (do $proof_index "step1") },
-        { name: "grate", sector: (do $proof_index "north"), x: 9.0, y: 11.0, z: 1.6, yaw: 0, pitch: 0, sees: (do $proof_index "alcove") },
-        { name: "line", sector: (do $proof_index "door"), x: 4.0, y: 8.0, z: 1.6, yaw: 270, pitch: 0, sees: (do $proof_index "hall") },
-        { name: "door", sector: (do $proof_index "hall"), x: 4.0, y: 5.0, z: 1.6, yaw: 90, pitch: 0, sees: (do $proof_index "north") },
+    # Render One, the map the format and the engine are proven on: loaded
+    # and held to its counts, the camera at the spawn with its eye over the
+    # floor there facing the spawn's way, the sign drawn from the spawn,
+    # the stairwell seen from the upper room through its window, the
+    # alcove through the grate, the north room through the door, the ramp
+    # posed with no pixel uncovered, the door tagged, a plan view a storey
+    # at the storey's bounds, and last the hall's light, the floor under
+    # it brighter than the far wall
+    let render_1_expected = (open ($render_1_tree | path join "map.nuon"))
+    let render_1_read = (map read ($render_1_tree | path join "map" "render_1.jabfps.map"))
+    # the line pose stands with the eye on the line the hall and the door
+    # sectors share, looking into the hall, which the flow reaches only by
+    # its facing slack, the eye's distance from the wall's line being zero
+    # there; the ramp's stands at its middle, midway between its planes,
+    # facing up its slope 30 degrees down at it; the light's is the
+    # capture's, last
+    let ramp = ($render_1_read.sectors | get (do $render_1_index "ramp"))
+    let ramp_x = (($ramp.bounds.min_x + $ramp.bounds.max_x) / 2)
+    let ramp_y = (($ramp.bounds.min_y + $ramp.bounds.max_y) / 2)
+    let ramp_z = (((map plane-z $ramp.floor $ramp_x $ramp_y) + (map plane-z $ramp.ceiling $ramp_x $ramp_y)) / 2)
+    let render_1_poses = [
+        { name: "window", sector: (do $render_1_index "upper_room"), x: 5.0, y: 4.0, z: 4.85, yaw: 0, pitch: -20, sees: (do $render_1_index "step1") },
+        { name: "grate", sector: (do $render_1_index "north"), x: 9.0, y: 11.0, z: 1.6, yaw: 0, pitch: 0, sees: (do $render_1_index "alcove") },
+        { name: "line", sector: (do $render_1_index "door"), x: 4.0, y: 8.0, z: 1.6, yaw: 270, pitch: 0, sees: (do $render_1_index "hall") },
+        { name: "door", sector: (do $render_1_index "hall"), x: 4.0, y: 5.0, z: 1.6, yaw: 90, pitch: 0, sees: (do $render_1_index "north") },
+        { name: "ramp", sector: (do $render_1_index "ramp"), x: $ramp_x, y: $ramp_y, z: $ramp_z, yaw: 90, pitch: -30, sees: (do $render_1_index "upper_hall") },
+        ($LIGHT_POSE | insert sector (do $render_1_index "hall") | insert sees (do $render_1_index "hall")),
     ]
     # the rendered assets the tree carries: the hum a Standard MIDI File
     # of one track, the servo the recipe's seconds of 16-bit samples
-    assert equal $proof_expected.ambients 1 "proof names one ambient"
+    assert equal $render_1_expected.ambients 1 "render_1 names one ambient"
     let recipes = (glob ($game | path join "content" "sound" "*.nuon") | length)
-    assert equal $proof_expected.sounds $recipes $"proof's tree carries every sound the content holds: ($proof_expected.sounds) against ($recipes) recipes"
-    let hum = (open --raw ($proof_tree | path join "ambient" "hum.mid") | into binary)
+    assert equal $render_1_expected.sounds $recipes $"render_1's tree carries every sound the content holds: ($render_1_expected.sounds) against ($recipes) recipes"
+    let hum = (open --raw ($render_1_tree | path join "ambient" "hum.mid") | into binary)
     assert equal ($hum | bytes at 0..<4) ("MThd" | into binary) "the hum is a Standard MIDI File"
     assert equal ($hum | bytes at 8..<10 | into int --endian big) 0 "the hum is format 0"
     assert equal ($hum | bytes at 10..<12 | into int --endian big) 1 "the hum holds one track"
     let servo_recipe = (open ($game | path join "content" "sound" "servo.nuon"))
-    let servo = (open --raw ($proof_tree | path join "sound" "servo.pcm") | into binary)
+    let servo = (open --raw ($render_1_tree | path join "sound" "servo.pcm") | into binary)
     assert equal ($servo | bytes length) (((($servo_recipe.seconds | into float) * 48000) | math round | into int) * 2) "the servo is its seconds of 16-bit samples"
-    let proof_sends = ($proof_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
-    let proof_disk = (romfs $proof_tree ($out | path join "proof.romfs"))
-    let proof_run = (jab launch --kernel $kernel --image $image --out ($out | path join "proof") --set $set --sound --api --disk $proof_disk --serial "fps" --send $proof_sends --capture 5500ms --seconds 6)
-    assert equal (open --raw $proof_run.qemu_log) "" "QEMU has no complaint about the guest on proof"
-    let proof_lines = ($proof_run.serial | lines)
-    let proof_reports = ($proof_lines | where {|l| $l starts-with "fps: proof loaded" })
-    assert equal ($proof_reports | length) 1 $"the load reported once on proof: ($proof_run.serial)"
-    let proof_load = ($proof_reports | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
+    let render_1_sends = ($render_1_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
+    let render_1_disk = (romfs $render_1_tree ($out | path join "render_1.romfs"))
+    let render_1_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_1") --set $set --sound --api --disk $render_1_disk --serial "fps" --send $render_1_sends --capture 5500ms --seconds 6)
+    assert equal (open --raw $render_1_run.qemu_log) "" "QEMU has no complaint about the guest on render_1"
+    let render_1_lines = ($render_1_run.serial | lines)
+    let render_1_reports = ($render_1_lines | where {|l| $l starts-with "fps: render_1 loaded" })
+    assert equal ($render_1_reports | length) 1 $"the load reported once on render_1: ($render_1_run.serial)"
+    let render_1_load = ($render_1_reports | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
     for f in [sectors walls vertices portals entities lights sprites materials] {
-        assert equal ($proof_load | get $f) ($proof_expected | get $f) $"proof's ($f) as the tree has it: ($proof_reports | get 0)"
+        assert equal ($render_1_load | get $f) ($render_1_expected | get $f) $"render_1's ($f) as the tree has it: ($render_1_reports | get 0)"
     }
-    assert equal $proof_load.textures $proof_expected.materials "proof's materials all textures"
-    assert equal $proof_load.missing 0 "proof's materials all in the tree"
-    assert ($FRAMES_LINE in $proof_lines) $"the engine's images all in proof's tree: ($proof_lines | where {|l| $l starts-with 'fps: frame' })"
-    assert ($SOUNDS_LINE in $proof_lines) $"the engine's sounds all in proof's tree: ($proof_lines | where {|l| $l starts-with 'fps: sound' })"
+    assert equal $render_1_load.materials (open ($render_1_tree | path join "tile.nuon") | length) "render_1's materials as tile.nuon has them"
+    assert equal $render_1_load.textures $render_1_expected.materials "render_1's materials all textures"
+    assert equal $render_1_load.missing 0 "render_1's materials all in the tree"
+    assert ($render_1_load.ms > 0 and $render_1_load.ms < 20000) $"render_1 loaded in a plausible time: ($render_1_load.ms) ms"
+    assert ($FRAMES_LINE in $render_1_lines) $"the engine's images all in render_1's tree: ($render_1_lines | where {|l| $l starts-with 'fps: frame' })"
+    assert ($SOUNDS_LINE in $render_1_lines) $"the engine's sounds all in render_1's tree: ($render_1_lines | where {|l| $l starts-with 'fps: sound' })"
     # the soundfont off the generic disk, and the hum playing once the
     # camera stands in the north room
-    let fonts = ($proof_lines | where {|l| $l starts-with "fps: soundfont " })
-    assert equal ($fonts | length) 1 $"the soundfont reported once on proof: ($proof_run.serial)"
+    let fonts = ($render_1_lines | where {|l| $l starts-with "fps: soundfont " })
+    assert equal ($fonts | length) 1 $"the soundfont reported once on render_1: ($render_1_run.serial)"
     let font = ($fonts | get 0 | parse "fps: soundfont {presets} presets, {instruments} instruments, {samples} samples")
     assert (not ($font | is-empty)) $"the soundfont loaded off the generic disk: ($fonts | get 0)"
     assert (($font | get 0.presets | into int) > 0) $"the soundfont holds presets: ($fonts | get 0)"
-    assert ("fps: ambient 0 playing" in $proof_lines) $"the hum plays in the north room: ($proof_lines | where {|l| $l starts-with 'fps: ambient' })"
+    assert ("fps: ambient 0 playing" in $render_1_lines) $"the hum plays in the north room: ($render_1_lines | where {|l| $l starts-with 'fps: ambient' })"
     # and is heard: the run's recording silent while the camera stands
     # in the hall, sounding once it stands in the north room and the
     # pad has swelled; the recording ends at the screen capture
-    assert ($proof_run.sound != "") "the proof run recorded its sound"
-    let hall_level = (sound-level $proof_run.sound 0.3 1.4)
-    let room_level = (sound-level $proof_run.sound 3.5 5.4)
+    assert ($render_1_run.sound != "") "the render_1 run recorded its sound"
+    let hall_level = (sound-level $render_1_run.sound 0.3 1.4)
+    let room_level = (sound-level $render_1_run.sound 3.5 5.4)
     assert ($hall_level.peak < $SOUND_SILENCE) $"the hall is silent, having no ambient: ($hall_level)"
     assert ($room_level.peak >= $SOUND_HEARD and $room_level.mean >= ($SOUND_HEARD / 8)) $"the hum is heard in the north room: ($room_level) against silence ($hall_level)"
-    let proof_frames = ($proof_lines | where {|l| $l starts-with "fps: frame in" } | each {|f| $f | parse $FRAME | get 0 | update cells {|c| $c | into int } })
-    assert equal ($proof_frames | length) (1 + ($proof_poses | length)) $"the first frame and each pose's reported on proof: ($proof_run.serial)"
-    for f in $proof_frames {
-        assert ($f.uncovered < $CRACKS) $"every pixel of the view reached by a surface on proof: ($f)"
+    let render_1_frames = ($render_1_lines | where {|l| $l starts-with "fps: frame in" } | each {|f| $f | parse $FRAME | get 0 | update cells {|c| $c | into int } })
+    assert equal ($render_1_frames | length) (1 + ($render_1_poses | length)) $"the first frame and each pose's reported on render_1: ($render_1_run.serial)"
+    for f in $render_1_frames {
+        assert ($f.uncovered < $CRACKS) $"every pixel of the view reached by a surface on render_1: ($f)"
     }
-    assert (($proof_frames | get 0 | get sprites) >= 1) $"the sign drawn from the spawn: ($proof_frames | get 0)"
-    assert (($proof_frames | last | get sprites) >= 2) $"the sign and the north room's android drawn from the door: ($proof_frames | last)"
-    let proof_sectors = ($proof_lines | where {|l| $l starts-with "fps: sectors " } | each {|l| $l | str substring 13.. | str trim | split row " " | each {|s| $s | into int } })
-    assert equal ($proof_sectors | length) ($proof_frames | length) $"a sectors line a reported frame on proof: ($proof_sectors | length)"
-    for e in ($proof_poses | enumerate) {
-        let drawn = ($proof_sectors | get ($e.index + 1))
+    let render_1_start = ($render_1_frames | get 0)
+    assert ($render_1_start.sectors > 0 and $render_1_start.walls > 0 and $render_1_start.pieces > 0 and $render_1_start.planes > 0) $"the first frame drew the world on render_1: ($render_1_start)"
+    assert ($render_1_start.us < 1000000) $"the first frame within a bound here on render_1: ($render_1_start.us) us"
+    assert ($render_1_start.sprites >= 1) $"the sign drawn from the spawn: ($render_1_start)"
+    let door_frame = ($render_1_frames | get (1 + ($render_1_poses | enumerate | where {|p| $p.item.name == "door" } | get 0.index)))
+    assert ($door_frame.sprites >= 2) $"the sign and the north room's android drawn from the door: ($door_frame)"
+    let render_1_sectors = ($render_1_lines | where {|l| $l starts-with "fps: sectors " } | each {|l| $l | str substring 13.. | str trim | split row " " | each {|s| $s | into int } })
+    assert equal ($render_1_sectors | length) ($render_1_frames | length) $"a sectors line a reported frame on render_1: ($render_1_sectors | length)"
+    for e in ($render_1_poses | enumerate) {
+        let drawn = ($render_1_sectors | get ($e.index + 1))
         assert ($e.item.sees in $drawn) $"the pose ($e.item.name) sees sector ($e.item.sees) through its opening: ($drawn)"
     }
-    let proof_records = (records $proof_run.api)
-    let proof_states = ($proof_records | where kind == 1)
-    assert (($proof_states | length) > 10) $"a state a frame on proof: ($proof_states | length)"
-    assert equal ($proof_states | get 0.sector) ($proof_read.entities | where class == 0 | get 0.sector) "the camera in the spawn's sector on proof"
-    let proof_consoles = ($proof_records | enumerate | where {|r| $r.item.kind == 11 })
-    assert equal ($proof_consoles | length) ($proof_poses | length) $"a console record a pose on proof: ($proof_consoles | length)"
-    for e in ($proof_consoles | enumerate) {
-        let landed = ($proof_records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
-        let pose_at = ($proof_poses | get $e.index)
-        assert ($landed != null) $"a state after the pose ($pose_at.name) on proof"
-        assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on proof: ($landed.sector)"
+    let render_1_records = (records $render_1_run.api)
+    let render_1_states = ($render_1_records | where kind == 1)
+    assert (($render_1_states | length) > 10) $"a state a frame on render_1: ($render_1_states | length)"
+    # the camera at the spawn: in its sector, its eye a body's radius at
+    # most from it in the plan, the eye's height over the floor there,
+    # facing the spawn's way
+    let spawned = ($render_1_states | get 0)
+    let spawn = $render_1_expected.spawn
+    assert equal $spawned.sector ($render_1_read.entities | where class == 0 | get 0.sector) "the camera in the spawn's sector on render_1"
+    let shove = ((($spawned.x - $spawn.at.0) ** 2 + ($spawned.y - $spawn.at.1) ** 2) | math sqrt)
+    assert ($shove <= $BODY_RADIUS) $"the eye stands at the spawn, or a body's radius off a wall there: ($spawned.x), ($spawned.y) against ($spawn.at), ($shove) off"
+    let spawn_floor = (map plane-z ($render_1_read.sectors | get $spawned.sector | get floor) $spawned.x $spawned.y)
+    assert ((($spawned.z - ($spawn_floor + $EYE_HEIGHT)) | math abs) < 0.01) $"the eye its height over the floor at the spawn: ($spawned.z) over a floor at ($spawn_floor)"
+    assert ((($spawned.yaw - $spawn.yaw) | math abs) < 0.01 and (($spawned.pitch - $spawn.pitch) | math abs) < 0.01 and $spawned.roll == 0.0) $"the camera faces the spawn's way: ($spawned.yaw), ($spawned.pitch), ($spawned.roll) against ($spawn.yaw), ($spawn.pitch)"
+    let render_1_consoles = ($render_1_records | enumerate | where {|r| $r.item.kind == 11 })
+    assert equal ($render_1_consoles | length) ($render_1_poses | length) $"a console record a pose on render_1: ($render_1_consoles | length)"
+    for e in ($render_1_consoles | enumerate) {
+        let landed = ($render_1_records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
+        let pose_at = ($render_1_poses | get $e.index)
+        assert ($landed != null) $"a state after the pose ($pose_at.name) on render_1"
+        assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on render_1: ($landed.sector)"
     }
-    assert equal ($proof_read.sectors | get (do $proof_index "door") | get tag) 1 "the door sector carries its tag"
+    assert equal ($render_1_read.sectors | get (do $render_1_index "door") | get tag) 1 "the door sector carries its tag"
     # the grate as authored: its coarser levels' share within the slack
-    alpha-held $proof_lines "texture/grate"
-    let proof_mips = (mips-built $proof_lines)
-    plan-views $proof_tree $proof_source $proof_read
+    alpha-held $render_1_lines "texture/grate"
+    let render_1_mips = (mips-built $render_1_lines)
+    plan-views $render_1_tree $render_1_source $render_1_read
+    # the hall's light, the capture's pose: the floor under the light
+    # brighter than the far wall by LIT_RATIO at least
+    assert ($render_1_run.screen != "") "a screen was taken on render_1"
+    let lit_near = (mean-brightness $render_1_run.screen $LIGHT_BLOCKS.near)
+    let lit_far = (mean-brightness $render_1_run.screen $LIGHT_BLOCKS.far)
+    assert ($lit_near > ($lit_far * $LIT_RATIO)) $"the floor under the hall's light lit past the far wall: ($lit_near) against ($lit_far), ($lit_near / $lit_far)"
 
-    # the stair: from the proof map's spawn the left stick held forward
-    # up the three steps onto the landing, a quarter turn to the north,
-    # then up the ramp into the upper hall
-    let stair_run = (jab launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_stair.nuon") --disk $proof_disk --serial "fps" --capture 8000ms --seconds 9)
+    # the stair: from Render One's spawn the left stick held forward up
+    # the three steps onto the landing, a quarter turn to the north, then
+    # up the ramp into the upper hall
+    let stair_run = (jab launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_stair.nuon") --disk $render_1_disk --serial "fps" --capture 8000ms --seconds 9)
     assert equal (open --raw $stair_run.qemu_log) "" "QEMU has no complaint about the guest on the stair"
     let stair_states = (records $stair_run.api | where kind == 1)
     assert (($stair_states | length) > 100) $"states through the stair: ($stair_states | length)"
     let stair_first = ($stair_states | first)
     let stair_last = ($stair_states | last)
-    assert equal $stair_first.sector (do $proof_index "hall") "the stair walk starts in the hall"
-    assert equal $stair_last.sector (do $proof_index "upper_hall") $"the body ended in the upper hall: ($stair_last.x), ($stair_last.y), ($stair_last.z) in ($stair_last.sector)"
-    let stair_floor = (map plane-z ($proof_read.sectors | get $stair_last.sector | get floor) $stair_last.x $stair_last.y)
+    assert equal $stair_first.sector (do $render_1_index "hall") "the stair walk starts in the hall"
+    assert equal $stair_last.sector (do $render_1_index "upper_hall") $"the body ended in the upper hall: ($stair_last.x), ($stair_last.y), ($stair_last.z) in ($stair_last.sector)"
+    let stair_floor = (map plane-z ($render_1_read.sectors | get $stair_last.sector | get floor) $stair_last.x $stair_last.y)
     assert ((($stair_last.z - ($stair_floor + $EYE_HEIGHT)) | math abs) < 0.05) $"the eye rides the upper floor: ($stair_last.z) over ($stair_floor)"
     let stair_sectors = ($stair_states | get sector | uniq)
-    let stair_way = ([step1 step2 step3 landing ramp upper_hall] | each {|n| do $proof_index $n })
+    let stair_way = ([step1 step2 step3 landing ramp upper_hall] | each {|n| do $render_1_index $n })
     let stair_order = ($stair_way | each {|s| $stair_sectors | enumerate | where {|e| $e.item == $s } | get -o 0.index })
     assert ($stair_order | all {|i| $i != null }) $"the body crossed every step, the landing, and the ramp: ($stair_sectors) against ($stair_way)"
     assert (($stair_order | window 2 | all {|w| $w.0 < $w.1 })) $"in order: ($stair_sectors)"
 
-    # the factory, the game's map: loaded and held to its counts with
+    # Render Zero, the game's map: loaded and held to its counts with
     # every material and ambient in the tree, the bay's ambient playing
-    # from the spawn, the spawn view lit within its bound; then the
-    # poses: the office window down onto the bay, the garage toward its
-    # door, and the yard under the sky, whose capture carries the sky
-    # texture's top band; each door sector tagged, a plan view a storey
-    let factory_tree = ($trees | path join "factory")
-    let factory_source = (open ($game | path join "content" "map" "factory.nuon"))
-    let factory_expected = (open ($factory_tree | path join "map.nuon"))
-    let factory_read = (map read ($factory_tree | path join "map" "factory.jabfps.map"))
-    let factory_index = {|name: string| $factory_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
-    let factory_ambient = {|name: string| $factory_read.ambients | enumerate | where {|a| $a.item.name == $"ambient/($name)" } | get 0.index }
-    let factory_poses = [
-        { name: "window", sector: (do $factory_index "office_hall"), x: 8.75, y: 17.0, z: 4.6, yaw: 0, pitch: -15, sees: (do $factory_index "bay") },
-        { name: "garage", sector: (do $factory_index "garage"), x: 16.0, y: 14.0, z: -1.4, yaw: 0, pitch: 0, sees: (do $factory_index "drive_low") },
-        { name: "yard", sector: (do $factory_index "yard"), x: 40.0, y: 6.0, z: 1.6, yaw: 90, pitch: 0, sees: (do $factory_index "beyond") },
+    # from the spawn, the spawn view lit within its bound; then the poses:
+    # the office window down onto the bay, the garage toward its door,
+    # down the down flight under its sloped ceiling, and the yard under
+    # the sky, whose capture carries the sky texture's top band; each door
+    # sector tagged, a plan view a storey
+    let render_0_tree = ($trees | path join "render_0")
+    let render_0_source = (open ($game | path join "content" "map" "render_0.nuon"))
+    let render_0_expected = (open ($render_0_tree | path join "map.nuon"))
+    let render_0_read = (map read ($render_0_tree | path join "map" "render_0.jabfps.map"))
+    let render_0_index = {|name: string| $render_0_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
+    let render_0_ambient = {|name: string| $render_0_read.ambients | enumerate | where {|a| $a.item.name == $"ambient/($name)" } | get 0.index }
+    # the down flight's pose stands mid-flight on its third step with the
+    # eye its height over the tread, facing down the flight, the ceiling
+    # sloping down over it to the garage's opening
+    let down3 = (do $render_0_index "down3")
+    let down_z = ((map plane-z ($render_0_read.sectors | get $down3 | get floor) 1.5 7.0) + $EYE_HEIGHT)
+    let render_0_poses = [
+        { name: "window", sector: (do $render_0_index "office_hall"), x: 8.75, y: 17.0, z: 4.6, yaw: 0, pitch: -15, sees: (do $render_0_index "bay") },
+        { name: "garage", sector: (do $render_0_index "garage"), x: 16.0, y: 14.0, z: -1.4, yaw: 0, pitch: 0, sees: (do $render_0_index "drive_low") },
+        { name: "down", sector: $down3, x: 1.5, y: 7.0, z: $down_z, yaw: 90, pitch: 0, sees: (do $render_0_index "garage") },
+        { name: "yard", sector: (do $render_0_index "yard"), x: 40.0, y: 6.0, z: 1.6, yaw: 90, pitch: 0, sees: (do $render_0_index "beyond") },
     ]
-    assert equal $factory_expected.unresolved 0 $"the factory names nothing the content lacks: ($factory_expected.missing)"
-    assert equal $factory_expected.ambients 5 "the factory names five ambients"
+    assert equal $render_0_expected.unresolved 0 $"render_0 names nothing the content lacks: ($render_0_expected.missing)"
+    assert equal $render_0_expected.ambients 5 "render_0 names five ambients"
     # a trace a quarter second after the window pose and after the yard's
-    let factory_sends = (($factory_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
-        | append [{ at: 1750ms, bytes: (pose command-frame "T") }, { at: 2750ms, bytes: (pose command-frame "T") }]
+    let render_0_sends = (($render_0_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
+        | append [{ at: 1750ms, bytes: (pose command-frame "T") }, { at: 3250ms, bytes: (pose command-frame "T") }]
         | sort-by at)
-    let factory_disk = (romfs $factory_tree ($out | path join "factory.romfs"))
-    let factory_run = (jab launch --kernel $kernel --image $image --out ($out | path join "factory") --set $set --sound --api --disk $factory_disk --serial "fps" --send $factory_sends --capture 3500ms --seconds 5)
-    assert equal (open --raw $factory_run.qemu_log) "" "QEMU has no complaint about the guest on the factory"
-    let factory_lines = ($factory_run.serial | lines)
-    let factory_reports = ($factory_lines | where {|l| $l starts-with "fps: factory loaded" })
-    assert equal ($factory_reports | length) 1 $"the load reported once on the factory: ($factory_run.serial)"
-    let factory_load = ($factory_reports | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
+    let render_0_disk = (romfs $render_0_tree ($out | path join "render_0.romfs"))
+    let render_0_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_0") --set $set --sound --api --disk $render_0_disk --serial "fps" --send $render_0_sends --capture 4000ms --seconds 5)
+    assert equal (open --raw $render_0_run.qemu_log) "" "QEMU has no complaint about the guest on render_0"
+    let render_0_lines = ($render_0_run.serial | lines)
+    let render_0_reports = ($render_0_lines | where {|l| $l starts-with "fps: render_0 loaded" })
+    assert equal ($render_0_reports | length) 1 $"the load reported once on render_0: ($render_0_run.serial)"
+    let render_0_load = ($render_0_reports | get 0 | parse $LOAD | get 0 | update cells {|c| if $c =~ '^\d+$' { $c | into int } else { $c } })
     for f in [sectors walls vertices portals entities lights sprites materials] {
-        assert equal ($factory_load | get $f) ($factory_expected | get $f) $"the factory's ($f) as the tree has it: ($factory_reports | get 0)"
+        assert equal ($render_0_load | get $f) ($render_0_expected | get $f) $"render_0's ($f) as the tree has it: ($render_0_reports | get 0)"
     }
-    assert equal $factory_load.textures $factory_expected.materials "the factory's materials all textures"
-    assert equal $factory_load.missing 0 "the factory's materials all in the tree"
-    assert ($FRAMES_LINE in $factory_lines) $"the engine's images all in the factory's tree: ($factory_lines | where {|l| $l starts-with 'fps: frame' })"
-    assert ($SOUNDS_LINE in $factory_lines) $"the engine's sounds all in the factory's tree: ($factory_lines | where {|l| $l starts-with 'fps: sound' })"
-    assert (($factory_lines | where {|l| $l starts-with "fps: ambient " and ($l | str contains " missing") } | is-empty)) $"every ambient of the factory in the tree: ($factory_lines | where {|l| $l starts-with 'fps: ambient' })"
-    assert ($"fps: ambient (do $factory_ambient 'floor') playing" in $factory_lines) $"the bay's ambient plays from the spawn: ($factory_lines | where {|l| $l starts-with 'fps: ambient' })"
-    let factory_frames = ($factory_lines | where {|l| $l starts-with "fps: frame in" } | each {|f| $f | parse $FRAME | get 0 | update cells {|c| $c | into int } })
-    assert equal ($factory_frames | length) (1 + ($factory_poses | length)) $"the first frame and each pose's reported on the factory: ($factory_run.serial)"
-    for f in $factory_frames {
-        assert ($f.uncovered < $CRACKS) $"every pixel of the view reached by a surface on the factory: ($f)"
+    assert equal $render_0_load.materials (open ($render_0_tree | path join "tile.nuon") | length) "render_0's materials as tile.nuon has them"
+    assert equal $render_0_load.textures $render_0_expected.materials "render_0's materials all textures"
+    assert equal $render_0_load.missing 0 "render_0's materials all in the tree"
+    assert ($FRAMES_LINE in $render_0_lines) $"the engine's images all in render_0's tree: ($render_0_lines | where {|l| $l starts-with 'fps: frame' })"
+    assert ($SOUNDS_LINE in $render_0_lines) $"the engine's sounds all in render_0's tree: ($render_0_lines | where {|l| $l starts-with 'fps: sound' })"
+    assert (($render_0_lines | where {|l| $l starts-with "fps: ambient " and ($l | str contains " missing") } | is-empty)) $"every ambient of render_0 in the tree: ($render_0_lines | where {|l| $l starts-with 'fps: ambient' })"
+    assert ($"fps: ambient (do $render_0_ambient 'floor') playing" in $render_0_lines) $"the bay's ambient plays from the spawn: ($render_0_lines | where {|l| $l starts-with 'fps: ambient' })"
+    let render_0_frames = ($render_0_lines | where {|l| $l starts-with "fps: frame in" } | each {|f| $f | parse $FRAME | get 0 | update cells {|c| $c | into int } })
+    assert equal ($render_0_frames | length) (1 + ($render_0_poses | length)) $"the first frame and each pose's reported on render_0: ($render_0_run.serial)"
+    for f in $render_0_frames {
+        assert ($f.uncovered < $CRACKS) $"every pixel of the view reached by a surface on render_0: ($f)"
     }
-    let factory_start = ($factory_frames | get 0)
-    assert ($factory_start.sectors > 0 and $factory_start.pieces > 0 and $factory_start.planes > 0) $"the spawn view drew the bay: ($factory_start)"
-    assert ($factory_start.us < $FACTORY_START_BOUND) $"the spawn view within its bound on the factory: ($factory_start)"
-    let factory_sectors = ($factory_lines | where {|l| $l starts-with "fps: sectors " } | each {|l| $l | str substring 13.. | str trim | split row " " | each {|s| $s | into int } })
-    assert equal ($factory_sectors | length) ($factory_frames | length) $"a sectors line a reported frame on the factory: ($factory_sectors | length)"
-    for e in ($factory_poses | enumerate) {
-        let drawn = ($factory_sectors | get ($e.index + 1))
+    let render_0_start = ($render_0_frames | get 0)
+    assert ($render_0_start.sectors > 0 and $render_0_start.pieces > 0 and $render_0_start.planes > 0) $"the spawn view drew the bay: ($render_0_start)"
+    assert ($render_0_start.us < $RENDER_0_START_BOUND) $"the spawn view within its bound on render_0: ($render_0_start)"
+    let render_0_sectors = ($render_0_lines | where {|l| $l starts-with "fps: sectors " } | each {|l| $l | str substring 13.. | str trim | split row " " | each {|s| $s | into int } })
+    assert equal ($render_0_sectors | length) ($render_0_frames | length) $"a sectors line a reported frame on render_0: ($render_0_sectors | length)"
+    for e in ($render_0_poses | enumerate) {
+        let drawn = ($render_0_sectors | get ($e.index + 1))
         assert ($e.item.sees in $drawn) $"the pose ($e.item.name) sees sector ($e.item.sees): ($drawn)"
     }
-    let factory_records = (records $factory_run.api)
-    let factory_states = ($factory_records | where kind == 1)
-    assert (($factory_states | length) > 10) $"a state a frame on the factory: ($factory_states | length)"
-    assert equal ($factory_states | get 0.sector) (do $factory_index "bay") "the camera in the bay at the spawn"
-    let factory_consoles = ($factory_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P })
-    assert equal ($factory_consoles | length) ($factory_poses | length) $"a console record a pose on the factory: ($factory_consoles | length)"
-    for e in ($factory_consoles | enumerate) {
-        let landed = ($factory_records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
-        let pose_at = ($factory_poses | get $e.index)
-        assert ($landed != null) $"a state after the pose ($pose_at.name) on the factory"
-        assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on the factory: ($landed.sector)"
+    let render_0_records = (records $render_0_run.api)
+    let render_0_states = ($render_0_records | where kind == 1)
+    assert (($render_0_states | length) > 10) $"a state a frame on render_0: ($render_0_states | length)"
+    assert equal ($render_0_states | get 0.sector) (do $render_0_index "bay") "the camera in the bay at the spawn"
+    let render_0_consoles = ($render_0_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P })
+    assert equal ($render_0_consoles | length) ($render_0_poses | length) $"a console record a pose on render_0: ($render_0_consoles | length)"
+    for e in ($render_0_consoles | enumerate) {
+        let landed = ($render_0_records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
+        let pose_at = ($render_0_poses | get $e.index)
+        assert ($landed != null) $"a state after the pose ($pose_at.name) on render_0"
+        assert equal $landed.sector $pose_at.sector $"the camera in the pose ($pose_at.name)'s sector on render_0: ($landed.sector)"
     }
     # the traces: the window's ray onto the bay's floor, the yard's to
     # the street's far wall at the world's edge
-    let traces = ($factory_records | where kind == 6)
-    assert equal ($traces | length) 2 $"two traces answered on the factory: ($traces)"
+    let traces = ($render_0_records | where kind == 6)
+    assert equal ($traces | length) 2 $"two traces answered on render_0: ($traces)"
     let window_trace = ($traces | get 0)
     assert equal $window_trace.fields.0 $TRACE_PLANE $"the window's ray met a plane: ($window_trace)"
     assert (($window_trace.fields.4 | math abs) < $TRACE_SLACK) $"the window's ray met the bay's floor: ($window_trace)"
     let yard_trace = ($traces | get 1)
     assert equal $yard_trace.fields.0 $TRACE_PIECE $"the yard's ray met a piece: ($yard_trace)"
-    let street_north = ((($factory_source.sectors | where name == "beyond" | get 0.loops.0 | each {|p| $p | get 1 } | math max) * 1000) | into int)
+    let street_north = ((($render_0_source.sectors | where name == "beyond" | get 0.loops.0 | each {|p| $p | get 1 } | math max) * 1000) | into int)
     assert ((($yard_trace.fields.3 - $street_north) | math abs) < $TRACE_SLACK) $"the yard's ray reached the street's far wall at ($street_north) mm: ($yard_trace)"
-    assert ($factory_run.screen != "") "a screen was taken on the factory"
-    assert equal (pixel $factory_run.screen $SKY_PIXEL) $SKY_TOP $"the sky's top band at ($SKY_PIXEL) from the yard: ($factory_run.screen)"
+    assert ($render_0_run.screen != "") "a screen was taken on render_0"
+    assert equal (pixel $render_0_run.screen $SKY_PIXEL) $SKY_TOP $"the sky's top band at ($SKY_PIXEL) from the yard: ($render_0_run.screen)"
     # the crosshair: the centre pixel blended half with white, so every
     # channel is at least half scale whatever lies under it
-    let centre = (pixel $factory_run.screen $CROSSHAIR)
+    let centre = (pixel $render_0_run.screen $CROSSHAIR)
     assert (([0 1 2] | all {|i| ($centre | bytes at $i..<($i + 1) | into int) >= 128 })) $"the crosshair at ($CROSSHAIR): ($centre | encode hex)"
     for tag in [1 2 3 4 5] {
-        assert equal ($factory_read.sectors | where tag == $tag | length) 1 $"one door sector carries tag ($tag)"
+        assert equal ($render_0_read.sectors | where tag == $tag | length) 1 $"one door sector carries tag ($tag)"
     }
     # the fence as authored: each coarser level's share at or above the
     # pass within the slack of the texture's
-    alpha-held $factory_lines "texture/fence"
-    let factory_mips = (mips-built $factory_lines)
-    plan-views $factory_tree $factory_source $factory_read
+    alpha-held $render_0_lines "texture/fence"
+    let render_0_mips = (mips-built $render_0_lines)
+    plan-views $render_0_tree $render_0_source $render_0_read
 
-    # the factory walked, one launch of three placed starts with the
-    # left stick held forward after each: the up flight from the hall's
-    # foot to the office corridor, the down flight to the garage, and the
+    # Render Zero walked, one launch of three placed starts with the left
+    # stick held forward after each: the up flight from the hall's foot
+    # to the office corridor, the down flight to the garage, and the
     # driveway from the garage door up the ramp to the gate, the sectors
     # crossed in order, the eye riding the floor at each end, and each
     # area's ambient reported as the body enters it
-    let factory_starts = [
+    let render_0_starts = [
         { name: "up", at: 1500ms, x: 8.75, y: 3.0, z: 1.6, yaw: 90, pitch: 0, way: [stair_ground up1 up2 up3 up4 up5 up6 office_hall], ambient: "office" },
         { name: "down", at: 5500ms, x: 1.5, y: 3.0, z: 1.6, yaw: 90, pitch: 0, way: [stair_ground down1 down2 down3 down4 down5 down6 garage], ambient: "garage" },
         { name: "ramp", at: 9500ms, x: 34.0, y: 13.0, z: -1.4, yaw: 90, pitch: 0, way: [drive_low drive_ramp], ambient: "yard" },
     ]
     let walk_sends = ([{ at: $CLOCK_SEED_AT, bytes: (gauge seed-frame $CLOCK_SEED) }, { at: $CLOCK_SEED_AT, bytes: (gauge cadence-frame $CLOCK_CADENCE) }]
-        | append ($factory_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
+        | append ($render_0_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
         | append [{ at: $CLOCK_END_AT, bytes: (pose command-frame "E") }]
         | sort-by at)
-    let factory_walk = (jab launch --kernel $kernel --image $image --out ($out | path join "factory_walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_factory.nuon") --disk $factory_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
-    assert equal (open --raw $factory_walk.qemu_log) "" "QEMU has no complaint about the guest on the factory walk"
-    let walk_lines = ($factory_walk.serial | lines)
-    let factory_walk_records = (records $factory_walk.api)
-    let walk_consoles = ($factory_walk_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P } | get index)
-    assert equal ($walk_consoles | length) ($factory_starts | length) $"a console record a start on the factory walk: ($walk_consoles | length)"
-    mut factory_walks = []
-    for e in ($factory_starts | enumerate) {
+    let render_0_walk = (jab launch --kernel $kernel --image $image --out ($out | path join "render_0_walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_render_0.nuon") --disk $render_0_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
+    assert equal (open --raw $render_0_walk.qemu_log) "" "QEMU has no complaint about the guest on the render_0 walk"
+    let walk_lines = ($render_0_walk.serial | lines)
+    let render_0_walk_records = (records $render_0_walk.api)
+    let walk_consoles = ($render_0_walk_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P } | get index)
+    assert equal ($walk_consoles | length) ($render_0_starts | length) $"a console record a start on the render_0 walk: ($walk_consoles | length)"
+    mut render_0_walks = []
+    for e in ($render_0_starts | enumerate) {
         let from = (($walk_consoles | get $e.index) + 1)
-        let to = (if ($e.index + 1) < ($factory_starts | length) { $walk_consoles | get ($e.index + 1) } else { $factory_walk_records | length })
-        let states = ($factory_walk_records | slice $from..<$to | where kind == 1)
+        let to = (if ($e.index + 1) < ($render_0_starts | length) { $walk_consoles | get ($e.index + 1) } else { $render_0_walk_records | length })
+        let states = ($render_0_walk_records | slice $from..<$to | where kind == 1)
         assert (($states | length) > 50) $"states through the ($e.item.name) walk: ($states | length)"
-        let way = ($e.item.way | each {|n| do $factory_index $n })
+        let way = ($e.item.way | each {|n| do $render_0_index $n })
         let crossed = ($states | get sector | uniq)
         let order = ($way | each {|s| $crossed | enumerate | where {|c| $c.item == $s } | get -o 0.index })
         assert ($order | all {|i| $i != null }) $"the ($e.item.name) walk crossed ($e.item.way): ($crossed)"
         assert (($order | window 2 | all {|w| $w.0 < $w.1 })) $"in order on the ($e.item.name) walk: ($crossed)"
         let last = ($states | last)
         assert equal $last.sector ($way | last) $"the ($e.item.name) walk ended in ($e.item.way | last): ($last)"
-        let floor = (map plane-z ($factory_read.sectors | get $last.sector | get floor) $last.x $last.y)
+        let floor = (map plane-z ($render_0_read.sectors | get $last.sector | get floor) $last.x $last.y)
         assert ((($last.z - ($floor + $EYE_HEIGHT)) | math abs) < 0.05) $"the eye rides the floor at the end of the ($e.item.name) walk: ($last.z) over ($floor)"
-        assert ($"fps: ambient (do $factory_ambient $e.item.ambient) playing" in $walk_lines) $"the ($e.item.ambient) ambient plays on the ($e.item.name) walk: ($walk_lines | where {|l| $l starts-with 'fps: ambient' })"
-        $factory_walks = ($factory_walks | append { name: $e.item.name, first: ($states | first), last: $last, crossed: $crossed, frames: ($states | length) })
+        assert ($"fps: ambient (do $render_0_ambient $e.item.ambient) playing" in $walk_lines) $"the ($e.item.ambient) ambient plays on the ($e.item.name) walk: ($walk_lines | where {|l| $l starts-with 'fps: ambient' })"
+        $render_0_walks = ($render_0_walks | append { name: $e.item.name, first: ($states | first), last: $last, crossed: $crossed, frames: ($states | length) })
     }
-    let ramp_end = ($factory_walks | last | get last)
+    let ramp_end = ($render_0_walks | last | get last)
     assert ($ramp_end.y > 27.0) $"the body reached the gate at the ramp's top: ($ramp_end)"
 
     # the frame's clock over the walk: the seed and the cadence answered
@@ -820,7 +799,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # time within the planes' and the walls', the tiled pixels within the
     # lit, the arena's peak at or past what it holds, and the game going
     # on past the measurement
-    let walk_clock = (gauge measure $factory_walk.api [{ name: "walk", places: $factory_starts, pad: [] }])
+    let walk_clock = (gauge measure $render_0_walk.api [{ name: "walk", places: $render_0_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
     assert $walk_clock.complete $"the walk's measurement complete: ($walk_clock.problems)"
@@ -852,7 +831,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the fallen frame, the trigger's round meets the geometry past it,
     # the walk takes its magazine; the shots heard in the recording
     let fight_sends = ([{ at: 1500ms, bytes: (pose pose-frame $FIGHT_POSE) }] | append ($FIGHT_ROUNDS | each {|at| { at: $at, bytes: (pose command-frame "F") } }))
-    let fight_run = (jab launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_fight.nuon") --disk $factory_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
+    let fight_run = (jab launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_fight.nuon") --disk $render_0_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
     assert equal (open --raw $fight_run.qemu_log) "" "QEMU has no complaint about the guest on the fight"
     let fight_records = (records $fight_run.api)
     assert (($fight_records | where kind == 1 | length) > 100) $"states through the fight: ($fight_records | where kind == 1 | length)"
@@ -877,14 +856,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($shots.peak >= $FIGHT_SHOTS.over) $"the shots are heard: ($shots)"
 
     # the light's view independence: six floor points of the bay read
-    # from the spawn's eye at two yaws on a copy of the factory with its
+    # from the spawn's eye at two yaws on a copy of Render Zero with its
     # androids dropped, so no sprite crosses a point, once as lit and
     # once with every lumel set full bright by the console's L frame,
     # both runs rebuilding their tiles from nothing under no budget at
     # the pose so the texture is sampled the same way in both; the lit
     # reading over the bright at a point, the light alone, holds within
     # a few levels across the yaws at every point in view at both
-    let view_still = (variant-tree $factory_source "factory_still" [android] ($out | path join "still") $game)
+    let view_still = (variant-tree $render_0_source "render_0_still" [android] ($out | path join "still") $game)
     mut view_readings = []
     for yaw in $VIEW_YAWS {
         let view_pose = { name: $"view($yaw)", x: $VIEW_EYE.x, y: $VIEW_EYE.y, z: $VIEW_EYE.z, yaw: $yaw, pitch: 0 }
@@ -922,7 +901,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
 
-    # one level a block: the still factory's spawn view under the bright
+    # one level a block: the still copy's spawn view under the bright
     # frame with every level of the tiles built against the tiles held
     # off, identical over the whole screen; the bay's far floor asks
     # levels past the tiles' four, which take the chain at their own
@@ -945,7 +924,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let spawn_rows = (rows-differ $spawn_captures.tiled.bytes $spawn_captures.held.bytes [0 0 1920 1080])
     assert ($spawn_rows | is-empty) $"the spawn view the same whether its tiles are built or held off: rows ($spawn_rows | first 5) differ, ($spawn_rows | length) in all"
 
-    # the alpha policy rendered: a copy of the proof map with its grate
+    # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
     # every lumel full bright and the tiles rebuilt whole by the
     # console's L frame at each pose, so a pixel reads a tile's texel as
@@ -963,7 +942,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let fixture_levels = (alpha-levels $fixture_alphas $ALPHA_FIXTURE.w $ALPHA_FIXTURE.h)
     assert $fixture_levels.line "the fixture is under full coverage, so the engine names a line for it"
     assert equal ($fixture_levels.scale | get 0) ((8388608 + 126) // 127) $"the fixture's search moves to 127 at level 1, so the scale lifts the pass less one over it: ($fixture_levels.scale)"
-    let fixture_tree = (alpha-tree $proof_source $game ($out | path join "alpha"))
+    let fixture_tree = (alpha-tree $render_1_source $game ($out | path join "alpha"))
     let fixture_read = (map read ($fixture_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
     let fixture_expected = (open ($fixture_tree | path join "map.nuon"))
     let fixture_material = ($fixture_read.materials | enumerate | where {|m| $m.item.name == $ALPHA_FIXTURE.name } | get 0.index)
@@ -1105,7 +1084,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the held-off run's same pixels vary, proving the tiled reading came
     # from the tiles; the samples' own arithmetic putting a texel lit at
     # its corner past the slack beside dark and bright nodes alike
-    let centre_tree = (centre-tree $proof_source $game ($out | path join "centre"))
+    let centre_tree = (centre-tree $render_1_source $game ($out | path join "centre"))
     let centre_read = (map read ($centre_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
     let centre_material = ($centre_read.materials | enumerate | where {|m| $m.item.name == $CENTRE_FIXTURE.name } | get 0.index)
     let centre_wall = ($centre_read.walls | where {|w| $w.surface.material == $centre_material } | get 0)
@@ -1152,7 +1131,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # once the hall's rectangle has grown through the side room's path
     # after the hall was flowed off the window's, and its far wall reads
     # the backdrop through its doorway
-    let grow_tree = (grow-tree $game ($out | path join "grow"))
     let grow_far = ((grow-source).sectors | enumerate | where {|s| $s.item.name == $GROW_FAR } | get 0.index)
     let grow_run = (jab launch --kernel $kernel --image $image --out ($out | path join "grow_run") --set $set --sound --api --disk (romfs $grow_tree ($out | path join "grow.romfs")) --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $GROW_POSE) }] --capture 2500ms --seconds 5)
     assert equal (open --raw $grow_run.qemu_log) "" "QEMU has no complaint about the guest on the growth run"
@@ -1178,23 +1156,21 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert equal $bad_run.status 6 $"a wrong magic exits 6: ($bad_run.status), ($bad_run.serial)"
     assert ("fps: /map/bad.jabfps.map is not a Jab FPS map" in ($bad_run.serial | lines)) $"and says so: ($bad_run.serial)"
 
-    # a map cut short inside its sections
-    let cage = (open --raw ($trees | path join "cage2" "map" "cage2.jabfps.map") | into binary)
-    let short = (broken ($out | path join "short_tree") "short" ($cage | bytes at 0..<$SHORT_BYTES))
+    # Render One's map cut short inside its sections
+    let whole = (open --raw ($render_1_tree | path join "map" "render_1.jabfps.map") | into binary)
+    assert (($whole | bytes length) > $SHORT_BYTES) $"Render One's map runs past ($SHORT_BYTES) bytes: ($whole | bytes length)"
+    let short = (broken ($out | path join "short_tree") "short" ($whole | bytes at 0..<$SHORT_BYTES))
     let short_run = (jab launch --kernel $kernel --image $image --out ($out | path join "short") --set $set --sound --disk (romfs $short ($out | path join "short.romfs")) --serial "fps" --seconds 8)
     assert equal $short_run.status 7 $"a short file exits 7: ($short_run.status), ($short_run.serial)"
     assert ($"fps: /map/short.jabfps.map ends at ($SHORT_BYTES) bytes before its structures do" in ($short_run.serial | lines)) $"and says so: ($short_run.serial)"
 
-    for r in $runs {
-        print $"fps: ($r.map) loaded in ($r.load_ms) ms; the first frame in ($r.frame.us) us over ($r.frame.sectors) sectors, ($r.frame.walls) walls, ($r.frame.pieces) pieces, ($r.frame.planes) planes, ($r.frame.openings) openings, ($r.frame.sprites) sprites, ($r.frame.uncovered) uncovered \(clear ($r.frame.clear), planes ($r.frame.plane_us), walls ($r.frame.wall_us), portals ($r.frame.portal_us), sprites ($r.frame.sprite_us) us\); the poses' frames in ($r.poses | each {|p| $p.us } | str join ', ') us with ($r.poses | each {|p| $p.uncovered } | str join ', ') uncovered; ($r.states) frames; QEMU ($r.cpu) CPU seconds"
-    }
-    print $"fps: the sprite drawn in ($sprite_frame.us) us, ($sprite_frame.sprites) sprites in ($sprite_frame.sprite_us) us, ($sprite_frame.uncovered) uncovered, red at ($SPRITE_RIGHT) and the wall at ($SPRITE_LEFT); the straddling sprite's near end at ($straddle_at) its texture, ($straddle_frame.sprites) sprites in ($straddle_frame.us) us"
+    print $"fps: the load screen: ($titles | each {|t| $'($t.text) inked ($t.ink.left) to ($t.ink.right) on rows ($t.ink.top) to ($t.ink.bottom)' } | str join '; ')"
+    print $"fps: the sprite drawn in ($sprite_frame.us) us, ($sprite_frame.sprites) sprites in ($sprite_frame.sprite_us) us, ($sprite_frame.uncovered) uncovered, red at ($SPRITE_RIGHT) and the wall at ($SPRITE_LEFT); the straddling sprite's near end at ($straddle_at) its texture, left of the doorway's column ($door_left), ($straddle_frame.sprites) sprites in ($straddle_frame.us) us"
     print $"fps: the growth map drew ($grow_sectors) in ($grow_frame.us) us with ($grow_frame.uncovered) uncovered, the far wall at ($grow_at) the backdrop"
-    print $"fps: the walk from ($walk_first.x), ($walk_first.y), ($walk_first.z) in ($walk_first.sector) to ($walk_last.x), ($walk_last.y), ($walk_last.z) in ($walk_last.sector) through ($walk_sectors) over ($walk_states | length) frames, the eye ($walk_last.z) over the floor at ($floor)"
-    print $"fps: proof loaded in ($proof_load.ms) ms; the spawn view in ($proof_frames | get 0 | get us) us with ($proof_frames | get 0 | get sprites) sprites, the poses in ($proof_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($proof_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($proof_sectors | slice 1.. | each {|s| $s | length } | str join ' and ') sectors; ($proof_mips.chains) chains of ($proof_mips.levels) levels, ($proof_mips.texels) texels in ($proof_mips.ms) ms"
+    print $"fps: render_1 loaded in ($render_1_load.ms) ms; the spawn view in ($render_1_start.us) us with ($render_1_start.sprites) sprites, the eye ($shove | math round --precision 3) off the spawn; the poses ($render_1_poses | get name | str join ', ') in ($render_1_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($render_1_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($render_1_sectors | slice 1.. | each {|s| $s | length } | str join ', ') sectors; the light's floor ($lit_near | math round --precision 1) against the far wall's ($lit_far | math round --precision 1); ($render_1_mips.chains) chains of ($render_1_mips.levels) levels, ($render_1_mips.texels) texels in ($render_1_mips.ms) ms"
     print $"fps: the stair from ($stair_first.x), ($stair_first.y), ($stair_first.z) in ($stair_first.sector) to ($stair_last.x), ($stair_last.y), ($stair_last.z) in ($stair_last.sector) through ($stair_sectors) over ($stair_states | length) frames"
-    print $"fps: factory loaded in ($factory_load.ms) ms; the spawn view in ($factory_start.us) us over ($factory_start.sectors) sectors, ($factory_start.walls) walls, ($factory_start.pieces) pieces, ($factory_start.planes) planes \(clear ($factory_start.clear), planes ($factory_start.plane_us), walls ($factory_start.wall_us), portals ($factory_start.portal_us) us\); the poses in ($factory_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($factory_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($factory_sectors | slice 1.. | each {|s| $s | length } | str join ', ') sectors; ($factory_mips.chains) chains of ($factory_mips.levels) levels, ($factory_mips.texels) texels in ($factory_mips.ms) ms"
-    for w in $factory_walks {
+    print $"fps: render_0 loaded in ($render_0_load.ms) ms; the spawn view in ($render_0_start.us) us over ($render_0_start.sectors) sectors, ($render_0_start.walls) walls, ($render_0_start.pieces) pieces, ($render_0_start.planes) planes \(clear ($render_0_start.clear), planes ($render_0_start.plane_us), walls ($render_0_start.wall_us), portals ($render_0_start.portal_us) us\); the poses ($render_0_poses | get name | str join ', ') in ($render_0_frames | slice 1.. | each {|p| $p.us } | str join ', ') us with ($render_0_frames | slice 1.. | each {|p| $p.uncovered } | str join ', ') uncovered, drawing ($render_0_sectors | slice 1.. | each {|s| $s | length } | str join ', ') sectors; ($render_0_mips.chains) chains of ($render_0_mips.levels) levels, ($render_0_mips.texels) texels in ($render_0_mips.ms) ms"
+    for w in $render_0_walks {
         print $"fps: the ($w.name) walk from ($w.first.x), ($w.first.y), ($w.first.z) in ($w.first.sector) to ($w.last.x), ($w.last.y), ($w.last.z) in ($w.last.sector) through ($w.crossed) over ($w.frames) frames"
     }
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
@@ -1233,6 +1209,19 @@ def project [eye: record, yaw: int, point: list<float>]: nothing -> oneof<list<i
     let y = ((540 - $v.2 / $depth * 960) | math round | into int)
     if $x < 1 or $x >= 1919 or $y < 1 or $y >= 1079 { return null }
     [$x, $y]
+}
+
+# A point of the plan's screen column from an eye at a yaw, as `project`
+# finds it, on the screen or off it; null behind the near plane.
+def project-x [eye: record, yaw: int, point: list<float>]: nothing -> oneof<int, nothing> {
+    let rad = ($yaw * 3.141592653589793 / 180)
+    let fx = ($rad | math cos)
+    let fy = ($rad | math sin)
+    let v = [($point.0 - $eye.x), ($point.1 - $eye.y)]
+    let depth = ($v.0 * $fx + $v.1 * $fy)
+    if $depth <= 0.0625 { return null }
+    let right = ($v.0 * $fy - $v.1 * $fx)
+    (960 + $right / $depth * 960) | math round | into int
 }
 
 # The sum of every channel over the 3 by 3 block of pixels about a point
@@ -1314,18 +1303,24 @@ def records [api: binary]: nothing -> table<kind: int, sector: int, x: float, y:
     } | compact
 }
 
-# Whether the capture is a screen of the display's size with every
-# pixel black: its pixels the same bytes as that many zeros. Read here
-# rather than through `jab screen`, whose `open --raw` comes back as a
-# string for a file of ASCII and zeros, which an all-black PPM is.
-def black-screen [ppm: path]: nothing -> bool {
-    let bytes = (open --raw $ppm | into binary)
-    let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
-    let header = ($bytes | bytes at 0..<($newlines.2) | decode | lines)
-    if ($header | get 0) != "P6" or ($header | get 1) != "1920 1080" { return false }
-    let pixels = ($bytes | bytes at ($newlines.2 + 1)..)
-    let zeros = (^head -c ($PIXELS * 3) /dev/zero | hash sha256)
-    (($pixels | bytes length) == ($PIXELS * 3)) and (($pixels | hash sha256) == $zeros)
+# A tree's load screen, captured at TITLE_AT while the map loads behind
+# it: the text in the title's ink, bold at four times the console's cell
+# and centred, its ink within the text's cells, wider than all of them
+# but one, and on the title's rows, so a shorter text drawn in its place
+# fails by its width and nothing drawn by its count; the ink's box.
+def title-holds [kernel: path, image: path, out: path, set: string, name: string, tree: path, text: string]: nothing -> record<count: int, left: int, top: int, right: int, bottom: int> {
+    let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"title_($name)") --set $set --sound --disk (romfs $tree ($out | path join $"title_($name).romfs")) --serial "fps" --capture $TITLE_AT --seconds 5)
+    assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($name)'s load screen"
+    assert ($run.screen != "") $"a screen was taken on ($name)'s load screen"
+    let ink = (jab ink (jab screen $run.screen) $TITLE_INK)
+    let cells = ($text | str length)
+    let half = ($cells * $TITLE_CELL // 2)
+    let width = ($ink.right - $ink.left + 1)
+    assert ($ink.count > 0) $"($name)'s load screen draws ($text): ($ink)"
+    assert ($ink.left >= (960 - $half) and $ink.right < (960 + $half)) $"($text) centred within its ($cells) cells on ($name)'s load screen: ($ink)"
+    assert ($width > (($cells - 1) * $TITLE_CELL)) $"the ink as wide as ($text)'s ($cells) cells on ($name)'s load screen, not a shorter text's: ($width) px, ($ink)"
+    assert ($ink.top >= $TITLE_Y and $ink.bottom < ($TITLE_Y + $TITLE_HEIGHT)) $"($text) on the title's rows on ($name)'s load screen: ($ink)"
+    $ink
 }
 
 # A romfs image of the tree, as the SDK builds one, with the program's
@@ -1336,34 +1331,34 @@ def romfs [tree: path, image: path]: nothing -> string {
     $image
 }
 
-# A copy of a doortest tree with its first sprite given the test
-# texture, a material of the test's own, and made to face the camera,
-# two-sided, and the alpha cases' textures laid in as materials beside
-# it; the map read, changed, and written back through the reader and
-# writer, and each texture written from its case; the copy's path.
-def sprite-tree [tree: path, out: path]: nothing -> string {
-    jab retire $out
-    cp -r $tree $out
-    let map_path = ($out | path join "map" "doortest.jabfps.map")
-    let m = (map read $map_path)
-    let index = ($m.materials | length)
-    let entity = ($m.entities | get $CONTENT.sprite.entity)
-    assert equal $entity.class 2 $"the fixture names a sprite entity: ($entity)"
-    assert equal ($ALPHA_CASES | get 0.name) $SPRITE_MATERIAL "the sprite's texture is the first alpha case"
-    let opaque = ($ALPHA_CASES | enumerate | where {|c| $c.item.name == $STRADDLE_MATERIAL } | get 0.index)
-    let s = $CONTENT.straddle.entity
-    let straddler = { class: 2, x: $s.x, y: $s.y, z: $s.z, yaw: $s.yaw, pitch: 0.0, width: $s.width, height: $s.height, material: ($index + $opaque), r: 1.0, g: 1.0, b: 1.0, radius: 0.0, spread: 0.0, flags: $STRADDLE_FLAGS, tag: 0, target: -1, sector: $s.sector }
-    let patched = ($m
-        | update materials ($m.materials | append ($ALPHA_CASES | each {|c| { name: $c.name, flags: 0 } }))
-        | update entities ($m.entities | update $CONTENT.sprite.entity {|e| $e | update material $index | update flags $SPRITE_FLAGS } | append $straddler))
-    map write $patched | save --raw -f $map_path
-    for c in $ALPHA_CASES {
-        let file = ($out | path join (map tile-path $c.name | str substring 1..))
+# A copy of a map source compiled with its lights and its android
+# dropped, so every texel reads as its texture holds it, and an alpha
+# case a sprite, two-sided: the straddler, a fixed quad along y; with
+# --halves the halves sprite facing the camera; and every other case a
+# small fixed quad standing in the upper storey, out of the lower's
+# sight, so it is a material of the map; each case's texture written
+# into the tree after the compile, which names it unresolved; the
+# tree's path.
+def sprite-tree [source: record, name: string, out: path, game: path, --halves]: nothing -> string {
+    let cases = ($ALPHA_CASES | where {|c| $halves or $c.name != $SPRITE_MATERIAL })
+    let sprites = ($cases | enumerate | each {|e|
+        let placed = (if $e.item.name == $SPRITE_MATERIAL {
+            { at: $SPRITE.at, size: $SPRITE.size, facing: "camera" }
+        } else if $e.item.name == $STRADDLE_MATERIAL {
+            { at: $STRADDLE.at, size: $STRADDLE.size, facing: "fixed" }
+        } else {
+            { at: [(1.0 + $e.index), 1.0, 3.5], size: [0.5, 0.5], facing: "fixed" }
+        })
+        { name: $"alpha_($e.index)", class: "sprite", at: $placed.at, yaw: 0.0, pitch: 0.0, size: $placed.size, material: ($e.item.name | str substring 7..), colour: [1.0, 1.0, 1.0], radius: 0.0, spread: 0.0, facing: $placed.facing, two_sided: true, solid: false, tag: 0, target: "" }
+    })
+    let tree = (variant-tree ($source | update entities ($source.entities | append $sprites)) $name [light android] $out $game)
+    for c in $cases {
+        let file = ($tree | path join (map tile-path $c.name | str substring 1..))
         mkdir ($file | path dirname)
         let pixels = (0..<$c.h | each {|y| 0..<$c.w | each {|x| (case-texel $c $x $y).bytes } | bytes collect } | bytes collect)
         png write-rgba $file $c.w $c.h $pixels
     }
-    $out
+    $tree
 }
 
 # A texel of an alpha case: its four bytes as the PNG carries them, red,
@@ -1560,7 +1555,7 @@ export def fixture-row [y: int]: nothing -> record<bytes: binary, alphas: list<i
     { bytes: ($cells | get bytes | bytes collect), alphas: ($cells | get alphas | flatten) }
 }
 
-# A copy of the proof map compiled with its grate wall given a material
+# A copy of Render One compiled with its grate wall given a material
 # of the test's own at a scale, the alcove's floor, ceiling, and walls
 # given the backdrop's, its android dropped, and the backdrop laid in the
 # tree after the compile, which names it unresolved; the tree's path.
@@ -2261,8 +2256,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 # The program's three cadences on its own clock records, one
 # launch a cadence of each fixture, the debug build's S frames standing
 # stalls in place of the drawing, each window held complete and valid at
-# schema 2 before anything is read from it. CadenceSchedule, on the
-# proof map: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
+# schema 2 before anything is read from it. CadenceSchedule, on Render
+# One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
 # 500 us spin inside every consume; ten trigger reports from 1.8 s, 400
 # ms apart, each pressed and released in one report; at 5.9 s a frame
 # whose flip is tried before its wait; at 6.3 s a frame stalled 30 ms;
@@ -2279,7 +2274,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 # past each late flip under 0, as soon as ready with no wait under 1, and
 # every second period on the tick grid under 2; ten rounds under every
 # cadence, presses taken in waits under 1 and 2, and few wakes a frame.
-# MotionByTime, on the still factory: placed on the bay's east side
+# MotionByTime, on the still copy of Render Zero: placed on the bay's east side
 # facing north, a 25 ms standing stall, the stick held forward from 2 to
 # 5 s; over the frames the body moved in a metre or more from every wall
 # of their sector, the distance from the first to the last over the
@@ -2288,10 +2283,10 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 export def cadence-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
     let dir = ($out | path join "cadence")
     mkdir $dir
-    let proof_disk = (romfs (jab program-shard $game "asset" | path join "proof") ($dir | path join "proof.romfs"))
-    let still_tree = (variant-tree (open ($game | path join "content" "map" "factory.nuon")) "factory_still" [android] ($dir | path join "still") $game)
+    let render_1_disk = (romfs (jab program-shard $game "asset" | path join "render_1") ($dir | path join "render_1.romfs"))
+    let still_tree = (variant-tree (open ($game | path join "content" "map" "render_0.nuon")) "render_0_still" [android] ($dir | path join "still") $game)
     let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
-    let still_read = (map read ($still_tree | path join "map" "factory_still.jabfps.map"))
+    let still_read = (map read ($still_tree | path join "map" "render_0_still.jabfps.map"))
     let triggers = ($dir | path join "triggers.nuon")
     $SCHEDULE_TRIGGERS | each {|at| [{ at: $at, type: 1, code: 313, value: 1 } { at: $at, type: 1, code: 313, value: 0 }] } | flatten | to nuon | save --raw -f $triggers
     let stick = ($dir | path join "stick.nuon")
@@ -2308,7 +2303,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
             { at: $SCHEDULE_SLOW.at, bytes: (stall-frame true $SCHEDULE_SLOW.stall 0 false $SCHEDULE_FAST.spin) }
             { at: $SCHEDULE_END, bytes: (pose command-frame "E") }
         ] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $proof_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
+        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $render_1_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
         let m = (gauge measure $run.api [{ name: "schedule", places: [], pad: [] }])
         assert ($m.complete and $m.valid and $m.schema == 2) $"the window complete and valid at schema 2 ($says): ($m.problems) ($m.invalid)"

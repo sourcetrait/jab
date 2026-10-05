@@ -39,8 +39,9 @@ def main [] {
 }
 
 # The source compiled into the tree under <out>/<name>/: the map, the
-# name file, every material and ambient the map names copied from the
-# content, map.nuon and tile.nuon, and a plan view an SVG a storey.
+# name file and the title's when the source gives a title, every
+# material and ambient the map names copied from the content, map.nuon
+# and tile.nuon, and a plan view an SVG a storey.
 def "main compile" [source: path, out: path, --content: path = ""] {
     let content = (if $content == "" { $here | path dirname | path join "content" } else { $content | path expand })
     let src = (open $source)
@@ -561,9 +562,10 @@ def ranges-overlap [s: record, t: record, x: float, y: float]: nothing -> bool {
     $floor <= $ceiling
 }
 
-# The tree written: the map and the name file, the materials and
-# ambients the map names and every sound copied from the content,
-# map.nuon, tile.nuon, and the plan views; the summary line.
+# The tree written: the map, the name file and the title's when the
+# source gives a title, the materials and ambients the map names and
+# every sound copied from the content, map.nuon, tile.nuon, and the plan
+# views; the summary line.
 def lay-out [src: record, m: record, content: string, out: string]: nothing -> string {
     let dest = ($out | path join $src.name)
     if ($dest | path exists) {
@@ -574,6 +576,8 @@ def lay-out [src: record, m: record, content: string, out: string]: nothing -> s
     let bytes = (write $m)
     $bytes | save --raw -f ($dest | path join "map" $"($src.name).jabfps.map")
     $src.name | save --raw -f ($dest | path join "map" "name")
+    let title = ($src.title? | default "")
+    if $title != "" { $title | save --raw -f ($dest | path join "map" "title") }
     mut unresolved = []
     mut tiles = []
     for t in ($m.materials | enumerate) {

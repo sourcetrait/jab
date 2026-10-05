@@ -12,6 +12,7 @@
 .set FONT_BYTES, (160 * 1024 * 1024)
 .set PAGE_BYTES, (1024 * 1024)
 .set NAME_BYTES, 64
+.set TITLE_BYTES, 64
 .set PATH_BYTES, 256
 .set LINE_BYTES, 512
 .set DIGITS_BYTES, 24
@@ -62,18 +63,9 @@ _start:
     la a3, path_name
     call read_file
     beqz a0, no_name
-    la t0, name
-    add t1, t0, a0
-    sb zero, 0(t1)
-1:
-    beq t1, t0, 2f
-    lbu t2, -1(t1)
-    li t3, ' '
-    bgtu t2, t3, 2f
-    addi t1, t1, -1
-    sb zero, 0(t1)
-    j 1b
-2:
+    mv a1, a0
+    la a0, name
+    call text_trim
     la a0, map_path
     la a1, word_map_dir
     call append_str
@@ -82,7 +74,17 @@ _start:
     la a1, word_map_ext
     call append_str
     sb zero, 0(a0)
-    la a0, name
+    la a0, title
+    li a1, (TITLE_BYTES - 1)
+    mv a2, s0
+    la a3, path_title
+    call read_file
+    mv a1, a0
+    la a0, title
+    call text_trim
+    bnez a1, 1f
+    la a0, name                     # no title: the name in its place
+1:
     call str_len
     li t1, TITLE_CELL
     mul t1, a1, t1
@@ -1156,6 +1158,21 @@ str_len:
 2:
     ret
 
+text_trim:
+    add t1, a0, a1
+    sb zero, 0(t1)
+1:
+    beq t1, a0, 2f
+    lbu t2, -1(t1)
+    li t3, ' '
+    bgtu t2, t3, 2f
+    addi t1, t1, -1
+    sb zero, 0(t1)
+    j 1b
+2:
+    sub a1, t1, a0
+    ret
+
 append_str:
 1:
     lbu t0, 0(a1)
@@ -1198,6 +1215,8 @@ line:
     .skip LINE_BYTES
 name:
     .skip NAME_BYTES
+title:
+    .skip TITLE_BYTES
 map_path:
     .skip PATH_BYTES
 tile_path:
@@ -1264,6 +1283,8 @@ serial_fps:
     .asciz "fps"
 path_name:
     .asciz "/map/name"
+path_title:
+    .asciz "/map/title"
 word_map_dir:
     .asciz "/map/"
 word_map_ext:

@@ -14,18 +14,21 @@ built against the Jab SDK from outside its workspace, for the 1K tier
   sprites, and the light; and the body walked by the pad over the
   floors and against the walls. `srcdoc/` holds every symbol and its
   prose.
-- `test/` the game's test, which runs the sample maps, a sprite, a
-  walk, the proof map of our own content with a stair walked to its
-  upper storey, the factory from its spawn, three poses, three walks,
-  and the fight, and two broken maps; the gauge, which measures every
-  frame of play against the frame's ceiling; and `fillrate`, the probe
-  of what the hart draws a second, a program of its own.
-- `content/` our content by kind: `map/` the map sources, the proof
-  map and the factory, FPS Tech's three-storey works with its garage,
-  mezzanine offices, yard, and driveway; `texture/` and `sprite/` the
-  images, each authored as an SVG beside the PNG the engine reads;
-  `ambient/` the note lists beside the MIDI pieces; `sound/` the
-  recipes beside the samples.
+- `test/` the game's test, on our own content alone: the load screen's
+  title, a sprite and the alpha policy on copies of Render One, Render
+  One from its spawn and six poses with a stair walked to its upper
+  storey, Render Zero from its spawn and four poses, its three walks,
+  and the fight, the light and the alpha policy rendered, and two broken
+  maps; the gauge, which measures every frame of play against the
+  frame's ceiling; and `fillrate`, the probe of what the hart draws a
+  second, a program of its own.
+- `content/` our content by kind: `map/` the map sources, Render Zero
+  (`render_0`), the game's map, FPS Tech's three-storey works with its
+  garage, mezzanine offices, yard, and driveway, and Render One
+  (`render_1`), the map the format and the engine are proven on;
+  `texture/` and `sprite/` the images, each authored as an SVG beside
+  the PNG the engine reads; `ambient/` the note lists beside the MIDI
+  pieces; `sound/` the recipes beside the samples.
 - `nu/` our scripting: the map format's reader, writer, and compiler,
   a PNG writer, and a capture viewer.
 - `rust/` a cargo workspace for the host tools: `svg2png`, which
@@ -53,9 +56,4 @@ route at each: run `just watch bench game/fps/1k/cadence` in one
 terminal and `just bench game/fps/1k/cadence` in another, and the watch
 reports the whole bench when it ends.
 
-The sample trees in the game's asset shard of the jab target,
-`asset/game/fps/1k/<map>`, are laid out by conversion tooling kept
-outside this repository over third-party sample content, never shipped,
-until the game runs on its own content alone; the test stops with a
-message when one is missing. `just adv shot` turns a run's capture into
-a PNG to look at.
+`just adv shot` turns a run's capture into a PNG to look at.

@@ -45,6 +45,13 @@ when no sector holds it between its planes, since a light sits in a
 ceiling and a sprite may sink into a floor; the spawn must be between
 the planes, since the body starts there.
 
+## lay-out
+
+`map/title` is written only when the source gives a title, so a tree
+without the file is a map with none, and the loader draws the map's name
+on the load screen in its place; `map/name` is always written, since the
+loader composes the map's path from it.
+
 ## float-bytes
 
 A host float to a single's bytes by taking the double's bits apart,

@@ -114,7 +114,7 @@ times the 6.26 1/z coefficient shifted down ten for the 48.16 u/z, and v the
 same. The span's texel coordinates then count from the map's first node, so
 the read is a shift; the origin is a multiple of the texture's size, so the
 wrap by the mask is unchanged and the texel loop needs no change. U0 times
-1/z stays under 2^46 across the factory. The read's one word packs the
+1/z stays under 2^46 across Render Zero. The read's one word packs the
 lumels' offset into the arena in 24 bits, a row's bytes in 16 from bit 24,
 the rows in 16 from bit 40, and k from bit 56, so the read can bound itself
 from the word alone; the offset rather than the address because a window
@@ -224,8 +224,9 @@ texel at every pixel: one coordinate rule for the cache and the chain. The
 bind shifted u, v, and their steps by the level before and the loops
 stepped the shifted values, which drops the step's low bits every pixel; the
 tile loop steps the full value, so near a texel's edge the two read
-neighbouring texels, which the still factory's spawn view read as 33 pixels
-of 2.07 million differing under the full-bright frame, by up to 49 of 255.
+neighbouring texels, which the spawn view of Render Zero's still copy read
+as 33 pixels of 2.07 million differing under the full-bright frame, by up
+to 49 of 255.
 The shift by a register costs what the shift by 16 did; s5, v/z, rides 40(sp)
 for the block, as the tile loop spills it, and the block's end takes it
 back for every path.
@@ -259,8 +260,8 @@ own cadence.
 
 The depth test comes before the texel's address in every pixel loop, so a
 rejected pixel costs the depth load, the compare, and the steps. It changes
-no stored pixel: the seven gauge captures on the androidless factory are byte
-for byte the same before and after. It saves little: the up flight's walls
+no stored pixel: the seven gauge captures on Render Zero without its androids
+are byte for byte the same before and after. It saves little: the up flight's walls
 phase moved from a minimum of 28.8 to 27.3 ms over five runs and the other
 views within their noise, because a texel address is eight integer ops and a
 load that mostly hits the host's cache, and because the rejected share was

@@ -696,7 +696,7 @@ apart from that limit.
 
 The mip constants: MIP_LEVELS is the chain's depth at most, ten taking a
 512-texel side to one; the entry is a level's texels eight bytes a level; the
-arena is 32 MiB in bss, free until touched, where the factory's chains take
+arena is 32 MiB in bss, free until touched, where Render Zero's chains take
 about six, a chain being a third of its texture. POLY_MIPS and POLY_MIP_COUNT
 carry the material's table and its levels for the block's bind (raster.S).
 ALPHA_MATERIAL_SIZE grew to a scale a chain level, since the chain is built

@@ -1,9 +1,0 @@
-# fps's pad for the walk: the left stick held forward from a second
-# and a half to five and a half, then released; from doortest's start
-# that is south through the doorway ahead, across the hall, and into
-# the room beyond until its far wall stops the body.
-[
-    [at, type, code, value];
-    [1500ms, 3, 1, 0],
-    [5500ms, 3, 1, 127],
-]

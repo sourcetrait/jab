@@ -10,7 +10,7 @@
 # toolchain the build's flags name. `just adv play` builds and runs it.
 use ../../../../sdk/nu/jab.nu
 
-def main [--kernel: path, --image: path, --out: path, --map: string = "factory", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
+def main [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
     let workspace = ($game | path join ".." ".." ".." | path expand)
     let tree = (jab program-shard $game "asset" | path join $map)

@@ -15,7 +15,3 @@ or RGBA. `shot.nu` turns a run's screen capture into a PNG to look at,
 behind `just adv shot`. `prepare.nu` compiles the maps before the game
 is built, tested, or run, and `adv.nu` holds the game's commands for
 development, which `just adv` lists.
-
-The sample content's trees in the game's asset shard of the jab target,
-`asset/game/fps/1k/<map>`, are laid out by conversion tooling kept
-outside this repository (`../README.md`).

@@ -1,7 +1,8 @@
-# factory: FPS Tech's factory, the game's map. Metres, z up, degrees;
-# x runs east and y north; the building's exterior is x 0 to 32 and y 0
-# to 24 with walls half a metre thick, drawn as the gaps between
-# sectors. Four storeys in the plan views:
+# render_0: Render Zero, FPS Tech's factory, the game's map, its title
+# the map screen's. Metres, z up, degrees; x runs east and y north; the
+# building's exterior is x 0 to 32 and y 0 to 24 with walls half a metre
+# thick, drawn as the gaps between sectors. Four storeys in the plan
+# views:
 #
 # ground (z 0): the factory floor, `bay`, 21 by 23 metres and 6 high
 #   with two pillars, the spawn in its south-east corner facing the
@@ -42,7 +43,8 @@
 # name on its north wall, a hazard on a pillar, the office's in the
 # corridor, and the garage level by the down flight's foot.
 {
-    name: "factory",
+    name: "render_0",
+    title: "Render Zero",
     sectors: [
         {
             name: "bay", storey: "ground", tag: 0, ambient: "floor",

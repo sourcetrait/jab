@@ -53,7 +53,7 @@ def "main shot" [ppm: path, png: path, --step: int = 4] {
 
 # Build with the symbols given, then capture a map from placed camera
 # poses, a NUON list of {name, x, y, z, yaw, pitch}, as PNGs under out:
-# `just adv pose cage2 poses.nuon out`; `--set debug,owner` captures the
+# `just adv pose render_1 poses.nuon out`; `--set debug,owner` captures the
 # surface each pixel belongs to
 def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
     build $set
@@ -62,7 +62,7 @@ def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
     ^nu ($p.game | path join "test" "pose.nu") $map ($poses | path expand) ($out | path expand) --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fps.jab") --set $set
 }
 
-# Build with DEBUG set, then play the factory on the pad from seeded
+# Build with DEBUG set, then play Render Zero on the pad from seeded
 # random tables for that many seconds a seed, the seeds separated by
 # commas, a fault resolved to its routine: `just adv smoke 1,2,3 60`
 def "main smoke" [seeds: string = "1", seconds: int = 60] {
@@ -76,16 +76,16 @@ def "main smoke" [seeds: string = "1", seconds: int = 60] {
 # Build with DEBUG set, then hand a map to robojab for an agent or a
 # script to play: `just adv play` prints the MCP server line and config
 # record for a subagent; `just adv play <socket>` serves commands on that
-# socket in the foreground; `just adv play mcp cage2 300` another map and
-# bound
-def "main play" [target: string = "mcp", map: string = "factory", seconds: int = 600] {
+# socket in the foreground; `just adv play mcp render_1 300` another map
+# and bound
+def "main play" [target: string = "mcp", map: string = "render_0", seconds: int = 600] {
     build "debug"
     let p = (places)
     let built = (jab program-out $p.game "debug")
     ^nu ($p.game | path join "test" "play.nu") --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fps.jab") --out ($built | path join "play") --map $map --seconds $seconds --target $target
 }
 
-# Build, then play the gauge's route (test/route_factory.nuon) on that
+# Build, then play the gauge's route (test/route_render_0.nuon) on that
 # build headless, every frame of each run read from the program's clock
 # records, gauge.nuon written and the summary printed: `just adv gauge`,
 # the release build three times at the program's own cadence, 1; `just
@@ -97,7 +97,7 @@ def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
     ^nu ($p.game | path join "test" "gauge.nu") run --tree $tree --runs $runs ...$rest
 }
 
-# Build, then put the factory in the host's window, with its audio and
+# Build, then put Render Zero in the host's window, with its audio and
 # its own gamepad, for you to play; the measurement closes after that
 # many seconds and the window with it: `just adv gauge-play 120`, or
 # `just adv gauge-play 60 release --cadence 2`

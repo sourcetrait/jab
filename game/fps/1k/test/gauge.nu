@@ -119,7 +119,7 @@ def "main run" [
     --tree: string = "release"   # the build tree the kernel and the image come from, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
     --image: string = ""         # the program's image, the tree's own unless given
-    --route: string = ""         # the route, route_factory.nuon unless given
+    --route: string = ""         # the route, route_render_0.nuon unless given
     --map: string = ""           # the map tree the route plays on, the route's unless given
     --runs: int = 3              # the route's runs
     --seeds: list<int> = []      # each run's seed, run n's n unless given
@@ -130,7 +130,7 @@ def "main run" [
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let at = (places $tree $kernel $image $out)
-    let route_file = (if $route == "" { $env.FILE_PWD | path join "route_factory.nuon" } else { $route | path expand })
+    let route_file = (if $route == "" { $env.FILE_PWD | path join "route_render_0.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
     let r = ($route_bytes | decode utf-8 | from nuon)
     let map_name = (if $map == "" { $r.map } else { $map })
@@ -184,7 +184,7 @@ def "main play" [
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let at = (places $tree $kernel $image $out)
-    let disk = (romfs-of $at.game "factory" $at.out)
+    let disk = (romfs-of $at.game "render_0" $at.out)
     let set = (if $at.tree == "debug" { "debug" } else { "" })
     let end = ($seconds * 1sec)
     let capture = ($end + $DRAIN)
@@ -193,7 +193,7 @@ def "main play" [
     mkdir $run_out
     let sends = [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }, { at: $end, bytes: (pose command-frame "E") }]
     let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $cadence, end: $end, capture: $capture }
-    let id = (identity $at $set "factory" null $mode)
+    let id = (identity $at $set "render_0" null $mode)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
     let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound)

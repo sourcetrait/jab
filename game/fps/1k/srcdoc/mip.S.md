@@ -72,7 +72,7 @@ material's count says so, span_fill holding every block's level under the
 count before it chooses the tiles or the chain.
 Nothing is freed: the chain is a property of the load, as the lumel maps
 are. The arena is bss, free until touched, and a chain is a third of its
-texture, so the factory's chains take about six megabytes of the thirty-two.
+texture, so Render Zero's chains take about six megabytes of the thirty-two.
 
 Each level takes its alpha scale from material_alpha; a level built is
 counted and the next builds from it; where the chain ends the count is the

@@ -87,8 +87,8 @@ level to a millisecond better.
 The arena is a bump allocator with one policy, a reset of the whole when
 an atlas does not fit: every record forgotten, the next frames
 rebuilding what they see. No eviction, since a tile's cost is its build
-and the arena, 1 GiB of a nearly 4 GiB window, holds most of the
-factory's level 0 (1,011 MiB at 64-texel cells before the columns'
+and the arena, 1 GiB of a nearly 4 GiB window, holds most of Render
+Zero's level 0 (1,011 MiB at 64-texel cells before the columns'
 padding); the program's bss costs nothing until touched, RAM being zero
 at QEMU's start and the kernel zeroing only its own. The frame line
 counts the resets since the load; the gauge's views read none.
@@ -113,7 +113,7 @@ and built them, tile_build addressing the lumel map with the padded
 column, so the nodes it read were the next row's, or past the map's end
 on the last row, inside the zeroed lumel arena; the span never read one
 back, since its prologue rejects an end in a padding column, so the
-cost was the budget alone. The factory's 64,726 cells pad to 88,568, 27
+cost was the budget alone. Render Zero's 64,726 cells pad to 88,568, 27
 percent over the map, and the bay view's L frame, which builds every
 surface in view whole under no budget, built 73,888 cells before the
 skip and 53,704 after, with the tiled pixel count unchanged at
@@ -272,15 +272,15 @@ empty at level 0 is left at one without the levels, since a mean of
 values at or above the pass stays at or above it and a mean of values
 under it stays under.
 
-Measured on the factory: the fence's share by level 7.33, 6.06, 9.47,
+Measured on Render Zero: the fence's share by level 7.33, 6.06, 9.47,
 and 9.22 percent, with scales 1.008, 1.455, and 1.103, where the plain
 average fell to 5.7, 4.0, and 1.9; the hazard sign 44.8, 44.7, 44.7,
 46.1; the other signs within a quarter of a percent of full, with
-scales near one; the proof map's grate 60.9 at every level but the
+scales near one; Render One's grate 60.9 at every level but the
 coarsest, which reads 50.0 at a scale of one, the step above it
 further from the target. The lines equal, to the digit, a reading of
 the same rule in python over the PNG files for the fence, the grate,
-the hazard sign, and the proof's sign, and the test holds the engine's
+the hazard sign, and Render One's sign, and the test holds the engine's
 lines for four textures of its own equal to a nushell reading. The share
 moves in jumps where many means share one value, the 127 of a
 half-covered square among them, so the nearest reachable share can sit

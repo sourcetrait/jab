@@ -7,9 +7,9 @@
 # play does. `nu smoke.nu --kernel <jab.elf> --image <fps.jab> --out <dir>
 # --seeds "[1 2 3]" --seconds 60`; `just adv smoke [seeds] [seconds]`,
 # the seeds separated by commas, builds and runs it. Every seed is one
-# launch of a debug build with the factory's
-# tree; the table it played is kept beside the run as pad.nuon, so a
-# seed that faults is replayed by its number.
+# launch of a debug build with Render Zero's tree; the table it played is
+# kept beside the run as pad.nuon, so a seed that faults is replayed by
+# its number.
 use ../../../../sdk/nu/jab.nu
 use std/assert
 
@@ -37,10 +37,10 @@ def main [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", -
     let seeds = (try { $seeds | from nuon } catch { null })
     if ($seeds | describe) != "list<int>" { error make { msg: $"--seeds takes a NUON list of whole numbers, \"[1 2 3]\": ($seeds | to nuon)" } }
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let tree = (jab program-shard $game "asset" | path join "factory")
+    let tree = (jab program-shard $game "asset" | path join "render_0")
     let elf = ($image | path dirname | path join "fps.elf")
     mkdir $out
-    let disk = ($out | path join "factory.romfs")
+    let disk = ($out | path join "render_0.romfs")
     let made = (^genromfs -d $tree -f $disk -V "fps" | complete)
     if $made.exit_code != 0 { error make { msg: $"genromfs on ($tree): ($made.stderr)" } }
     mut faults = []

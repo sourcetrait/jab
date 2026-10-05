@@ -50,7 +50,7 @@ is the header, then a row's pixels and its span for every row.
 
 A material's record capacity is the SDK's rule, 16 plus rows times columns
 times 4 plus 4; the arena is 64 MiB. The 512 by 512 textures are 1 MiB
-records; the factory's 23 textures and 69 frames load in about 800 ms, most
+records; Render Zero's 23 textures and 69 frames load in about 800 ms, most
 of it the decodes.
 
 ## frames_load

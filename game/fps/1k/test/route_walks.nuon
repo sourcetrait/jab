@@ -1,5 +1,5 @@
-# The factory's three walks as a gauge route, the test's placed starts
-# and table_factory.nuon's holds (test.nu's factory walk): the up flight
+# Render Zero's three walks as a gauge route, the test's placed starts
+# and table_render_0.nuon's holds (test.nu's render_0 walk): the up flight
 # from its foot into the office corridor, the down flight into the
 # garage, the driveway from the garage door to the gate. The route the
 # builds since the lumel read are compared over, each from its own
@@ -8,7 +8,7 @@
 # records. The frames before the first placement, the spawn's after the
 # load, are their own leg, start.
 {
-    map: "factory",
+    map: "render_0",
     end: 14400ms,
     legs: [
         { name: "start", places: [], pad: [] },

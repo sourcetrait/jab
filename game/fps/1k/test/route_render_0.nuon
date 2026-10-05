@@ -1,4 +1,4 @@
-# The gauge's route over the factory, normal play with no warmed cache
+# The gauge's route over Render Zero, normal play with no warmed cache
 # (gauge.nu run). The start: the spawn's view from the load, the cold
 # start, still while the first sight builds. The fight, as the test's
 # fight times it: placed on the bay's east patrol leg facing south while
@@ -24,7 +24,7 @@
 # right Y 5; 313 is the right trigger's button. A full throw turns half a
 # turn a second and looks a quarter turn a second, and walks 4 m a second.
 {
-    map: "factory",
+    map: "render_0",
     end: 56000ms,
     legs: [
         { name: "start", places: [], pad: [] },

@@ -103,7 +103,7 @@ slack squared times the run squared, with no square root. The eye
 exactly on a portal's line, which a strict test rejected before the near
 case could take the wall, and which the renderer before this one
 rejected the same way, now flows the wall and the near case hands the
-neighbour the sector's rectangle; the proof map's line pose holds it.
+neighbour the sector's rectangle; Render One's line pose holds it.
 The draw's own facing test stays strict, since a wall edge-on draws
 nothing.
 

@@ -1,14 +1,16 @@
-# proof: the map the format and the engine are proven on. Two storeys:
-# below, a hall with a spawn and a sign, a door sector (tag 1) into a
-# north room with a patrol of waypoints, a spotlight on a grate, and the
-# hum ambient, the grate a solid masked wall onto an alcove that hums
-# too; a stair of three steps east
-# of the hall to a landing under a tall stairwell, then a ramp north
-# up to the upper storey. Above, a room over the hall with a window, a
-# solid wall with a portal, looking down into the stairwell, and a
-# hall over the north room the ramp arrives in. Metres, z up, degrees.
+# render_1: Render One, the map the format and the engine are proven on.
+# Two storeys: below, a hall with a spawn and a sign, a door sector (tag
+# 1) into a north room with a patrol of waypoints, a spotlight on a
+# grate, and the hum ambient, the grate a solid masked wall onto an
+# alcove that hums too; a stair of three steps east of the hall to a
+# landing under a tall stairwell, then a ramp north up to the upper
+# storey. Above, a room over the hall with a window, a solid wall with a
+# portal, looking down into the stairwell, and a hall over the north
+# room the ramp arrives in. Metres, z up, degrees. The title is the map
+# screen's.
 {
-    name: "proof",
+    name: "render_1",
+    title: "Render One",
     sectors: [
         {
             name: "hall", storey: "lower", tag: 0, ambient: "",

@@ -105,8 +105,8 @@ and the sprites. No frame calls it yet.
 ## point_light
 
 Single precision throughout. The brightness ends as a 16.16 fraction per
-channel, which a single's 24 bits cover with margin; positions within the
-factory's 64 metres resolve to microns. Every light field is a single, so
+channel, which a single's 24 bits cover with margin; positions within
+Render Zero's 64 metres resolve to microns. Every light field is a single, so
 nothing converts. The light's vector is computed into ft0 to ft2 and used
 there: the register forms `jab.f32.vec3.reg.sqrlen` and `reg.dot` touch only
 their destination, so the vector survives them for the radius test, the
@@ -165,7 +165,7 @@ shifts.
 
 A mapping of no scale or a wall of no length has no map and the surface
 draws unlit, as does one the arena cannot hold, each counted unmapped on
-the bake's line. Measured on the factory: 228 maps, 64,726 lumels, baked in
+the bake's line. Measured on Render Zero: 228 maps, 64,726 lumels, baked in
 29 ms against twenty lights, each map's list culled first to the lights its
 box reaches, the maps a half megabyte of the 8 MiB arena; the metre grid
 baked 42,485 lumels, the texel grid's margins and its lumel a power of two
