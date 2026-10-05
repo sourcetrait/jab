@@ -18,10 +18,10 @@ the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The frame's whole time is measured too, its critical path from its start to
 the end of its reporting less any wait before the flip, with the crosshair,
 the mix, the flip, and the reporting timed apart and the await after the path
-alone; the frame before's three records go over the API at a frame's start,
+alone; the frame before's four records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
-frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW, and
-REPORT_PRESENT, read by test/gauge.nu). A frame presents under one of
+frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW,
+REPORT_PRESENT, and REPORT_PACKET, read by test/gauge.nu). A frame presents under one of
 three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
 a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits
 the display's tick or the pad after its reporting, the loop as it first
@@ -199,6 +199,14 @@ The time ticks a microsecond.
 
 `u64`: the cadence the frame presented under, a CADENCE_*.
 
+## .set CLOCK_DRAW
+
+`u64`: the drawing's ticks, frame_us before its division, the packet record's preparation taken from them less the raster's.
+
+## .set CLOCK_SNAPSHOT
+
+`u64`: the frame whose simulation the drawing was given, the loop's frame count at its simulation's end.
+
 ## .set CLOCK_SIZE
 
 frame_clock's bytes.
@@ -226,7 +234,9 @@ placement.
 
 The marks, into frame_clock: the start, which is the await's end; the
 reporting so far, the frame before's records; the game and the drawing as
-before, the game's start kept as the simulation's time; the crosshair, the
+before, the game's start kept as the simulation's time and the frame's
+count as the snapshot the drawing is given, the drawing's ticks kept beside
+its microseconds; the crosshair, the
 mix, and the flip with its status and its end; the state report and a debug
 build's lines added to the reporting; and the await's start, which ends the
 critical path. One register, s9, carries the last mark, so each phase starts
@@ -261,7 +271,11 @@ minutes, inside a played session. The critical path is the start to the
 await's start less the wait, both in ticks before the one division. The next
 start is the tick the loop read at the next frame's entry and handed in, so
 the presentation record's next start is the next frame record's start, read
-once. The three records go in one write, the API's write being the one call
+once. The packet record's preparation is the drawing's ticks less the
+raster's, one division, so the drawing's microseconds less its preparation's
+and its raster's are 0 or 1; its bytes are the commands at POLY_SIZE and the
+spans at SPAN_RECORD_SIZE, what the frame's packets held across its flushes.
+The four records go in one write, the API's write being the one call
 besides the await that can wait, and its cost is the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker
 goes out right after that frame's records, so every record of the
@@ -448,11 +462,11 @@ carries none.
 
 ## frame_clock
 
-`17 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
+`19 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
 
 ## clock_records
 
-`192 u8`: the frame's clock, drawing, and presentation records, written as one.
+`256 u8`: the frame's clock, drawing, presentation, and packet records, written as one.
 
 ## end_record
 

@@ -1121,12 +1121,12 @@ A raster context's bytes.
 The records over the API are 64 bytes each. An event carries the state's
 fields and its own from REPORT_FIELD0.
 
-The clock records, REPORT_FRAME, REPORT_DRAW, and REPORT_PRESENT, and the
-end marker, REPORT_END, put the frame's number where the state puts its
-sector and the schema's version in the last word, so a reader refuses a
-layout it does not know; the state record keeps its layout and meanings. The
-three clock records of a frame go out in one write at the next frame's
-start. The frame record's start and flip's end are 64 bits on 8-byte
+The clock records, REPORT_FRAME, REPORT_DRAW, REPORT_PRESENT, and
+REPORT_PACKET, and the end marker, REPORT_END, put the frame's number where
+the state puts its sector and the schema's version in the last word, so a
+reader refuses a layout it does not know; the state record keeps its layout
+and meanings. The four clock records of a frame go out in one write at the
+next frame's start. The frame record's start and flip's end are 64 bits on 8-byte
 boundaries and every other field 32. Its critical path runs from the frame's
 start to its reporting's end less the wait, the time a frame waits before
 its flip so it presents no earlier than the cap allows. Its phases are
@@ -1135,8 +1135,14 @@ reporting, with the presentation record's pacing beside them, and the
 critical path less their sum is time no phase holds; the flip is every
 attempt's call and its status the final attempt's, FLIP_NONE when the frame
 reached no flip (main.S). The drawing's parts are exclusive within the
-drawing, the clear, the portals, the planes, the walls, and the sprites,
-with DRAW_TILES inside the planes and the walls. The await runs from the
+drawing, the clear, the portals, the planes, the walls, the sprites, and
+the packet record's raster, with DRAW_TILES inside the planes and the
+walls: the planes, the walls, and the sprites are their preparation alone,
+since a packet flushed among them renders apart from their marks (world.S's
+phase_mark), and the raster is every render of the frame's packets. The
+packet record splits the drawing in two, its preparation and its raster,
+each converted once, so the drawing less the two is 0 or 1 microsecond.
+The await runs from the
 reporting's end to the next frame's start, the time inside the call
 whatever the kernel does there. So the next start less the start is the
 critical path, the wait, and the await, to the microseconds each
@@ -1273,9 +1279,13 @@ A record's bytes, zero to the end.
 
 `u32`: the console's answer, the command's byte.
 
+## .set REPORT_PACKET
+
+`u32`: the frame before's packets, PACKET_* fields, beside its clock.
+
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out.
+`u32`: the clock records' layout as this source lays them out, 3 with the packet record.
 
 ## .set TIME_START
 
@@ -1331,15 +1341,15 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_PLANES
 
-`u32`: the planes, their tiles' time within.
+`u32`: the planes' preparation, their tiles' time within.
 
 ## .set DRAW_WALLS
 
-`u32`: the walls, their tiles' time within.
+`u32`: the walls' preparation, their tiles' time within.
 
 ## .set DRAW_SPRITES
 
-`u32`: the sprites and the actors.
+`u32`: the sprites' and the actors' preparation.
 
 ## .set DRAW_TILES
 
@@ -1408,6 +1418,34 @@ A record's bytes, zero to the end.
 ## .set PRESENT_CADENCE
 
 `u32`: the frame's cadence, a CADENCE_*.
+
+## .set PACKET_PREPARATION
+
+`u32`: the drawing less its raster, the frame's preparation, converted once from ticks.
+
+## .set PACKET_RASTER
+
+`u32`: every render of the frame's packets, the flushes' and the last, each with its resolve and its counts.
+
+## .set PACKET_COMMANDS
+
+`u32`: the commands the frame emitted over its packets, STAT_COMMANDS.
+
+## .set PACKET_FLUSHES
+
+`u32`: the packets rendered full before the frame's last, STAT_FLUSHES.
+
+## .set PACKET_INVALIDATED
+
+`u32`: the bindings the resolves took off their tiles, STAT_INVALIDATED.
+
+## .set PACKET_BYTES
+
+`u32`: the bytes the frame's packets held, the commands at POLY_SIZE and the spans at SPAN_RECORD_SIZE.
+
+## .set PACKET_SNAPSHOT
+
+`u32`: the frame whose simulation the packets were prepared from, the record's own while one owner prepares and renders in turn.
 
 ## .set CADENCE_AFTER_FLIP
 

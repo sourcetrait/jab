@@ -1,12 +1,16 @@
 # gauge.nu: the game's frames measured over play. At each frame's start
 # the program sends the frame before's records over the API, the frame's
-# clock (kind 7), its drawing with the tile cache (kind 8), and at schema
-# 2 its presentation (kind 10): the simulation's time, the next frame's
+# clock (kind 7), its drawing with the tile cache (kind 8), from schema 2
+# its presentation (kind 10): the simulation's time, the next frame's
 # start, the wait before the flip and the pacing around it, the pad's
 # wakes and presses in the wait, the flip's attempts and refusals, and
-# the cadence; after the console's E the end marker (kind 9) names the
-# final frame of the measurement, which the frames from 0 to it make up.
-# render.inc lays the records out; this reader takes schemas 1 and 2.
+# the cadence; and at schema 3 its packets (kind 12): the preparation and
+# the raster apart, the commands, the flushes, the bindings invalidated,
+# the bytes the packets held, and the frame whose simulation they were
+# prepared from, the drawing's planes, walls, and sprites then
+# preparation alone. After the console's E the end marker (kind 9) names
+# the final frame of the measurement, which the frames from 0 to it make
+# up. render.inc lays the records out; this reader takes schemas 1 to 3.
 # `run` plays a route on a build `--runs` times, headless or with
 # `--host` in the host's window and audio, each run seeded by the
 # console's R and asking its cadence by the console's C before its first
@@ -28,13 +32,15 @@
 # the await apart, is under 15 ms; a measurement is valid when it is
 # complete, every flip presented or refused as its cadence allows, every
 # phase within its frame, every frame's clock agreeing with its state,
-# and at schema 2 every frame's start, critical path, wait, and await
+# from schema 2 every frame's start, critical path, wait, and await
 # adding up to the next frame's start and its start, simulation, flip
-# end, and next start in that order, and passes when it is valid and
-# every frame in it passes. A capture holding no record of the clock's
-# kinds, 7, 8, 9, or 10, is a build older than them: it holds no
-# measurement and is read from its state records alone, the drawing's
-# and the game's microseconds. `bench-report` reads a run of a bench
+# end, and next start in that order, and at schema 3 every frame's
+# drawing its preparation and its raster, the bytes its packets held its
+# commands' and its span records', and its packets prepared from its own
+# simulation, and passes when it is valid and every frame in it passes.
+# A capture holding no record of the clock's kinds, 7, 8, 9, 10, or 12,
+# is a build older than them: it holds no measurement and is read from
+# its state records alone, the drawing's and the game's microseconds. `bench-report` reads a run of a bench
 # whose steps are this script's, every cadence's frames pooled. `just
 # adv gauge`, `just adv gauge-play`, `just adv gauge-read`, and `just adv
 # gauge-compare` run it, and `just bench game/fps/1k/cadence` runs
@@ -47,7 +53,7 @@ use ./pose.nu
 const WORKSPACE = (path self | path dirname | path join ".." ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
-const SCHEMAS = [1 2]
+const SCHEMAS = [1 2 3]
 const CEILING_US = 15000
 const KIND_STATE = 1
 const KIND_FRAME = 7
@@ -55,6 +61,7 @@ const KIND_DRAW = 8
 const KIND_END = 9
 const KIND_PRESENT = 10
 const KIND_CONSOLE = 11
+const KIND_PACKET = 12
 # the console's commands as its records name them: P a placement, R a
 # seed, C a cadence
 const CONSOLE_P = 80
@@ -73,11 +80,27 @@ const HARTS = 4
 const RESIDUAL_US = 4
 # the span records a frame holds before its spans go unrecorded
 const SPAN_RECORDS = 65536
+# a command's bytes in a packet, the polygon's record copied whole, and a
+# span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
+const COMMAND_BYTES = 312
+const SPAN_BYTES = 16
+# a frame's drawing less its preparation and its raster: the microsecond
+# the three conversions drop, at most this
+const PACKET_RESIDUAL_US = 1
 # the critical path's phases at each schema and the drawing's parts, each
 # exclusive; tiles_us lies within planes_us and walls_us and is never
-# added to them
-const PHASES = { "1": [game_us draw_us hud_us mix_us flip_us report_us], "2": [game_us draw_us hud_us mix_us pacing_us flip_us report_us] }
-const PARTS = [clear_us portals_us planes_us walls_us sprites_us]
+# added to them; at schema 3 the planes, walls, and sprites are
+# preparation alone and the raster a part of its own
+const PHASES = {
+    "1": [game_us draw_us hud_us mix_us flip_us report_us],
+    "2": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+    "3": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+}
+const PARTS = {
+    "1": [clear_us portals_us planes_us walls_us sprites_us],
+    "2": [clear_us portals_us planes_us walls_us sprites_us],
+    "3": [clear_us portals_us planes_us walls_us sprites_us raster_us],
+}
 # an unexplained phase outlier: a phase past OUTLIER_RATIO times its
 # leg's median and OUTLIER_US over it, in a frame whose tile work stayed
 # within twice its leg's median, the first frame after a placement apart
@@ -435,17 +458,19 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # first end marker: the state records, the n-th frame n's, with the
 # placements the console answered before each, whether an R was answered
 # before the first state and whether one came later, the same for a C,
-# the game's events with the frame each fell in, the frame, draw, and
-# presentation records, kinds 7, 8, and 10, each field microseconds or a
-# count, and the marker, kind 9, with its frame and schema, null when none
-# came. What follows the marker is outside the measurement: its state
-# records are counted as `past` and nothing else in it is read.
-export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, frames: list<any>, draws: list<any>, presents: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
+# the game's events with the frame each fell in, the frame, draw,
+# presentation, and packet records, kinds 7, 8, 10, and 12, each field
+# microseconds or a count, and the marker, kind 9, with its frame and
+# schema, null when none came. What follows the marker is outside the
+# measurement: its state records are counted as `past` and nothing else
+# in it is read.
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
     mut states = []
     mut events = []
     mut frames = []
     mut draws = []
     mut presents = []
+    mut packets = []
     mut placed = 0
     mut seeded = false
     mut late_seed = false
@@ -498,13 +523,20 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 pacing_us: (u32-at $r 28), wakes: (u32-at $r 32), wait_presses: (u32-at $r 36), flip_attempts: (u32-at $r 40),
                 refusals: (u32-at $r 44), cadence: (u32-at $r 48), schema: (u32-at $r 60),
             })
+        } else if $kind == $KIND_PACKET {
+            $packets = ($packets | append {
+                frame: (u32-at $r 4), preparation_us: (u32-at $r 8), raster_us: (u32-at $r 12), commands: (u32-at $r 16),
+                flushes: (u32-at $r 20), invalidated: (u32-at $r 24), packet_bytes: (u32-at $r 28), snapshot: (u32-at $r 32),
+                schema: (u32-at $r 60),
+            })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
     }
     {
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
-        late_cadence: $late_cadence, frames: $frames, draws: $draws, presents: $presents, end: $end, past: $past,
+        late_cadence: $late_cadence, frames: $frames, draws: $draws, presents: $presents, packets: $packets,
+        end: $end, past: $past,
     }
 }
 
@@ -512,7 +544,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
 # first clock record's; null for a capture with none.
 def schema-of [s: record]: nothing -> oneof<int, nothing> {
     if $s.end != null { return $s.end.schema }
-    let first = ($s.frames | append $s.draws | append $s.presents | get -o 0)
+    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | get -o 0)
     if $first == null { null } else { $first.schema }
 }
 
@@ -522,27 +554,34 @@ def phases-of [schema: oneof<int, nothing>]: nothing -> list<string> {
     $PHASES | get -o ($schema | default 1 | into string) | default ($PHASES | get "1")
 }
 
+# The drawing's parts at a schema, schema 1's for one this reader does
+# not take.
+def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
+    $PARTS | get -o ($schema | default 1 | into string) | default ($PARTS | get "1")
+}
+
 # A capture measured: its window, every frame in it as a row with its
 # leg, the leg's summaries, the outliers, and the outcomes. The window is
 # the capture read in order through its first end marker (stream): it is
 # complete when its clock records sit at one schema this reader takes,
 # the marker names the final frame, and every frame from 0 to it has its
-# state, its frame record, its draw record, and at schema 2 its
-# presentation record before the marker, numbered in order with none
-# twice; what follows the marker counts for nothing, a record sent late
-# or a second marker alike. A complete window is valid unless a flip was
-# never shown or not presented as its cadence requires, a phase or a part
-# sums past its whole, a frame's clock disagrees with its state, or at
-# schema 2 a frame's presentation breaks its rules (invalidity); it
-# passes when it is valid and no frame reaches the ceiling. A frame is
+# state, its frame record, its draw record, from schema 2 its
+# presentation record, and at schema 3 its packet record before the
+# marker, numbered in order with none twice; what follows the marker
+# counts for nothing, a record sent late or a second marker alike. A
+# complete window is valid unless a flip was never shown or not presented
+# as its cadence requires, a phase or a part sums past its whole, a
+# frame's clock disagrees with its state, or from schema 2 a frame's
+# presentation or at schema 3 its packets break their rules (invalidity);
+# it passes when it is valid and no frame reaches the ceiling. A frame is
 # fast when its critical path is under the period of `cap`, whatever its
-# cadence. A capture with no record of the clock's kinds, 7, 8, 9, or 10,
-# is a build older than them: its rows are its state records' alone and
-# it holds no window. Any one of them marks the capture clocked and holds
-# it to its window.
+# cadence. A capture with no record of the clock's kinds, 7, 8, 9, 10, or
+# 12, is a build older than them: its rows are its state records' alone
+# and it holds no window. Any one of them marks the capture clocked and
+# holds it to its window.
 export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
     let s = (stream $api)
-    let clocked = ((not ($s.frames | is-empty)) or (not ($s.draws | is-empty)) or (not ($s.presents | is-empty)) or $s.end != null)
+    let clocked = (([$s.frames $s.draws $s.presents $s.packets] | any {|k| not ($k | is-empty) }) or $s.end != null)
     let schema = (if $clocked { schema-of $s } else { null })
     let final = (if $s.end == null { null } else { $s.end.frame })
     let problems = (if not $clocked { [] } else { window-problems $s $schema })
@@ -584,17 +623,21 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 # its end marker alone: no marker, a capture whose schema this reader
 # does not take, a clock record at a schema other than the capture's, a
 # record numbered out of order or twice, and a frame short of a record or
-# one too many, the presentation records counted at schema 2.
+# one too many, the presentation records counted from schema 2 and the
+# packet records at schema 3.
 def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<string> {
     mut problems = []
     if $s.end == null {
         $problems = ($problems | append "no end marker: the measurement never closed")
     }
     if $schema not-in $SCHEMAS {
-        $problems = ($problems | append $"the clock records at schema ($schema), this reader's being ($SCHEMAS | str join ' and ')")
+        $problems = ($problems | append $"the clock records at schema ($schema), this reader's being ($SCHEMAS | str join ', ')")
     }
     let last = (if $s.end == null { ($s.frames | length) - 1 } else { $s.end.frame })
-    let records = ([[name items]; [frame $s.frames] [draw $s.draws]] | append (if $schema == 2 { [[name items]; [presentation $s.presents]] } else { [] }))
+    let at = ($schema | default 1)
+    let records = ([[name items]; [frame $s.frames] [draw $s.draws]]
+        | append (if $at >= 2 { [[name items]; [presentation $s.presents]] } else { [] })
+        | append (if $at >= 3 { [[name items]; [packet $s.packets]] } else { [] }))
     for kind in $records {
         let order = ($kind.items | enumerate | where {|e| $e.item.frame != $e.index } | length)
         if $order > 0 { $problems = ($problems | append $"($order) ($kind.name) records out of order or repeated") }
@@ -602,7 +645,7 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
     }
     if ($s.states | length) != ($last + 1) { $problems = ($problems | append $"($s.states | length) state records before the end marker for ($last + 1) frames") }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
-    let others = ($s.frames | append $s.draws | append $s.presents | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
+    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
     if not ($others | is-empty) { $problems = ($problems | append $"clock records at schemas ($others | str join ', ') in a capture at schema ($schema)") }
     $problems
 }
@@ -611,7 +654,7 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
 # other than presented or refused as early, which is a frame never shown;
 # a frame whose phases or whose drawing's parts sum past their whole; a
 # frame whose clock record's drawing or game time differs from its
-# state's. At schema 2: a frame without its presentation record, which
+# state's. From schema 2: a frame without its presentation record, which
 # the rest are read without; a cadence outside 0 to 2; under cadence 0 a wait
 # or a pacing, or attempts other than one; under 1 and 2 a final flip not
 # presented, since those cadences flip again on a refusal; attempts other
@@ -621,7 +664,12 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
 # frame whose start, simulation, flip end, and next start do not come in
 # that order, so no submission age is negative, a frame that reached no
 # flip keeping a flip end from before its start; and a next start that is
-# not the next frame's start.
+# not the next frame's start. At schema 3: a frame without its packet
+# record, which the rest are read without; a frame whose drawing less its
+# preparation and its raster is not 0 to PACKET_RESIDUAL_US, so the raster
+# lies within the drawing; a frame whose packets' bytes are not its
+# commands' and its span records'; and a frame whose packets were
+# prepared from another frame's simulation, a stale snapshot drawn.
 def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<string> {
     let unshown = ($rows | where {|r| $r.flip_status not-in $FLIP_VALID })
     let negative = ($rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
@@ -631,9 +679,11 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
         (if ($negative | is-empty) { null } else { $"($negative | length) frames whose phases or parts sum past their whole" }),
         (if ($misaligned | is-empty) { null } else { $"($misaligned | length) frames whose clock record differs from their state's" }),
     ]
-    if $schema != 2 { return ($base | compact) }
-    let unrecorded = ($rows | where {|r| $r.cadence == null })
-    let rows = ($rows | where {|r| $r.cadence != null })
+    let at = ($schema | default 1)
+    if $at < 2 { return ($base | compact) }
+    let every = $rows
+    let unrecorded = ($every | where {|r| $r.cadence == null })
+    let rows = ($every | where {|r| $r.cadence != null })
     let outside = ($rows | where {|r| $r.cadence not-in $CADENCES })
     let after = ($rows | where {|r| $r.cadence == $CADENCE_AFTER_FLIP })
     let waited = ($after | where {|r| $r.wait_us != 0 or $r.pacing_us != 0 })
@@ -643,7 +693,7 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     let unbalanced = ($rows | where {|r| $r.residual_us < 0 or $r.residual_us > $RESIDUAL_US })
     let disordered = ($rows | where {|r| not ($r.start_us <= $r.simulation_us and $r.simulation_us <= $r.flip_done_us and $r.flip_done_us <= $r.next_start_us) })
     let broken = ($rows | window 2 | where {|w| $w.0.next_start_us != $w.1.start_us })
-    $base | append [
+    let presented = [
         (if ($unrecorded | is-empty) { null } else { $"($unrecorded | length) frames without a presentation record" }),
         (if ($outside | is-empty) { null } else { $"($outside | length) frames at a cadence outside 0 to 2" }),
         (if ($waited | is-empty) { null } else { $"($waited | length) frames under cadence 0 with a wait or a pacing" }),
@@ -653,6 +703,18 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
         (if ($unbalanced | is-empty) { null } else { $"($unbalanced | length) frames whose next start less their start is not their critical path, wait, and await" }),
         (if ($disordered | is-empty) { null } else { $"($disordered | length) frames whose start, simulation, flip end, and next start are out of order" }),
         (if ($broken | is-empty) { null } else { $"($broken | length) frames whose next start is not the next frame's start" }),
+    ]
+    if $at < 3 { return ($base | append $presented | compact) }
+    let unpacked = ($every | where {|r| $r.raster_us == null })
+    let packed = ($every | where {|r| $r.raster_us != null })
+    let unsplit = ($packed | where {|r| $r.packet_residual_us < 0 or $r.packet_residual_us > $PACKET_RESIDUAL_US })
+    let unsized = ($packed | where {|r| $r.packet_bytes != ($r.commands * $COMMAND_BYTES + $r.spans * $SPAN_BYTES) })
+    let stale = ($packed | where {|r| $r.snapshot != $r.frame })
+    $base | append $presented | append [
+        (if ($unpacked | is-empty) { null } else { $"($unpacked | length) frames without a packet record" }),
+        (if ($unsplit | is-empty) { null } else { $"($unsplit | length) frames whose drawing is not their preparation and their raster" }),
+        (if ($unsized | is-empty) { null } else { $"($unsized | length) frames whose packets' bytes are not their commands' and their span records'" }),
+        (if ($stale | is-empty) { null } else { $"($stale | length) frames whose packets were prepared from another frame's simulation" }),
     ] | compact
 }
 
@@ -660,16 +722,21 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
 # answered before it), whether a placement opened it, its state, and
 # with the clock records its phases, the time it left unattributed, its
 # flip's interval from the presented one before and its latency from
-# its start, the drawing's parts, and the tile cache's counts; at schema
-# 2 its presentation too, the submission age from its simulation to its
-# presented flip's end and the residual its next start leaves past its
-# start, critical path, wait, and await. Without the clock records the
-# clock's columns are null, and the presentation's below schema 2 or
-# without its record.
+# its start, the drawing's parts, and the tile cache's counts; from
+# schema 2 its presentation too, the submission age from its simulation
+# to its presented flip's end and the residual its next start leaves past
+# its start, critical path, wait, and await; at schema 3 its packets, the
+# preparation, the raster, the commands, the flushes, the bindings
+# invalidated, the bytes, the snapshot, and what its drawing leaves past
+# its preparation and its raster. Without the clock records the clock's
+# columns are null, the presentation's below schema 2 or without its
+# record, and the packets' below schema 3 or without theirs.
 def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]: nothing -> list<any> {
     let names = ($legs | get name)
     let reach = ($legs | enumerate | each {|e| $legs | first ($e.index + 1) | each {|l| $l.places | length } | math sum })
     let phases = (phases-of $schema)
+    let parts = (parts-of $schema)
+    let at = ($schema | default 1)
     mut rows = []
     mut previous_flip: any = null
     for e in ($s.states | first ($last + 1) | enumerate) {
@@ -678,7 +745,8 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let entry = (if $e.index == 0 { true } else { ($s.states | get ($e.index - 1) | get placed) != $st.placed })
         let f = ($s.frames | get -o $st.frame)
         let d = ($s.draws | get -o $st.frame)
-        let p = (if $schema == 2 { $s.presents | get -o $st.frame } else { null })
+        let p = (if $at >= 2 { $s.presents | get -o $st.frame } else { null })
+        let k = (if $at >= 3 { $s.packets | get -o $st.frame } else { null })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
@@ -697,6 +765,12 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 residual_us: ($p.next_start_us - $f.start_us - ($f.critical_us + $p.wait_us + $f.await_us)),
             } })
             let timed = ($f | upsert pacing_us ($shown.pacing_us | default 0))
+            let packed = (if $k == null { packetless } else { {
+                preparation_us: $k.preparation_us, raster_us: $k.raster_us, commands: $k.commands, flushes: $k.flushes,
+                invalidated: $k.invalidated, packet_bytes: $k.packet_bytes, snapshot: $k.snapshot,
+                packet_residual_us: ($f.draw_us - $k.preparation_us - $k.raster_us),
+            } })
+            let drawn = ($d | upsert raster_us ($packed.raster_us | default 0))
             $rows = ($rows | append ($base | merge {
                 start_us: $f.start_us, critical_us: $f.critical_us, hud_us: $f.hud_us, mix_us: $f.mix_us,
                 flip_us: $f.flip_us, report_us: $f.report_us, await_us: $f.await_us, flip_done_us: $f.flip_done_us,
@@ -704,29 +778,36 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 unattributed_us: ($f.critical_us - ($phases | each {|ph| $timed | get $ph } | math sum)),
                 clear_us: $d.clear_us, portals_us: $d.portals_us, planes_us: $d.planes_us, walls_us: $d.walls_us,
                 sprites_us: $d.sprites_us, tiles_us: $d.tiles_us,
-                parts_unattributed_us: ($f.draw_us - ($PARTS | each {|pt| $d | get $pt } | math sum)),
+                parts_unattributed_us: ($f.draw_us - ($parts | each {|pt| $drawn | get $pt } | math sum)),
                 tiles_built: $d.tiles_built, tile_resets: $d.tile_resets, tiled_pixels: $d.tiled_pixels,
                 lit_pixels: $d.lit_pixels, fallback_pixels: ($d.lit_pixels - $d.tiled_pixels),
                 tile_bytes: $d.tile_bytes, tile_peak: $d.tile_peak, spans: $d.spans, spans_over: ($d.spans > $SPAN_RECORDS),
                 over: ($f.critical_us >= $CEILING_US),
                 aligned: ($f.draw_us == $st.draw_us and $f.game_us == $st.game_us),
-            } | merge $shown))
+            } | merge $shown | merge $packed))
         }
     }
     $rows
 }
 
 # The clock's columns of a row with no clock records, all null, the
-# presentation's among them.
+# presentation's and the packets' among them.
 def clockless []: nothing -> record {
     [start_us critical_us hud_us mix_us flip_us report_us await_us flip_done_us flip_status flip_interval_us latency_us unattributed_us clear_us portals_us planes_us walls_us sprites_us tiles_us parts_unattributed_us tiles_built tile_resets tiled_pixels lit_pixels fallback_pixels tile_bytes tile_peak spans spans_over over aligned]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
     | merge (presentationless)
+    | merge (packetless)
 }
 
 # The presentation's columns of a row below schema 2, all null.
 def presentationless []: nothing -> record {
     [cadence simulation_us next_start_us wait_us pacing_us wakes wait_presses flip_attempts refusals submission_age_us residual_us]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
+}
+
+# The packets' columns of a row below schema 3, all null.
+def packetless []: nothing -> record {
+    [preparation_us raster_us commands flushes invalidated packet_bytes snapshot packet_residual_us]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
@@ -749,15 +830,16 @@ def total [values: list<any>]: nothing -> int {
 
 # A leg's frames summed up: the counts, then with the clock records the
 # critical path and every phase, the flips, the unattributed time, the
-# drawing's parts, the tile cache, and the presentation, the fast frames,
-# their critical path under `period_us`, with those among them that
-# waited before their flip apart; the drawing's and the game's times
-# alone without them.
+# drawing's parts, the tile cache, the presentation, and the packets, the
+# fast frames, their critical path under `period_us`, with those among
+# them that waited before their flip apart; the drawing's and the game's
+# times alone without them.
 def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> record {
     let clocked = ($rows | where {|r| $r.critical_us != null })
     let base = { leg: $name, frames: ($rows | length), entries: ($rows | where entry | length), draw: (stats ($rows | get draw_us)), game: (stats ($rows | get game_us)) }
     if ($clocked | is-empty) { return $base }
     let fast = ($clocked | where {|r| $r.critical_us < $period_us })
+    let held = ($clocked | get packet_bytes | compact)
     $base | merge {
         over: ($clocked | where {|r| $r.over } | length),
         fast: ($fast | length),
@@ -797,6 +879,12 @@ def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> r
         spans_max: ($clocked | get spans | math max),
         spans_over: ($clocked | where {|r| $r.spans_over } | length),
         misaligned: ($clocked | where {|r| not $r.aligned } | length),
+        preparation: (stats ($clocked | get preparation_us)),
+        raster: (stats ($clocked | get raster_us)),
+        commands: (stats ($clocked | get commands)),
+        flushes: (total ($clocked | get flushes)),
+        invalidated: (total ($clocked | get invalidated)),
+        packet_bytes_max: (if ($held | is-empty) { null } else { $held | math max }),
     }
 }
 
@@ -838,7 +926,7 @@ def outcomes-of [events: list<any>, rows: list<any>, last: int]: nothing -> reco
 
 # One line on a run: complete or not and why, valid or not and why,
 # passing or not, the schema, the critical path's spread, the seed, the
-# cadence at schema 2, a program fault.
+# cadence from schema 2, a program fault.
 def run-line [label: string, n: int, m: record, ran: record]: nothing -> string {
     let name = (if $label == "" { "" } else { $"($label): " })
     let fault = (if ($ran.fault? | default null) == null { "" } else { $"; a program fault: ($ran.fault)" })
@@ -855,7 +943,7 @@ def run-line [label: string, n: int, m: record, ran: record]: nothing -> string 
         $"complete, valid, fails: ($m.over) of ($m.frames) frames at or over 15 ms"
     })
     let seed = (if $m.seeded and (not $m.late_seed) { "seeded" } else if $m.late_seed { "seeded late, no paired comparison" } else { "unseeded" })
-    let cadence = (if $m.schema != 2 {
+    let cadence = (if ($m.schema | default 1) < 2 {
         ""
     } else if $m.cadence_set and (not $m.late_cadence) {
         $"; cadence ($m.cadences | each {|c| $c | into string } | str join ', ')"
@@ -908,7 +996,7 @@ def report [label: string, id: record, runs: list<any>, out: path]: nothing -> n
             if ($l.critical? | default null) == null {
                 print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames; draw (spread $l.draw), game (spread $l.game)"
             } else {
-                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) cells built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
+                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) cells built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
             }
         }
         let o = $r.measured.outliers
@@ -1069,7 +1157,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: ([
                 "a build is an image's SHA-256 at the cadence its runs played on the machine their identities"
-                "record: the cadence the one asked at schema 2, and 0 below it, where a request other than 0 leaves"
+                "record: the cadence the one asked from schema 2, and 0 below it, where a request other than 0 leaves"
                 "the run unpaired; a capture's label less a trailing _<n> names it, one name a build and one build"
                 "a name, and its runs are its batches; each run keeps the cadence asked and the cadence played"
             ] | str join " "),
@@ -1090,7 +1178,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "incomplete, invalid, or unchecked (complete but measured before validity was recorded); unpaired, a"
                 "build older than the clock records, read from its states alone, whose console answers a seed it"
                 "never takes, or a run not seeded before its first frame or seeded again after it, or below schema"
-                "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or at schema 2"
+                "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or from schema 2"
                 "one whose cadence was not asked before its first frame or was asked again after it, whose identity"
                 "asks no cadence from 0 to 2, or with a frame at another cadence; diagnostic, a run on a machine its"
                 "identity records as diagnostic, fewer harts than the specification's four, or whose identity"
@@ -1172,7 +1260,7 @@ def standing-of [
 # seed answered before its first frame, or one answered after it; below
 # schema 2, an identity asking a cadence other than 0, which a program
 # writing schema 1 cannot play, the request read as the identity holds it
-# before effective-cadence puts 0 in its place; and at schema 2, no
+# before effective-cadence puts 0 in its place; and from schema 2, no
 # cadence asked before its first frame, or one asked after it, an
 # identity asking no cadence from 0 to 2, or a frame at a cadence other
 # than the one asked. A measurement written before schema 2 was read is
@@ -1185,7 +1273,7 @@ def unpaired-reasons [m: record, requested: any]: nothing -> list<string> {
         (if $seeded { null } else { "unseeded: no seed answered before the first frame" }),
         (if $late_seed { "a seed answered after the first frame" } else { null }),
     ]
-    if $schema != 2 {
+    if $schema < 2 {
         let legacy = (if $requested == null or $requested == 0 { null } else {
             $"the identity asks cadence ($requested), which a capture below schema 2 cannot play"
         })
@@ -1209,12 +1297,12 @@ def unpaired-reasons [m: record, requested: any]: nothing -> list<string> {
 }
 
 # The cadence a run played, the one a build is named by: the one its
-# identity asked at schema 2; below it 0, the one cadence a program
+# identity asked from schema 2; below it 0, the one cadence a program
 # writing schema 1 or no clock records has, set only after
 # unpaired-reasons has held the request to it. A measurement written
 # before schema 2 was read is at schema 1.
 def effective-cadence [m: oneof<record, nothing>, requested: any]: nothing -> any {
-    if ($m | get -o schema | default 1) == 2 { $requested } else { $CADENCE_AFTER_FLIP }
+    if ($m | get -o schema | default 1) >= 2 { $requested } else { $CADENCE_AFTER_FLIP }
 }
 
 # Why a run's rows give nothing to compare in `field`, read from the rows'

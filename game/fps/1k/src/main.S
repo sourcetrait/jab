@@ -42,7 +42,9 @@
 .set CLOCK_ATTEMPTS, 112
 .set CLOCK_REFUSALS, 120
 .set CLOCK_CADENCE, 128
-.set CLOCK_SIZE, 136
+.set CLOCK_DRAW, 136
+.set CLOCK_SNAPSHOT, 144
+.set CLOCK_SIZE, 152
 .set FLIP_EARLY, 1
 .set FLIP_NONE, 255
 
@@ -194,6 +196,7 @@ frame:
     sw t0, 0(t1)                    # the game's microseconds
     la t1, frame_clock
     sd s9, CLOCK_SIMULATION(t1)     # the simulation's time, camera_look's start
+    sd s8, CLOCK_SNAPSHOT(t1)       # the frame whose simulation the drawing is given
     rdtime s9
 .ifdef DEBUG
     call draw_or_stall              # an S's stall in place of the drawing
@@ -206,6 +209,8 @@ frame:
     divu t0, s10, t1
     la t1, frame_us
     sw t0, 0(t1)                    # the drawing's microseconds
+    la t1, frame_clock
+    sd s10, CLOCK_DRAW(t1)          # and its ticks, the raster's taken from them once
     rdtime s9
 .ifndef OWNER
     call hud_draw
@@ -537,8 +542,37 @@ frame_records:
     sw t2, PRESENT_REFUSALS(t1)
     ld t2, CLOCK_CADENCE(t0)
     sw t2, PRESENT_CADENCE(t1)
+    addi t1, t1, REPORT_SIZE        # the packet record
+    li t2, REPORT_PACKET
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    la t3, stats
+    ld t4, STAT_RASTER_TICKS(t3)
+    ld t2, CLOCK_DRAW(t0)
+    sub t2, t2, t4
+    divu t2, t2, t6
+    sw t2, PACKET_PREPARATION(t1)   # the drawing less its raster, converted once
+    divu t4, t4, t6
+    sw t4, PACKET_RASTER(t1)        # every render of the frame's packets, flushes and the resolve in them
+    ld t2, STAT_COMMANDS(t3)
+    sw t2, PACKET_COMMANDS(t1)
+    li t4, POLY_SIZE
+    mul t2, t2, t4
+    ld t4, STAT_SPANS(t3)
+    li a1, SPAN_RECORD_SIZE
+    mul t4, t4, a1
+    add t2, t2, t4
+    sw t2, PACKET_BYTES(t1)         # the commands and span records the frame's packets held
+    ld t2, STAT_FLUSHES(t3)
+    sw t2, PACKET_FLUSHES(t1)
+    ld t2, STAT_INVALIDATED(t3)
+    sw t2, PACKET_INVALIDATED(t1)
+    ld t2, CLOCK_SNAPSHOT(t0)
+    sw t2, PACKET_SNAPSHOT(t1)      # the frame whose simulation the packets were prepared from
     la t0, clock_records
-    li t1, (REPORT_SIZE * 3)
+    li t1, (REPORT_SIZE * 4)
     jab.sys.api.write t0, t1
     la t0, measure_end
     lbu t1, 0(t0)
@@ -1274,7 +1308,7 @@ tick_reported:
 frame_clock:
     .skip CLOCK_SIZE
 clock_records:
-    .skip (REPORT_SIZE * 3)
+    .skip (REPORT_SIZE * 4)
 end_record:
     .skip REPORT_SIZE
 .balign 8

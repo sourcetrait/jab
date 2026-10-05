@@ -77,12 +77,12 @@ const CRACKS = 32
 # actor; its row), 4 the frame struck (the damage; the health), 5 a
 # pickup (the rounds), 6 a trace's answer (0 nothing, 1 a plane, 2 a
 # piece, 3 an android, 4 the player; the distance and the point in
-# millimetres); kinds 7, 8, and 10 the frame before's clock, its
-# drawing, and its presentation, sent at each frame's start, and 9 the
-# end of a measurement, which gauge.nu reads (`gauge measure`) and
-# `records` leaves out
+# millimetres); kinds 7, 8, 10, and 12 the frame before's clock, its
+# drawing, its presentation, and its packets, sent at each frame's start,
+# and 9 the end of a measurement, which gauge.nu reads (`gauge measure`)
+# and `records` leaves out
 const RECORD = 64
-const CLOCK_KINDS = [7 8 9 10]
+const CLOCK_KINDS = [7 8 9 10 12]
 # A console record carries the command's byte where the state's sector
 # sits; the P frame's
 const CONSOLE_P = 80
@@ -95,7 +95,7 @@ const CLOCK_SEED = 7
 const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
-const CLOCK_SCHEMA = 2
+const CLOCK_SCHEMA = 3
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
@@ -823,15 +823,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the frame's clock over the walk: the seed and the cadence answered
     # before the first frame, the E closing the measurement with the end
     # marker after its final frame's records, every frame from 0 to it
-    # with a frame, a draw, and a presentation record in order at the
-    # schema, each at cadence 0, awaiting after its flip: no wait and no
-    # pacing, one flip attempt, a refusal only when it came early; each
-    # frame's start, critical path, wait, and await adding up to its next
-    # start, the next frame's start; each frame's phases within its
-    # critical path and the drawing's parts within the drawing, the tiles'
-    # time within the planes' and the walls', the tiled pixels within the
-    # lit, the arena's peak at or past what it holds, and the game going
-    # on past the measurement
+    # with a frame, a draw, a presentation, and a packet record in order
+    # at the schema, each at cadence 0, awaiting after its flip: no wait
+    # and no pacing, one flip attempt, a refusal only when it came early;
+    # each frame's start, critical path, wait, and await adding up to its
+    # next start, the next frame's start; each frame's phases within its
+    # critical path and the drawing's parts, the raster among them, within
+    # the drawing, the tiles' time within the planes' and the walls', the
+    # tiled pixels within the lit, the arena's peak at or past what it
+    # holds; each frame's drawing its preparation and its raster, the
+    # bytes its packets held its commands' and span records', and its
+    # packets prepared from its own simulation, the gauge's rules at
+    # schema 3 which its validity holds; commands and spans in every
+    # frame; and the game going on past the measurement
     let walk_clock = (gauge measure $render_0_walk.api [{ name: "walk", places: $render_0_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
@@ -853,7 +857,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($clock_rows | all {|r| $r.tiled_pixels <= $r.lit_pixels }) "the tiled pixels within the lit"
     assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile arena's peak at or past what it holds"
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
-    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early"
+    let unprepared = ($clock_rows | where {|r| $r.commands == null or $r.commands == 0 or $r.spans == 0 })
+    assert ($unprepared | is-empty) $"each frame of the walk prepares commands and spans into its packets: ($unprepared | select frame commands spans | first 3)"
+    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.invalidated) bindings invalidated, ($walk_clock.whole.packet_bytes_max) packet bytes at most"
 
     # the three cadences on a schedule of stalls and trigger reports and
     # on a timed walk (cadence-holds)
@@ -2059,7 +2065,15 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # one build under two names, keeps one image's two cadences apart as two
 # builds, and takes one image's schema 1 captures asking none and 0 as
 # one build at cadence 0, each comparison it must make wrapped and held
-# to no refusal. A run on a diagnostic machine is refused as diagnostic
+# to no refusal. At schema 3: the packet record read at its offsets; a
+# frame without it, or one at another schema, leaves the window
+# incomplete; packet records alone among the states are clocked and
+# incomplete; a drawing a microsecond past its preparation and raster is
+# valid, and two past, or less than they, invalid; a raster past what the
+# drawing's other parts leave, packet bytes other than the commands' and
+# span records', and packets prepared from another frame's simulation are
+# each invalid for that alone; and one image's captures at cadences 0 and
+# 1 compare as two builds. A run on a diagnostic machine is refused as diagnostic
 # and admitted marked under --diagnostic; runs on two machines refuse
 # the comparison, and under --diagnostic each build's row names its
 # machine; one name's runs on two machines are two builds; a run whose
@@ -2380,6 +2394,54 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($legacy.runs | get effective_cadence) [0 0] $"both played cadence 0: ($legacy.runs | get effective_cadence)"
     assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
 
+    # schema 3: every frame's packets, read at their offsets, a capture's
+    # records at one schema, the packet records clock evidence; the drawing
+    # its preparation and its raster to within the microsecond the
+    # conversions drop, the raster a part of the drawing, the bytes the
+    # packets held their commands' and span records', the packets prepared
+    # from the frame's own simulation, each case moving one field of frame
+    # 1 and invalid for that alone
+    let good3 = (fx-items 3 --schema 3)
+    let m3 = (do $measure $good3)
+    assert ($m3.complete and $m3.valid and $m3.passes and $m3.seeded and $m3.cadence_set) $"a well-formed capture at schema 3: ($m3.problems) ($m3.invalid)"
+    assert equal [$m3.schema $m3.cadences $m3.final $m3.frames] [3 [0] 2 3] "schema 3, cadence 0, frames 0 to 2"
+    let read3 = ($m3.rows | get 2 | select preparation_us raster_us commands flushes invalidated packet_bytes snapshot packet_residual_us)
+    let read3_holds = { preparation_us: 960, raster_us: 40, commands: 3, flushes: 1, invalidated: 2, packet_bytes: 1016, snapshot: 2, packet_residual_us: 0 }
+    assert equal $read3 $read3_holds $"frame 2's packet record read at its offsets: ($read3)"
+    let unpacked = (do $measure ($good3 | where {|i| not ($i.kind == "packet" and $i.frame == 1) }))
+    let unpacked_says = $"a frame without its packet record leaves the window incomplete: ($unpacked.problems)"
+    assert ((not $unpacked.complete) and ($unpacked.problems | any {|p| $p =~ "packet records" })) $unpacked_says
+    let mixed3 = (do $measure (fx-set $good3 "packet" 1 { schema: 2 }))
+    let mixed3_says = $"a packet record at another schema leaves the window incomplete: ($mixed3.problems)"
+    assert ((not $mixed3.complete) and ($mixed3.problems | any {|p| $p =~ "at schemas 2 in a capture at schema 3" })) $mixed3_says
+    let packets_alone = (do $measure ($good3 | where {|i| $i.kind in ["ack" "cack" "state" "packet"] }))
+    assert ($packets_alone.clocked and (not $packets_alone.complete)) $"states with packet records alone are clocked and incomplete: ($packets_alone.problems)"
+    let rounded = (do $measure (fx-set $good3 "packet" 1 { preparation: 959 }))
+    assert ($rounded.complete and $rounded.valid) $"a drawing a microsecond past its preparation and raster, the conversions' drop, is valid: ($rounded.invalid)"
+    let unsplit = "1 frames whose drawing is not their preparation and their raster"
+    let packet_cases = [
+        { name: "a drawing two microseconds past its preparation and raster", items: (fx-set $good3 "packet" 1 { preparation: 958 }), says: $unsplit }
+        { name: "a preparation and raster past the drawing", items: (fx-set $good3 "packet" 1 { preparation: 961 }), says: $unsplit }
+        { name: "a raster past what the drawing's other parts leave", items: (fx-set $good3 "packet" 1 { preparation: 940, raster: 60 }), says: "1 frames whose phases or parts sum past their whole" }
+        { name: "packet bytes other than the commands' and span records'", items: (fx-set $good3 "packet" 1 { bytes: 1015 }), says: "1 frames whose packets' bytes are not their commands' and their span records'" }
+        { name: "packets prepared from the frame before's simulation", items: (fx-set $good3 "packet" 1 { snapshot: 0 }), says: "1 frames whose packets were prepared from another frame's simulation" }
+    ]
+    for c in $packet_cases {
+        let mc = (do $measure $c.items)
+        assert ($mc.complete and $mc.invalid == [$c.says]) $"($c.name) is invalid for that alone: ($mc.problems) ($mc.invalid)"
+    }
+
+    # from schema 2 a capture plays the cadence it asks: one image's
+    # schema 3 captures at cadences 0 and 1 are two builds, the comparison
+    # wrapped and held to no refusal
+    let early3 = (fx-items 3 --schema 3 --cadence 1)
+    let at3 = (try {
+        gauge compare [(fx-gauge $dir "three_0" "three_after" "three_image" 0 $good3) (fx-gauge $dir "three_1" "three_early" "three_image" 1 $early3)] "draw_us" 50
+    } catch {|e| { refusal: $e.msg } })
+    let at3_says = $"schema 3 captures at cadences 0 and 1 compare without a refusal: ($at3 | get -o refusal)"
+    assert (($at3 | get -o refusal) == null) $at3_says
+    assert equal ($at3.runs | get effective_cadence) [0 1] $"each schema 3 capture plays the cadence it asked: ($at3.runs | get effective_cadence)"
+
     # machines: the specification's four harts, two harts diagnostic, and
     # four harts on another -machine, the PLIC's line before the AIA
     let four = (jab machine-of 4)
@@ -2442,7 +2504,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
 # The program's three cadences on its own clock records, one
 # launch a cadence of each fixture, the debug build's S frames standing
 # stalls in place of the drawing, each window held complete and valid at
-# schema 2 before anything is read from it. CadenceSchedule, on Render
+# the program's schema before anything is read from it. CadenceSchedule, on Render
 # One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
 # 500 us spin inside every consume; ten trigger reports from 1.8 s, 400
 # ms apart, each pressed and released in one report; at 5.9 s a frame
@@ -2492,7 +2554,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $render_1_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
         let m = (gauge measure $run.api [{ name: "schedule", places: [], pad: [] }])
-        assert ($m.complete and $m.valid and $m.schema == 2) $"the window complete and valid at schema 2 ($says): ($m.problems) ($m.invalid)"
+        assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the window complete and valid at schema ($CLOCK_SCHEMA) ($says): ($m.problems) ($m.invalid)"
         assert equal $m.cadences [$cadence] $"every frame presented at cadence ($cadence) ($says)"
         let s = (answered-frames $run.api $CONSOLE_S)
         assert equal ($s | length) 4 $"the four S frames answered in the window ($says): ($s)"
@@ -2583,7 +2645,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"motion_($cadence)") --set $set --sound --api --pad $stick --disk $still_disk --serial "fps" --send $sends --capture ($MOTION_END + 1sec) --seconds 7)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
         let m = (gauge measure $run.api [{ name: "motion", places: [$MOTION_POSE], pad: [] }])
-        assert ($m.complete and $m.valid and $m.schema == 2) $"the window complete and valid at schema 2 ($says): ($m.problems) ($m.invalid)"
+        assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the window complete and valid at schema ($CLOCK_SCHEMA) ($says): ($m.problems) ($m.invalid)"
         let moved = ($m.rows | window 2 | where {|w|
             let step = (((($w.1.x - $w.0.x) ** 2) + (($w.1.y - $w.0.y) ** 2)) | math sqrt)
             $step > 0.001 and $step < 0.5
@@ -2664,37 +2726,51 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 }
 
 # A synthetic capture's records as the program sends them over `frames`
-# frames: the seed's answer and at schema 2 the cadence's, frame 0's
-# state, then at each frame's top the frame before's clock, drawing, and
-# at schema 2 presentation, the end marker after the final frame's, and
-# the frame's state, two frames' states past the window.
+# frames: the seed's answer and from schema 2 the cadence's, frame 0's
+# state, then at each frame's top the frame before's clock, drawing, from
+# schema 2 presentation, and at schema 3 packets, the end marker after
+# the final frame's, and the frame's state, two frames' states past the
+# window.
 def fx-items [frames: int, --schema: int = 1, --cadence: int = 0]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
         [(fx-frame ($n - 1) $schema) { kind: "draw", frame: ($n - 1), schema: $schema }]
-        | append (if $schema == 2 { [(fx-present ($n - 1) $cadence)] } else { [] })
+        | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
+        | append (if $schema >= 3 { [(fx-packet ($n - 1))] } else { [] })
         | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
-    let answers = (if $schema == 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
+    let answers = (if $schema >= 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
     $answers | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
 }
 
 # A frame record's fields for a synthetic capture: its phases 1.72 ms of
 # a critical path of 1.8, the drawing 1 ms, presented, frames FX_PERIOD
-# apart; at schema 2 the await the rest of the period, so the frame's
+# apart; from schema 2 the await the rest of the period, so the frame's
 # start, critical path, wait, and await add up to the next frame's start.
 def fx-frame [frame: int, schema: int = 1]: nothing -> record {
-    let await = (if $schema == 2 { $FX_PERIOD - 1800 } else { 16000 })
+    let await = (if $schema >= 2 { $FX_PERIOD - 1800 } else { 16000 })
     { kind: "frame", frame: $frame, critical: 1800, game: 100, draw: 1000, status: 0, schema: $schema, await: $await }
 }
 
 # A presentation record's fields for a synthetic capture: the simulation
 # 50 us into the frame, the next start the next frame's, no wait, pacing,
 # wakes, or presses, one attempt, presented.
-def fx-present [frame: int, cadence: int]: nothing -> record {
+def fx-present [frame: int, cadence: int, schema: int = 2]: nothing -> record {
     {
         kind: "present", frame: $frame, simulation: ($frame * $FX_PERIOD + 50), next: (($frame + 1) * $FX_PERIOD),
-        wait: 0, pacing: 0, wakes: 0, presses: 0, attempts: 1, refusals: 0, cadence: $cadence, schema: 2,
+        wait: 0, pacing: 0, wakes: 0, presses: 0, attempts: 1, refusals: 0, cadence: $cadence, schema: $schema,
+    }
+}
+
+# A packet record's fields for a synthetic capture: the drawing's 1 ms
+# its preparation's 0.96 and its raster's 0.04, the drawing's other parts
+# taking 0.95 of it; three commands, a flush, two bindings invalidated;
+# the bytes three commands' and the draw record's five span records'; and
+# the frame's own simulation.
+def fx-packet [frame: int]: nothing -> record {
+    {
+        kind: "packet", frame: $frame, preparation: 960, raster: 40, commands: 3, flushes: 1, invalidated: 2,
+        bytes: (3 * 312 + 5 * 16), snapshot: $frame, schema: 3,
     }
 }
 
@@ -2733,8 +2809,8 @@ def fx-gauge [dir: path, name: string, label: string, image: string, cadence: an
 # game microseconds at 32 and 36, 1000 and 100 unless given; a frame's
 # clock, the crosshair and the mix 10 us each, the flip 500, the
 # reporting 100, its await, its flip's end 1.7 ms past its start unless
-# given; a drawing whose parts take 0.95 ms, its tiles 0.1; a
-# presentation; and the end marker's frame and schema.
+# given; a drawing whose parts take 0.95 ms, its tiles 0.1, its spans 5;
+# a presentation; a packet record; and the end marker's frame and schema.
 def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
@@ -2754,6 +2830,11 @@ def fx-bytes [items: list<any>]: nothing -> binary {
             "present" => ([
                 0x[0a 00 00 00] (fx-u32 $i.frame) (fx-u64 $i.simulation) (fx-u64 $i.next) (fx-u32 $i.wait) (fx-u32 $i.pacing)
                 (fx-u32 $i.wakes) (fx-u32 $i.presses) (fx-u32 $i.attempts) (fx-u32 $i.refusals) (fx-u32 $i.cadence) (fx-zeros 8)
+                (fx-u32 $i.schema)
+            ] | bytes collect),
+            "packet" => ([
+                0x[0c 00 00 00] (fx-u32 $i.frame) (fx-u32 $i.preparation) (fx-u32 $i.raster) (fx-u32 $i.commands)
+                (fx-u32 $i.flushes) (fx-u32 $i.invalidated) (fx-u32 $i.bytes) (fx-u32 $i.snapshot) (fx-zeros 24)
                 (fx-u32 $i.schema)
             ] | bytes collect),
             "end" => ([0x[09 00 00 00] (fx-u32 $i.frame) (fx-zeros 52) (fx-u32 $i.schema)] | bytes collect),
