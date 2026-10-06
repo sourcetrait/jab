@@ -44,14 +44,6 @@ directory and, optionally, specific relative file or directory.
 - JabIO
 - jab (term)
 
-## Spec
-System specifications that lock-in minimum-maximum hardware requirements.
-
-Nomenclature starts with the display type (1K (1080p), 2K (QHD), 4K, etc.)
-followed by a sub-specification letter (1KA, 2KC, etc.).
-
-Omission of the sub-spec, where allowed, implies 'A'.
-
 ### Launch
 Distribution for desktop systems (Linux, MacOS, Windows) including its
 self-named launcher app.
