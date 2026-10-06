@@ -356,16 +356,19 @@ const HOT_FAMILIES = [
     { name: "the packet's render", members: [packet_render band_render span_fill] }
 ]
 # The raster's workers through the console's W frame: the default, every
-# worker started, two on four harts, a band a worker; the spawn view of
-# the still copy drawn again by the serial backend, by one worker, and
-# by two in bands of WORKER_GRAIN rows, each the default's capture over
-# the whole screen and its frame line's counts the default's
+# worker started, two on four harts, in bands of GRAIN_DEFAULT rows
+# (render.inc's); the spawn view of the still copy drawn again by the
+# serial backend, by one worker, by two a band a worker, and by two in
+# bands of WORKER_GRAIN rows, each the default's capture over the whole
+# screen and its frame line's counts the default's
 const WORKERS_STARTED = 2
+const GRAIN_DEFAULT = 32
 const WORKER_GRAIN = 16
 const SCREEN_ROWS = 1080
 const WORKER_MODES = [
     { workers: 0, grain: 0 }
     { workers: 1, grain: 0 }
+    { workers: 2, grain: 0 }
     { workers: 2, grain: $WORKER_GRAIN }
 ]
 const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
@@ -883,8 +886,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # packets prepared from its own simulation, and its workers' round
     # times within its raster, the gauge's rules at schema 4 which its
     # validity holds; commands and spans in every frame; every frame drawn
-    # by the default, every worker started a band each, with a slowest
-    # worker's time; and the game going on past the measurement
+    # by the default, every worker started in bands of GRAIN_DEFAULT rows,
+    # with a slowest worker's time; and the game going on past the
+    # measurement
     let walk_clock = (gauge measure $render_0_walk.api [{ name: "walk", places: $render_0_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
@@ -908,8 +912,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
     let unprepared = ($clock_rows | where {|r| $r.commands == null or $r.commands == 0 or $r.spans == 0 })
     assert ($unprepared | is-empty) $"each frame of the walk prepares commands and spans into its packets: ($unprepared | select frame commands spans | first 3)"
-    let undrawn = ($clock_rows | where {|r| $r.workers != $WORKERS_STARTED or $r.grain != 0 or $r.slowest_us == 0 or $r.busy_us == 0 })
-    assert ($undrawn | is-empty) $"every frame of the walk drawn by the ($WORKERS_STARTED) workers started, a band each, a slowest worker and busy time recorded: ($undrawn | select frame workers grain slowest_us busy_us | first 3)"
+    let undrawn = ($clock_rows | where {|r| $r.workers != $WORKERS_STARTED or $r.grain != $GRAIN_DEFAULT or $r.slowest_us == 0 or $r.busy_us == 0 })
+    assert ($undrawn | is-empty) $"every frame of the walk drawn by the ($WORKERS_STARTED) workers started in bands of ($GRAIN_DEFAULT) rows, a slowest worker and busy time recorded:($undrawn | select frame workers grain slowest_us busy_us | first 3)"
     print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.invalidated) bindings invalidated, ($walk_clock.whole.packet_bytes_max) packet bytes at most; ($walk_clock.workers | str join ', ') workers, the slowest's median ($walk_clock.whole.slowest.median) us, dispatch ($walk_clock.whole.dispatch.median) and barrier ($walk_clock.whole.barrier.median)"
 
     # the three cadences on a schedule of stalls and trigger reports and
@@ -1034,15 +1038,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($capped_rows | is-empty) $"the spawn view drawn in packets of ($PACKET_CAPS.commands) commands and ($PACKET_CAPS.spans) spans, ($capped_frame.flushes) flushed, the uncapped one's: rows ($capped_rows | first 5) differ, ($capped_rows | length) in all"
     assert equal $capped_frame.rounds ($capped_frame.flushes + 1) $"every render of the capped frame a round of the workers: ($capped_frame)"
 
-    # the raster's workers: the default, every worker started and a band
-    # a worker, drew the views above; the same spawn view drawn again by
-    # the serial backend, by one worker, and by two in bands of
-    # WORKER_GRAIN rows, each the default's picture over the whole screen
-    # with the default's counts, every band rendered in every round and
-    # the clear on hart 0 under the serial backend alone
+    # the raster's workers: the default, every worker started in bands of
+    # GRAIN_DEFAULT rows, drew the views above; the same spawn view drawn
+    # again by the serial backend, by one worker, by two a band a worker,
+    # and by two in bands of WORKER_GRAIN rows, each the default's picture
+    # over the whole screen with the default's counts, every band rendered
+    # in every round and the clear on hart 0 under the serial backend alone
     let default_frame = $spawn_captures.tiled.frame
-    assert ($default_frame.workers == $WORKERS_STARTED and $default_frame.grain == 0) $"the default draws with every worker started, a band a worker: ($default_frame)"
-    assert ($default_frame.rounds == 1 and $default_frame.bands0 == 1 and $default_frame.bands1 == 1 and $default_frame.clear == 0) $"the default's one round a band a worker, the clear theirs: ($default_frame)"
+    let default_bands = (($SCREEN_ROWS + $GRAIN_DEFAULT - 1) // $GRAIN_DEFAULT)
+    assert ($default_frame.workers == $WORKERS_STARTED and $default_frame.grain == $GRAIN_DEFAULT) $"the default draws with every worker started in bands of ($GRAIN_DEFAULT) rows: ($default_frame)"
+    assert ($default_frame.rounds == 1 and ($default_frame.bands0 + $default_frame.bands1) == $default_bands and $default_frame.clear == 0) $"the default's one round, its ($default_bands) bands each rendered once, the clear theirs: ($default_frame)"
     for m in $WORKER_MODES {
         let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
         let sends = [{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
@@ -1139,7 +1144,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             }
         }
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, on four, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
+    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows, on four, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,

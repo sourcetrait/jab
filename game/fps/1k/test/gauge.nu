@@ -204,7 +204,7 @@ def "main run" [
     --seeds: list<int> = []      # each run's seed, run n's n unless given
     --cadence: int = 1           # the cadence each run asks for, the program's own 1 unless given
     --workers: int = -1          # the raster's workers each run asks for, 0 the serial backend; none asked, no W, unless given
-    --grain: int = 0             # the rows a band asked with the workers, 0 for a band a worker
+    --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
@@ -269,7 +269,7 @@ def "main play" [
     --seed: int = 1              # the seed the run sends
     --cadence: int = 1           # the cadence the run asks for, the program's own 1 unless given
     --workers: int = -1          # the raster's workers the run asks for, 0 the serial backend; none asked, no W, unless given
-    --grain: int = 0             # the rows a band asked with the workers, 0 for a band a worker
+    --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
     --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run

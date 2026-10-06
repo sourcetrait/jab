@@ -906,6 +906,13 @@ A worker's stack's bytes.
 
 `u32`: the rows a band until a console W chooses, 0 for a band a worker.
 
+Thirty-two, the screen's 1080 rows in 34 bands, the last 24 rows. Measured
+with the program's gauge on its settled route, two workers drew the still
+views in the least raster time taken together at 32 rows, against a band
+a worker and bands of 16, 64, and 128 rows. A band a worker left the
+slowest worker up to a millisecond and a quarter a frame past the
+workers' mean; at 32 rows it stayed within a tenth of one.
+
 ## .set ROUND_COMMANDS
 
 `u32`: the round's packet's commands.
