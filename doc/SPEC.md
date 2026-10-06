@@ -2,15 +2,15 @@
 
 System specifications for Jab that lock-in system requirements.
 
-Nomenclature: `{resolution}K{components}{compatability}`
-- Resolution
+Nomenclature: `{res}{req}{ver}`
+- Resolution (res)
   - `1K` 1080p
   - `2k` QHD
   - `4K` 4K
-- Components
-  - `/[A-Z]/` Minimum hardware components and resources
-- Compatability
-  - `/[0-9]+/` Minimum compatability (eg, RVA22 vs RVA23)
+- Requirements (req)
+  - `/[A-Z]/` Hardware components and resources
+- Version (ver)
+  - `/[0-9]+/` Compatability, etc (eg, RVA22 vs RVA23)
 
 ## 1KA1
 - ISA: RISC-V
