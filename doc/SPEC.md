@@ -3,13 +3,13 @@
 System specifications for Jab that lock-in system requirements.
 
 Nomenclature: `{res}{req}{ver}`
-- Resolution (res)
+- Resolution (`res`)
   - `1K` 1080p
   - `2k` QHD
   - `4K` 4K
-- Requirements (req)
+- Requirements (`req`)
   - `/[A-Z]/` Hardware components and resources
-- Version (ver)
+- Version (`ver`)
   - `/[0-9]+/` Compatability, etc (eg, RVA22 vs RVA23)
 
 ## 1KA1
