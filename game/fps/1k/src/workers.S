@@ -283,6 +283,19 @@ round_run:
     sd t1, STAT_CANCELLED(t0)
 85:
 .ifdef DEBUG
+    li s3, 0
+86:
+    bgeu s3, s1, 87f
+    slli s6, s3, 7
+    la t0, mailboxes
+    add s6, s6, t0
+    lw t0, JAB_JOB_DONE(s6)
+    lw t1, JAB_JOB_GEN(s6)
+    addi s3, s3, 1
+    beq t0, t1, 86b                 # its job joined, the round's
+    jab.sys.uart.print msg_unjoined
+    jab.sys.exit 13
+87:
     ld t1, 16(sp)
     lwu t2, ROUND_BANDS(s0)
     beq t1, t2, 90f
@@ -478,6 +491,8 @@ msg_refused:
     .asciz "fps: worker refused on hart "
 msg_lost_bands:
     .asciz "fps: round lost bands\n"
+msg_unjoined:
+    .asciz "fps: round unjoined\n"
 .endif
 
 .section .bss

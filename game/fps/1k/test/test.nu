@@ -434,6 +434,7 @@ const DEBUG_TEXT = [
     "fps: workers "
     "fps: worker refused on hart "
     "fps: round lost bands\n"
+    "fps: round unjoined\n"
 ]
 const EXIT_TEXT = [
     "fps: "

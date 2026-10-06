@@ -51,8 +51,12 @@ job published, the publishes' fence ordering all of it before the
 generation a worker awaits. Each job's frame is the frame's snapshot. The
 dispatch is the latest worker's start less hart 0's clock before its first
 publish, the barrier hart 0's clock after its joins less the latest
-worker's end. A debug build checks that the bands rendered are the round's
-and exits 13 with `fps: round lost bands` when they are not.
+worker's end. A debug build checks after the joins that every job's
+completion is its generation, the round's, and exits 13 with `fps: round
+unjoined` when one is not, the join's own invariant, since a round read
+before a worker completes would still find its bands from the round
+before; then that the bands rendered are the round's, exiting 13 with
+`fps: round lost bands` when they are not.
 
 A cancelled round is finished on hart 0: a job read its cancel at a band's
 boundary and completed as cancelled, so after the joins round_finish
@@ -96,7 +100,11 @@ calls being the jobs' alone.
 
 `23 u8`.
 
-The debug lines' text, msg_workers to msg_lost_bands, is in a debug build
+## msg_unjoined
+
+`21 u8`.
+
+The debug lines' text, msg_workers to msg_unjoined, is in a debug build
 alone.
 
 ## mailboxes
