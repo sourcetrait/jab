@@ -177,7 +177,7 @@ const REFUSED = [incomplete invalid unchecked unpaired diagnostic]
 const REJECTED = [empty unclassified unusable]
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--threads <at>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
@@ -210,6 +210,7 @@ def "main run" [
     --label: string = ""         # a name for the build in the summary
     --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
+    --threads: duration = 0sec   # when in each run to read every QEMU thread's CPU over a second, kept in run.nuon; none unless given
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
@@ -240,9 +241,9 @@ def "main run" [
         let id = (identity $at $set $map_name $route_file $mode $harts $qemu)
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads $threads
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads $threads
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
@@ -519,13 +520,17 @@ def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
 }
 
 # What a launch came to: its status, a fault line on the UART, the CPU
-# and wall seconds, and the machine it ran on, its line and its record.
+# and wall seconds, each QEMU thread's CPU over the second `--threads`
+# held with that span, empty and null when none was held, and the
+# machine it ran on, its line and its record.
 def outcome [launched: record]: nothing -> record {
     {
         status: $launched.status,
         fault: ($launched.serial | lines | where {|l| $l starts-with "jab: " } | get -o 0),
         cpu_seconds: $launched.cpu_seconds,
         wall_seconds: $launched.wall_seconds,
+        threads: ($launched | get -o threads | default []),
+        threads_span: ($launched | get -o threads_span),
         qemu_binary: $launched.qemu_binary,
         qemu: $launched.qemu,
         machine: $launched.machine,
