@@ -1067,6 +1067,11 @@ frame_report:
     li t0, US_TICKS
     divu a1, a1, t0
     call append_dec
+    la a1, word_cancelled
+    call append_str
+    la t0, stats
+    ld a1, STAT_CANCELLED(t0)
+    call append_dec
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1556,6 +1561,8 @@ word_slowest:
     .asciz ", slowest us "
 word_busy:
     .asciz ", busy us "
+word_cancelled:
+    .asciz ", cancelled "
 .ifdef COUNT
 msg_count:
     .asciz "fps: count "

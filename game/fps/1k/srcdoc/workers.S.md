@@ -54,10 +54,31 @@ publish, the barrier hart 0's clock after its joins less the latest
 worker's end. A debug build checks that the bands rendered are the round's
 and exits 13 with `fps: round lost bands` when they are not.
 
+A cancelled round is finished on hart 0: a job read its cancel at a band's
+boundary and completed as cancelled, so after the joins round_finish
+renders on hart 0's context the bands the jobs left, the clear with them
+on a first round, and the round is counted in STAT_CANCELLED. The game
+cancels nothing; a debug build's J frame cancels every round while it
+stands, so the path is the jobs library's cancellation exercised, and a
+frame is whole, never a prefix.
+
 ## raster_worker
 
 The fixed band is the worker's index of the round's workers; a claimed
-band's rows end at the screen's last.
+band's rows end at the screen's last. On a debug build the J frame's
+fault loads SCRATCH_POISON's address before the band, and its hold spins
+on rdtime before each band and claim (job_delay).
+
+## round_finish
+
+At a band a worker, a worker whose job holds no band read its cancel
+before its band, and its rows are rendered here; at a grain the counter
+hands on the bands no worker claimed, every band once.
+
+## job_delay
+
+A debug build's: the hold spins on rdtime, calling nothing, a worker's
+calls being the jobs' alone.
 
 ## msg_workers
 
@@ -121,6 +142,22 @@ alone.
 ## round_first
 
 `u8`: 1 until the frame's first round takes it, the round that clears.
+
+## job_delay_worker
+
+`u8`: on a debug build, the J frame's held worker, its index plus one, 0 for none; the knobs after it are a debug build's too.
+
+## job_cancel
+
+`u8`: 1 while every round is cancelled after its publish.
+
+## job_fault_worker
+
+`u8`: the worker to fault on the next round, its index plus one, cleared by that round.
+
+## job_delay_us
+
+`u32`: the hold before each band in microseconds.
 
 ## worker_stacks
 

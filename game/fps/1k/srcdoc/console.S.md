@@ -6,7 +6,17 @@ with the lumels bright or set by parity, the tiles held off, or the levels built
 capped, R the generator seeded, E the gauge's measurement closed, C the
 cadence chosen, W the raster's workers and grain chosen, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds and a forced
-reset, each reported back as REPORT_CONSOLE.
+reset, J on a debug build the jobs' hold, cancel, and fault, each reported back
+as REPORT_CONSOLE.
+
+J is the jobs' knob, on a debug build alone, read by the rounds after it
+(workers.S): byte 4 the worker to hold, its index plus one, 0 for none,
+and bytes 8 to 11 its hold before each band in microseconds, standing;
+byte 12 set cancels every round after its publish while it stands, the
+bands its jobs left finished on hart 0; byte 13 the worker to fault, its
+index plus one, which on the next round alone loads SCRATCH_POISON's
+address and ends the run through the kernel. The test's `jobs-frame`
+builds it.
 
 W takes byte 4 as the frame's workers, 0 for the serial backend, held to the
 workers started (workers.S), and bytes 8 to 11 as the rows a band, 0 for a

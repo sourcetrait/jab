@@ -368,9 +368,9 @@ tile arena is reset after the bake, since a map's maps are the tiles'
 frame. The packet follows: the raster's microseconds among the phases, the
 commands the frame's packets held, the flushes, and the bindings a reset
 invalidated (raster.S). The workers close the line: the frame's workers and
-grain, its rounds, each worker's bands, and the rounds' dispatch, barrier,
-slowest worker, and every worker's busy time in microseconds (workers.S),
-the two band counts WORKERS_MAX's.
+grain, its rounds, each worker's bands, the rounds' dispatch, barrier,
+slowest worker, and every worker's busy time in microseconds, and the
+rounds cancelled (workers.S), the two band counts WORKERS_MAX's.
 
 ## count_report
 
@@ -623,7 +623,7 @@ carries none.
 
 `14 u8`.
 
-The debug lines' text, from here to word_busy, is in a debug build alone,
+The debug lines' text, from here to word_cancelled, is in a debug build alone,
 and the count line's after it, msg_count to word_count_mismatches, in a
 COUNT build alone.
 
@@ -806,6 +806,10 @@ COUNT build alone.
 ## word_busy
 
 `11 u8`.
+
+## word_cancelled
+
+`13 u8`.
 
 ## msg_count
 

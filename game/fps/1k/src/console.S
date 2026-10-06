@@ -188,7 +188,7 @@ console_frame:
     j 8f
 14:
     li t1, 'K'
-    bne t0, t1, 8f
+    bne t0, t1, 15f
     lwu t1, 4(s2)
     la t2, packet_command_cap
     sw t1, 0(t2)                    # the commands a packet holds, 0 for MAX_COMMANDS
@@ -198,6 +198,22 @@ console_frame:
     lwu t1, 12(s2)
     la t2, tile_reset_after
     sw t1, 0(t2)                    # the binds each frame before a forced reset, 0 for none
+    j 8f
+15:
+    li t1, 'J'
+    bne t0, t1, 8f
+    lbu t1, 4(s2)
+    la t2, job_delay_worker
+    sb t1, 0(t2)                    # the delayed worker's index plus one, 0 for none
+    lwu t1, 8(s2)
+    la t2, job_delay_us
+    sw t1, 0(t2)                    # its delay before each band
+    lbu t1, 12(s2)
+    la t2, job_cancel
+    sb t1, 0(t2)                    # every round cancelled after its publish while set
+    lbu t1, 13(s2)
+    la t2, job_fault_worker
+    sb t1, 0(t2)                    # the faulting worker's index plus one, its next round
 .endif
 8:
     la t0, console_record

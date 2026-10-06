@@ -64,7 +64,7 @@ use ./gauge.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}, cancelled {cancelled}"
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -369,6 +369,26 @@ const WORKER_MODES = [
     { workers: 2, grain: $WORKER_GRAIN }
 ]
 const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
+# The jobs' behaviours through the console's J frame, a debug build's,
+# on the spawn view with two workers: worker 1 held before each band at a
+# band a worker, the frame waiting for it, and at 16 rows, the other
+# taking its bands; every round cancelled after its publish, worker 1
+# held so its band is left to hart 0, and at 16 rows; each the default's
+# picture and counts. Worker 0 faulting on its next round ends the run
+# with its line; an idle worker's thread under IDLE_RATE of a core over
+# the span held from IDLE_AT
+const JOB_CASES = [
+    { name: "worker 1 held at a band a worker", grain: 0, delayed: 2, delay_us: 150000, cancel: false }
+    { name: "worker 1 held at 16 rows", grain: 16, delayed: 2, delay_us: 150000, cancel: false }
+    { name: "every round cancelled, worker 1 held, at a band a worker", grain: 0, delayed: 2, delay_us: 50000, cancel: true }
+    { name: "every round cancelled at 16 rows", grain: 16, delayed: 0, delay_us: 0, cancel: true }
+]
+const IDLE_RATE = 0.05
+const IDLE_AT = 2500ms
+const IDLE_CASES = [
+    { workers: 0, asleep: [1 2] }
+    { workers: 1, asleep: [2] }
+]
 # The workers on fewer harts, the machine's secondaries all there are:
 # each machine's workers line, and a W asking two held to those started
 const WORKER_MACHINES = [
@@ -1066,7 +1086,59 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
         assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, and on four, two, and one harts, each the default's picture and counts"
+    # the jobs' behaviours (JOB_CASES): a held worker, the cancel, the
+    # fault, and idle workers asleep
+    for j in $JOB_CASES {
+        let label = $"the spawn view with ($j.name)"
+        let sends = [
+            { at: 1300ms, bytes: (gauge workers-frame 2 $j.grain) }
+            { at: 1300ms, bytes: (jobs-frame $j.delayed $j.delay_us $j.cancel 0) }
+            { at: 1400ms, bytes: (level-frame true false 0) }
+            { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
+        ]
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_jobs_($j.grain)_($j.delayed)_($j.cancel)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+        let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        let bands = (if $j.grain == 0 { 2 } else { ($SCREEN_ROWS + $j.grain - 1) // $j.grain })
+        if $j.cancel {
+            assert equal $frame.cancelled $frame.rounds $"($label) cancels its every round: ($frame)"
+            assert (($frame.bands0 + $frame.bands1) <= ($frame.rounds * $bands)) $"($label) no band rendered twice: ($frame)"
+            if $j.delayed > 0 { assert equal $frame.bands1 0 $"($label) worker 1 reads the cancel after its hold, its band hart 0's: ($frame)" }
+        } else {
+            assert ($frame.cancelled == 0 and ($frame.bands0 + $frame.bands1) == ($frame.rounds * $bands)) $"($label) every band rendered once by the workers: ($frame)"
+            assert ($frame.slowest >= $j.delay_us) $"($label) the slowest worker held ($j.delay_us) us: ($frame)"
+            if $j.grain == 0 {
+                assert ($frame.bands0 == $frame.rounds and $frame.bands1 == $frame.rounds) $"($label) each worker its own band: ($frame)"
+            } else {
+                assert ($frame.bands0 > $frame.bands1) $"($label) worker 0 takes the held worker's bands: ($frame)"
+            }
+        }
+        let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
+        assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
+        assert ($run.screen != "") $"a screen was taken on ($label)"
+        let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
+        assert ($rows | is-empty) $"($label) the default's picture, no HUD or flip before the join: rows ($rows | first 5) differ, ($rows | length) in all"
+    }
+    let fault_sends = [{ at: 1300ms, bytes: (jobs-frame 0 0 false 1) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+    let fault_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_jobs_fault") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $fault_sends --capture 3000ms --seconds 5)
+    let fault_lines = ($fault_run.serial | lines | where {|l| $l starts-with "jab: worker fault: " })
+    assert (($fault_lines | length) == 1 and ($fault_lines | get 0 | str starts-with "jab: worker fault: hart=1 argument=")) $"worker 0 on hart 1 faults on its round with its line: ($fault_run.serial | lines | last 3)"
+    assert equal $fault_run.status 1 $"a worker's fault ends the run with status 1: ($fault_run.serial | lines | last 3)"
+    if $nu.os-info.name == "linux" {
+        for i in $IDLE_CASES {
+            let sends = [{ at: 1300ms, bytes: (gauge workers-frame $i.workers 0) }]
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.workers)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT)
+            assert (not ($run.threads | is-empty)) $"the threads read over the held span with ($i.workers) workers drawing: ($run.threads)"
+            for h in $i.asleep {
+                let thread = ($run.threads | where name == $"CPU ($h)/TCG" | get -o 0)
+                assert ($thread != null) $"hart ($h)'s thread among ($run.threads | get name)"
+                assert ($thread.rate <= $IDLE_RATE) $"hart ($h)'s worker, given no job with ($i.workers) workers drawing, asleep: ($thread.rate) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
+            }
+        }
+    }
+    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, on four, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -1604,6 +1676,14 @@ def chain-levels [w: int, h: int]: nothing -> int {
 def level-frame [bright: bool, held: bool, cap: int, --parity]: nothing -> binary {
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
     [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's J frame, a debug build's: the delayed worker's index plus
+# one in byte 4, 0 for none, and its delay before each band in
+# microseconds from byte 8; byte 12 set cancels every round after its
+# publish; byte 13 the faulting worker's index plus one, its next round.
+def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int]: nothing -> binary {
+    [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (0..<50 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # The console's K frame, a debug build's: the commands and the spans a

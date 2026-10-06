@@ -934,6 +934,18 @@ clear. A worker reads it after its await and nothing else hart 0 keeps.
 
 `u32`: ROUND_CLEAR on the frame's first round.
 
+## .set ROUND_DELAY_WORKER
+
+`u32`: on a debug build, the J frame's held worker's index plus one, 0 for none.
+
+## .set ROUND_DELAY_US
+
+`u32`: its hold before each band in microseconds.
+
+## .set ROUND_FAULT_WORKER
+
+`u32`: on a debug build, the J frame's faulting worker's index plus one for this round alone, 0 for none.
+
 ## .set ROUND_SIZE
 
 The round record's bytes, a line.
@@ -1096,6 +1108,10 @@ backend drew.
 ## .set STAT_ROUNDS
 
 `u64`: the rounds, the renders the workers took.
+
+## .set STAT_CANCELLED
+
+`u64`: the rounds a job of was cancelled, their left bands finished on hart 0.
 
 ## .set STAT_BANDS
 

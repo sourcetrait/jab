@@ -97,6 +97,7 @@ world_draw:
     sd zero, STAT_SLOWEST(t1)
     sd zero, STAT_BUSY(t1)
     sd zero, STAT_ROUNDS(t1)
+    sd zero, STAT_CANCELLED(t1)
     sd zero, STAT_BANDS(t1)
     sd zero, (STAT_BANDS + 8)(t1)
 .ifdef COUNT

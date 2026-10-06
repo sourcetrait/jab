@@ -21,7 +21,7 @@ call local row_crossings row f32 > count a0 u64,crossings crossings MAX_EDGES f3
 call local span_bound x f32 > pixel a0 i32 [576:588] :the first pixel whose centre is at or past x, within the screen's columns
 call local row_range > first a0 i32,last a1 i32 [590:608] :the rows the edges cover, within the screen
  last :the row past the last
-call local poly_fill > records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,commands commands MAX_COMMANDS*POLY_SIZE u8,held command_count u64,runs command_runs MAX_COMMANDS u32,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 33 u64,clobber a0-a7,fa0 [610:700] :the polygon in hand's spans by scanlines into the packet, its rows and each span held within the rectangle in hand, the polygon copied into the packet as a command at its first span; a full packet rendered whole first
+call local poly_fill > records span_records SPAN_RECORDS*SPAN_RECORD_SIZE u8,count span_count u64,commands commands MAX_COMMANDS*POLY_SIZE u8,held command_count u64,runs command_runs MAX_COMMANDS u32,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 34 u64,clobber a0-a7,fa0 [610:700] :the polygon in hand's spans by scanlines into the packet, its rows and each span held within the rectangle in hand, the polygon copied into the packet as a command at its first span; a full packet rendered whole first
  screen :only through a full packet's render, as is depth
 call local span_record first i32,end i32,row i32,command u32 > record span_records 16 u8,count span_count u64 [702:719] :the span recorded into the packet, its row, its pixels, the polygon's mode and surface, and its command's index, the caller holding room for it
  end :the pixel past the last
@@ -35,7 +35,7 @@ call local command_emit > command a0 u64,commands commands MAX_COMMANDS*POLY_SIZ
  command :its index in the packet
 call local packet_flush > flushes STAT_FLUSHES(stats) u64,screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,clobber a0-a7 [790:795] :a full packet rendered whole before preparation goes on, counted; packet_render's tail
 call local packet_resolve > modes POLY_MODE(commands) u64,invalidated STAT_INVALIDATED(stats) u64 [797:823] :every command of the packet whose tiles were bound in a generation of the arena before its last reset taken off its tiles, onto the chain at each block's level, and counted
-call local context_counts context tp addr > stats stats 33 u64,counters CTX_SPANS(tp) 7 u64 [825:879] :the raster context's counters added into the frame's stats and zeroed, and on a COUNT build its counts into count_stats
+call local context_counts context tp addr > stats stats 34 u64,counters CTX_SPANS(tp) 7 u64 [825:879] :the raster context's counters added into the frame's stats and zeroed, and on a COUNT build its counts into count_stats
 call local scratch_poison > poisoned poly u64 [880:889] :on a debug build, the producer's scratch overwritten with SCRATCH_POISON once the frame's packet is published, so a read of it from the raster draws wrong or faults
  poisoned :every word from poly to scratch_end
 call local poly_rect count u64 > x0 a0 i32,x1 a1 i32,y0 a2 i32,y1 a3 i32 [891:1031] :the screen rectangle of the projected polygon in hand, a pixel of slack each side, held within the screen
@@ -50,7 +50,7 @@ macro mip_bind level 192(sp) u64 > texels a1 addr,vmask a2 u64,umask a3 u64,wshi
  shift :the level plus 16
  spill :s5 as it was, v/z, which the block's end takes back
 macro count_add field imm,scratch reg,base reg,n=1 imm > counter field(CTX_COUNT(tp)) u64,base base addr,scratch scratch [1023:1028] :on a COUNT build alone, the raster context's counter at field raised by n, the two registers named changed
-call local packet_render > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 33 u64,context tp addr,clobber a0-a7 [1032:1085] :the packet rendered: every command's tiles resolved against the arena's generation, then under the serial backend every span in order through span_fill on hart 0's context, its counters into the frame's stats, or with the frame's workers their round (workers.S's round_run); the packet emptied, and the render's ticks added to the raster's
+call local packet_render > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 34 u64,context tp addr,clobber a0-a7 [1032:1085] :the packet rendered: every command's tiles resolved against the arena's generation, then under the serial backend every span in order through span_fill on hart 0's context, its counters into the frame's stats, or with the frame's workers their round (workers.S's round_run); the packet emptied, and the render's ticks added to the raster's
  context :raster_context, or a worker's under the round
 call local band_render first u32,end u32,clear bool,context tp addr > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,counters CTX_SPANS(tp) 7 u64,clobber a0-a7 [1087:1199] :a band's rows rendered on the caller's context: on a clearing round its depth rows zeroed and on a debug build its pixels painted magenta, then each command's spans in the band in the commands' order, the first found in the command's run by a binary search on the row
  end :the row past the band's last

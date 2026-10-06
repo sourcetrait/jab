@@ -139,6 +139,18 @@ round_run:
     sw t2, ROUND_BANDS(s0)
     la t0, round_next
     sw zero, 0(t0)                  # the claims, before the publishes' fence
+.ifdef DEBUG
+    la t0, job_delay_worker
+    lbu t1, 0(t0)
+    sw t1, ROUND_DELAY_WORKER(s0)   # the J frame's knobs, the workers' through the record
+    la t0, job_delay_us
+    lwu t1, 0(t0)
+    sw t1, ROUND_DELAY_US(s0)
+    la t0, job_fault_worker
+    lbu t1, 0(t0)
+    sb zero, 0(t0)                  # the fault once
+    sw t1, ROUND_FAULT_WORKER(s0)
+.endif
     la t0, frame_clock
     ld s5, CLOCK_SNAPSHOT(t0)       # the frame, each job's
     rdtime s2                       # the round's start, before its first publish
@@ -161,6 +173,22 @@ round_run:
     j 3b
 4:
     jab.sys.worker.wake s4          # one wake for the round
+.ifdef DEBUG
+    la t0, job_cancel
+    lbu t1, 0(t0)
+    beqz t1, 42f
+    li s3, 0
+41:
+    bgeu s3, s1, 42f
+    slli s6, s3, 7
+    la t0, mailboxes
+    add s6, s6, t0
+    lw t3, JAB_JOB_GEN(s6)
+    jab.job.cancel s6, t3           # the J frame's cancel of the job in flight
+    addi s3, s3, 1
+    j 41b
+42:
+.endif
     li s3, 0
 5:
     bgeu s3, s1, 6f
@@ -178,6 +206,7 @@ round_run:
     sd zero, 0(sp)                  # the slowest's busy ticks
     sd zero, 8(sp)                  # every worker's
     sd zero, 16(sp)                 # the bands rendered
+    sd zero, 24(sp)                 # a job cancelled
 7:
     bgeu s3, s1, 8f
     slli s6, s3, 7
@@ -209,6 +238,12 @@ round_run:
     ld t2, STAT_BANDS(t1)
     add t2, t2, t0
     sd t2, STAT_BANDS(t1)           # its bands, the frame's
+    lw t0, JAB_JOB_STATUS(s6)
+    li t1, JAB_JOB_CANCELLED
+    bne t0, t1, 74f
+    li t0, 1
+    sd t0, 24(sp)
+74:
     slli t0, s3, 7
     la tp, worker_contexts
     add tp, tp, t0
@@ -236,6 +271,17 @@ round_run:
     ld t2, STAT_ROUNDS(t0)
     addi t2, t2, 1
     sd t2, STAT_ROUNDS(t0)
+    ld t1, 24(sp)
+    beqz t1, 85f
+    call round_finish               # the bands the cancelled jobs left, on hart 0
+    ld t1, 16(sp)
+    add t1, t1, a0
+    sd t1, 16(sp)
+    la t0, stats
+    ld t1, STAT_CANCELLED(t0)
+    addi t1, t1, 1
+    sd t1, STAT_CANCELLED(t0)
+85:
 .ifdef DEBUG
     ld t1, 16(sp)
     lwu t2, ROUND_BANDS(s0)
@@ -272,11 +318,23 @@ raster_worker:
     rdtime t0
     sd t0, JOB_START(s0)
     la s4, round
+.ifdef DEBUG
+    lwu t1, ROUND_FAULT_WORKER(s4)
+    addi t2, s2, 1
+    bne t1, t2, 2f
+    li t0, SCRATCH_POISON
+    ld t0, 0(t0)                    # the J frame's fault: a load no page maps
+2:
+.endif
     lwu s5, ROUND_FLAGS(s4)         # the clear
     lwu s8, ROUND_GRAIN(s4)
     li s6, 0                        # its bands
     li s7, JAB_JOB_OK
     bnez s8, 3f
+.ifdef DEBUG
+    mv a0, s2
+    call job_delay
+.endif
     jab.job.cancelled s0, s3, t2    # fixed bands: its own, the worker's index
     bnez t2, 7f
     lwu t2, ROUND_WORKERS(s4)
@@ -293,6 +351,10 @@ raster_worker:
 3:
     lwu s9, ROUND_BANDS(s4)
 4:
+.ifdef DEBUG
+    mv a0, s2
+    call job_delay
+.endif
     jab.job.cancelled s0, s3, t2    # at every band's boundary
     bnez t2, 7f
     la t0, round_next
@@ -321,6 +383,90 @@ raster_worker:
     j 1b
 9:
     jab.sys.worker.exit
+
+round_finish:
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s0, 48(sp)
+    sd s1, 40(sp)
+    sd s2, 32(sp)
+    sd s3, 24(sp)
+    sd s4, 16(sp)
+    sd s5, 8(sp)
+    la tp, raster_context
+    la s0, round
+    lwu s1, ROUND_GRAIN(s0)
+    lwu s2, ROUND_FLAGS(s0)         # the clear on a first round
+    li s3, 0                        # the bands hart 0 renders
+    bnez s1, 3f
+    lwu s4, ROUND_WORKERS(s0)
+    li s5, 0                        # the worker
+1:
+    bgeu s5, s4, 5f
+    slli t0, s5, 7
+    la t1, mailboxes
+    add t0, t0, t1
+    ld t1, JOB_BANDS(t0)
+    bnez t1, 2f                     # its band rendered before it read the cancel
+    li t3, SCREEN_H
+    mul a0, s5, t3
+    divu a0, a0, s4
+    addi t4, s5, 1
+    mul a1, t4, t3
+    divu a1, a1, s4
+    mv a2, s2
+    call band_render
+    addi s3, s3, 1
+2:
+    addi s5, s5, 1
+    j 1b
+3:
+    lwu s4, ROUND_BANDS(s0)
+4:
+    la t0, round_next
+    li t1, 1
+    amoadd.w t2, t1, (t0)           # the bands no worker claimed
+    bgeu t2, s4, 5f
+    mul a0, t2, s1
+    add a1, a0, s1
+    li t3, SCREEN_H
+    bleu a1, t3, 41f
+    mv a1, t3
+41:
+    mv a2, s2
+    call band_render
+    addi s3, s3, 1
+    j 4b
+5:
+    call context_counts             # hart 0's counts, the frame's
+    mv a0, s3
+    ld ra, 56(sp)
+    ld s0, 48(sp)
+    ld s1, 40(sp)
+    ld s2, 32(sp)
+    ld s3, 24(sp)
+    ld s4, 16(sp)
+    ld s5, 8(sp)
+    addi sp, sp, 64
+    ret
+
+.ifdef DEBUG
+job_delay:
+    la t0, round
+    lwu t1, ROUND_DELAY_WORKER(t0)
+    addi t2, a0, 1
+    bne t1, t2, 9f
+    lwu t1, ROUND_DELAY_US(t0)
+    li t2, US_TICKS
+    mul t1, t1, t2
+    rdtime t2
+    add t1, t1, t2                  # the delay's end
+1:
+    rdtime t2
+    bltu t2, t1, 1b
+9:
+    ret
+.endif
 
 .section .rodata
 .ifdef DEBUG
@@ -359,6 +505,17 @@ round_grain:
     .skip 4
 round_first:
     .skip 1
+.ifdef DEBUG
+job_delay_worker:
+    .skip 1
+job_cancel:
+    .skip 1
+job_fault_worker:
+    .skip 1
+.balign 4
+job_delay_us:
+    .skip 4
+.endif
 .balign 16
 worker_stacks:
     .skip (WORKERS_MAX * WORKER_STACK)
