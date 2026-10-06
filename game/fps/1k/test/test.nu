@@ -388,6 +388,9 @@ const JOB_CASES = [
 ]
 const IDLE_RATE = 0.05
 const IDLE_AT = 2500ms
+# the same launches' readings at a list of times (`jab launch
+# --threads-at`), the last past the run's six-second bound and missing
+const IDLE_READINGS = [3sec 4sec 60sec]
 const IDLE_CASES = [
     { workers: 0, asleep: [1 2] }
     { workers: 1, asleep: [2] }
@@ -1136,8 +1139,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     if $nu.os-info.name == "linux" {
         for i in $IDLE_CASES {
             let sends = [{ at: 1300ms, bytes: (gauge workers-frame $i.workers 0) }]
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.workers)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT)
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.workers)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT --threads-at $IDLE_READINGS)
             assert (not ($run.threads | is-empty)) $"the threads read over the held span with ($i.workers) workers drawing: ($run.threads)"
+            let readings = $run.thread_readings
+            let taken = ($readings | where {|r| $r.at != null })
+            let taken_held = (($readings | length) == 3 and ($taken | length) == 2 and ($taken | all {|r| $r.at >= $r.requested and ($r.threads | any {|t| $t.name == "CPU 1/TCG" }) }))
+            assert $taken_held $"the readings asked at 3 and 4 s taken at or past their requests, every hart's thread in each: ($readings | each {|r| { requested: $r.requested, at: $r.at, threads: ($r.threads | default [] | length) } })"
+            assert (($readings | last | get at) == null and ($readings | last | get threads) == null) $"the reading asked past the run's end recorded missing: ($readings | last)"
             for h in $i.asleep {
                 let thread = ($run.threads | where name == $"CPU ($h)/TCG" | get -o 0)
                 assert ($thread != null) $"hart ($h)'s thread among ($run.threads | get name)"
@@ -2252,15 +2260,23 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # backend's frames valid with no round time; a frame drawn by three
 # workers, at a grain past the screen's rows, of the serial backend with a
 # round's time, with a slowest worker, a dispatch, or a barrier past its
-# raster, or with its busy time under its slowest worker's each invalid
-# for that alone, times at the raster valid; a comparison refuses as
-# unpaired a run asking workers unanswered, answered late, or answered
-# and again late, drawn by other workers or at another grain than asked,
-# or below schema 4 asking workers other than 0, each named and admitted
-# marked under --diagnostic, while a run asking none whose frames hold one
-# count stands and a schema 3 run asking the serial backend stands; and
+# raster, or with its busy time under its slowest worker's or past W times
+# it and the microseconds the conversions drop, at two workers and at one,
+# each invalid for that alone, times at the raster and busy at the bound
+# valid; a comparison refuses as unpaired a run asking workers unanswered,
+# answered late, or answered and again late, drawn by other workers or at
+# another grain than asked, or below schema 4 asking workers above 0, each
+# named and admitted marked under --diagnostic, while a run asking none
+# whose frames hold one count stands; below schema 4 a run with W 0
+# answered before its first frame and no W after it stands as the serial
+# backend at grain 0 whatever grain it asked, and one asking none, one
+# whose W 0 went unanswered, one answered late, and one answered then
+# asked again late are refused with their workers unknown, admitted under
+# --diagnostic as unknown and kept a build apart from a known one; and
 # one image's runs at 0 and 2 workers or at two grains are two builds,
-# refused under one name and compared under two. The drawing's moved
+# refused under one name and compared under two. The synthetic captures
+# below schema 4 answer a W 0 unless a fixture asks otherwise
+# (fx-gauge). The drawing's moved
 # parts: schema 1 against schema 3 refused on planes_us with or without
 # --diagnostic and compared on draw_us, critical_us, and
 # parts_unattributed_us; an unlisted schema 2 run, dirty or without its
@@ -2276,7 +2292,23 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # as diagnostic, its machine the one the launch marked or the one asked
 # for, the reason naming the words and no hart count; and a bench pools
 # the specification's machine's run alone, keeps the diagnostic machine's
-# apart, and names every step's machine in its report.
+# apart, and names every step's machine in its report. Identities: a run's
+# own file read with its bound correction applied and named; a correction
+# bound to another identity or image, holding an old value the file does
+# not, or naming a third field stopping the read; a run directory without
+# its file reading the report's embedded copy with its correction
+# provenance, a report with neither its one identity; a moved report
+# finding its run beside it, the run beside a report read before the path
+# it recorded, and one holding another image's run refused; one build's
+# runs differing in their flags alone or their ELF alone refused, and
+# compared once a correction makes them one, the correction named; the
+# flags' contradictions of the tree asked, a missing flags file none; and
+# a report embedding each run's identity. The CPU windows on synthetic
+# readings taken late at unequal intervals, a thread appearing mid-run and
+# a reading missing: the whole window from 5 s to the end intact, a leg's
+# from its first placement to the next leg's, a leg of three placements
+# one window with its subwindows, the windows the missing reading bounds
+# missing.
 export def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -2346,7 +2378,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     }
     let clocked_rows = (do $rows_of true)
     let clockless_rows = (do $rows_of false)
-    let checked = { clocked: true, complete: true, problems: [], valid: true, invalid: [], seeded: true, late_seed: false }
+    let checked = { clocked: true, complete: true, problems: [], valid: true, invalid: [], seeded: true, late_seed: false, workers_set: true, late_workers: false }
+    let serial_mode = { workers: 0, grain: 0 }
     let stateless = { clocked: false, complete: false, problems: [], valid: false, invalid: [] }
     let never_shown = ["1 flips at status 2, never shown"]
     let never_closed = ["no end marker: the measurement never closed"]
@@ -2365,7 +2398,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     ]
     let files = ($fixtures | each {|x|
         let file = ($dir | path join $"compare_($x.name).nuon")
-        let doc = { label: $x.name, identity: { build: { image_sha256: $x.name } } }
+        let doc = { label: $x.name, identity: { build: { image_sha256: $x.name }, mode: $serial_mode } }
         $doc | insert runs [{ run: 1, measured: $x.measured }] | insert rows $x.rows | to nuon | save --raw -f $file
         { name: $x.name, file: ($file | path expand) }
     })
@@ -2429,7 +2462,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let cover_files = ($covers | each {|x|
         let file = ($dir | path join $"cover_($x.name).nuon")
         let image = ($x.label | str replace --regex '_\d+$' '')
-        let doc = { label: $x.label, identity: { build: { image_sha256: $image } }, runs: [{ run: 1, measured: $checked }], rows: (do $legged $x.legs) }
+        let doc = { label: $x.label, identity: { build: { image_sha256: $image }, mode: $serial_mode }, runs: [{ run: 1, measured: $checked }], rows: (do $legged $x.legs) }
         $doc | to nuon | save --raw -f $file
         { name: $x.name, file: ($file | path expand) }
     })
@@ -2657,6 +2690,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let mixed4_says = $"a schema 3 packet record in a schema 4 capture leaves it incomplete: ($mixed4.problems)"
     assert ((not $mixed4.complete) and ($mixed4.problems | any {|p| $p =~ "at schemas 3 in a capture at schema 4" })) $mixed4_says
     let serial4 = (fx-items 3 --schema 4 --workers 0)
+    let one4 = (fx-items 3 --schema 4 --workers 1)
     let ms4 = (do $measure $serial4)
     assert ($ms4.complete and $ms4.valid and $ms4.workers == [0]) $"a schema 4 capture of the serial backend, no round times: ($ms4.invalid)"
     let overtimed = "1 frames whose slowest worker, dispatch, or barrier is past their raster"
@@ -2669,6 +2703,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         { name: "a dispatch past the raster", items: (fx-set $good4 "packet" 1 { dispatch: 41 }), says: $overtimed }
         { name: "a barrier past the raster", items: (fx-set $good4 "packet" 1 { barrier: 41 }), says: $overtimed }
         { name: "busy time under the slowest worker's", items: (fx-set $good4 "packet" 1 { busy: 29 }), says: "1 frames whose workers' busy time is less than their slowest's" }
+        { name: "busy time past twice the slowest worker's and one", items: (fx-set $good4 "packet" 1 { busy: 62 }), says: "1 frames whose workers' busy time is past W times their slowest's" }
+        { name: "one worker's busy time past its slowest", items: (fx-set $one4 "packet" 1 { busy: 31 }), says: "1 frames whose workers' busy time is past W times their slowest's" }
     ]
     for c in $worker_cases {
         let mc = (do $measure $c.items)
@@ -2676,6 +2712,10 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     }
     let within = (do $measure (fx-set $good4 "packet" 1 { slowest: 40, dispatch: 40, barrier: 40, busy: 40 }))
     assert ($within.complete and $within.valid) $"round times at the raster and busy at the slowest are valid: ($within.invalid)"
+    let truncated = (do $measure (fx-set $good4 "packet" 1 { busy: 61 }))
+    assert ($truncated.complete and $truncated.valid) $"busy at twice the slowest and the one microsecond the conversions drop is valid: ($truncated.invalid)"
+    let one_held = (do $measure $one4)
+    assert ($one_held.complete and $one_held.valid) $"one worker's busy time equal to its slowest is valid: ($one_held.invalid)"
 
     # pairing from schema 4: workers asked and unanswered, answered late,
     # or answered and drawn by other workers or at another grain, and below
@@ -2704,7 +2744,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         { name: "workers_again", items: (fx-late $asked4 { kind: "wack" }), workers: 2, grain: 0, reason: "workers asked after the first frame" }
         { name: "workers_other", items: $asked4, workers: 1, grain: 0, reason: "frames drawn by 2 workers where the identity asked 1" }
         { name: "grain_other", items: $asked4, workers: 2, grain: 16, reason: "frames at a grain of 0 where the identity asked 16" }
-        { name: "legacy_workers", items: $good3, workers: 2, grain: 0, reason: "the identity asks 2 workers, which a capture below schema 4 cannot play" }
+        { name: "legacy_workers", items: $good3, workers: 2, grain: 0, reason: "the identity asks 2 workers, which a capture below schema 4 cannot show" }
     ]
     for u in $workers_unpaired {
         let file = (fx-gauge $dir $u.name $u.name $u.name 0 $u.items --workers $u.workers --grain $u.grain)
@@ -2716,9 +2756,41 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         assert (($admitted | get -o refusal) == null) $"--diagnostic admits the ($u.name) run, the comparison standing: ($admitted | get -o refusal)"
         assert equal ($admitted.table | where build == $u.name | get 0.standings) ["unpaired"] $"--diagnostic admits the ($u.name) run marked unpaired"
     }
-    let legacy_serial = (try { gauge compare [$paired4 (fx-gauge $dir "legacy_serial" "legacy_serial" "legacy_serial" 0 $good3 --workers 0 --grain 0)] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
-    assert (($legacy_serial | get -o refusal) == null) $"a schema 3 run asking the serial backend stands: ($legacy_serial | get -o refusal)"
+    let three_asked = (fx-items 3 --schema 3 --asked)
+    let three_bare = (fx-items 3 --schema 3)
+    let legacy_serial = (try { gauge compare [$paired4 (fx-gauge $dir "legacy_serial" "legacy_serial" "legacy_serial" 0 $three_asked --workers 0 --grain 0)] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert (($legacy_serial | get -o refusal) == null) $"a schema 3 run with W 0 answered before its first frame stands: ($legacy_serial | get -o refusal)"
     assert equal ($legacy_serial.runs | where label == "legacy_serial" | get 0.effective_workers) 0 "a schema 3 run plays the serial backend, 0 workers"
+
+    # below schema 4 the records hold no workers: a run asking W 0,
+    # answered before its first frame and no W after it, drew with the
+    # serial backend at grain 0 whatever grain it asked; any other run's
+    # workers are unknown, refused unpaired with the reasons and admitted
+    # under --diagnostic as unknown, a build apart from a known one
+    let normalized = (gauge compare [$paired4 (fx-gauge $dir "legacy_grain" "legacy_grain" "legacy_grain" 0 $three_asked --workers 0 --grain 16)] "draw_us" 50)
+    let grain_run = ($normalized.runs | where label == "legacy_grain" | get 0)
+    assert equal [$grain_run.standing $grain_run.effective_workers $grain_run.effective_grain] [valid 0 0] $"a schema 3 run asking W 0 at 16 rows plays the serial backend at grain 0: ($grain_run | select standing effective_workers effective_grain)"
+    let unknown_head = "the workers that drew it are unknown"
+    let unknowns = [
+        { name: "legacy_unasked", items: $three_bare, unasked: true, reasons: [$unknown_head "no workers asked"] }
+        { name: "legacy_unanswered", items: $three_bare, unasked: false, reasons: [$unknown_head "no W 0 answered before the first frame"] }
+        { name: "legacy_answered_late", items: (fx-late $three_bare { kind: "wack" }), unasked: false, reasons: [$unknown_head "workers asked after the first frame"] }
+        { name: "legacy_changed", items: (fx-late $three_asked { kind: "wack" }), unasked: false, reasons: [$unknown_head "workers asked after the first frame"] }
+    ]
+    for u in $unknowns {
+        let file = (if $u.unasked { fx-gauge $dir $u.name $u.name $u.name 0 $u.items --unasked } else { fx-gauge $dir $u.name $u.name $u.name 0 $u.items --workers 0 --grain 0 })
+        let refused = (try { gauge compare [$paired4 $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        assert ($refused | str contains $"($file) run 1, unpaired: ") $"the ($u.name) run, its workers unknown, is refused unpaired: ($refused)"
+        for reason in $u.reasons { assert ($refused | str contains $reason) $"the ($u.name) run's reason, ($reason): ($refused)" }
+        let admitted = (gauge compare [$paired4 $file] "draw_us" 50 --diagnostic)
+        let run = ($admitted.runs | where label == $u.name | get 0)
+        assert equal [$run.standing $run.effective_workers $run.effective_grain] [unpaired unknown unknown] $"--diagnostic admits the ($u.name) run marked unpaired, its workers unknown: ($run | select standing effective_workers effective_grain)"
+    }
+    let unknown_merged = (try {
+        gauge compare [(fx-gauge $dir "known_1" "legacy_pair_1" "legacy_pair_image" 0 $three_asked --workers 0 --grain 0) (fx-gauge $dir "unknown_1" "legacy_pair_2" "legacy_pair_image" 0 $three_bare --unasked)] "draw_us" 50 --diagnostic
+        ""
+    } catch {|e| $e.msg })
+    assert ($unknown_merged | str contains "come from 2 builds") $"one image's schema 3 runs, the serial backend and unknown workers, under one name are two builds even under --diagnostic: ($unknown_merged)"
 
     # grouping from schema 4: one image's runs at 0 and 2 workers, or at
     # two grains, are two builds, refused under one name and compared
@@ -2860,6 +2932,121 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let text = (gauge bench-text $doc | lines)
     let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two"
     assert ($line in $text) $"the report names the step's machine, ($line): ($text)"
+
+    # identities: a run's own file with its audited correction applied,
+    # else the report's embedded copy with its correction provenance, else
+    # the report's one identity, each named; a correction bound to another
+    # file or image, holding an old value the file does not, or naming a
+    # field outside the flags and the ELF stops the read, never a fallback;
+    # a run directory beside a moved report found before the path it
+    # recorded, and one holding another image's run refused; one build's
+    # runs differing in flags refused until a correction makes them one
+    let ids = ($dir | path join "identities")
+    mkdir $ids
+    let debug_flags = "-I src --defsym DEBUG=1 -march=rva23u64 fx-"
+    let release_flags = "-I src -march=rva23u64 fx-"
+    let fx_id = { build: { image_sha256: "fx_ident", flags: $debug_flags, elf_sha256: null }, mode: { cadence: 0, workers: 2, grain: 0, seed: 1 } }
+    let corrected_fields = { "build.flags": { old: $debug_flags, new: $release_flags }, "build.elf_sha256": { old: null, new: "fx_elf" } }
+    let run_of = {|report: string| open $report | get runs.0 }
+    let applied = (fx-ident-report $ids "applied" "applied" $fx_id)
+    fx-sidecar ($ids | path join "applied" "run_1" "identity.nuon") "fx_ident" $corrected_fields
+    let read = (gauge identity-of $applied (do $run_of $applied) $fx_id)
+    assert equal [$read.from $read.identity.build.flags $read.identity.build.elf_sha256] [file $release_flags fx_elf] $"a bound correction applied to the run's file: ($read | select from file)"
+    assert equal ($read.corrections.fields | get field) ["build.flags" "build.elf_sha256"] $"the correction names its fields: ($read.corrections)"
+    let stopped_by = [
+        { name: "other_identity", fields: $corrected_fields, image: "fx_ident", sha: "0000", says: "corrects an identity of SHA-256 0000" }
+        { name: "other_image", fields: $corrected_fields, image: "other_image", sha: "", says: "corrects a run of the image other_image" }
+        { name: "wrong_old", fields: { "build.flags": { old: $release_flags, new: $release_flags } }, image: "fx_ident", sha: "", says: "holds build.flags as" }
+        { name: "third_field", fields: ($corrected_fields | insert "build.image_sha256" { old: "fx_ident", new: "x" }), image: "fx_ident", sha: "", says: "names build.image_sha256" }
+    ]
+    for x in $stopped_by {
+        let report = (fx-ident-report $ids $x.name $x.name $fx_id)
+        fx-sidecar ($ids | path join $x.name "run_1" "identity.nuon") $x.image $x.fields --identity-sha $x.sha
+        let msg = (try { gauge identity-of $report (do $run_of $report) $fx_id; "" } catch {|e| $e.msg })
+        assert ($msg | str contains $x.says) $"the correction ($x.name) stops the read, never a fallback: ($msg)"
+    }
+    let embedded = (fx-ident-report $ids "embedded" "embedded" $fx_id --no-file --embed)
+    let embedded_run = (do $run_of $embedded | update corrections { fields: [{ field: "build.flags" }] })
+    let from_embedded = (gauge identity-of $embedded $embedded_run $fx_id)
+    assert equal [$from_embedded.from ($from_embedded.corrections.fields | get field)] [embedded ["build.flags"]] $"a run directory without its identity file reads the embedded copy, its correction provenance kept: ($from_embedded | select from corrections)"
+    let legacy_report = (fx-ident-report $ids "legacy_ident" "legacy_ident" $fx_id --no-file --out ($ids | path join "gone" "run_9"))
+    let from_legacy = (gauge identity-of $legacy_report (do $run_of $legacy_report) $fx_id)
+    assert equal $from_legacy.from "legacy" $"a report with no run directory and no embedded copy reads its one identity: ($from_legacy.from)"
+    let moved = (fx-ident-report $ids "moved" "moved" $fx_id --out ($ids | path join "gone" "run_1"))
+    let from_moved = (gauge identity-of $moved (do $run_of $moved) $fx_id)
+    assert equal [$from_moved.from $from_moved.file] [file ($ids | path join "moved" "run_1" "identity.nuon" | path expand)] $"a moved report finds its run beside it: ($from_moved | select from file)"
+    fx-ident-report $ids "elsewhere" "elsewhere" ($fx_id | update mode.seed 9) | ignore
+    let preferred = (fx-ident-report $ids "preferred" "preferred" $fx_id --out ($ids | path join "elsewhere" "run_1"))
+    let from_preferred = (gauge identity-of $preferred (do $run_of $preferred) $fx_id)
+    assert equal $from_preferred.identity.mode.seed 1 $"the run directory beside the report before the path it recorded: ($from_preferred.file)"
+    let stranger = (fx-ident-report $ids "stranger" "stranger" ($fx_id | update build.image_sha256 "stranger_image"))
+    let stranger_msg = (try { gauge identity-of $stranger (do $run_of $stranger) $fx_id; "" } catch {|e| $e.msg })
+    assert ($stranger_msg | str contains "is a run of the image stranger_image") $"a run beside the report of another image stops the read: ($stranger_msg)"
+    let flagged_one = (fx-ident-report $ids "flags_1" "flagged_1" ($fx_id | update build.flags $release_flags))
+    let flagged_two = (fx-ident-report $ids "flags_2" "flagged_2" $fx_id)
+    let flagged_three = (fx-ident-report $ids "flags_3" "flagged_3" ($fx_id | update build.flags $release_flags | update build.elf_sha256 "fx_elf"))
+    let differ = (try { gauge compare [$flagged_one $flagged_two] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($differ | str contains "differ in build.flags or build.elf_sha256") $"one build's runs differing in their flags alone refuse the comparison: ($differ)"
+    let elf_differ = (try { gauge compare [$flagged_one $flagged_three] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($elf_differ | str contains "differ in build.flags or build.elf_sha256") $"one build's runs differing in their ELF alone refuse the comparison: ($elf_differ)"
+    fx-sidecar ($ids | path join "flags_2" "run_1" "identity.nuon") "fx_ident" { "build.flags": { old: $debug_flags, new: $release_flags } }
+    let mended = (gauge compare [$flagged_one $flagged_two] "draw_us" 50)
+    let mended_run = ($mended.runs | where label == "flagged_2" | get 0)
+    assert equal [$mended_run.identity_from ($mended_run.corrections.fields | get field)] [file ["build.flags"]] $"a correction makes them one build, named in the comparison: ($mended_run | select identity_from corrections)"
+    let contradictions = [
+        { flags: $release_flags, tree: "release", contradicts: false }
+        { flags: $debug_flags, tree: "release", contradicts: true }
+        { flags: $release_flags, tree: "debug", contradicts: true }
+        { flags: $debug_flags, tree: "debug", contradicts: false }
+        { flags: null, tree: "release", contradicts: false }
+    ]
+    for c in $contradictions {
+        let said = (gauge flags-contradiction $c.flags $c.tree)
+        assert equal ($said != null) $c.contradicts $"the flags ($c.flags | to nuon) on the ($c.tree) tree contradict it, ($c.contradicts): ($said)"
+    }
+    let doc4 = (gauge report-doc "embed" $fx_id [{ run: 1, seed: 1, out: "o", ran: {}, measured: { rows: [] }, identity: $fx_id, corrections: { fields: [] }, cpu: null }])
+    assert equal [$doc4.runs.0.identity $doc4.runs.0.corrections] [$fx_id { fields: [] }] "a report embeds each run's identity and its correction provenance"
+
+    # the CPU windows: readings asked at 5 s, at each placement, and at
+    # the end, taken late and at unequal intervals, a thread appearing
+    # mid-run, the reading at the third leg's first placement missing; the
+    # whole window from 5 s to the end intact, a leg's window from its
+    # first placement to the next leg's, the third leg's three placements
+    # one leg with its subwindows, the windows the missing reading bounds
+    # missing, never bridged
+    let cpu_legs = [
+        { name: "start", places: [], pad: [] }
+        { name: "first", places: [{ at: 2sec }], pad: [] }
+        { name: "second", places: [{ at: 7sec }], pad: [] }
+        { name: "third", places: [{ at: 9sec } { at: 10sec } { at: 11sec }], pad: [] }
+    ]
+    let cpu_end = 14sec
+    assert equal (gauge cpu-requests $cpu_legs $cpu_end) [2sec 5sec 7sec 9sec 10sec 11sec 14sec] "the readings asked: every placement, 5 s, and the end, once each, in order"
+    let t = {|id: string, name: string, cpu: float| { id: $id, name: $name, cpu: $cpu } }
+    let readings = [
+        { requested: 2.0, at: 2.08, threads: [(do $t "10" "CPU 0/TCG" 1.0) (do $t "11" "CPU 1/TCG" 0.5)] }
+        { requested: 5.0, at: 5.05, threads: [(do $t "10" "CPU 0/TCG" 1.6) (do $t "11" "CPU 1/TCG" 2.0)] }
+        { requested: 7.0, at: 7.25, threads: [(do $t "10" "CPU 0/TCG" 2.1) (do $t "11" "CPU 1/TCG" 3.0) (do $t "12" "CPU 2/TCG" 0.3)] }
+        { requested: 9.0, at: null, threads: null }
+        { requested: 10.0, at: 10.1, threads: [(do $t "10" "CPU 0/TCG" 3.0) (do $t "11" "CPU 1/TCG" 4.5) (do $t "12" "CPU 2/TCG" 1.0)] }
+        { requested: 11.0, at: 11.3, threads: [(do $t "10" "CPU 0/TCG" 3.2) (do $t "11" "CPU 1/TCG" 5.0) (do $t "12" "CPU 2/TCG" 1.4)] }
+        { requested: 14.0, at: 14.02, threads: [(do $t "10" "CPU 0/TCG" 4.0) (do $t "11" "CPU 1/TCG" 6.2) (do $t "12" "CPU 2/TCG" 2.0)] }
+    ]
+    let w = (gauge cpu-windows $readings $cpu_legs $cpu_end)
+    let near = {|a: any, b: float| $a != null and (($a - $b) | math abs) < 0.000001 }
+    let of = {|win: record, id: string| $win.threads | where id == $id | get 0 }
+    let whole = $w.whole
+    let whole_held = ((not $whole.missing) and (do $near $whole.interval 8.97) and (do $near (do $of $whole "10").cpu_seconds 2.4) and (do $near (do $of $whole "11").cpu_seconds 4.2) and (do $of $whole "12").cpu_seconds == null)
+    assert $whole_held $"the whole window from the 5 s reading to the end, at their actual times, a thread absent at its start null: ($whole)"
+    assert equal ($w.legs | get window) [first second third] $"a window a leg with placements, the third's three placements one leg: ($w.legs | get window)"
+    let first_leg = ($w.legs | get 0)
+    let first_held = ((do $near $first_leg.interval 5.17) and (do $near (do $of $first_leg "11").cpu_seconds 2.5) and (do $near (do $of $first_leg "11").utilization (2.5 / 5.17)) and (do $near (do $of $first_leg "10").cpu_seconds 1.1))
+    assert $first_held $"the first leg from its placement's reading to the next leg's, its seconds and utilization: ($first_leg)"
+    assert (($w.legs | get 1).missing and ($w.legs | get 2).missing) $"the legs the missing reading bounds are missing, never bridged: ($w.legs | select window missing)"
+    let subs = ($w.legs | get 2 | get subwindows)
+    assert equal ($subs | get missing) [true false false] $"the third leg's subwindows, the first bounded by the missing reading: ($subs | select window missing)"
+    let between = ($subs | get 1)
+    assert ((do $near $between.interval 1.2) and (do $near (do $of $between "12").cpu_seconds 0.4)) $"a subwindow between two placements' readings: ($between)"
 }
 
 # The program's three cadences on its own clock records, one
@@ -3129,14 +3316,14 @@ def fx-present [frame: int, cadence: int, schema: int = 2]: nothing -> record {
 # taking 0.95 of it; three commands, a flush, two bindings invalidated;
 # the bytes three commands' and the draw record's five span records'; the
 # frame's own simulation; and at schema 4 its workers at grain 0, their
-# rounds' slowest worker 30 us, busy 55, dispatch 2, and barrier 1, every
-# time 0 under the serial backend.
+# rounds' slowest worker 30 us, busy 55, its slowest's at one worker,
+# dispatch 2, and barrier 1, every time 0 under the serial backend.
 def fx-packet [frame: int, schema: int = 3, workers: int = 2]: nothing -> record {
     let timed = ($workers > 0)
     {
         kind: "packet", frame: $frame, preparation: 960, raster: 40, commands: 3, flushes: 1, invalidated: 2,
         bytes: (3 * 312 + 5 * 16), snapshot: $frame, schema: $schema, workers: $workers, grain: 0,
-        slowest: (if $timed { 30 } else { 0 }), busy: (if $timed { 55 } else { 0 }),
+        slowest: (if $timed { 30 } else { 0 }), busy: (if not $timed { 0 } else if $workers == 1 { 30 } else { 55 }),
         dispatch: (if $timed { 2 } else { 0 }), barrier: (if $timed { 1 } else { 0 }),
     }
 }
@@ -3152,16 +3339,30 @@ def fx-late [items: list<any>, item: record]: nothing -> list<any> {
     $items | insert ($first + 1) $item
 }
 
+# A synthetic capture with an item put right before its first state.
+def fx-early [items: list<any>, item: record]: nothing -> list<any> {
+    let first = ($items | enumerate | where {|e| $e.item.kind == "state" } | get 0.index)
+    $items | insert $first $item
+}
+
 # A gauge.nuon for a comparison, as `run` writes one, from a synthetic
 # capture measured: its label, an identity of the image, the cadence
 # asked, none when null, the workers and grain asked when given, the
 # machine when given, the program's source as the identity records it
 # when given, and the launch's QEMU words when given, the run's
-# measurement, and its rows.
-def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --program: record, --overrides: list<string> = [], --workers: any, --grain: any]: nothing -> string {
-    let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
+# measurement, and its rows. Below schema 4, unless `--workers` or
+# `--unasked` says otherwise, the run asks W 0 and its capture answers it
+# before its first frame, the serial backend a run below schema 4 shows
+# to pair without --diagnostic; `--unasked` is such a run asking none.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --program: record, --overrides: list<string> = [], --workers: any, --grain: any, --unasked]: nothing -> string {
+    let schema = ($items | where kind == "end" | get -o 0.schema | default 1)
+    let legacy = ($schema < 4 and $workers == null and (not $unasked))
+    let answered = ($items | take until {|i| $i.kind == "state" } | any {|i| $i.kind == "wack" })
+    let played = (if $legacy and (not $answered) { fx-early $items { kind: "wack" } } else { $items })
+    let asked = (if $legacy { 0 } else { $workers })
+    let m = (gauge measure (fx-bytes $played) [{ name: "walk", places: [], pad: [] }])
     let paced = (if $cadence == null { {} } else { { cadence: $cadence } })
-    let mode = (if $workers == null { $paced } else { $paced | insert workers $workers | insert grain ($grain | default 0) })
+    let mode = (if $asked == null { $paced } else { $paced | insert workers $asked | insert grain ($grain | default 0) })
     let file = ($dir | path join $"pair_($name).nuon")
     let id = { build: { image_sha256: $image }, mode: $mode }
     let machined = (if $machine == null { $id } else { $id | insert machine $machine })
@@ -3173,6 +3374,34 @@ def fx-gauge [dir: path, name: string, label: string, image: string, cadence: an
         rows: ($m.rows | each {|r| $r | insert run 1 }),
     } | to nuon | save --raw -f $file
     $file | path expand
+}
+
+# A report for the identity fixtures at `dir`/`name`, as `run` writes
+# one: one run of a schema 4 capture asking its workers, its directory
+# run_1 beside the report holding `id` as its identity file unless
+# `--no-file`, the run's recorded `out` the given one or that directory,
+# `--embed` putting `id` in the report's run as a report now does, and
+# `id` the report's one identity.
+def fx-ident-report [dir: path, name: string, label: string, id: record, --out: string = "", --no-file, --embed]: nothing -> string {
+    let home = ($dir | path join $name)
+    let run_dir = ($home | path join "run_1")
+    mkdir $run_dir
+    if not $no_file { $id | to nuon --indent 2 | save --raw -f ($run_dir | path join "identity.nuon") }
+    let m = (gauge measure (fx-bytes (fx-items 3 --schema 4 --asked)) [{ name: "walk", places: [], pad: [] }])
+    let run = { run: 1, seed: 1, out: (if $out == "" { $run_dir } else { $out }), measured: ($m | reject rows) }
+    let embedded = (if $embed { $run | insert identity $id | insert corrections null } else { $run })
+    let file = ($home | path join "gauge.nuon")
+    { label: $label, identity: $id, runs: [$embedded], rows: ($m.rows | each {|r| $r | insert run 1 }) } | to nuon | save --raw -f $file
+    $file | path expand
+}
+
+# A correction beside an identity file, bound to the file's SHA-256, or
+# to `--identity-sha` when given, and to the image named, holding
+# `fields`.
+def fx-sidecar [file: path, image: string, fields: record, --identity-sha: string = ""]: nothing -> nothing {
+    let sha = (if $identity_sha == "" { open --raw $file | into binary | hash sha256 } else { $identity_sha })
+    let sidecar = ($file | path dirname | path join "identity_correction.nuon")
+    { identity_sha256: $sha, image_sha256: $image, fields: $fields, evidence: "the fixture's own" } | to nuon --indent 2 | save --raw -f $sidecar
 }
 
 # A synthetic capture's records as bytes, 64 each in render.inc's

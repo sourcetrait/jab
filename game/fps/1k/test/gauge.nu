@@ -43,8 +43,9 @@
 # simulation, and at schema 4 every frame's workers at most WORKERS_MAX at
 # a grain within the screen's rows, its round times none under the serial
 # backend and its slowest worker, dispatch, and barrier within its raster,
-# its busy time at least its slowest worker's, and passes when it is valid
-# and every frame in it passes.
+# its busy time at least its slowest worker's and at most W times it with
+# the W - 1 microseconds its conversions drop, and passes when it is
+# valid and every frame in it passes.
 # A capture holding no record of the clock's kinds, 7, 8, 9, 10, or 12,
 # is a build older than them: it holds no measurement and is read from
 # its state records alone, the drawing's and the game's microseconds.
@@ -52,6 +53,15 @@
 # every cadence's frames pooled. `just adv gauge`, `just adv gauge-play`,
 # `just adv gauge-read`, and `just adv gauge-compare` run it, and `just
 # bench game/fps/1k/cadence` runs `play`, `run`, and `bench-report`.
+# A run's identity is read through one reader (identity-of): the run's
+# identity.nuon, its directory found beside its report before the path
+# the report recorded, with an audited correction beside it applied
+# (correction-of); else the copy its report embedded; else the report's
+# one identity; a comparison names each run's source and corrections.
+# `run` and `play` refuse an image whose build flags contradict the tree
+# asked. `run --cpu` reads every QEMU thread's CPU at 5 s, at each
+# placement, and at the route's end, kept whole in run.nuon and reported
+# as host-time windows (cpu-windows).
 use ../../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
@@ -175,9 +185,21 @@ const MET = [nothing geometry android]
 # run missing a leg is refused unless admitted too, whatever its standing
 const REFUSED = [incomplete invalid unchecked unpaired diagnostic]
 const REJECTED = [empty unclassified unusable]
+# a run's workers and grain below schema 4 when its records cannot show
+# them (effective-workers), a build of its own
+const UNKNOWN_WORKERS = "unknown"
+# the identity's fields a correction may change: the build's flags and its
+# ELF's SHA-256, each read from beside the image at the run's start
+const CORRECTABLE = ["build.flags" "build.elf_sha256"]
+# where a run's effective identity came from (identity-of)
+const FROM_FILE = "file"
+const FROM_EMBEDDED = "embedded"
+const FROM_LEGACY = "legacy"
+# the CPU readings' whole window opens here, past the load (cpu-requests)
+const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--threads <at>] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
@@ -193,7 +215,11 @@ def main [] {
 # recorded, or with `--host` in the window and the audio a run of the
 # program has. `--qemu` words go on each launch's line after its own, and
 # each run's identity then takes the machine and the words the launch
-# returns, a diagnostic run.
+# returns, a diagnostic run. An image whose build flags contradict the
+# tree asked is refused before any launch (flags-contradiction). With
+# `--cpu`, every QEMU thread's CPU is read at the times cpu-requests
+# names, the readings kept whole in run.nuon and each run's windows
+# (cpu-windows) in the report.
 def "main run" [
     --tree: string = "release"   # the build tree the kernel and the image come from, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
@@ -210,15 +236,18 @@ def "main run" [
     --label: string = ""         # a name for the build in the summary
     --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
-    --threads: duration = 0sec   # when in each run to read every QEMU thread's CPU over a second, kept in run.nuon; none unless given
+    --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
+    let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
+    if $contradiction != null { error make { msg: $contradiction } }
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_render_0.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
     let r = ($route_bytes | decode utf-8 | from nuon)
+    let requests = (if $cpu { cpu-requests $r.legs $r.end } else { [] })
     let map_name = (if $map == "" { $r.map } else { $map })
     let disk = (romfs-of $at.game $map_name $at.out)
     let pad = ($at.out | path join "pad.nuon")
@@ -241,17 +270,19 @@ def "main run" [
         let id = (identity $at $set $map_name $route_file $mode $harts $qemu)
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads $threads
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads-at $requests
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads $threads
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads-at $requests
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
-        launched-identity $id $launched | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+        let ran_id = (launched-identity $id $launched)
+        $ran_id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP))
         print (run-line $label $n $measured $ran)
         print (outcome-line $n $measured $ran)
-        { run: $n, seed: $seed, out: $run_out, ran: $ran, measured: $measured }
+        let windows = (if $cpu { cpu-windows $ran.thread_readings $r.legs $r.end } else { null })
+        { run: $n, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, cpu: $windows }
     })
     report $label (open ($at.out | path join "run_1" "identity.nuon")) $runs $at.out
 }
@@ -260,7 +291,8 @@ def "main run" [
 # gamepad, for a person to play from the spawn: an R with the seed and a
 # C with the cadence before the first frame, the E after `seconds`, the
 # capture once the final records have landed, which closes the window.
-# `--qemu` as `run` takes it.
+# `--qemu` as `run` takes it, and an image whose build flags contradict the
+# tree asked is refused as `run` refuses it.
 def "main play" [
     --tree: string = "release"   # the build tree, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
@@ -279,6 +311,8 @@ def "main play" [
     let asked = (workers-asked $workers $grain)
     jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
+    let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
+    if $contradiction != null { error make { msg: $contradiction } }
     let disk = (romfs-of $at.game "render_0" $at.out)
     let set = (if $at.tree == "debug" { "debug" } else { "" })
     let end = ($seconds * 1sec)
@@ -296,19 +330,21 @@ def "main play" [
     let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --harts $harts --qemu $qemu)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
-    launched-identity $id $launched | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
+    let ran_id = (launched-identity $id $launched)
+    $ran_id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     let legs = [{ name: "play", places: [], pad: [] }]
     let measured = (measure $launched.api $legs --cap ($id.cap | default $CAP))
     print (run-line $label 1 $measured $ran)
     print (outcome-line 1 $measured $ran)
-    report $label (open ($run_out | path join "identity.nuon")) [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured }] $at.out
+    report $label $ran_id [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, cpu: null }] $at.out
 }
 
 # Read a capture, a run's api.out: with the identity.nuon and run.nuon
-# its launch wrote beside it, or without them as what the capture alone
-# says; the legs from `--route`, else the route kept beside the capture,
-# else the one the identity names, refused unless it is the route that
-# played (legs-for), and one leg, play, when no route is recorded.
+# its launch wrote beside it, the identity's correction applied
+# (correction-of), or without them as what the capture alone says; the
+# legs from `--route`, else the route kept beside the capture, else the
+# one the identity names, refused unless it is the route that played
+# (legs-for), and one leg, play, when no route is recorded.
 def "main read" [
     api: path                    # the capture
     --route: string = ""         # the route the capture played, for its legs
@@ -318,7 +354,8 @@ def "main read" [
     let file = ($api | path expand)
     let dir = ($file | path dirname)
     let id_file = ($dir | path join "identity.nuon")
-    let id = (if ($id_file | path exists) { open $id_file } else { { launched: false, note: "read from the capture alone; no identity was written at its launch" } })
+    let read_id = (if ($id_file | path exists) { correction-of $id_file } else { { identity: { launched: false, note: "read from the capture alone; no identity was written at its launch" }, corrections: null } })
+    let id = $read_id.identity
     let chosen = (legs-for $dir $id $route)
     let legs = $chosen.legs
     if $chosen.route != null and (not $chosen.checked) { print $"gauge: the legs from ($chosen.route), unchecked: the capture's identity records no route" }
@@ -329,7 +366,8 @@ def "main read" [
     print (outcome-line 1 $measured $ran)
     let target = (if $out == "" { $dir } else { $out | path expand })
     mkdir $target
-    report $label $id [{ run: 1, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured }] $target
+    let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu-windows $ran.thread_readings $legs ($id | get -o mode.end | default 0sec) })
+    report $label $id [{ run: 1, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured, identity: $id, corrections: $read_id.corrections, cpu: $windows }] $target
 }
 
 # Where a run's pieces are: the game, the workspace, the tree, the
@@ -405,14 +443,16 @@ def workers-sends [asked: record]: nothing -> list<any> {
 # the QEMU words of the launch's own (`overrides`), the host, the
 # toolchain, and the mode: the window, the sound, the pad, the seed, the
 # cadence asked for, the workers and grain asked for, null for none, and
-# when the measurement closes. The QEMU, the
+# when the measurement closes. The build's flags are null, unknown, with
+# no `flags` beside the image, and its provenance the `provenance.nuon`
+# beside the image (ImageProvenance), null without one. The QEMU, the
 # machine, and the words are the launch's, written in when it returns
 # (launched-identity).
 def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, harts: int, qemu: list<string>]: nothing -> record {
     let built = ($at.image | path dirname)
-    let flags_file = ($built | path join "flags")
-    let flags = (if ($flags_file | path exists) { open --raw $flags_file | decode | lines | first } else { "" })
-    let prefix = ($flags | split row " " | last)
+    let flags = (image-flags $at.image)
+    let prefix = (if $flags == null { null } else { $flags | split row " " | last })
+    let provenance_file = ($built | path join "provenance.nuon")
     let jab_inc = ($at.workspace | path join "sdk" "src" "jab.inc")
     let cap = (open --raw $jab_inc | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get -o 0.cap)
     let tree = (jab program-shard $at.game "asset" | path join $map)
@@ -434,6 +474,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
             elf_sha256: (digest ($built | path join "fps.elf")),
             kernel: $at.kernel,
             kernel_sha256: (digest $at.kernel),
+            provenance: (if ($provenance_file | path exists) { open $provenance_file } else { null }),
         },
         assets: { map: $map, tree: $tree, digest: (tree-digest $tree) },
         route: (if $route == null { null } else { { file: $route, sha256: (digest $route) } }),
@@ -453,7 +494,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         },
         toolchain: {
             prefix: $prefix,
-            assembler: (try { ^$"($prefix)as" --version | complete | get stdout | lines | get -o 0 } catch { null }),
+            assembler: (if $prefix == null { null } else { try { ^$"($prefix)as" --version | complete | get stdout | lines | get -o 0 } catch { null } }),
             link: (try { ls -l ($at.workspace | path join "extern") | where {|e| ($e.name | path basename) == "riscv" } | get -o 0.target } catch { null }),
         },
         mode: $mode,
@@ -471,6 +512,111 @@ def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<s
 # the ones asked for.
 def launched-identity [id: record, launched: record]: nothing -> record {
     $id | upsert qemu (qemu-of $launched.qemu_binary) | upsert machine $launched.machine | upsert overrides $launched.overrides
+}
+
+# An image's build flags, the first line of the `flags` its build wrote
+# beside it, or null, unknown, where there is none.
+def image-flags [image: path]: nothing -> oneof<string, nothing> {
+    let file = ($image | path expand | path dirname | path join "flags")
+    if ($file | path exists) { open --raw $file | decode | lines | get -o 0 } else { null }
+}
+
+# Why an image's build flags contradict the tree a run asks for, none
+# where they do not: DEBUG defined on a release run, or absent on a debug
+# one. Flags missing are unknown and contradict nothing.
+export def flags-contradiction [flags: oneof<string, nothing>, tree: string]: nothing -> oneof<string, nothing> {
+    if $flags == null { return null }
+    let debug = ($flags =~ '--defsym DEBUG=')
+    if $tree == "release" and $debug { return $"the image's build flags define DEBUG where the run asks the release tree: ($flags)" }
+    if $tree == "debug" and (not $debug) { return $"the image's build flags lack DEBUG where the run asks the debug tree: ($flags)" }
+    null
+}
+
+# A run's identity file read with the correction beside it applied. The
+# sidecar, identity_correction.nuon, names the identity file's SHA-256 and
+# the image's (`build.image_sha256`), and for CORRECTABLE's fields alone
+# the old value the file holds and the new one; a sidecar naming another
+# file or image, an old value the file does not hold, no field, or a
+# field outside CORRECTABLE stops the read. The corrections, null with no
+# sidecar: the sidecar, its SHA-256, each field's old and new values, and
+# the evidence it records.
+export def correction-of [file: path]: nothing -> record<identity: record, corrections: any> {
+    let raw = (open --raw $file | into binary)
+    let id = ($raw | decode utf-8 | from nuon)
+    let sidecar = ($file | path expand | path dirname | path join "identity_correction.nuon")
+    if not ($sidecar | path exists) { return { identity: $id, corrections: null } }
+    let side_raw = (open --raw $sidecar | into binary)
+    let c = ($side_raw | decode utf-8 | from nuon)
+    let file_sha = ($raw | hash sha256)
+    let image = ($id | get -o build.image_sha256)
+    if ($c | get -o identity_sha256) != $file_sha {
+        error make { msg: $"($sidecar) corrects an identity of SHA-256 ($c | get -o identity_sha256), where ($file) has ($file_sha)" }
+    }
+    if ($c | get -o image_sha256) != $image {
+        error make { msg: $"($sidecar) corrects a run of the image ($c | get -o image_sha256), where ($file) records ($image)" }
+    }
+    let fields = ($c | get -o fields | default {})
+    let named = ($fields | columns)
+    if ($named | is-empty) { error make { msg: $"($sidecar) names no field to correct" } }
+    let foreign = ($named | where {|f| $f not-in $CORRECTABLE })
+    if not ($foreign | is-empty) {
+        error make { msg: $"($sidecar) names ($foreign | str join ', '), where a correction holds ($CORRECTABLE | str join ' and ') alone" }
+    }
+    mut changes = []
+    for f in $named {
+        let entry = ($fields | get $f)
+        if not ("old" in ($entry | columns) and "new" in ($entry | columns)) {
+            error make { msg: $"($sidecar)'s ($f) holds no old and new value" }
+        }
+        let path = ($f | split row "." | into cell-path)
+        let current = ($id | get -o $path)
+        if $current != $entry.old {
+            error make { msg: $"($sidecar) holds ($f) as ($entry.old | to nuon), where ($file) holds ($current | to nuon)" }
+        }
+        $changes = ($changes | append { field: $f, path: $path, old: $entry.old, new: $entry.new })
+    }
+    let corrected = ($changes | reduce --fold $id {|ch, acc| $acc | upsert $ch.path $ch.new })
+    {
+        identity: $corrected,
+        corrections: {
+            sidecar: $sidecar,
+            sidecar_sha256: ($side_raw | hash sha256),
+            fields: ($changes | each {|ch| { field: $ch.field, old: $ch.old, new: $ch.new } }),
+            evidence: ($c | get -o evidence),
+        },
+    }
+}
+
+# A run's effective identity and where it came from: the run's identity
+# file, its directory found beside the report before the absolute `out`
+# the report recorded so a moved report keeps its runs, read with its
+# correction applied (correction-of); else the identity the report
+# embedded for the run, its correction provenance with it; else the
+# report's one identity, as a report from before per-run identities holds
+# it. A fallback is taken only where that identity is absent, no run
+# directory or one without identity.nuon; a file that fails to parse or a
+# correction that fails its checks stops the read, and so does a run's
+# file whose image is not the one the report names for it.
+export def identity-of [report: path, run: record, legacy: any]: nothing -> record<identity: any, from: string, file: any, corrections: any> {
+    let here = ($report | path expand | path dirname)
+    let out = ($run | get -o out | default "")
+    let name = ($out | path basename)
+    let adjacent = (if $out == "" { null } else if $name == ($here | path basename) { $here } else { $here | path join $name })
+    let dirs = ([$adjacent (if $out == "" { null } else { $out })] | compact | uniq)
+    let found = ($dirs | where {|d| $d | path join "identity.nuon" | path exists } | get -o 0)
+    let embedded = ($run | get -o identity)
+    if $found != null {
+        let file = ($found | path join "identity.nuon")
+        let read = (correction-of $file)
+        let named = (if $embedded != null { $embedded | get -o build.image_sha256 } else { $legacy | get -o build.image_sha256 })
+        let image = ($read.identity | get -o build.image_sha256)
+        if $named != null and $image != $named {
+            error make { msg: $"($file) is a run of the image ($image), where its report ($report) names ($named)" }
+        }
+        return { identity: $read.identity, from: $FROM_FILE, file: $file, corrections: $read.corrections }
+    }
+    if $embedded != null { return { identity: $embedded, from: $FROM_EMBEDDED, file: null, corrections: ($run | get -o corrections) } }
+    { identity: $legacy, from: $FROM_LEGACY, file: null, corrections: null }
 }
 
 # The workspace's commit and whether its tree held changes: where the
@@ -520,9 +666,10 @@ def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
 }
 
 # What a launch came to: its status, a fault line on the UART, the CPU
-# and wall seconds, each QEMU thread's CPU over the second `--threads`
-# held with that span, empty and null when none was held, and the
-# machine it ran on, its line and its record.
+# and wall seconds, each QEMU thread's CPU over a second `jab launch
+# --threads` held with that span, empty and null when none was held, every
+# reading `--threads-at` asked for kept whole, and the machine it ran on,
+# its line and its record.
 def outcome [launched: record]: nothing -> record {
     {
         status: $launched.status,
@@ -531,12 +678,75 @@ def outcome [launched: record]: nothing -> record {
         wall_seconds: $launched.wall_seconds,
         threads: ($launched | get -o threads | default []),
         threads_span: ($launched | get -o threads_span),
+        thread_readings: ($launched | get -o thread_readings | default []),
         qemu_binary: $launched.qemu_binary,
         qemu: $launched.qemu,
         machine: $launched.machine,
         window: $launched.window,
         audio: $launched.audio,
     }
+}
+
+# The times a run's CPU is read at, the readings cpu-windows reads:
+# CPU_FROM, every placement of the route, and the route's end, each once,
+# in order.
+export def cpu-requests [legs: list<any>, end: duration]: nothing -> list<duration> {
+    [$CPU_FROM] | append ($legs | each {|l| $l.places | each {|p| $p.at } } | flatten) | append $end | uniq | sort
+}
+
+# A run's CPU readings as windows, the CPU contract. A reading's times are
+# host seconds from the launch's start, which comes before QEMU's spawn
+# where the frames' clock begins at the program's start; it is taken as
+# the launch polls, every 100 ms, so its actual time trails its request;
+# and a placement takes effect at the frame after it, so a window is host
+# time near the legs and never a count of the guest's frames. The whole
+# window runs from the reading at CPU_FROM to the one at the route's end;
+# a leg's window from its first placement's reading to the next leg's
+# first placement's, the last leg's to the end, the readings at a leg's
+# further placements its subwindows; CPU_FROM's reading bounds the whole
+# window alone. A window gives its actual interval and each thread's CPU
+# seconds, the counters' difference, with its utilization, those seconds
+# over the interval, null for a thread absent from either bound; a window
+# whose bound is missing is missing, never bridged across.
+export def cpu-windows [readings: list<any>, legs: list<any>, end: duration]: nothing -> record {
+    let reading = {|at: duration|
+        let s = ($at / 1sec)
+        $readings | where {|r| (($r.requested - $s) | math abs) < 0.000001 } | get -o 0
+    }
+    let between = {|name: string, from: duration, to: duration| cpu-window $name (do $reading $from) (do $reading $to) $from $to }
+    let starts = ($legs | where {|l| not ($l.places | is-empty) } | each {|l| { leg: $l.name, places: ($l.places | each {|p| $p.at }) } })
+    let leg_windows = ($starts | enumerate | each {|e|
+        let from = ($e.item.places | first)
+        let to = (if ($e.index + 1) < ($starts | length) { $starts | get ($e.index + 1) | get places | first } else { $end })
+        let marks = ($e.item.places | append $to)
+        let subs = (if ($e.item.places | length) < 2 { [] } else {
+            $marks | window 2 | enumerate | each {|w| do $between $"($e.item.leg) ($w.index + 1)" ($w.item | get 0) ($w.item | get 1) }
+        })
+        do $between $e.item.leg $from $to | insert subwindows $subs
+    })
+    { whole: (do $between "whole" $CPU_FROM $end), legs: $leg_windows }
+}
+
+# One CPU window between two readings (cpu-windows): missing when either
+# reading is absent or was never taken.
+def cpu-window [name: string, first: any, second: any, from: duration, to: duration]: nothing -> record {
+    let base = { window: $name, requested_from: ($from / 1sec), requested_to: ($to / 1sec) }
+    let taken = ($first != null and $second != null and ($first | get -o at) != null and ($second | get -o at) != null)
+    if not $taken {
+        return ($base | merge { missing: true, from: ($first | get -o at), to: ($second | get -o at), interval: null, threads: [] })
+    }
+    let interval = ($second.at - $first.at)
+    let ids = ($first.threads | each {|t| $t.id } | append ($second.threads | each {|t| $t.id }) | uniq)
+    let threads = ($ids | each {|id|
+        let a = ($first.threads | where id == $id | get -o 0)
+        let b = ($second.threads | where id == $id | get -o 0)
+        let name = (if $b != null { $b.name } else { $a.name })
+        if $a == null or $b == null { { id: $id, name: $name, cpu_seconds: null, utilization: null } } else {
+            let seconds = ($b.cpu - $a.cpu)
+            { id: $id, name: $name, cpu_seconds: $seconds, utilization: (if $interval > 0 { $seconds / $interval } else { null }) }
+        }
+    })
+    $base | merge { missing: false, from: $first.at, to: $second.at, interval: $interval, threads: $threads }
 }
 
 # A record's 32-bit word at a byte offset, or its 64-bit one.
@@ -807,7 +1017,10 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
 # past the screen's rows; one of the serial backend, 0 workers, carrying
 # a round's time; one whose slowest worker, dispatch, or barrier is past
 # its raster, each a part of the raster's span on hart 0; and one whose
-# workers' busy time is less than its slowest worker's, which it sums.
+# workers' busy time is less than its slowest worker's, which it sums, or
+# past W times it with the W - 1 microseconds the conversions drop, since
+# each round's busy time is at most W times its slowest and each total is
+# converted once.
 def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<string> {
     let unshown = ($rows | where {|r| $r.flip_status not-in $FLIP_VALID })
     let negative = ($rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
@@ -860,12 +1073,14 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     let serial_timed = ($packed | where {|r| $r.workers == 0 and ([$r.slowest_us $r.busy_us $r.dispatch_us $r.barrier_us] | any {|t| ($t | default 0) != 0 }) })
     let overtimed = ($packed | where {|r| ($r.workers | default 0) > 0 and ([$r.slowest_us $r.dispatch_us $r.barrier_us] | any {|t| ($t | default 0) > $r.raster_us }) })
     let short_busy = ($packed | where {|r| ($r.workers | default 0) > 0 and ($r.busy_us | default 0) < ($r.slowest_us | default 0) })
+    let long_busy = ($packed | where {|r| let w = ($r.workers | default 0); $w > 0 and ($r.busy_us | default 0) > ($w * ($r.slowest_us | default 0) + $w - 1) })
     $base | append $presented | append $packets | append [
         (if ($crowded | is-empty) { null } else { $"($crowded | length) frames drawn by more than ($WORKERS_MAX) workers" }),
         (if ($coarse | is-empty) { null } else { $"($coarse | length) frames at a grain past the screen's ($SCREEN_ROWS) rows" }),
         (if ($serial_timed | is-empty) { null } else { $"($serial_timed | length) frames of the serial backend carrying a round's time" }),
         (if ($overtimed | is-empty) { null } else { $"($overtimed | length) frames whose slowest worker, dispatch, or barrier is past their raster" }),
         (if ($short_busy | is-empty) { null } else { $"($short_busy | length) frames whose workers' busy time is less than their slowest's" }),
+        (if ($long_busy | is-empty) { null } else { $"($long_busy | length) frames whose workers' busy time is past W times their slowest's" }),
     ] | compact
 }
 
@@ -1148,20 +1363,30 @@ def ms [us: any]: nothing -> string {
     if $us == null { "-" } else { $"(($us / 1000.0) | math round --precision 1)" }
 }
 
-# The report: every run's measurement and outcome under the identity,
-# written as gauge.nuon in `out`, a previous one there retired, its legs
-# and its outliers printed.
-def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
-    let file = ($out | path join "gauge.nuon")
-    jab retire $file (jab target-root $WORKSPACE)
-    let doc = {
+# A report's document: the label, the first run's identity as the
+# report's one, the ceiling, every run with its outcome, its measurement
+# less its rows, its effective identity and correction provenance, and its
+# CPU windows, null without readings, and every row with its run.
+export def report-doc [label: string, id: record, runs: list<any>]: nothing -> record {
+    {
         label: $label,
         identity: $id,
         ceiling_us: $CEILING_US,
-        runs: ($runs | each {|r| { run: $r.run, seed: $r.seed, out: $r.out, ran: $r.ran, measured: ($r.measured | reject rows) } }),
+        runs: ($runs | each {|r| {
+            run: $r.run, seed: $r.seed, out: $r.out, ran: $r.ran, measured: ($r.measured | reject rows),
+            identity: ($r | get -o identity), corrections: ($r | get -o corrections), cpu: ($r | get -o cpu),
+        } }),
         rows: ($runs | each {|r| $r.measured.rows | each {|row| $row | insert run $r.run } } | flatten),
     }
-    $doc | to nuon | save --raw $file
+}
+
+# The report: every run's measurement and outcome under the identity
+# (report-doc), written as gauge.nuon in `out`, a previous one there
+# retired, its legs and its outliers printed.
+def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
+    let file = ($out | path join "gauge.nuon")
+    jab retire $file (jab target-root $WORKSPACE)
+    report-doc $label $id $runs | to nuon | save --raw $file
     for r in $runs {
         for l in $r.measured.legs {
             if ($l.critical? | default null) == null {
@@ -1203,7 +1428,9 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # (effective-workers) on the machine their identities record, its runs
 # its batches, named by the label less a trailing _<n>, one name a build
 # and one build a name, each run keeping the cadence, the workers, and
-# the grain its identity asked beside those it played; for each leg a
+# the grain its identity asked beside those it played, its identity read
+# through identity-of with its source and corrections named, and a build
+# whose runs' identities differ in its flags or its ELF refused; for each leg a
 # value of `field` a run, a leg
 # whose eye travels one bin or more taken per bin of its path over the
 # bins every run reached, a shorter one over its frames, so a leg's value
@@ -1228,25 +1455,30 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # leg, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
-        let g = (open ($f | path expand))
+        let file = ($f | path expand)
+        let g = (open $file)
         let build = ($g.label | str replace --regex '_\d+$' '')
-        let image = ($g.identity | get -o build.image_sha256 | default "")
-        let requested = ($g.identity | get -o mode.cadence)
-        let asked = { workers: ($g.identity | get -o mode.workers), grain: ($g.identity | get -o mode.grain) }
-        let machine = ($g.identity | get -o machine)
-        let overrides = ($g.identity | get -o overrides)
         let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
+            let effective = (identity-of $file $r ($g | get -o identity))
+            let id = $effective.identity
+            let image = ($id | get -o build.image_sha256 | default "")
+            let requested = ($id | get -o mode.cadence)
+            let asked = { workers: ($id | get -o mode.workers), grain: ($id | get -o mode.grain) }
+            let machine = ($id | get -o machine)
+            let overrides = ($id | get -o overrides)
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
             let standing = (standing-of $measured $rows $field $requested $asked $machine $overrides)
             let schema = ($measured | get -o schema | default 1)
-            let played = (effective-workers $measured)
+            let played = (effective-workers $measured $asked)
             {
-                file: ($f | path expand), label: $g.label, build: $build, image: $image, machine: $machine,
+                file: $file, label: $g.label, build: $build, image: $image, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
                 requested_workers: $asked.workers, requested_grain: $asked.grain,
                 effective_workers: $played.workers, effective_grain: $played.grain,
+                flags: ($id | get -o build.flags), elf_sha256: ($id | get -o build.elf_sha256),
+                identity_from: $effective.from, identity_file: $effective.file, corrections: $effective.corrections,
                 schema: $schema, parts: (parts-meaning $schema (if $image == "" { null } else { $image })),
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
                 held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
@@ -1307,6 +1539,13 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
         if ($names | length) > 1 { error make { msg: $"one build, ($made | to nuon), is labelled ($names | str join ' and '); a build has one name" } }
     }
+    for b in $builds {
+        let built = ($runs | where build == $b | each {|r| { flags: $r.flags, elf_sha256: $r.elf_sha256 } } | uniq)
+        if ($built | length) > 1 {
+            let named = ($runs | where build == $b | each {|r| $"($r.file) run ($r.run), its identity from ($r.identity_from): flags ($r.flags | to nuon), ELF ($r.elf_sha256 | to nuon)" })
+            error make { msg: ([$"the runs of ($b) differ in build.flags or build.elf_sha256, its identities' record of one build"] | append $named | str join "\n  ") }
+        }
+    }
     let common = ($expected | each {|leg|
         let measured = ($runs | each {|r| $r.legs | where {|l| $l.leg == $leg and $l.kind != "missing" } | get -o 0 } | compact)
         let kinds = ($measured | get kind | uniq)
@@ -1353,10 +1592,18 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "a build is an image's SHA-256 at the cadence its runs played by the workers at the grain they"
                 "played on the machine their identities record: the cadence the one asked from schema 2, and 0"
                 "below it, where a request other than 0 leaves the run unpaired; the workers and grain its frames"
-                "were drawn by from schema 4, and the serial backend, 0 at grain 0, below it, where workers asked"
-                "other than 0 leave the run unpaired; a capture's label less a trailing _<n> names it, one name a"
-                "build and one build a name, and its runs are its batches; each run keeps the cadence, workers,"
-                "and grain asked beside those played"
+                "were drawn by from schema 4; below it the serial backend, 0 at grain 0, for a run with a W 0"
+                "answered before its first frame and no W after it, and unknown for any other, which leaves the run"
+                "unpaired and under --diagnostic a build of its own, never one with a known configuration, workers"
+                "asked above 0 leaving it unpaired too; a capture's label less a trailing _<n> names it, one name a"
+                "build and one build a name, and its runs are its batches, whose identities hold one build's flags"
+                "and ELF; each run keeps the cadence, workers, and grain asked beside those played"
+            ] | str join " "),
+            identities: ([
+                "each run's identity is its own file, its directory found beside its report before the path the"
+                "report recorded, with an audited correction beside it applied to build.flags and build.elf_sha256"
+                "alone; else the identity its report embedded; else the report's one identity; each run names its"
+                "source and its corrections, and a correction that fails its checks stops the comparison"
             ] | str join " "),
             machine: ([
                 "a run's machine is the one its identity records, its harts, whether it is diagnostic, -machine,"
@@ -1378,7 +1625,8 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "2 one whose identity asks a cadence other than 0, which such a capture cannot play, or from schema 2"
                 "one whose cadence was not asked before its first frame or was asked again after it, whose identity"
                 "asks no cadence from 0 to 2, or with a frame at another cadence, or below schema 4 one whose identity"
-                "asks workers other than 0, or from schema 4 one asking workers not asked before its first frame or"
+                "asks workers above 0 or whose workers are unknown, no W 0 answered before its first frame or a W"
+                "after it, or from schema 4 one asking workers not asked before its first frame or"
                 "asked again after it or with a frame drawn by other workers or at another grain, or asking none"
                 "with workers asked after its first frame or frames at more than one count of workers or grain;"
                 "diagnostic, a run on a machine its identity records as diagnostic, fewer harts than the"
@@ -1521,24 +1769,33 @@ def effective-cadence [m: oneof<record, nothing>, requested: any]: nothing -> an
 }
 
 # Why a clocked run's workers keep it from pairing, none when they do
-# not: below schema 4, an identity asking workers other than 0, which an
-# image writing no workers in its records cannot play, its raster the
-# serial backend; from schema 4 with workers asked, no W answered before
-# the first frame, one answered after it, or a frame drawn by other
-# workers or at another grain than asked; with none asked, a W answered
-# after the first frame, or frames drawn by more than one count of
-# workers or at more than one grain.
+# not. Below schema 4 the records hold no workers: a run legacy-serial
+# holds to the serial backend pairs; an identity asking workers above 0
+# asks what such a capture cannot show; any other run's workers are
+# unknown, since 1a9986e drew with workers at schema 3 where every older
+# build drew with the serial backend, and the reasons say why: none asked,
+# no W 0 answered before the first frame, or a W after it. From schema 4
+# with workers asked, no W answered before the first frame, one answered
+# after it, or a frame drawn by other workers or at another grain than
+# asked; with none asked, a W answered after the first frame, or frames
+# drawn by more than one count of workers or at more than one grain.
 def workers-unpaired [m: record, asked: record]: nothing -> list<string> {
     let schema = ($m | get -o schema | default 1)
     let wanted = ($asked | get -o workers)
     let grain = ($asked | get -o grain)
-    if $schema < 4 {
-        return (if $wanted == null or $wanted == 0 { [] } else {
-            [$"the identity asks ($wanted) workers, which a capture below schema 4 cannot play"]
-        })
-    }
     let answered = ($m | get -o workers_set | default false)
     let late = (if ($m | get -o late_workers | default false) { "workers asked after the first frame" } else { null })
+    if $schema < 4 {
+        if $wanted != null and $wanted > 0 {
+            return [$"the identity asks ($wanted) workers, which a capture below schema 4 cannot show"]
+        }
+        if (legacy-serial $m $asked) { return [] }
+        return ([
+            "the workers that drew it are unknown: below schema 4 a capture is the serial backend only with a W 0 answered before its first frame and no W after it"
+            (if $wanted == null { "no workers asked" } else if not $answered { "no W 0 answered before the first frame" } else { null })
+            $late
+        ] | compact)
+    }
     let drawn = ($m | get -o workers | default [])
     let grains = ($m | get -o grains | default [])
     if $wanted == null {
@@ -1558,14 +1815,28 @@ def workers-unpaired [m: record, asked: record]: nothing -> list<string> {
     ] | compact
 }
 
+# Whether a run below schema 4 drew with the serial backend: W 0 asked,
+# answered before its first frame, and no W after it. An older build has
+# no other raster, and 1a9986e takes a W 0 to the serial backend.
+def legacy-serial [m: oneof<record, nothing>, asked: record]: nothing -> bool {
+    let wanted = ($asked | get -o workers)
+    let answered = ($m | get -o workers_set | default false)
+    let late = ($m | get -o late_workers | default false)
+    $wanted == 0 and $answered and (not $late)
+}
+
 # The workers and grain a run played, which a build is named by beside
-# its cadence: below schema 4 the serial backend, 0 workers at grain 0,
-# the one raster an image writing no workers in its records has; from
-# schema 4 the one count its frames were drawn by, the grain theirs above
-# 0 workers and 0 at none, each null where its frames hold more than one,
-# which workers-unpaired refuses.
-def effective-workers [m: oneof<record, nothing>]: nothing -> record<workers: any, grain: any> {
-    if ($m | get -o schema | default 1) < 4 { return { workers: 0, grain: 0 } }
+# its cadence: below schema 4 the serial backend, 0 workers at grain 0
+# whatever grain it asked, for a run legacy-serial holds to it, and
+# UNKNOWN_WORKERS for both otherwise, which workers-unpaired refuses and
+# --diagnostic admits as a build of its own; from schema 4 the one count
+# its frames were drawn by, the grain theirs above 0 workers and 0 at
+# none, each null where its frames hold more than one, which
+# workers-unpaired refuses.
+def effective-workers [m: oneof<record, nothing>, asked: record]: nothing -> record<workers: any, grain: any> {
+    if ($m | get -o schema | default 1) < 4 {
+        return (if (legacy-serial $m $asked) { { workers: 0, grain: 0 } } else { { workers: $UNKNOWN_WORKERS, grain: $UNKNOWN_WORKERS } })
+    }
     let drawn = ($m | get -o workers | default [])
     let grains = ($m | get -o grains | default [])
     let workers = (if ($drawn | length) == 1 { $drawn | first } else { null })
@@ -1644,6 +1915,14 @@ def "main compare" [
             $"(ms $t.value_us) ms, half spread (ms $t.half_spread_us), ($t.batches) batches"
         })
         print $"gauge: ($t.build) ($t.leg): ($value)($marked)"
+    }
+    let corrected = ($result.runs | where {|r| $r.corrections != null })
+    let fallen = ($result.runs | where {|r| $r.identity_from != $FROM_FILE })
+    if not ($corrected | is-empty) {
+        print $"gauge: identities corrected by their sidecars: ($corrected | each {|r| $'($r.label) run ($r.run), ($r.corrections.fields | get field | str join ' and ')' } | str join '; ')"
+    }
+    if not ($fallen | is-empty) {
+        print $"gauge: identities read from their reports, not their runs' files: ($fallen | each {|r| $'($r.label) run ($r.run), ($r.identity_from)' } | str join '; ')"
     }
     print $"gauge: ($target)"
 }
@@ -1735,22 +2014,23 @@ def column-of [rows: list<any>, name: string]: nothing -> list<any> {
 # identity names the host's own pad, else a batch of the route; its
 # cadence and period; the machine and the QEMU its identity records; and
 # every run with its standing and reasons as a comparison classifies it
-# (standing-of), its CPU seconds over wall seconds, its outcomes, and its
-# frames (presented-calls). A step with no gauge.nuon holds no runs.
+# (standing-of) from its own identity (identity-of), its CPU seconds over
+# wall seconds, its outcomes, and its frames (presented-calls). A step
+# with no gauge.nuon holds no runs.
 def bench-step [dir: path, label: string, state: any]: nothing -> record {
     let file = ($dir | path join $label "gauge.nuon")
     if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, machine: null, qemu: null, file: null, runs: [] } }
     let g = (open $file)
     let period = (1000000 / ($g.identity | get -o cap | default $CAP))
     let requested = ($g.identity | get -o mode.cadence)
-    let asked = { workers: ($g.identity | get -o mode.workers), grain: ($g.identity | get -o mode.grain) }
     let machine = ($g.identity | get -o machine)
-    let overrides = ($g.identity | get -o overrides)
     let all_rows = ($g.rows? | default [])
     let runs = ($g.runs | each {|r|
         let m = ($r | get -o measured)
         let rows = ($all_rows | where run == $r.run)
-        let standing = (standing-of $m $rows "critical_us" $requested $asked $machine $overrides)
+        let id = (identity-of $file $r ($g | get -o identity) | get identity)
+        let asked = { workers: ($id | get -o mode.workers), grain: ($id | get -o mode.grain) }
+        let standing = (standing-of $m $rows "critical_us" ($id | get -o mode.cadence) $asked ($id | get -o machine) ($id | get -o overrides))
         let ran = ($r | get -o ran | default {})
         let wall = ($ran | get -o wall_seconds | default 0)
         let cpu = ($ran | get -o cpu_seconds)

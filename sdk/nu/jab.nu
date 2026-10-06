@@ -393,7 +393,14 @@ def image-manifest [image: path]: nothing -> record {
 # `threads` carries each thread's name, the CPU seconds it used in
 # between, and those over the span (threads-between), the harts' threads
 # named `CPU N/TCG` on Linux; empty, its span null, when the run ended
-# before the second reading. `--qemu` appends words of its own
+# before the second reading. With `--threads-at`, every QEMU thread's
+# cumulative CPU seconds are read at each time it lists, `thread_readings`
+# keeping each reading whole: the time asked, `requested`, and the time
+# it was taken, `at`, both seconds from the launch's start, which comes
+# before QEMU's spawn, the reading taken at the first poll past its
+# request, so `at` trails `requested` by up to a poll; and every thread's
+# id, name, and counter (threads-of); a time the run ended before keeps
+# its request with `at` and `threads` null, missing. `--qemu` appends words of its own
 # to the line, unchanged, after the launch's: a device or a property a
 # test needs that no launch flag gives. Such a run is diagnostic, its
 # `machine` keeping the platform asked for and marked so (machine-of
@@ -424,8 +431,9 @@ export def launch [
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
+    --threads-at: list<duration> = [] # each time to read every QEMU thread's CPU, kept whole in the result's `thread_readings`; none unless given
     --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     let gamepad = (pad-table $pad)
     let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
@@ -462,6 +470,9 @@ export def launch [
     mut header_sent = (not $gamepad.port)
     mut threads_first: any = null
     mut threads_held: any = null
+    let thread_requests = ($threads_at | sort)
+    mut readings = []
+    mut taken = 0
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
         # QEMU deletes its pid file as it exits, so the read is tried, never
@@ -516,7 +527,15 @@ export def launch [
                 $threads_held = (threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
             }
         }
+        # every thread's counter at each time `--threads-at` asks, read at
+        # the first poll past it, its own time taken with it
+        while $alive and $taken < ($thread_requests | length) and ($thread_requests | get $taken) <= $elapsed {
+            let threads = (threads-of ($pid | into int))
+            $readings = ($readings | append { requested: (($thread_requests | get $taken) / 1sec), at: (((date now) - $started) / 1sec), threads: $threads })
+            $taken += 1
+        }
     }
+    let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
     if $bridge != null { try { job kill $bridge } }
     {
         status: $result.exit_code,
@@ -537,6 +556,7 @@ export def launch [
         machine: (machine-of $harts --overrides $qemu),
         threads: (if $threads_held == null { [] } else { $threads_held.threads }),
         threads_span: (if $threads_held == null { null } else { $threads_held.span }),
+        thread_readings: ($readings | append $unread),
     }
 }
 
