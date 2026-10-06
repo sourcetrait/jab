@@ -8,9 +8,9 @@ Nomenclature: `{resolution}K{components}{compatability}`
   - `2k` QHD
   - `4K` 4K
 - Components
-  - `/[A-Z]/` Ascending; Minimum hardware components and resources
+  - `/[A-Z]/` Minimum hardware components and resources
 - Compatability
-  - `/[0-9]+/` Ascending; Minimum compatability (eg, RVA22 vs RVA23)
+  - `/[0-9]+/` Minimum compatability (eg, RVA22 vs RVA23)
 
 ## 1KA1
 - ISA: RISC-V
@@ -22,27 +22,23 @@ Nomenclature: `{resolution}K{components}{compatability}`
 - VRAM: None
 - Display: 1080p (1920x1080, 16:9)
 - FPS: 60
-### 1KB1
-- Cores: 8
-## 2KA1
+## 1KB1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 4
+- Cores: 8
+- Clock: 2Ghz
+- RAM: 8GB
+- GPU: None
+- VRAM: None
+- Display: 1080p (1920x1080, 16:9)
+- FPS: 60
+### 1KC1
+- ISA: RISC-V
+- ISA Profile: RVA23
+- Cores: 8
 - Clock: 2Ghz
 - RAM: 8GB
 - GPU: Vulkan
 - VRAM: 4GB
-- Display: 1440p (2560x1440, 16:9)
+- Display: 1080p (1920x1080, 16:9)
 - FPS: 60
-### 2KB1
-- Cores: 8
-## 4KA1
-- ISA: RISC-V
-- ISA Profile: RVA23
-- Cores: 8
-- Clock: 2Ghz
-- RAM: 8GB (min)
-- GPU: Vulkan
-- VRAM: 12GB (min)
-- Display: 4K (3840x2160, 16:9) (exact)
-- FPS: 60 (exact)
