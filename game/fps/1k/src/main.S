@@ -573,6 +573,25 @@ frame_records:
     sw t2, PACKET_INVALIDATED(t1)
     ld t2, CLOCK_SNAPSHOT(t0)
     sw t2, PACKET_SNAPSHOT(t1)      # the frame whose simulation the packets were prepared from
+    la t3, round_workers
+    lwu t2, 0(t3)
+    sw t2, PACKET_WORKERS(t1)       # the frame's workers, 0 for the serial backend
+    la t3, round_grain
+    lwu t2, 0(t3)
+    sw t2, PACKET_GRAIN(t1)
+    la t3, stats
+    ld t2, STAT_SLOWEST(t3)
+    divu t2, t2, t6
+    sw t2, PACKET_SLOWEST(t1)       # the rounds' times, each converted once
+    ld t2, STAT_BUSY(t3)
+    divu t2, t2, t6
+    sw t2, PACKET_BUSY(t1)
+    ld t2, STAT_DISPATCH(t3)
+    divu t2, t2, t6
+    sw t2, PACKET_DISPATCH(t1)
+    ld t2, STAT_BARRIER(t3)
+    divu t2, t2, t6
+    sw t2, PACKET_BARRIER(t1)
     la t0, clock_records
     li t1, (REPORT_SIZE * 4)
     jab.sys.api.write t0, t1

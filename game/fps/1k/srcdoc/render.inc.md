@@ -1380,7 +1380,7 @@ A record's bytes, zero to the end.
 
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out, 3 with the packet record.
+`u32`: the clock records' layout as this source lays them out, 4 with the packet record's workers.
 
 ## .set TIME_START
 
@@ -1541,6 +1541,37 @@ A record's bytes, zero to the end.
 ## .set PACKET_SNAPSHOT
 
 `u32`: the frame whose simulation the packets were prepared from, the record's own while one owner prepares and renders in turn.
+
+## .set PACKET_WORKERS
+
+`u32`: the raster's workers the frame drew with, 0 for the serial backend, world_draw's latch.
+
+The record's workers and their rounds, from schema 4: the frame's workers
+and grain as world_draw took them, and the rounds' times summed over the
+frame's rounds, each converted once, 0 under the serial backend and on a
+frame that took no round, a stall's. The slowest worker, the dispatch, and
+the barrier each lie within the raster, and the busy time is every
+worker's, at least the slowest's (test/gauge.nu's rules).
+
+## .set PACKET_GRAIN
+
+`u32`: the rows a band, 0 for a band a worker.
+
+## .set PACKET_SLOWEST
+
+`u32`: the rounds' slowest workers, STAT_SLOWEST.
+
+## .set PACKET_BUSY
+
+`u32`: every worker's time in the rounds, STAT_BUSY.
+
+## .set PACKET_DISPATCH
+
+`u32`: the rounds' dispatch, STAT_DISPATCH.
+
+## .set PACKET_BARRIER
+
+`u32`: the rounds' barrier, STAT_BARRIER.
 
 ## .set CADENCE_AFTER_FLIP
 

@@ -276,7 +276,9 @@ the presentation record's next start is the next frame record's start, read
 once. The packet record's preparation is the drawing's ticks less the
 raster's, one division, so the drawing's microseconds less its preparation's
 and its raster's are 0 or 1; its bytes are the commands at POLY_SIZE and the
-spans at SPAN_RECORD_SIZE, what the frame's packets held across its flushes.
+spans at SPAN_RECORD_SIZE, what the frame's packets held across its flushes;
+its workers and grain are the frame's latch, still the frame before's at
+this frame's start, and its rounds' times the stats', one division each.
 The four records go in one write, the API's write being the one call
 besides the await that can wait, and its cost is the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker

@@ -96,7 +96,7 @@ const CLOCK_SEED = 7
 const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
-const CLOCK_SCHEMA = 3
+const CLOCK_SCHEMA = 4
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
@@ -369,6 +369,13 @@ const WORKER_MODES = [
     { workers: 2, grain: $WORKER_GRAIN }
 ]
 const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
+# The workers on fewer harts, the machine's secondaries all there are:
+# each machine's workers line, and a W asking two held to those started
+const WORKER_MACHINES = [
+    { harts: 4, started: 2, line: "fps: workers 2 on harts 1 2" }
+    { harts: 2, started: 1, line: "fps: workers 1 on harts 1" }
+    { harts: 1, started: 0, line: "fps: workers 0 on harts" }
+]
 # The packet's bounds and the stale binding, through the console's K
 # frame on a debug build. The still copy of Render Zero's spawn view,
 # every level built, drawn in packets of at most PACKET_CAPS' commands and
@@ -852,9 +859,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # tiled pixels within the lit, the arena's peak at or past what it
     # holds; each frame's drawing its preparation and its raster, the
     # bytes its packets held its commands' and span records', and its
-    # packets prepared from its own simulation, the gauge's rules at
-    # schema 3 which its validity holds; commands and spans in every
-    # frame; and the game going on past the measurement
+    # packets prepared from its own simulation, and its workers' round
+    # times within its raster, the gauge's rules at schema 4 which its
+    # validity holds; commands and spans in every frame; every frame drawn
+    # by the default, every worker started a band each, with a slowest
+    # worker's time; and the game going on past the measurement
     let walk_clock = (gauge measure $render_0_walk.api [{ name: "walk", places: $render_0_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
@@ -878,7 +887,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
     let unprepared = ($clock_rows | where {|r| $r.commands == null or $r.commands == 0 or $r.spans == 0 })
     assert ($unprepared | is-empty) $"each frame of the walk prepares commands and spans into its packets: ($unprepared | select frame commands spans | first 3)"
-    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.invalidated) bindings invalidated, ($walk_clock.whole.packet_bytes_max) packet bytes at most"
+    let undrawn = ($clock_rows | where {|r| $r.workers != $WORKERS_STARTED or $r.grain != 0 or $r.slowest_us == 0 or $r.busy_us == 0 })
+    assert ($undrawn | is-empty) $"every frame of the walk drawn by the ($WORKERS_STARTED) workers started, a band each, a slowest worker and busy time recorded: ($undrawn | select frame workers grain slowest_us busy_us | first 3)"
+    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.invalidated) bindings invalidated, ($walk_clock.whole.packet_bytes_max) packet bytes at most; ($walk_clock.workers | str join ', ') workers, the slowest's median ($walk_clock.whole.slowest.median) us, dispatch ($walk_clock.whole.dispatch.median) and barrier ($walk_clock.whole.barrier.median)"
 
     # the three cadences on a schedule of stalls and trigger reports and
     # on a timed walk (cadence-holds)
@@ -1034,7 +1045,28 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
         assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, each the default's picture and counts"
+    # the workers on each machine: the specification's four harts start
+    # two, two harts one, one hart none; a W asking two held to those
+    # started, the serial backend where none; each the default's picture
+    # and counts
+    for h in $WORKER_MACHINES {
+        let label = $"the spawn view on ($h.harts) harts with two workers asked"
+        let sends = [{ at: 1300ms, bytes: (gauge workers-frame 2 0) }, { at: 1400ms, bytes: (level-frame true false 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_harts_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5 --harts $h.harts)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+        let lines = ($run.serial | lines)
+        assert ($h.line in $lines) $"($label) names its workers, ($h.line): ($lines | where {|l| $l starts-with 'fps: worker' })"
+        let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        assert equal $frame.workers $h.started $"($label) drawn by the ($h.started) workers started: ($frame)"
+        let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
+        assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
+        assert ($run.screen != "") $"a screen was taken on ($label)"
+        let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
+        assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
+    }
+    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, and on four, two, and one harts, each the default's picture and counts"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -2127,22 +2159,37 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # drawing's other parts leave, packet bytes other than the commands' and
 # span records', and packets prepared from another frame's simulation are
 # each invalid for that alone; and one image's captures at cadences 0 and
-# 1 compare as two builds. The drawing's moved parts: schema 1 against
-# schema 3 refused on planes_us with or without --diagnostic and compared
-# on draw_us, critical_us, and parts_unattributed_us; an unlisted schema
-# 2 run, dirty or without its program's source, refused on planes_us and
-# compared on draw_us; f59f7a7's commit on an unlisted image refused; its
-# listed image under another clean commit, dirty, and with no commit
-# compared with schema 3 on planes_us, its remainder refused; two runs of
-# one class compared. A run on a diagnostic machine is refused as
-# diagnostic and admitted marked under --diagnostic; runs on two machines
-# refuse the comparison, and under --diagnostic each build's row names its
-# machine; one name's runs on two machines are two builds; a run whose
-# identity carries QEMU words of its launch's own is refused as
-# diagnostic, its machine the one the launch marked or the one asked
-# for, the reason naming the words and no hart count; and a bench
-# pools the specification's machine's run alone, keeps the diagnostic
-# machine's apart, and names every step's machine in its report.
+# 1 compare as two builds. At schema 4: the packet record's workers, grain,
+# and round times read at their offsets, a schema 3 record carrying none;
+# a schema 3 record among them leaves the window incomplete; the serial
+# backend's frames valid with no round time; a frame drawn by three
+# workers, at a grain past the screen's rows, of the serial backend with a
+# round's time, with a slowest worker, a dispatch, or a barrier past its
+# raster, or with its busy time under its slowest worker's each invalid
+# for that alone, times at the raster valid; a comparison refuses as
+# unpaired a run asking workers unanswered, answered late, or answered
+# and again late, drawn by other workers or at another grain than asked,
+# or below schema 4 asking workers other than 0, each named and admitted
+# marked under --diagnostic, while a run asking none whose frames hold one
+# count stands and a schema 3 run asking the serial backend stands; and
+# one image's runs at 0 and 2 workers or at two grains are two builds,
+# refused under one name and compared under two. The drawing's moved
+# parts: schema 1 against schema 3 refused on planes_us with or without
+# --diagnostic and compared on draw_us, critical_us, and
+# parts_unattributed_us; an unlisted schema 2 run, dirty or without its
+# program's source, refused on planes_us and compared on draw_us;
+# f59f7a7's commit on an unlisted image refused; its listed image under
+# another clean commit, dirty, and with no commit compared with schema 3
+# on planes_us, its remainder refused; two runs of one class compared, and
+# schema 3 against schema 4 on planes_us. A run on a diagnostic machine is
+# refused as diagnostic and admitted marked under --diagnostic; runs on
+# two machines refuse the comparison, and under --diagnostic each build's
+# row names its machine; one name's runs on two machines are two builds;
+# a run whose identity carries QEMU words of its launch's own is refused
+# as diagnostic, its machine the one the launch marked or the one asked
+# for, the reason naming the words and no hart count; and a bench pools
+# the specification's machine's run alone, keeps the diagnostic machine's
+# apart, and names every step's machine in its report.
 export def gauge-rules [dir: path]: nothing -> nothing {
     let legs = [{ name: "walk", places: [], pad: [] }]
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
@@ -2504,6 +2551,109 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert (($at3 | get -o refusal) == null) $at3_says
     assert equal ($at3.runs | get effective_cadence) [0 1] $"each schema 3 capture plays the cadence it asked: ($at3.runs | get effective_cadence)"
 
+    # schema 4: every frame's packets carry the workers that drew them, the
+    # grain, and the rounds' slowest worker, busy time, dispatch, and
+    # barrier, read at their offsets; a frame drawn by more than
+    # WORKERS_MAX workers, at a grain past the screen's rows, of the serial
+    # backend carrying a round's time, with a slowest worker, a dispatch, or
+    # a barrier past its raster, or with its busy time under its slowest
+    # worker's each invalid for that alone
+    let good4 = (fx-items 3 --schema 4)
+    let m4 = (do $measure $good4)
+    assert ($m4.complete and $m4.valid and $m4.passes) $"a well-formed capture at schema 4: ($m4.problems) ($m4.invalid)"
+    assert equal [$m4.schema $m4.workers $m4.grains] [4 [2] [0]] $"schema 4, two workers, grain 0: ($m4.schema) ($m4.workers) ($m4.grains)"
+    let read4 = ($m4.rows | get 2 | select workers grain slowest_us busy_us dispatch_us barrier_us)
+    let read4_holds = { workers: 2, grain: 0, slowest_us: 30, busy_us: 55, dispatch_us: 2, barrier_us: 1 }
+    assert equal $read4 $read4_holds $"frame 2's packet record's workers read at their offsets: ($read4)"
+    assert equal ($m3.rows | get 2 | select workers slowest_us) { workers: null, slowest_us: null } "a schema 3 packet record carries no workers"
+    let mixed4 = (do $measure (fx-set $good4 "packet" 1 { schema: 3 }))
+    let mixed4_says = $"a schema 3 packet record in a schema 4 capture leaves it incomplete: ($mixed4.problems)"
+    assert ((not $mixed4.complete) and ($mixed4.problems | any {|p| $p =~ "at schemas 3 in a capture at schema 4" })) $mixed4_says
+    let serial4 = (fx-items 3 --schema 4 --workers 0)
+    let ms4 = (do $measure $serial4)
+    assert ($ms4.complete and $ms4.valid and $ms4.workers == [0]) $"a schema 4 capture of the serial backend, no round times: ($ms4.invalid)"
+    let overtimed = "1 frames whose slowest worker, dispatch, or barrier is past their raster"
+    let worker_cases = [
+        { name: "a frame drawn by three workers", items: (fx-set $good4 "packet" 1 { workers: 3 }), says: "1 frames drawn by more than 2 workers" }
+        { name: "a grain past the screen's rows", items: (fx-set $good4 "packet" 1 { grain: 1081 }), says: "1 frames at a grain past the screen's 1080 rows" }
+        { name: "the serial backend with a slowest worker", items: (fx-set $serial4 "packet" 1 { slowest: 1 }), says: "1 frames of the serial backend carrying a round's time" }
+        { name: "the serial backend with a barrier", items: (fx-set $serial4 "packet" 1 { barrier: 1 }), says: "1 frames of the serial backend carrying a round's time" }
+        { name: "a slowest worker past the raster", items: (fx-set $good4 "packet" 1 { slowest: 41, busy: 60 }), says: $overtimed }
+        { name: "a dispatch past the raster", items: (fx-set $good4 "packet" 1 { dispatch: 41 }), says: $overtimed }
+        { name: "a barrier past the raster", items: (fx-set $good4 "packet" 1 { barrier: 41 }), says: $overtimed }
+        { name: "busy time under the slowest worker's", items: (fx-set $good4 "packet" 1 { busy: 29 }), says: "1 frames whose workers' busy time is less than their slowest's" }
+    ]
+    for c in $worker_cases {
+        let mc = (do $measure $c.items)
+        assert ($mc.complete and $mc.invalid == [$c.says]) $"($c.name) is invalid for that alone: ($mc.problems) ($mc.invalid)"
+    }
+    let within = (do $measure (fx-set $good4 "packet" 1 { slowest: 40, dispatch: 40, barrier: 40, busy: 40 }))
+    assert ($within.complete and $within.valid) $"round times at the raster and busy at the slowest are valid: ($within.invalid)"
+
+    # pairing from schema 4: workers asked and unanswered, answered late,
+    # or answered and drawn by other workers or at another grain, and below
+    # schema 4 an identity asking workers other than 0 each leave a run
+    # unpaired, refused unless --diagnostic admits it marked; a run asking
+    # none whose frames hold one count stands
+    let asked4 = (fx-items 3 --schema 4 --asked)
+    let answered4 = (do $measure $asked4)
+    assert ($answered4.workers_set and (not $answered4.late_workers)) "the W answered before the first frame is read"
+    let paired4 = (fx-gauge $dir "paired4" "paired4" "paired4" 0 $asked4 --workers 2 --grain 0)
+    let unasked4 = (fx-gauge $dir "unasked4" "unasked4" "unasked4" 0 $good4)
+    let unasked_stands = (try { gauge compare [$paired4 $unasked4] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert (($unasked_stands | get -o refusal) == null) $"a run asking no workers, its frames drawn by one count, stands: ($unasked_stands | get -o refusal)"
+    let unasked_mixes = [
+        { name: "mixed_counts", items: (fx-set $good4 "packet" 1 { workers: 0, slowest: 0, busy: 0, dispatch: 0, barrier: 0 }), reason: "frames drawn by 0 and 2 workers, none asked" }
+        { name: "mixed_grains", items: (fx-set $good4 "packet" 1 { grain: 16 }), reason: "frames at grains 0 and 16, none asked" }
+    ]
+    for x in $unasked_mixes {
+        let file = (fx-gauge $dir $x.name $x.name $x.name 0 $x.items)
+        let refused = (try { gauge compare [$paired4 $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        assert (($refused | str contains $"($file) run 1, unpaired: ") and ($refused | str contains $x.reason)) $"the ($x.name) run, asking no workers, is refused unpaired, ($x.reason): ($refused)"
+    }
+    let workers_unpaired = [
+        { name: "workers_unanswered", items: $good4, workers: 2, grain: 0, reason: "no workers asked before the first frame" }
+        { name: "workers_late", items: (fx-late $good4 { kind: "wack" }), workers: 2, grain: 0, reason: "workers asked after the first frame" }
+        { name: "workers_again", items: (fx-late $asked4 { kind: "wack" }), workers: 2, grain: 0, reason: "workers asked after the first frame" }
+        { name: "workers_other", items: $asked4, workers: 1, grain: 0, reason: "frames drawn by 2 workers where the identity asked 1" }
+        { name: "grain_other", items: $asked4, workers: 2, grain: 16, reason: "frames at a grain of 0 where the identity asked 16" }
+        { name: "legacy_workers", items: $good3, workers: 2, grain: 0, reason: "the identity asks 2 workers, which a capture below schema 4 cannot play" }
+    ]
+    for u in $workers_unpaired {
+        let file = (fx-gauge $dir $u.name $u.name $u.name 0 $u.items --workers $u.workers --grain $u.grain)
+        let refused = (try { gauge compare [$paired4 $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        assert ($refused | str contains $"($file) run 1, unpaired: ") $"the ($u.name) run is refused unpaired: ($refused)"
+        assert ($refused | str contains $u.reason) $"the ($u.name) run's reason, ($u.reason): ($refused)"
+        assert (not ($refused | str contains $"($paired4) run")) $"the paired run is not named beside ($u.name): ($refused)"
+        let admitted = (try { gauge compare [$paired4 $file] "draw_us" 50 --diagnostic } catch {|e| { refusal: $e.msg } })
+        assert (($admitted | get -o refusal) == null) $"--diagnostic admits the ($u.name) run, the comparison standing: ($admitted | get -o refusal)"
+        assert equal ($admitted.table | where build == $u.name | get 0.standings) ["unpaired"] $"--diagnostic admits the ($u.name) run marked unpaired"
+    }
+    let legacy_serial = (try { gauge compare [$paired4 (fx-gauge $dir "legacy_serial" "legacy_serial" "legacy_serial" 0 $good3 --workers 0 --grain 0)] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert (($legacy_serial | get -o refusal) == null) $"a schema 3 run asking the serial backend stands: ($legacy_serial | get -o refusal)"
+    assert equal ($legacy_serial.runs | where label == "legacy_serial" | get 0.effective_workers) 0 "a schema 3 run plays the serial backend, 0 workers"
+
+    # grouping from schema 4: one image's runs at 0 and 2 workers, or at
+    # two grains, are two builds, refused under one name and compared
+    # under two; below schema 4 an image plays the serial backend
+    let serial_asked = (fx-items 3 --schema 4 --workers 0 --asked)
+    let workers_split = (try {
+        gauge compare [(fx-gauge $dir "w_split_0" "w_split_1" "w_image" 0 $serial_asked --workers 0 --grain 0) (fx-gauge $dir "w_split_1" "w_split_2" "w_image" 0 $asked4 --workers 2 --grain 0)] "draw_us" 50
+        ""
+    } catch {|e| $e.msg })
+    assert ($workers_split | str contains "come from 2 builds") $"one image at 0 and 2 workers under one name refuses the comparison: ($workers_split)"
+    let workers_apart = (try {
+        gauge compare [(fx-gauge $dir "w_apart_0" "serial" "w_image" 0 $serial_asked --workers 0 --grain 0) (fx-gauge $dir "w_apart_1" "two" "w_image" 0 $asked4 --workers 2 --grain 0)] "draw_us" 50
+    } catch {|e| { refusal: $e.msg } })
+    assert (($workers_apart | get -o refusal) == null) $"one image at 0 and 2 workers under two names compares: ($workers_apart | get -o refusal)"
+    assert equal ($workers_apart.runs | get effective_workers) [0 2] $"each run plays the workers it asked: ($workers_apart.runs | get effective_workers)"
+    let grained = (fx-set (fx-set (fx-set $asked4 "packet" 0 { grain: 16 }) "packet" 1 { grain: 16 }) "packet" 2 { grain: 16 })
+    let grain_split = (try {
+        gauge compare [(fx-gauge $dir "g_split_0" "g_split_1" "g_image" 0 $asked4 --workers 2 --grain 0) (fx-gauge $dir "g_split_1" "g_split_2" "g_image" 0 $grained --workers 2 --grain 16)] "draw_us" 50
+        ""
+    } catch {|e| $e.msg })
+    assert ($grain_split | str contains "come from 2 builds") $"one image at two grains under one name refuses the comparison: ($grain_split)"
+
     # the drawing's parts whose meaning moved with the packets: the phases
     # with rendering at schema 1 and preparation alone at 3, the remainder
     # holding no rendering at both and the raster in f59f7a7's listed
@@ -2562,6 +2712,9 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         let alike = (do $compared $pair "planes_us" false)
         assert ($alike == "") $"two runs of one class compare on planes_us: ($alike)"
     }
+    let four_a = (fx-gauge $dir "parts_four_a" "parts_four_a" "parts_four_a" 0 $good4)
+    let three_four = (do $compared [$three_a $four_a] "planes_us" false)
+    assert ($three_four == "") $"schema 3 against schema 4 compares on planes_us, both preparation alone: ($three_four)"
 
     # machines: the specification's four harts, two harts diagnostic, and
     # four harts on another -machine, the PLIC's line before the AIA
@@ -2847,21 +3000,22 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 }
 
 # A synthetic capture's records as the program sends them over `frames`
-# frames: the seed's answer and from schema 2 the cadence's, frame 0's
-# state, then at each frame's top the frame before's clock, drawing, from
-# schema 2 presentation, and at schema 3 packets, the end marker after
-# the final frame's, and the frame's state, two frames' states past the
-# window.
-def fx-items [frames: int, --schema: int = 1, --cadence: int = 0]: nothing -> list<any> {
+# frames: the seed's answer, from schema 2 the cadence's, and with
+# `asked` the W's, frame 0's state, then at each frame's top the frame
+# before's clock, drawing, from schema 2 presentation, and from schema 3
+# packets, drawn at schema 4 by `workers`, the end marker after the final
+# frame's, and the frame's state, two frames' states past the window.
+def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
         [(fx-frame ($n - 1) $schema) { kind: "draw", frame: ($n - 1), schema: $schema }]
         | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
-        | append (if $schema >= 3 { [(fx-packet ($n - 1))] } else { [] })
+        | append (if $schema >= 3 { [(fx-packet ($n - 1) $schema $workers)] } else { [] })
         | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
     let answers = (if $schema >= 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
-    $answers | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+    let worked = (if $asked { $answers | append { kind: "wack" } } else { $answers })
+    $worked | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
 }
 
 # A frame record's fields for a synthetic capture: its phases 1.72 ms of
@@ -2886,12 +3040,17 @@ def fx-present [frame: int, cadence: int, schema: int = 2]: nothing -> record {
 # A packet record's fields for a synthetic capture: the drawing's 1 ms
 # its preparation's 0.96 and its raster's 0.04, the drawing's other parts
 # taking 0.95 of it; three commands, a flush, two bindings invalidated;
-# the bytes three commands' and the draw record's five span records'; and
-# the frame's own simulation.
-def fx-packet [frame: int]: nothing -> record {
+# the bytes three commands' and the draw record's five span records'; the
+# frame's own simulation; and at schema 4 its workers at grain 0, their
+# rounds' slowest worker 30 us, busy 55, dispatch 2, and barrier 1, every
+# time 0 under the serial backend.
+def fx-packet [frame: int, schema: int = 3, workers: int = 2]: nothing -> record {
+    let timed = ($workers > 0)
     {
         kind: "packet", frame: $frame, preparation: 960, raster: 40, commands: 3, flushes: 1, invalidated: 2,
-        bytes: (3 * 312 + 5 * 16), snapshot: $frame, schema: 3,
+        bytes: (3 * 312 + 5 * 16), snapshot: $frame, schema: $schema, workers: $workers, grain: 0,
+        slowest: (if $timed { 30 } else { 0 }), busy: (if $timed { 55 } else { 0 }),
+        dispatch: (if $timed { 2 } else { 0 }), barrier: (if $timed { 1 } else { 0 }),
     }
 }
 
@@ -2908,12 +3067,14 @@ def fx-late [items: list<any>, item: record]: nothing -> list<any> {
 
 # A gauge.nuon for a comparison, as `run` writes one, from a synthetic
 # capture measured: its label, an identity of the image, the cadence
-# asked, none when null, the machine when given, the program's source as
-# the identity records it when given, and the launch's QEMU words when
-# given, the run's measurement, and its rows.
-def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --program: record, --overrides: list<string> = []]: nothing -> string {
+# asked, none when null, the workers and grain asked when given, the
+# machine when given, the program's source as the identity records it
+# when given, and the launch's QEMU words when given, the run's
+# measurement, and its rows.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --program: record, --overrides: list<string> = [], --workers: any, --grain: any]: nothing -> string {
     let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
-    let mode = (if $cadence == null { {} } else { { cadence: $cadence } })
+    let paced = (if $cadence == null { {} } else { { cadence: $cadence } })
+    let mode = (if $workers == null { $paced } else { $paced | insert workers $workers | insert grain ($grain | default 0) })
     let file = ($dir | path join $"pair_($name).nuon")
     let id = { build: { image_sha256: $image }, mode: $mode }
     let machined = (if $machine == null { $id } else { $id | insert machine $machine })
@@ -2928,17 +3089,19 @@ def fx-gauge [dir: path, name: string, label: string, image: string, cadence: an
 }
 
 # A synthetic capture's records as bytes, 64 each in render.inc's
-# layouts: the console's answers to R and to C; a state, its drawing and
-# game microseconds at 32 and 36, 1000 and 100 unless given; a frame's
-# clock, the crosshair and the mix 10 us each, the flip 500, the
+# layouts: the console's answers to R, to C, and to W; a state, its
+# drawing and game microseconds at 32 and 36, 1000 and 100 unless given; a
+# frame's clock, the crosshair and the mix 10 us each, the flip 500, the
 # reporting 100, its await, its flip's end 1.7 ms past its start unless
 # given; a drawing whose parts take 0.95 ms, its tiles 0.1, its spans 5;
-# a presentation; a packet record; and the end marker's frame and schema.
+# a presentation; a packet record, its workers' words from schema 4; and
+# the end marker's frame and schema.
 def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
             "ack" => (fx-pad ([0x[0b 00 00 00] 0x[52]] | bytes collect)),
             "cack" => (fx-pad ([0x[0b 00 00 00] 0x[43]] | bytes collect)),
+            "wack" => (fx-pad ([0x[0b 00 00 00] 0x[57]] | bytes collect)),
             "state" => (fx-pad ([0x[01 00 00 00] (fx-zeros 28) (fx-u32 ($i.draw? | default 1000)) (fx-u32 ($i.game? | default 100))] | bytes collect)),
             "frame" => ([
                 0x[07 00 00 00] (fx-u32 $i.frame) (fx-u64 ($i.frame * $FX_PERIOD)) (fx-u32 $i.critical) (fx-u32 $i.game) (fx-u32 $i.draw)
@@ -2957,7 +3120,10 @@ def fx-bytes [items: list<any>]: nothing -> binary {
             ] | bytes collect),
             "packet" => ([
                 0x[0c 00 00 00] (fx-u32 $i.frame) (fx-u32 $i.preparation) (fx-u32 $i.raster) (fx-u32 $i.commands)
-                (fx-u32 $i.flushes) (fx-u32 $i.invalidated) (fx-u32 $i.bytes) (fx-u32 $i.snapshot) (fx-zeros 24)
+                (fx-u32 $i.flushes) (fx-u32 $i.invalidated) (fx-u32 $i.bytes) (fx-u32 $i.snapshot)
+                (if $i.schema >= 4 {
+                    [(fx-u32 $i.workers) (fx-u32 $i.grain) (fx-u32 $i.slowest) (fx-u32 $i.busy) (fx-u32 $i.dispatch) (fx-u32 $i.barrier)] | bytes collect
+                } else { fx-zeros 24 })
                 (fx-u32 $i.schema)
             ] | bytes collect),
             "end" => ([0x[09 00 00 00] (fx-u32 $i.frame) (fx-zeros 52) (fx-u32 $i.schema)] | bytes collect),
