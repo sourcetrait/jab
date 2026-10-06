@@ -526,8 +526,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert equal (open --raw $plain_run.qemu_log) "" "QEMU has no complaint about the guest on the plain run"
     # the first frames drawn: a debug build poisons the producer's scratch
     # once a frame's packet is published (raster.S), so a render reading
-    # it through a pointer faults here
-    assert (not ($plain_run.serial | str contains "jab: program fault")) $"no program fault drawing the plain run's frames: ($plain_run.serial | lines | where {|l| $l starts-with 'jab: ' })"
+    # it through a pointer faults here, on hart 0 or on a worker
+    let plain_faulted = (($plain_run.serial | str contains "jab: program fault") or ($plain_run.serial | str contains "jab: worker fault"))
+    assert (not $plain_faulted) $"no program or worker fault drawing the plain run's frames: ($plain_run.serial | lines | where {|l| $l starts-with 'jab: ' })"
     assert ($plain_run.screen != "") "a screen was taken on the plain run"
     let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
