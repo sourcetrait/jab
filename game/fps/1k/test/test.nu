@@ -2939,10 +2939,13 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # file or image, holding an old value the file does not, or naming a
     # field outside the flags and the ELF stops the read, never a fallback;
     # a run directory beside a moved report found before the path it
-    # recorded, and one holding another image's run refused; one build's
-    # runs differing in flags refused until a correction makes them one
+    # recorded, and one holding another image's run passed over; one
+    # build's runs differing in flags refused until a correction makes them
+    # one. A call a mutant could make throw is attempted, so its fixture
+    # fails at its own assertion.
     let ids = ($dir | path join "identities")
     mkdir $ids
+    let attempt = {|c: closure| try { do $c } catch {|e| { error: $e.msg } } }
     let debug_flags = "-I src --defsym DEBUG=1 -march=rva23u64 fx-"
     let release_flags = "-I src -march=rva23u64 fx-"
     let fx_id = { build: { image_sha256: "fx_ident", flags: $debug_flags, elf_sha256: null }, mode: { cadence: 0, workers: 2, grain: 0, seed: 1 } }
@@ -2978,10 +2981,11 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     fx-ident-report $ids "elsewhere" "elsewhere" ($fx_id | update mode.seed 9) | ignore
     let preferred = (fx-ident-report $ids "preferred" "preferred" $fx_id --out ($ids | path join "elsewhere" "run_1"))
     let from_preferred = (gauge identity-of $preferred (do $run_of $preferred) $fx_id)
-    assert equal $from_preferred.identity.mode.seed 1 $"the run directory beside the report before the path it recorded: ($from_preferred.file)"
+    assert equal [$from_preferred.identity.mode.seed ($from_preferred.passed | length)] [1 0] $"the run directory beside the report before the path it recorded, the recorded one never tried: ($from_preferred | select file passed)"
     let stranger = (fx-ident-report $ids "stranger" "stranger" ($fx_id | update build.image_sha256 "stranger_image"))
-    let stranger_msg = (try { gauge identity-of $stranger (do $run_of $stranger) $fx_id; "" } catch {|e| $e.msg })
-    assert ($stranger_msg | str contains "is a run of the image stranger_image") $"a run beside the report of another image stops the read: ($stranger_msg)"
+    let from_stranger = (do $attempt { gauge identity-of $stranger (do $run_of $stranger) $fx_id })
+    let stranger_named = ($from_stranger | get -o passed.0.reasons | default [] | any {|r| $r | str contains "build.image_sha256" })
+    assert (($from_stranger | get -o from) == "legacy" and $stranger_named) $"a run beside the report of another image passed over, its image named: ($from_stranger)"
     let flagged_one = (fx-ident-report $ids "flags_1" "flagged_1" ($fx_id | update build.flags $release_flags))
     let flagged_two = (fx-ident-report $ids "flags_2" "flagged_2" $fx_id)
     let flagged_three = (fx-ident-report $ids "flags_3" "flagged_3" ($fx_id | update build.flags $release_flags | update build.elf_sha256 "fx_elf"))
@@ -2993,6 +2997,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let mended = (gauge compare [$flagged_one $flagged_two] "draw_us" 50)
     let mended_run = ($mended.runs | where label == "flagged_2" | get 0)
     assert equal [$mended_run.identity_from ($mended_run.corrections.fields | get field)] [file ["build.flags"]] $"a correction makes them one build, named in the comparison: ($mended_run | select identity_from corrections)"
+    assert equal ($mended_run | get -o binding.strength) "legacy" $"the comparison names each run's binding: ($mended_run | select binding passed)"
     let contradictions = [
         { flags: $release_flags, tree: "release", contradicts: false }
         { flags: $debug_flags, tree: "release", contradicts: true }
@@ -3004,8 +3009,210 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         let said = (gauge flags-contradiction $c.flags $c.tree)
         assert equal ($said != null) $c.contradicts $"the flags ($c.flags | to nuon) on the ($c.tree) tree contradict it, ($c.contradicts): ($said)"
     }
-    let doc4 = (gauge report-doc "embed" $fx_id [{ run: 1, seed: 1, out: "o", ran: {}, measured: { rows: [] }, identity: $fx_id, corrections: { fields: [] }, cpu: null }])
-    assert equal [$doc4.runs.0.identity $doc4.runs.0.corrections] [$fx_id { fields: [] }] "a report embeds each run's identity and its correction provenance"
+    let doc4 = (gauge report-doc "embed" $fx_id [{ run: 1, seed: 1, out: "o", ran: {}, measured: { rows: [] }, identity: $fx_id, corrections: { fields: [] }, identity_sha256: "fx_sha", cpu: null }])
+    assert equal [$doc4.runs.0.identity $doc4.runs.0.corrections $doc4.runs.0.identity_sha256] [$fx_id { fields: [] } fx_sha] "a report embeds each run's identity, its correction provenance, and its identity file's hash"
+
+    # binding: a found identity file binds to its report's run by the
+    # SHA-256 the run records, else by the identity the run embeds on every
+    # field but the flags and the ELF, else, weaker, by the report's one
+    # identity over the legacy fields with the run's own seed, a field that
+    # identity lacks named unrecorded; a candidate that does not bind is
+    # passed over with its strength and reasons, its sidecar never read,
+    # the evidence read in its place, another run of the same image beside
+    # the report and at its recorded path alike; a hash-bound file that
+    # does not parse stops the read; a hash carried, never made
+    let bnd = ($ids | path join "binding")
+    let full_id = {
+        launched: true, written: "2026-10-06T00:00:00+0000",
+        workspace: { dir: "w", commit: "fx_commit", dirty: false },
+        build: { tree: "release", set: "", flags: $release_flags, image: "fps.jab", image_sha256: "fx_full", elf_sha256: "fx_elf", kernel: "jab.elf", kernel_sha256: "fx_kernel", provenance: null },
+        assets: { map: "render_0", tree: "t", digest: "fx_assets" },
+        route: { file: "route.nuon", sha256: "fx_route" },
+        cap: 60,
+        machine: { harts: 4, diagnostic: false, machine: "virt", cpu: "rva23s64", accel: "tcg,thread=multi" },
+        overrides: [],
+        qemu: { binary: "qemu-system-riscv64", version: "QEMU emulator version 11.1.2" },
+        host: { os: "linux", hostname: "fx_host" },
+        toolchain: { prefix: "fx-", assembler: "GNU assembler 2.47", link: "riscv" },
+        mode: { window: false, sound: "recorded", pad: "route", seed: 1, cadence: 1, workers: 2, grain: 32, end: 10sec, capture: 12sec },
+    }
+    let w_dir = ($bnd | path join "written")
+    mkdir $w_dir
+    let w_sha = (gauge write-identity $full_id $w_dir)
+    assert equal $w_sha (open --raw ($w_dir | path join "identity.nuon") | into binary | hash sha256) "the hash a run records is its identity file's as written"
+    let h_dir = ($bnd | path join "hash" "run_1")
+    let h_sha = (fx-id-file $h_dir $full_id)
+    let h_run = { run: 1, seed: 1, out: $h_dir, identity: $full_id, corrections: null, identity_sha256: $h_sha }
+    let by_hash = (do $attempt { gauge identity-of (fx-report ($bnd | path join "hash") "hash" $full_id [$h_run]) $h_run $full_id })
+    assert equal [($by_hash | get -o from) ($by_hash | get -o binding.strength) ($by_hash | get -o identity_sha256)] [file sha256 $h_sha] $"a file bound by the SHA-256 its run records: ($by_hash)"
+    let r_orig = (fx-id-file ($bnd | path join "original" "run_1") $full_id)
+    let r_dir = ($bnd | path join "reserialized" "run_1")
+    fx-id-file $r_dir $full_id --compact | ignore
+    let r_run = { run: 1, seed: 1, out: $r_dir, identity: $full_id, corrections: null, identity_sha256: $r_orig }
+    let reser = (do $attempt { gauge identity-of (fx-report ($bnd | path join "reserialized") "reserialized" $full_id [$r_run]) $r_run $full_id })
+    let reser_named = ($reser | get -o passed.0.reasons | default [] | any {|r| $r | str contains "is not the run's recorded" })
+    assert ([($reser | get -o from) ($reser | get -o identity_sha256)] == [embedded $r_orig] and $reser_named) $"a re-serialized identity, its fields under another hash, passed over where the run records the original's, that hash kept: ($reser)"
+    let e_dir = ($bnd | path join "embedded" "run_1")
+    fx-id-file $e_dir ($full_id | update build.flags $debug_flags) | ignore
+    let e_run = { run: 1, seed: 1, out: $e_dir, identity: $full_id, corrections: null }
+    let by_embedded = (do $attempt { gauge identity-of (fx-report ($bnd | path join "embedded") "embedded" $full_id [$e_run]) $e_run $full_id })
+    assert equal [($by_embedded | get -o from) ($by_embedded | get -o binding.strength) ($by_embedded | get -o identity.build.flags)] [file embedded $debug_flags] $"a file differing from the run's embedded identity in a correctable field alone binds to it: ($by_embedded)"
+    let n_home = ($bnd | path join "hostname")
+    let n_dir = ($n_home | path join "run_1")
+    fx-id-file $n_dir ($full_id | update host.hostname "other_host") | ignore
+    let n_run = { run: 1, seed: 1, out: $n_dir, identity: $full_id, corrections: null }
+    let n_report = (fx-report $n_home "hostname" $full_id [$n_run])
+    let n_embedded = (do $attempt { gauge identity-of $n_report $n_run $full_id })
+    let n_named = ($n_embedded | get -o passed.0.reasons | default [] | any {|r| $r | str contains "host.hostname" })
+    assert ([($n_embedded | get -o from) ($n_embedded | get -o identity_sha256)] == [embedded null] and $n_named) $"another hostname passed over at the embedded strength, no hash made for the embedded identity: ($n_embedded)"
+    let n_legacy = (do $attempt { gauge identity-of $n_report ($n_run | reject identity corrections) $full_id })
+    assert equal [($n_legacy | get -o from) ($n_legacy | get -o binding.strength)] [file legacy] $"the hostname, outside the legacy fields, binds at the weaker legacy strength: ($n_legacy)"
+    let l_home = ($bnd | path join "legacy")
+    let l_dir = ($l_home | path join "run_2")
+    let batch = ($full_id | reject qemu)
+    fx-id-file $l_dir ($full_id | update mode.seed 2) | ignore
+    let l_run = { run: 2, seed: 2, out: $l_dir }
+    let l_report = (fx-report $l_home "legacy" $batch [{ run: 1, seed: 1, out: ($l_home | path join "run_1") } $l_run])
+    let by_legacy = (do $attempt { gauge identity-of $l_report $l_run $batch })
+    let legacy_held = ([($by_legacy | get -o from) ($by_legacy | get -o binding.strength) ($by_legacy | get -o identity.mode.seed) ($by_legacy | get -o binding.unrecorded)] == [file legacy 2 [qemu]])
+    assert $legacy_held $"run 2 bound at the legacy strength by its own recorded seed, the field the report's identity lacks named unrecorded: ($by_legacy)"
+    let alone = [
+        [field path value];
+        ["build.image_sha256" "build.image_sha256" "other_image"]
+        ["build.kernel_sha256" "build.kernel_sha256" "other_kernel"]
+        ["assets" "assets.digest" "other_assets"]
+        ["route" "route.sha256" "other_route"]
+        ["machine" "machine.harts" 8]
+        ["overrides" "overrides" ["-global" "x"]]
+        ["mode" "mode.cadence" 2]
+        ["cap" "cap" 30]
+        ["toolchain" "toolchain.assembler" "other assembler"]
+        ["qemu" "qemu.version" "QEMU emulator version 10.0.0"]
+        ["mode.seed" "mode.seed" 3]
+    ]
+    for c in $alone {
+        let home = ($bnd | path join $"alone_($c.field | str replace --all '.' '_')")
+        let one = ($home | path join "run_1")
+        fx-id-file $one ($full_id | upsert ($c.path | split row "." | into cell-path) $c.value) | ignore
+        let run = { run: 1, seed: 1, out: $one }
+        let read = (do $attempt { gauge identity-of (fx-report $home "alone" $full_id [$run]) $run $full_id })
+        let named = ($read | get -o passed.0.reasons | default [] | any {|r| $r | str contains $"its ($c.field)" })
+        assert (($read | get -o from) == "legacy" and $named) $"a file differing in ($c.field) alone passed over naming it: ($read)"
+    }
+    let other = ($full_id | update mode.seed 5 | update route.sha256 "other_route")
+    let reused_abs = ($bnd | path join "reused_elsewhere" "run_1")
+    fx-id-file $reused_abs $other | ignore
+    let strengths = [
+        { name: "sha256", run: { identity: $full_id, corrections: null, identity_sha256: $h_sha }, from: "embedded" }
+        { name: "embedded", run: { identity: $full_id, corrections: null }, from: "embedded" }
+        { name: "legacy", run: {}, from: "legacy" }
+    ]
+    for s in $strengths {
+        for place in [beside absolute] {
+            let home = ($bnd | path join $"reused_($s.name)_($place)")
+            mkdir $home
+            let out = (if $place == "beside" { fx-id-file ($home | path join "run_1") $other | ignore; $home | path join "run_1" } else { $reused_abs })
+            let run = ({ run: 1, seed: 1, out: $out } | merge $s.run)
+            let read = (do $attempt { gauge identity-of (fx-report $home "reused" $full_id [$run]) $run $full_id })
+            let passed = ($read | get -o passed | default [])
+            let held = (($read | get -o from) == $s.from and ($passed | length) == 1 and ($passed | get -o 0.strength) == $s.name)
+            assert $held $"another run of the same image ($place) the report, passed over at ($s.name), the report's evidence read: ($read)"
+        }
+    }
+    let s_dir = ($bnd | path join "passed_sidecar" "run_1")
+    fx-id-file $s_dir $other | ignore
+    "{ not a sidecar" | save --raw -f ($s_dir | path join "identity_correction.nuon")
+    let s_run = { run: 1, seed: 1, out: $s_dir, identity: $full_id, corrections: null }
+    let s_read = (do $attempt { gauge identity-of (fx-report ($bnd | path join "passed_sidecar") "sidecar" $full_id [$s_run]) $s_run $full_id })
+    assert equal ($s_read | get -o from) "embedded" $"a directory passed over is never corrected, its broken sidecar unread: ($s_read)"
+    let u_home = ($bnd | path join "unparsed_hash")
+    let u_dir = ($u_home | path join "run_1")
+    let u_sha = (fx-id-file $u_dir {} --raw "{ not nuon")
+    let u_run = { run: 1, seed: 1, out: $u_dir, identity: $full_id, corrections: null, identity_sha256: $u_sha }
+    let u_report = (fx-report $u_home "unparsed" $full_id [$u_run])
+    let u_msg = (try { gauge identity-of $u_report $u_run $full_id; "" } catch {|e| $e.msg })
+    assert ($u_msg | str contains "binds to its run by its SHA-256 but does not parse") $"a hash-bound file that does not parse stops the read: ($u_msg)"
+    let p_dir = ($bnd | path join "unparsed_fields" "run_1")
+    fx-id-file $p_dir {} --raw "{ not nuon" | ignore
+    let p_run = { run: 1, seed: 1, out: $p_dir, identity: $full_id, corrections: null }
+    let unparsed = (do $attempt { gauge identity-of (fx-report ($bnd | path join "unparsed_fields") "unparsed" $full_id [$p_run]) $p_run $full_id })
+    let unparsed_named = ($unparsed | get -o passed.0.reasons | default [] | any {|r| $r | str contains "does not parse" })
+    assert (($unparsed | get -o from) == "embedded" and $unparsed_named) $"a file that does not parse passed over at the embedded strength: ($unparsed)"
+
+    # read: a capture's identity through the reports it belongs to, beside
+    # it and in its parent; with its identity file absent, the batch
+    # report's embedded identity and correction; a moved batch report
+    # finding its run; an older parent report beside a corrected per-run
+    # report, reconciled to the correction; conflicting evidence, a
+    # correction that does not explain a difference, and two corrections
+    # each ambiguous; one correction under two sidecar paths the same; no
+    # report, the capture's own file bound to nothing; no file, the
+    # capture alone
+    let rd = ($ids | path join "read")
+    let uncorrected = ($full_id | update build.flags $debug_flags)
+    let correction = { sidecar: ($rd | path join "a" "identity_correction.nuon"), sidecar_sha256: "fx_side", fields: [{ field: "build.flags", old: $debug_flags, new: $release_flags }], evidence: "the fixture's own" }
+    let absent = ($rd | path join "absent")
+    mkdir ($absent | path join "run_2")
+    let absent_runs = [
+        { run: 1, seed: 1, out: ($absent | path join "run_1"), identity: $uncorrected, corrections: null }
+        { run: 2, seed: 2, out: ($absent | path join "run_2"), identity: ($full_id | update mode.seed 2), corrections: $correction }
+    ]
+    fx-report $absent "absent" $uncorrected $absent_runs | ignore
+    let from_absent = (do $attempt { gauge read-identity ($absent | path join "run_2") })
+    let absent_held = ([($from_absent | get -o from) ($from_absent | get -o identity.mode.seed) ($from_absent | get -o identity.build.flags) ($from_absent | get -o corrections.fields.0.field)] == [embedded 2 $release_flags "build.flags"])
+    assert $absent_held $"re-read with its identity file absent, the batch report's embedded identity and its correction: ($from_absent)"
+    let moved_batch = ($rd | path join "moved_batch")
+    fx-id-file ($moved_batch | path join "run_2") ($full_id | update mode.seed 2) | ignore
+    fx-report $moved_batch "moved" $full_id [{ run: 1, seed: 1, out: ($rd | path join "gone" "run_1") } { run: 2, seed: 2, out: ($rd | path join "gone" "run_2") }] | ignore
+    let from_moved_batch = (do $attempt { gauge read-identity ($moved_batch | path join "run_2") })
+    assert equal [($from_moved_batch | get -o from) ($from_moved_batch | get -o binding.strength) ($from_moved_batch | get -o identity.mode.seed) ($from_moved_batch | get -o seed)] [file legacy 2 2] $"a moved batch report finds its run, bound by its seed: ($from_moved_batch)"
+    let older = ($rd | path join "older")
+    let older_run = ($older | path join "run_1")
+    fx-report $older "older" $uncorrected [{ run: 1, seed: 1, out: $older_run, identity: $uncorrected, corrections: null }] | ignore
+    fx-report $older_run "older" $full_id [{ run: 1, seed: 1, out: $older_run, identity: $full_id, corrections: $correction }] | ignore
+    let from_older = (do $attempt { gauge read-identity $older_run })
+    let older_held = ([($from_older | get -o identity.build.flags) ($from_older | get -o corrections.fields.0.field) ($from_older | get -o reports | default [] | length)] == [$release_flags "build.flags" 2])
+    assert $older_held $"an older parent report beside a corrected per-run report, reconciled to the correction: ($from_older)"
+    let conflict = ($rd | path join "conflict")
+    let conflict_run = ($conflict | path join "run_1")
+    fx-report $conflict "conflict" $full_id [{ run: 1, seed: 1, out: $conflict_run, identity: $full_id, corrections: null }] | ignore
+    fx-report $conflict_run "conflict" $full_id [{ run: 1, seed: 7, out: $conflict_run, identity: ($full_id | update mode.seed 7), corrections: null }] | ignore
+    let conflict_msg = (try { gauge read-identity $conflict_run; "" } catch {|e| $e.msg })
+    assert ($conflict_msg | str contains "mode.seed: 7 against 1") $"two reports conflicting on the seed are ambiguous: ($conflict_msg)"
+    let unexplained = ($rd | path join "unexplained")
+    let unexplained_run = ($unexplained | path join "run_1")
+    fx-report $unexplained "unexplained" $full_id [{ run: 1, seed: 1, out: $unexplained_run, identity: ($full_id | update build.flags "-I src other fx-"), corrections: null }] | ignore
+    fx-report $unexplained_run "unexplained" $full_id [{ run: 1, seed: 1, out: $unexplained_run, identity: $full_id, corrections: $correction }] | ignore
+    let unexplained_msg = (try { gauge read-identity $unexplained_run; "" } catch {|e| $e.msg })
+    assert ($unexplained_msg | str contains "build.flags") $"a correction whose old value is not the other report's explains nothing: ($unexplained_msg)"
+    let twice = ($rd | path join "twice")
+    let twice_run = ($twice | path join "run_1")
+    let second = ($correction | update fields [{ field: "build.flags", old: $debug_flags, new: "-I src second fx-" }] | update sidecar_sha256 "fx_side_2")
+    fx-report $twice "twice" $full_id [{ run: 1, seed: 1, out: $twice_run, identity: ($full_id | update build.flags "-I src second fx-"), corrections: $second }] | ignore
+    fx-report $twice_run "twice" $full_id [{ run: 1, seed: 1, out: $twice_run, identity: $full_id, corrections: $correction }] | ignore
+    let twice_msg = (try { gauge read-identity $twice_run; "" } catch {|e| $e.msg })
+    assert ($twice_msg | str contains "two corrections") $"two reports corrected differently are ambiguous: ($twice_msg)"
+    let hashes = ($rd | path join "hashes")
+    let hashes_run = ($hashes | path join "run_1")
+    fx-report $hashes "hashes" $full_id [{ run: 1, seed: 1, out: $hashes_run, identity: $full_id, corrections: null, identity_sha256: "fx_first" }] | ignore
+    fx-report $hashes_run "hashes" $full_id [{ run: 1, seed: 1, out: $hashes_run, identity: $full_id, corrections: null, identity_sha256: "fx_second" }] | ignore
+    let hashes_msg = (try { gauge read-identity $hashes_run; "" } catch {|e| $e.msg })
+    assert ($hashes_msg | str contains "an identity of SHA-256 fx_second against fx_first") $"two reports recording different identity hashes are ambiguous: ($hashes_msg)"
+    let relocated = ($rd | path join "relocated")
+    let relocated_run = ($relocated | path join "run_1")
+    let moved_side = ($correction | update sidecar ($rd | path join "b" "identity_correction.nuon"))
+    fx-report $relocated "relocated" $full_id [{ run: 1, seed: 1, out: $relocated_run, identity: $full_id, corrections: $moved_side }] | ignore
+    fx-report $relocated_run "relocated" $full_id [{ run: 1, seed: 1, out: $relocated_run, identity: $full_id, corrections: $correction }] | ignore
+    let from_relocated = (do $attempt { gauge read-identity $relocated_run })
+    assert equal [($from_relocated | get -o identity.build.flags) ($from_relocated | get -o reports | default [] | length)] [$release_flags 2] $"one correction under two sidecar paths is the same correction: ($from_relocated)"
+    let lone = ($rd | path join "lone")
+    fx-id-file $lone $full_id | ignore
+    let from_lone = (do $attempt { gauge read-identity $lone })
+    assert equal [($from_lone | get -o from) ($from_lone | get -o binding.strength)] [file none] $"a capture with no report reads its own file, bound to nothing: ($from_lone)"
+    let bare = ($rd | path join "bare")
+    mkdir $bare
+    let from_bare = (do $attempt { gauge read-identity $bare })
+    assert equal ($from_bare | get -o identity.launched) false $"a capture with neither reads as the capture alone: ($from_bare)"
 
     # the CPU windows: readings asked at 5 s, at each placement, and at
     # the end, taken late and at unequal intervals, a thread appearing
@@ -3402,6 +3609,30 @@ def fx-sidecar [file: path, image: string, fields: record, --identity-sha: strin
     let sha = (if $identity_sha == "" { open --raw $file | into binary | hash sha256 } else { $identity_sha })
     let sidecar = ($file | path dirname | path join "identity_correction.nuon")
     { identity_sha256: $sha, image_sha256: $image, fields: $fields, evidence: "the fixture's own" } | to nuon --indent 2 | save --raw -f $sidecar
+}
+
+# An identity file in `dir`, `id` as `run` writes it, on one line with
+# `--compact`, or `raw` verbatim when given; the file's SHA-256.
+def fx-id-file [dir: path, id: any, --compact, --raw: string = ""]: nothing -> string {
+    mkdir $dir
+    let file = ($dir | path join "identity.nuon")
+    let text = (if $raw != "" { $raw } else if $compact { $id | to nuon } else { $id | to nuon --indent 2 })
+    $text | save --raw -f $file
+    open --raw $file | into binary | hash sha256
+}
+
+# A report at `home`/gauge.nuon holding `runs` as given, each beside a
+# schema 4 capture's measurement and rows, `id` its one identity.
+def fx-report [home: path, label: string, id: any, runs: list<any>]: nothing -> string {
+    mkdir $home
+    let m = (gauge measure (fx-bytes (fx-items 3 --schema 4 --asked)) [{ name: "walk", places: [], pad: [] }])
+    let file = ($home | path join "gauge.nuon")
+    {
+        label: $label, identity: $id,
+        runs: ($runs | each {|r| $r | insert measured ($m | reject rows) }),
+        rows: ($runs | each {|r| $m.rows | each {|row| $row | insert run $r.run } } | flatten),
+    } | to nuon | save --raw -f $file
+    $file | path expand
 }
 
 # A synthetic capture's records as bytes, 64 each in render.inc's
