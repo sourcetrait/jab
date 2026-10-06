@@ -980,6 +980,7 @@ tile_binds:
 tile_reset_after:
     .skip 4
 .endif
+.balign 8
 tilemaps:
     .skip (LUMAP_COUNT * TILE_SIZE)
 material_alpha:

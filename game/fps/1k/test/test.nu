@@ -2073,7 +2073,14 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # drawing's other parts leave, packet bytes other than the commands' and
 # span records', and packets prepared from another frame's simulation are
 # each invalid for that alone; and one image's captures at cadences 0 and
-# 1 compare as two builds. A run on a diagnostic machine is refused as
+# 1 compare as two builds. The drawing's moved parts: schema 1 against
+# schema 3 refused on planes_us with or without --diagnostic and compared
+# on draw_us, critical_us, and parts_unattributed_us; an unlisted schema
+# 2 run, dirty or without its program's source, refused on planes_us and
+# compared on draw_us; f59f7a7's commit on an unlisted image refused; its
+# listed image under another clean commit, dirty, and with no commit
+# compared with schema 3 on planes_us, its remainder refused; two runs of
+# one class compared. A run on a diagnostic machine is refused as
 # diagnostic and admitted marked under --diagnostic; runs on two machines
 # refuse the comparison, and under --diagnostic each build's row names its
 # machine; one name's runs on two machines are two builds; a run whose
@@ -2358,7 +2365,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         assert ($refused | str contains $"($file) run 1, unpaired: ") $"the ($u.name) run is refused unpaired: ($refused)"
         assert ($refused | str contains $u.reason) $"the ($u.name) run's reason, ($u.reason): ($refused)"
         assert (not ($refused | str contains $"($paired) run")) $"the paired run is not named beside ($u.name): ($refused)"
-        let admitted = (gauge compare [$paired $file] "draw_us" 50 --diagnostic)
+        let admitted = (try { gauge compare [$paired $file] "draw_us" 50 --diagnostic } catch {|e| { refusal: $e.msg } })
+        assert (($admitted | get -o refusal) == null) $"--diagnostic admits the ($u.name) run, the comparison standing: ($admitted | get -o refusal)"
         assert equal ($admitted.table | where build == $u.name | get 0.standings) ["unpaired"] $"--diagnostic admits the ($u.name) run marked unpaired"
     }
 
@@ -2441,6 +2449,65 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let at3_says = $"schema 3 captures at cadences 0 and 1 compare without a refusal: ($at3 | get -o refusal)"
     assert (($at3 | get -o refusal) == null) $at3_says
     assert equal ($at3.runs | get effective_cadence) [0 1] $"each schema 3 capture plays the cadence it asked: ($at3.runs | get effective_cadence)"
+
+    # the drawing's parts whose meaning moved with the packets: the phases
+    # with rendering at schema 1 and preparation alone at 3, the remainder
+    # holding no rendering at both and the raster in f59f7a7's listed
+    # schema 2 images, a listed image classified by its SHA-256 whatever
+    # its identity's commit or dirty flag says and any other schema 2 run
+    # unknown; a comparison on a phase or the remainder refused,
+    # --diagnostic or not, when its runs' classes differ or one is unknown,
+    # every other field comparing across schemas
+    let compared = {|files: list<string>, field: string, diagnostic: bool|
+        try { gauge compare $files $field 50 --diagnostic=$diagnostic; "" } catch {|e| $e.msg }
+    }
+    let one_a = (fx-gauge $dir "parts_one_a" "parts_one_a" "parts_one_a" null $good)
+    let one_b = (fx-gauge $dir "parts_one_b" "parts_one_b" "parts_one_b" null $good)
+    let three_a = (fx-gauge $dir "parts_three_a" "parts_three_a" "parts_three_a" 0 $good3)
+    let three_b = (fx-gauge $dir "parts_three_b" "parts_three_b" "parts_three_b" 0 $good3)
+    let across = (do $compared [$one_a $three_a] "planes_us" false)
+    let across_says = $"schema 1 against schema 3 refused on planes_us, each run's class named: ($across)"
+    assert (($across | str contains "planes_us refuses") and ($across | str contains $"($one_a) run 1, schema 1") and ($across | str contains "with rendering") and ($across | str contains "preparation alone")) $across_says
+    let across_admitted = (do $compared [$one_a $three_a] "planes_us" true)
+    assert ($across_admitted | str contains "planes_us refuses") $"--diagnostic admits no comparison of phases measuring different things: ($across_admitted)"
+    for field in [draw_us critical_us parts_unattributed_us] {
+        let kept = (do $compared [$one_a $three_a] $field false)
+        assert ($kept == "") $"schema 1 against schema 3 compares on ($field): ($kept)"
+    }
+    let unlisted = [
+        { name: "dirty", file: (fx-gauge $dir "parts_dirty" "parts_dirty" "parts_dirty" 0 $good2 --program { dir: "", commit: "d876d94", dirty: true, from: "git" }) }
+        { name: "unsourced", file: (fx-gauge $dir "parts_unsourced" "parts_unsourced" "parts_unsourced" 0 $good2) }
+    ]
+    for u in $unlisted {
+        let refused = (do $compared [$u.file $one_a] "planes_us" false)
+        let refused_says = $"an unlisted schema 2 run, ($u.name), is unknown and refused on planes_us: ($refused)"
+        assert (($refused | str contains "planes_us refuses") and ($refused | str contains $"($u.file) run 1, schema 2, image parts_($u.name): unknown")) $refused_says
+        let drawn = (do $compared [$u.file $one_a] "draw_us" false)
+        assert ($drawn == "") $"the unlisted ($u.name) run compares on draw_us: ($drawn)"
+    }
+    let stale = (fx-gauge $dir "parts_stale" "parts_stale" "parts_stale" 0 $good2 --program { dir: "", commit: "f59f7a740873f9dfad4c3bcab8126271fe475fd4", dirty: false, from: "git" })
+    let stale_refused = (do $compared [$stale $three_a] "planes_us" false)
+    let stale_says = $"f59f7a7's commit, clean, on an unlisted image is unknown and refused: ($stale_refused)"
+    assert (($stale_refused | str contains "planes_us refuses") and ($stale_refused | str contains $"($stale) run 1, schema 2, image parts_stale: unknown")) $stale_says
+    let listed = (gauge phase-images | columns | first)
+    let listings = [
+        { name: "under another clean commit", label: "parts_listed_clean", program: { dir: "", commit: "64f518a", dirty: false, from: "git" } }
+        { name: "dirty", label: "parts_listed_dirty", program: { dir: "", commit: "64f518a", dirty: true, from: "git" } }
+        { name: "with no commit", label: "parts_listed_bare", program: { dir: "", commit: null, dirty: null, from: null } }
+    ]
+    for l in $listings {
+        let file = (fx-gauge $dir $l.label $l.label $listed 0 $good2 --program $l.program)
+        let kept = (do $compared [$file $three_a] "planes_us" false)
+        assert ($kept == "") $"f59f7a7's listed image ($l.name) compares with schema 3 on planes_us: ($kept)"
+    }
+    let listed_clean = ($dir | path join "pair_parts_listed_clean.nuon" | path expand)
+    let remainder = (do $compared [$listed_clean $three_a] "parts_unattributed_us" false)
+    let remainder_says = $"the listed image's remainder, holding the raster, refused against schema 3's: ($remainder)"
+    assert (($remainder | str contains "parts_unattributed_us refuses") and ($remainder | str contains "holding the raster") and ($remainder | str contains "holding no rendering")) $remainder_says
+    for pair in [[$one_a $one_b] [$three_a $three_b]] {
+        let alike = (do $compared $pair "planes_us" false)
+        assert ($alike == "") $"two runs of one class compare on planes_us: ($alike)"
+    }
 
     # machines: the specification's four harts, two harts diagnostic, and
     # four harts on another -machine, the PLIC's line before the AIA
@@ -2787,17 +2854,19 @@ def fx-late [items: list<any>, item: record]: nothing -> list<any> {
 
 # A gauge.nuon for a comparison, as `run` writes one, from a synthetic
 # capture measured: its label, an identity of the image, the cadence
-# asked, none when null, the machine when given, and the launch's QEMU
-# words when given, the run's measurement, and its rows.
-def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --overrides: list<string> = []]: nothing -> string {
+# asked, none when null, the machine when given, the program's source as
+# the identity records it when given, and the launch's QEMU words when
+# given, the run's measurement, and its rows.
+def fx-gauge [dir: path, name: string, label: string, image: string, cadence: any, items: list<any>, --machine: record, --program: record, --overrides: list<string> = []]: nothing -> string {
     let m = (gauge measure (fx-bytes $items) [{ name: "walk", places: [], pad: [] }])
     let mode = (if $cadence == null { {} } else { { cadence: $cadence } })
     let file = ($dir | path join $"pair_($name).nuon")
     let id = { build: { image_sha256: $image }, mode: $mode }
     let machined = (if $machine == null { $id } else { $id | insert machine $machine })
+    let sourced = (if $program == null { $machined } else { $machined | insert program $program })
     {
         label: $label,
-        identity: (if ($overrides | is-empty) { $machined } else { $machined | insert overrides $overrides }),
+        identity: (if ($overrides | is-empty) { $sourced } else { $sourced | insert overrides $overrides }),
         runs: [{ run: 1, measured: ($m | reject rows) }],
         rows: ($m.rows | each {|r| $r | insert run 1 }),
     } | to nuon | save --raw -f $file

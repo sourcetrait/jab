@@ -408,7 +408,7 @@ room's light changes too little across a texel to tell the two.
 
 ## tilemaps
 
-`LUMAP_COUNT*11 u64`: every surface's tiles at the map's index, TILE_* fields.
+`LUMAP_COUNT*11 u64`: every surface's tiles at the map's index, TILE_* fields; eight-aligned past the debug build's four-byte tile_reset_after, as the tables after it need.
 
 ## material_alpha
 

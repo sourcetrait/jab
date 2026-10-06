@@ -101,6 +101,40 @@ const PARTS = {
     "2": [clear_us portals_us planes_us walls_us sprites_us],
     "3": [clear_us portals_us planes_us walls_us sprites_us raster_us],
 }
+# the drawing's parts whose meaning moved with the packets (compare): the
+# phases, holding their rendering before the packets and preparation
+# alone from them on; and the remainder, holding no rendering at schemas
+# 1 and 3 and the raster in f59f7a7, the packet core before its record,
+# which writes schema 2 with its phases preparation alone
+const PHASE_FIELDS = [planes_us walls_us sprites_us]
+const REMAINDER_FIELDS = [parts_unattributed_us]
+const WITH_RENDERING = "with rendering"
+const PREPARATION_ALONE = "preparation alone"
+const NO_RENDERING = "holding no rendering"
+const HOLDING_RASTER = "holding the raster"
+const UNKNOWN_PARTS = "unknown"
+# the schema 2 images whose parts are known, by the SHA-256 of the .jab
+# image a run's identity records (build.image_sha256): f59f7a7's three
+# sets, each built twice from a `git archive` export of that commit in
+# two directories, the two images alike, with the SDK, the toolchain, and
+# the flags they were built with
+const PHASE_IMAGES = {
+    "ef8d01fa7e52c0076b6ca735803ae8ddb9c5a80c016e47577c5df4a51ef02234": {
+        commit: "f59f7a740873f9dfad4c3bcab8126271fe475fd4", set: "release", flags: "-march=rva23u64",
+        sdk: "sdk/src at 9397f24, the workspace at 31e4023", toolchain: "GNU Binutils 2.47.20260726, riscv64-unknown-linux-gnu",
+        phases: $PREPARATION_ALONE, remainder: $HOLDING_RASTER,
+    },
+    "5d723b3f14e3bedeca11f03b95a196eac116d4f5c3aba8906c93b5040fe32ca4": {
+        commit: "f59f7a740873f9dfad4c3bcab8126271fe475fd4", set: "debug", flags: "--defsym DEBUG=1 -march=rva23u64",
+        sdk: "sdk/src at 9397f24, the workspace at 31e4023", toolchain: "GNU Binutils 2.47.20260726, riscv64-unknown-linux-gnu",
+        phases: $PREPARATION_ALONE, remainder: $HOLDING_RASTER,
+    },
+    "263c84ee5b9a1b1f355d0242b9d775df74f86d2e73b90dc0aba4d0b0e96d2cf8": {
+        commit: "f59f7a740873f9dfad4c3bcab8126271fe475fd4", set: "debug,owner", flags: "--defsym DEBUG=1 --defsym OWNER=1 -march=rva23u64",
+        sdk: "sdk/src at 9397f24, the workspace at 31e4023", toolchain: "GNU Binutils 2.47.20260726, riscv64-unknown-linux-gnu",
+        phases: $PREPARATION_ALONE, remainder: $HOLDING_RASTER,
+    },
+}
 # an unexplained phase outlier: a phase past OUTLIER_RATIO times its
 # leg's median and OUTLIER_US over it, in a frame whose tile work stayed
 # within twice its leg's median, the first frame after a placement apart
@@ -558,6 +592,32 @@ def phases-of [schema: oneof<int, nothing>]: nothing -> list<string> {
 # not take.
 def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
     $PARTS | get -o ($schema | default 1 | into string) | default ($PARTS | get "1")
+}
+
+# What a run's moved parts measure, the phases' class and the
+# remainder's, with the evidence: schema 1 its phases with rendering and
+# its remainder holding none, the rendering inside the phases; schema 3
+# its phases preparation alone and its remainder holding no rendering,
+# the raster a part of its own; schema 2 a listed image's classes
+# (PHASE_IMAGES) by the SHA-256 its identity records, whatever its
+# identity's commit or dirty flag says, since the commit is the
+# checkout's at launch and never the image's; any other run unknown. A
+# measurement written before schema 2 was read is at schema 1, as compare
+# hands it here.
+def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, evidence: string> {
+    if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, evidence: "schema 1" } }
+    if $schema == 3 { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, evidence: "schema 3" } }
+    let listed = (if $schema == 2 and $image != null { $PHASE_IMAGES | transpose image entry | where image == $image | get -o 0.entry } else { null })
+    if $listed != null {
+        return { phases: $listed.phases, remainder: $listed.remainder, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }
+    }
+    let why = (if $schema == 2 { "schema 2 with no listed image" } else { $"schema ($schema | default 'none')" })
+    { phases: $UNKNOWN_PARTS, remainder: $UNKNOWN_PARTS, evidence: $why }
+}
+
+# The schema 2 images whose parts are known (PHASE_IMAGES), by SHA-256.
+export def phase-images []: nothing -> record {
+    $PHASE_IMAGES
 }
 
 # A capture measured: its window, every frame in it as a row with its
@@ -1045,11 +1105,14 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 # and in its build's row in place of a value, never a mean over fewer
 # batches. The comparison fails with every refused run's file, run, and
 # reasons. Runs on more than one machine, a recorded one or none, are
-# refused unless `diagnostic` admits them. The method with the machines,
-# the bins, every run's standing, cadences, machine, missing legs, and
-# bins with their medians, and the table, each row naming its build's
-# machine, its batches' standings, and the batches missing its leg, come
-# back together.
+# refused unless `diagnostic` admits them. A comparison on a phase of the
+# drawing or its remainder, whose meanings moved with the packets, is
+# refused, `diagnostic` or not, when its runs' classes differ or any is
+# unknown (parts-meaning), each run keeping its classes. The method with
+# the machines, the bins, every run's standing, cadences, machine, missing
+# legs, and bins with their medians, and the table, each row naming its
+# build's machine, its batches' standings, and the batches missing its
+# leg, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let g = (open ($f | path expand))
@@ -1063,9 +1126,11 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
             let standing = (standing-of $measured $rows $field $requested $machine $overrides)
+            let schema = ($measured | get -o schema | default 1)
             {
                 file: ($f | path expand), label: $g.label, build: $build, image: $image, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
+                schema: $schema, parts: (parts-meaning $schema (if $image == "" { null } else { $image })),
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
                 held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
             }
@@ -1095,6 +1160,18 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     if ($machines | length) > 1 and (not $diagnostic) {
         let head = $"the runs ran on ($machines | length) machines, a comparison's runs on one unless --diagnostic admits them"
         error make { msg: ([$head] | append ($machines | each {|m| machine-text $m }) | str join "\n  ") }
+    }
+    let class = (if $field in $PHASE_FIELDS { "phases" } else if $field in $REMAINDER_FIELDS { "remainder" } else { null })
+    if $class != null {
+        let classes = ($covered | each {|r| $r.parts | get $class } | uniq)
+        if ($classes | length) > 1 or ($UNKNOWN_PARTS in $classes) {
+            let head = ([
+                $"the comparison on ($field) refuses runs whose ($class) measure different things or unknown ones,"
+                "--diagnostic or not: a schema 2 run's parts are known by a listed image alone"
+            ] | str join " ")
+            let named = ($covered | each {|r| $"($r.file) run ($r.run), schema ($r.schema | default 'none'), image ($r.image): ($r.parts | get $class), by ($r.parts.evidence)" })
+            error make { msg: ([$head] | append $named | str join "\n  ") }
+        }
     }
     let runs = ($covered | each {|r|
         let legs = ($r.held | each {|leg|
@@ -1189,6 +1266,13 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "a run's expected legs are every leg any compared run holds; a run missing one is refused unless"
                 "--diagnostic admits it, and then each leg it misses is an explicit missing result in its run and"
                 "its build's row is missing in place of a value, never a mean over fewer batches"
+            ] | str join " "),
+            parts: ([
+                "planes_us, walls_us, and sprites_us hold their rendering at schema 1 and are preparation alone at"
+                "schema 3; parts_unattributed_us holds no rendering at both and the raster in f59f7a7's schema 2"
+                "images; a schema 2 run's parts are known by a listed image's SHA-256 alone, whatever its identity's"
+                "commit says, else unknown; a comparison on these fields is refused, --diagnostic or not, when its"
+                "runs' classes differ or any is unknown, and every other field compares across schemas"
             ] | str join " "),
             admitted: $diagnostic,
             machines: $machines,
