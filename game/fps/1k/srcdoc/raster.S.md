@@ -19,9 +19,19 @@ the span's counters, so the depth test meets the surfaces in the order the
 immediate fill met them and the picture is the same. A packet full of
 commands or spans is rendered whole and emptied before preparation goes on,
 so a frame is never drawn short. The serial backend is one context, hart
-0's; a worker's context is the same record. On a debug build the producer's
-scratch is poisoned once the packet is published, so a read of it from the
-raster draws wrong or faults.
+0's, the spans in their order; with workers the frame's each render is a
+round (workers.S), each worker rendering whole bands of rows through
+band_render on a context of its own, the same record. On a debug build the
+producer's scratch is poisoned once the packet is published, so a read of
+it from the raster draws wrong or faults.
+
+A band renders the serial picture of its rows: a command's spans are
+contiguous in its packet and ascend by row, since poly_fill fills one
+polygon's rows in order and a flush emits the polygon in hand again as the
+emptied packet's command 0, so a pixel's writes come from the commands in
+their order, one span a command, whichever renderer owns its row. The run
+table, `command_runs`, holds each command's first span, so a band finds its
+spans of each command by a binary search on the row.
 
 The context rides tp: user mode's own register, which the kernel saves and
 restores across a trap and sets to zero entering the program and a worker,
@@ -219,7 +229,9 @@ span_fill reads at its POLY_* offset, the tile binding's generation
 (POLY_TILE_GENERATION) among them, and fields only preparation reads
 besides; the frame line counts the frame's commands. A packet full of
 commands is rendered whole first. The command's index is its record's
-position in the table.
+position in the table, and its run's first span, the packet's span count
+then, goes into the run table at the same index; the run ends at the next
+command's first or the packet's last span.
 
 ## packet_flush
 
@@ -334,7 +346,22 @@ fill's to the byte wherever no reset invalidated a binding. Its per-span
 loop, a record's fields, the command's address by a multiply, and the
 call, shares span_fill's page, so the call chains within the page where
 poly_fill's call to span_fill crossed one every span. The render's ticks
-go to STAT_RASTER_TICKS, a flush's with the last render's.
+go to STAT_RASTER_TICKS, a flush's with the last render's. With the
+frame's workers above 0 the resolve is followed by the round in place of
+the loop (workers.S's round_run), which sums the workers' contexts; the
+packet is emptied and the ticks taken the same way.
+
+## band_render
+
+A band's rows rendered on the caller's context, a worker's or hart 0's:
+on a clearing round its depth rows zeroed first, and on a debug build its
+pixels painted magenta, so each row is cleared once a frame by the band's
+renderer before its first span; then for each command in order its run's
+first span at or past the band's first row by a binary search over the
+run's rows, and each span from there until one past the band, through
+span_fill with the command in the context. It shares the packet's page
+with packet_render and span_fill, so its call a span chains within the
+page as the serial loop's does.
 
 ## span_fill
 
@@ -758,6 +785,10 @@ The end of the producer's scratch from `poly`, the poison's bound.
 
 `MAX_COMMANDS*POLY_SIZE u8`: the packet's commands, each a polygon's record as preparation published it, POLY_* fields.
 
+## command_runs
+
+`MAX_COMMANDS u32`: each command's first span in the packet, the run table a band searches.
+
 ## zbuf
 
-`SCREEN_W*SCREEN_H u32`: the depth buffer, 1/z in 6.26 a pixel.
+`SCREEN_W*SCREEN_H u32`: the depth buffer, 1/z in 6.26 a pixel, on a line's boundary, so no line holds two rows and two renderers' rows never share one.

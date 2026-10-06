@@ -4,9 +4,15 @@ The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
 with the lumels bright or set by parity, the tiles held off, or the levels built
 capped, R the generator seeded, E the gauge's measurement closed, C the
-cadence chosen, S on a debug build the cadence fixture's stalls, K on a debug
-build the packet's bounds and a forced reset, each reported back as
-REPORT_CONSOLE.
+cadence chosen, W the raster's workers and grain chosen, S on a debug build the
+cadence fixture's stalls, K on a debug build the packet's bounds and a forced
+reset, each reported back as REPORT_CONSOLE.
+
+W takes byte 4 as the frame's workers, 0 for the serial backend, held to the
+workers started (workers.S), and bytes 8 to 11 as the rows a band, 0 for a
+band a worker, held to the screen's rows; both from the next drawing on,
+since world_draw takes them at its start, in release and debug alike, so one
+image draws by the serial backend, one worker, or two.
 
 C takes byte 4 as the cadence, render.inc's CADENCE_*, from the reading
 frame's flip on (main.S's CLOCK_CADENCE); a value past the three leaves the

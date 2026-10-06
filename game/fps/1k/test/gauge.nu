@@ -349,6 +349,12 @@ export def cadence-frame [cadence: int]: nothing -> binary {
     [("C" | into binary), 0x[00 00 00], ($cadence | into binary --endian little | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
+# The console's W frame: the raster's workers in byte 4, 0 for the serial
+# backend, and the rows a band in bytes 8 to 11, 0 for a band a worker.
+export def workers-frame [workers: int, grain: int]: nothing -> binary {
+    [("W" | into binary), 0x[00 00 00], ($workers | into binary --endian little | bytes at 0..<1), 0x[00 00 00], ($grain | into binary --endian little | bytes at 0..<4), (0..<52 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
 # What a run was, written beside its capture before it starts: the
 # records' schemas this reader takes and the clock, the workspace the SDK
 # and kernel come from, the program's own source, the build, the assets,

@@ -47,9 +47,10 @@
 # beside a node read from its tile at the light of its centre by the
 # test's own bilinear; one level a block, the still copy's spawn view
 # with every level built against the tiles held off, identical over the
-# screen with the far floor's blocks past the tiles' levels, and drawn in
+# screen with the far floor's blocks past the tiles' levels, drawn in
 # packets of a few commands and spans, flushed many times, identical
-# again; the flow's
+# again, and drawn by the serial backend, one worker, and two in bands of
+# sixteen rows, identical again with the same counts; the flow's
 # eye on the line two sectors share reaching the sector behind it, and
 # a map where a hall's rectangle grows through a later path before the
 # room beyond it can be reached; a map whose magic is wrong, which exits
@@ -63,7 +64,7 @@ use ./gauge.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}"
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -332,27 +333,42 @@ const SKY_PIXEL = [960, 100]
 const SKY_TOP = 0x[3a 6f b0]
 const CROSSHAIR = [960, 540]
 # the functions whose loops run a pixel or a sample, the span loop with
-# the helpers it calls, and the packet's render with the span it calls,
-# each within one page of code (render.inc's CODE_PAGE) and trapping
-# only where the mixer's two calls a frame are
+# the helpers it calls, and the packet's render and a band's with the
+# span they call, each within one page of code (render.inc's CODE_PAGE)
+# and trapping only where the mixer's two calls a frame are
 const HOT_FUNCTIONS = [
     span_fill span_light tile_build mixer_update
     row_crossings span_bound row_range poly_fill span_record
-    packet_render
+    packet_render band_render
 ]
 const HOT_ECALLS = {
     span_fill: 0, span_light: 0, tile_build: 0, mixer_update: 2,
     row_crossings: 0, span_bound: 0, row_range: 0, poly_fill: 0, span_record: 0,
-    packet_render: 0,
+    packet_render: 0, band_render: 0,
 }
 # the families, each together on one page: poly_fill's loop runs once a
-# span and calls span_bound twice a span, and packet_render's loop calls
-# span_fill once a span, so a member on another page costs every span a
-# lookup, which each member within a page of its own does not catch
+# span and calls span_bound twice a span, and packet_render's loop and
+# band_render's call span_fill once a span, so a member on another page
+# costs every span a lookup, which each member within a page of its own
+# does not catch
 const HOT_FAMILIES = [
     { name: "the span loop's", members: [row_crossings span_bound row_range poly_fill span_record] }
-    { name: "the packet's render", members: [packet_render span_fill] }
+    { name: "the packet's render", members: [packet_render band_render span_fill] }
 ]
+# The raster's workers through the console's W frame: the default, every
+# worker started, two on four harts, a band a worker; the spawn view of
+# the still copy drawn again by the serial backend, by one worker, and
+# by two in bands of WORKER_GRAIN rows, each the default's capture over
+# the whole screen and its frame line's counts the default's
+const WORKERS_STARTED = 2
+const WORKER_GRAIN = 16
+const SCREEN_ROWS = 1080
+const WORKER_MODES = [
+    { workers: 0, grain: 0 }
+    { workers: 1, grain: 0 }
+    { workers: 2, grain: $WORKER_GRAIN }
+]
+const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
 # The packet's bounds and the stale binding, through the console's K
 # frame on a debug build. The still copy of Render Zero's spawn view,
 # every level built, drawn in packets of at most PACKET_CAPS' commands and
@@ -388,6 +404,9 @@ const DEBUG_TEXT = [
     "fps: sounds "
     "fps: alpha "
     "fps: mips "
+    "fps: workers "
+    "fps: worker refused on hart "
+    "fps: round lost bands\n"
 ]
 const EXIT_TEXT = [
     "fps: "
@@ -981,6 +1000,41 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($capped_run.screen != "") "a screen was taken on the spawn view in capped packets"
     let capped_rows = (rows-differ (open --raw $capped_run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
     assert ($capped_rows | is-empty) $"the spawn view drawn in packets of ($PACKET_CAPS.commands) commands and ($PACKET_CAPS.spans) spans, ($capped_frame.flushes) flushed, the uncapped one's: rows ($capped_rows | first 5) differ, ($capped_rows | length) in all"
+    assert equal $capped_frame.rounds ($capped_frame.flushes + 1) $"every render of the capped frame a round of the workers: ($capped_frame)"
+
+    # the raster's workers: the default, every worker started and a band
+    # a worker, drew the views above; the same spawn view drawn again by
+    # the serial backend, by one worker, and by two in bands of
+    # WORKER_GRAIN rows, each the default's picture over the whole screen
+    # with the default's counts, every band rendered in every round and
+    # the clear on hart 0 under the serial backend alone
+    let default_frame = $spawn_captures.tiled.frame
+    assert ($default_frame.workers == $WORKERS_STARTED and $default_frame.grain == 0) $"the default draws with every worker started, a band a worker: ($default_frame)"
+    assert ($default_frame.rounds == 1 and $default_frame.bands0 == 1 and $default_frame.bands1 == 1 and $default_frame.clear == 0) $"the default's one round a band a worker, the clear theirs: ($default_frame)"
+    for m in $WORKER_MODES {
+        let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
+        let sends = [{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_w($m.workers)_g($m.grain)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+        let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        assert ($frame.workers == $m.workers and $frame.grain == $m.grain) $"($label) drawn as the W frame chose: ($frame)"
+        let bands = (if $m.workers == 0 { 0 } else if $m.grain == 0 { $m.workers } else { ($SCREEN_ROWS + $m.grain - 1) // $m.grain })
+        assert equal ($frame.bands0 + $frame.bands1) ($frame.rounds * $bands) $"every band of every round rendered once on ($label): ($frame)"
+        if $m.workers == 0 {
+            assert ($frame.rounds == 0 and $frame.clear > 0) $"the serial backend takes no round and clears on hart 0: ($frame)"
+        } else {
+            assert ($frame.rounds == 1 and $frame.clear == 0) $"($label) one round, the clear the bands': ($frame)"
+        }
+        if $m.workers == 1 { assert equal $frame.bands1 0 $"one worker renders every band: ($frame)" }
+        let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
+        assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
+        assert ($run.screen != "") $"a screen was taken on ($label)"
+        let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
+        assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
+    }
+    print $"fps: the spawn view by the serial backend, one worker, and two in bands of ($WORKER_GRAIN) rows, each the default's picture and counts"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,

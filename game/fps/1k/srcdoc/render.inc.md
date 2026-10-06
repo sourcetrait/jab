@@ -887,6 +887,73 @@ A span block's pixels.
 
 `u32`: the depth a sky pixel stores, so anything drawn later overwrites it.
 
+## .set WORKERS_MAX
+
+The raster's workers at most, each on a secondary hart of its own.
+
+The raster's workers (workers.S): started once after the load on the
+lowest online secondaries, each with its mailbox (`jab_jobs.inc`), a
+context, and a stack; a frame renders each packet in a round, the frame's
+workers each rendering whole bands of rows. Two, harts 1 and 2 on the
+specification's four, the third secondary left for the game and its
+services.
+
+## .set WORKER_STACK
+
+A worker's stack's bytes.
+
+## .set GRAIN_DEFAULT
+
+`u32`: the rows a band until a console W chooses, 0 for a band a worker.
+
+## .set ROUND_COMMANDS
+
+`u32`: the round's packet's commands.
+
+The round record, hart 0's, published with each job of the round: what
+the packet holds, the workers, the grain and the bands it makes, and the
+clear. A worker reads it after its await and nothing else hart 0 keeps.
+
+## .set ROUND_SPANS
+
+`u32`: the packet's spans.
+
+## .set ROUND_WORKERS
+
+`u32`: the round's workers, the frame's.
+
+## .set ROUND_GRAIN
+
+`u32`: the rows a band, 0 for a band a worker.
+
+## .set ROUND_BANDS
+
+`u32`: the bands, the workers for a band a worker, else the screen's rows over the grain, the last band short.
+
+## .set ROUND_FLAGS
+
+`u32`: ROUND_CLEAR on the frame's first round.
+
+## .set ROUND_SIZE
+
+The round record's bytes, a line.
+
+## .set ROUND_CLEAR
+
+`u32`: the round clears each band's depth before its spans, and on a debug build prepaints its pixels.
+
+## .set JOB_START
+
+`u64`: a worker's clock when its await took the round's job, in its mailbox's own words.
+
+## .set JOB_END
+
+`u64`: its clock before its completion.
+
+## .set JOB_BANDS
+
+`u64`: the bands it rendered in the round.
+
 ## .set STAT_SECTORS
 
 `u64`: the frame's sectors drawn.
@@ -919,7 +986,7 @@ each cell built or shrunk, and is never added to them.
 
 ## .set STAT_CLEAR_TICKS
 
-`u64`: the depth clear's ticks.
+`u64`: the depth clear's ticks on hart 0, 0 when the workers' first round clears each band.
 
 ## .set STAT_PLANE_TICKS
 
@@ -1006,6 +1073,34 @@ inside one is no part of it (world.S's phase_mark).
 
 `u64`: the commands whose tiles a reset took back before their render, drawn on the chain.
 
+## .set STAT_DISPATCH
+
+`u64`: the rounds' dispatch, each the latest worker's start less hart 0's clock before its first publish.
+
+The rounds' times are the jobs' bench's definitions (kernel FourHarts'
+JobCosts), each summed over the frame's rounds, 0 on a frame the serial
+backend drew.
+
+## .set STAT_BARRIER
+
+`u64`: the rounds' barrier, each hart 0's clock after its joins less the latest worker's end.
+
+## .set STAT_SLOWEST
+
+`u64`: the rounds' slowest workers, each round's greatest time from a worker's start to its end.
+
+## .set STAT_BUSY
+
+`u64`: every worker's time from its start to its end, every round's.
+
+## .set STAT_ROUNDS
+
+`u64`: the rounds, the renders the workers took.
+
+## .set STAT_BANDS
+
+`WORKERS_MAX u64`: the bands each worker rendered over the frame's rounds.
+
 ## .set STAT_SIZE
 
 The stats' bytes.
@@ -1067,8 +1162,8 @@ is the table's, and a frame past it flushes.
 
 A raster context is a renderer's own: the command in hand and the counts
 span_fill keeps, so contexts share nothing span_fill writes but the pixels
-and the depths of the rows each owns. Hart 0's is raster_context, reached
-through tp.
+and the depths of the rows each owns. Hart 0's is raster_context and a
+worker's its own of worker_contexts, each reached through tp.
 
 ## .set CTX_SPANS
 
@@ -1333,7 +1428,7 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_CLEAR
 
-`u32`: the depth clear.
+`u32`: the depth clear on hart 0, 0 when the workers clear.
 
 ## .set DRAW_PORTALS
 

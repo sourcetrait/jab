@@ -148,9 +148,28 @@ console_frame:
     sw t1, 0(t2)                    # from this frame's flip on
     j 8f
 12:
+    li t1, 'W'
+    bne t0, t1, 13f
+    lbu t1, 4(s2)
+    la t2, workers_started
+    lwu t2, 0(t2)
+    bleu t1, t2, 121f
+    mv t1, t2                       # no more than started
+121:
+    la t2, workers_active
+    sw t1, 0(t2)                    # from the next frame's drawing on
+    lwu t1, 8(s2)
+    li t2, SCREEN_H
+    bleu t1, t2, 122f
+    mv t1, t2
+122:
+    la t2, band_grain
+    sw t1, 0(t2)                    # rows a band, 0 for a band a worker
+    j 8f
+13:
 .ifdef DEBUG
     li t1, 'S'
-    bne t0, t1, 13f
+    bne t0, t1, 14f
     lbu t1, 4(s2)
     la t2, stall_on
     sb t1, 0(t2)                    # the standing stall on, or the drawing back
@@ -167,7 +186,7 @@ console_frame:
     la t2, consume_spin
     sw t1, 0(t2)                    # the spin inside every consume
     j 8f
-13:
+14:
     li t1, 'K'
     bne t0, t1, 8f
     lwu t1, 4(s2)

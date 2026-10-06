@@ -36,9 +36,11 @@ zeroes its count_stats there too (raster.S).
 
 The frame is prepared, then rendered: the flow, the sectors, the sprites,
 and the actors fill their polygons into the frame's packet, and the
-packet is rendered after the actors (raster.S), the depth buffer and on a
-debug build the magenta prepaint laid before preparation as before, since
-preparation reads neither. The phases are preparation's: the planes', the
+packet is rendered after the actors (raster.S). The serial backend's
+depth clear and a debug build's magenta prepaint are laid before
+preparation, which reads neither; with workers each band's renderer
+clears its own rows in the frame's first round instead (workers.S), and
+hart 0 clears nothing. The phases are preparation's: the planes', the
 walls', and the sprites' ticks are marked by phase_mark, the clock less
 the raster's ticks, so a full packet rendered inside a phase is the
 raster's and no phase's; the raster's ticks are the frame line's last
@@ -73,10 +75,14 @@ a sector reached twice is drawn once. Sprites and actors are drawn within
 their sector's rectangle, which also stops a quad poking through a wall
 from showing in the sector beyond.
 
-The depth clear is 8 MB, about two milliseconds; its loop and the uncovered
+The frame's workers and grain are taken once, at its start, from what the
+console last chose, so every render of the frame is one kind: the serial
+backend at 0 workers, else a round each, the first of them clearing. The
+depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached;
-the release build leaves the frame before. The flow is timed as the portals'
+the release build leaves the frame before. Under workers neither runs here
+and the clear's ticks are 0. The flow is timed as the portals'
 phase; the sectors are prepared in the order the flow reached them, then the
 sprites and the actors of the sectors reached, into a packet emptied at the
 frame's start, a debug build's bind count with it; on a debug build the
@@ -224,7 +230,7 @@ is.
 
 ## stats
 
-`26 u64`: the frame's counts and its ticks by phase, STAT_* fields.
+`STAT_SIZE u8`: the frame's counts, its ticks by phase, and its rounds' times and bands, STAT_* fields.
 
 ## walk_fifo
 

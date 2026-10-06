@@ -18,6 +18,22 @@ world_draw:
     sd s2, 32(sp)
     sd s3, 24(sp)
     sd s4, 16(sp)
+    la t0, workers_active
+    lwu t2, 0(t0)
+    la t0, round_workers
+    sw t2, 0(t0)                    # the frame's workers, every render's
+    la t0, band_grain
+    lwu t1, 0(t0)
+    la t0, round_grain
+    sw t1, 0(t0)                    # and its grain
+    beqz t2, 10f
+    li t1, 1
+    la t0, round_first
+    sb t1, 0(t0)                    # the first round clears each band before its spans
+    la t1, stats
+    sd zero, STAT_CLEAR_TICKS(t1)
+    j 12f
+10:
     rdtime s2
     la t0, zbuf
     li t1, ZBUF_BYTES
@@ -51,6 +67,7 @@ world_draw:
     sub t0, t0, s2
     la t1, stats
     sd t0, STAT_CLEAR_TICKS(t1)
+12:
     sd zero, STAT_SECTORS(t1)
     sd zero, STAT_WALLS(t1)
     sd zero, STAT_PIECES(t1)
@@ -75,6 +92,13 @@ world_draw:
     sd zero, STAT_COMMANDS(t1)
     sd zero, STAT_FLUSHES(t1)
     sd zero, STAT_INVALIDATED(t1)
+    sd zero, STAT_DISPATCH(t1)
+    sd zero, STAT_BARRIER(t1)
+    sd zero, STAT_SLOWEST(t1)
+    sd zero, STAT_BUSY(t1)
+    sd zero, STAT_ROUNDS(t1)
+    sd zero, STAT_BANDS(t1)
+    sd zero, (STAT_BANDS + 8)(t1)
 .ifdef COUNT
     la t1, count_stats
     sd zero, COUNT_DIVIDES(t1)

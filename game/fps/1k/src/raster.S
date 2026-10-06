@@ -759,6 +759,12 @@ command_emit:
 2:
     addi t2, t1, 1
     sd t2, 0(t0)
+    la t3, span_count
+    ld t3, 0(t3)
+    la t4, command_runs
+    slli t2, t1, 2
+    add t4, t4, t2
+    sw t3, 0(t4)                    # the command's run starts at the packet's next span
     li t2, POLY_SIZE
     mul t2, t1, t2
     la t3, commands
@@ -1032,13 +1038,19 @@ packet_render:
     rdtime t0
     sd t0, 0(sp)                    # the render's start
     call packet_resolve
+    la t0, round_workers
+    lwu t0, 0(t0)
+    beqz t0, 1f
+    call round_run                  # the workers' round, their counts summed
+    j 3f
+1:
     la tp, raster_context
     la s2, span_records
     la t0, span_count
     ld s3, 0(t0)                    # the spans
     la s4, commands
     beqz s3, 2f
-1:
+11:
     lwu t0, SPAN_POLY(s2)
     li t1, POLY_SIZE
     mul t0, t0, t1
@@ -1050,9 +1062,10 @@ packet_render:
     call span_fill
     addi s2, s2, SPAN_RECORD_SIZE
     addi s3, s3, -1
-    bnez s3, 1b
+    bnez s3, 11b
 2:
     call context_counts
+3:
     la t0, span_count
     sd zero, 0(t0)
     la t0, command_count
@@ -1069,6 +1082,120 @@ packet_render:
     ld s3, 24(sp)
     ld s4, 16(sp)
     addi sp, sp, 48
+    ret
+
+band_render:
+    addi sp, sp, -96
+    sd ra, 88(sp)
+    sd s0, 80(sp)
+    sd s2, 72(sp)
+    sd s3, 64(sp)
+    sd s4, 56(sp)
+    sd s5, 48(sp)
+    sd s6, 40(sp)
+    sd s7, 32(sp)
+    sd s8, 24(sp)
+    sd s9, 16(sp)
+    sd s10, 8(sp)
+    mv s0, a0                       # the band's first row
+    mv s2, a1                       # the row past its last
+    beqz a2, 3f                     # no clear this round
+    li t0, SCREEN_PITCH
+    mul t1, s0, t0
+    mul t2, s2, t0
+    la t0, zbuf
+    add t1, t1, t0
+    add t2, t2, t0                  # the band's depth rows
+1:
+    sd zero, 0(t1)
+    sd zero, 8(t1)
+    sd zero, 16(t1)
+    sd zero, 24(t1)
+    addi t1, t1, 32
+    bltu t1, t2, 1b
+.ifdef DEBUG
+    li t0, SCREEN_PITCH
+    mul t1, s0, t0
+    mul t2, s2, t0
+    li t0, JAB_DISPLAY_BASE
+    add t1, t1, t0
+    add t2, t2, t0                  # the band's pixels, magenta where nothing reaches
+    li t3, 0xff00ff
+    slli t4, t3, 32
+    or t3, t3, t4
+2:
+    sd t3, 0(t1)
+    sd t3, 8(t1)
+    sd t3, 16(t1)
+    sd t3, 24(t1)
+    addi t1, t1, 32
+    bltu t1, t2, 2b
+.endif
+3:
+    la t0, round
+    lwu s3, ROUND_COMMANDS(t0)
+    lwu s4, ROUND_SPANS(t0)
+    la s5, command_runs
+    la s6, span_records
+    la s7, commands
+    li s8, 0                        # the command
+4:
+    bgeu s8, s3, 9f
+    slli t0, s8, 2
+    add t0, t0, s5
+    lwu t4, 0(t0)                   # its run's first span
+    mv s9, s4                       # its run's end, the packet's spans for the last command
+    addi t1, s8, 1
+    bgeu t1, s3, 5f
+    lwu s9, 4(t0)                   # the next command's first span
+5:
+    mv t5, s9
+6:
+    bgeu t4, t5, 7f                 # the first span at or past the band's first row
+    add t6, t4, t5
+    srli t6, t6, 1
+    slli t0, t6, 4
+    add t0, t0, s6
+    lhu t0, SPAN_ROW(t0)
+    bgeu t0, s0, 61f
+    addi t4, t6, 1
+    j 6b
+61:
+    mv t5, t6
+    j 6b
+7:
+    mv s10, t4                      # the span
+    li t0, POLY_SIZE
+    mul t0, s8, t0
+    add t0, t0, s7
+    sd t0, CTX_COMMAND(tp)          # the run's command, which span_fill reads through the context
+8:
+    bgeu s10, s9, 81f
+    slli t0, s10, 4
+    add t0, t0, s6
+    lhu a2, SPAN_ROW(t0)
+    bgeu a2, s2, 81f                # past the band
+    lhu a0, SPAN_X0(t0)
+    lhu a1, SPAN_X1(t0)
+    call span_fill
+    addi s10, s10, 1
+    j 8b
+81:
+    addi s8, s8, 1
+    j 4b
+9:
+    ld ra, 88(sp)
+    ld s0, 80(sp)
+    ld s2, 72(sp)
+    ld s3, 64(sp)
+    ld s4, 56(sp)
+    ld s5, 48(sp)
+    ld s6, 40(sp)
+    ld s7, 32(sp)
+    ld s8, 24(sp)
+    ld s9, 16(sp)
+    ld s10, 8(sp)
+    addi sp, sp, 96
     ret
 
 span_fill:
@@ -2022,6 +2149,8 @@ raster_context:
 .balign 16
 commands:
     .skip (MAX_COMMANDS * POLY_SIZE)
-.balign 16
+command_runs:
+    .skip (MAX_COMMANDS * 4)
+.balign 64
 zbuf:
     .skip ZBUF_BYTES

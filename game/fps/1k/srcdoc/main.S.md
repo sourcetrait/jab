@@ -225,7 +225,9 @@ The map's name is read with its trailing whitespace dropped and the map's
 path built from it, /map/<name>.jabfps.map; the map's title is read the same
 way from /map/title and drawn centred on the black screen, the name in its
 place when the tree carries no title; the map is read whole, then held to its
-format; loaded, the screen is cleared and a debug build reports the load.
+format; loaded, the screen is cleared and a debug build reports the load;
+then the raster's workers start (workers.S), asleep until the first frame's
+round.
 
 ## frame
 
@@ -361,9 +363,12 @@ from tiles follow: the first is the build's share of the frame, zero once
 the view has settled, and the second against the lit pixels is the near
 blocks' share, the far and edge ones staying on the lit loop (tile.S). The
 tile arena is reset after the bake, since a map's maps are the tiles'
-frame. The packet closes the line: the raster's microseconds among the
-phases, and at the end the commands the frame's packets held, the flushes,
-and the bindings a reset invalidated (raster.S).
+frame. The packet follows: the raster's microseconds among the phases, the
+commands the frame's packets held, the flushes, and the bindings a reset
+invalidated (raster.S). The workers close the line: the frame's workers and
+grain, its rounds, each worker's bands, and the rounds' dispatch, barrier,
+slowest worker, and every worker's busy time in microseconds (workers.S),
+the two band counts WORKERS_MAX's.
 
 ## count_report
 
@@ -616,7 +621,7 @@ carries none.
 
 `14 u8`.
 
-The debug lines' text, from here to word_invalidated, is in a debug build alone,
+The debug lines' text, from here to word_busy, is in a debug build alone,
 and the count line's after it, msg_count to word_count_mismatches, in a
 COUNT build alone.
 
@@ -767,6 +772,38 @@ COUNT build alone.
 ## word_invalidated
 
 `15 u8`.
+
+## word_workers
+
+`11 u8`.
+
+## word_grain
+
+`9 u8`.
+
+## word_rounds
+
+`10 u8`.
+
+## word_bands
+
+`9 u8`.
+
+## word_dispatch
+
+`15 u8`.
+
+## word_barrier
+
+`14 u8`.
+
+## word_slowest
+
+`14 u8`.
+
+## word_busy
+
+`11 u8`.
 
 ## msg_count
 

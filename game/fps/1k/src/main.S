@@ -1,4 +1,5 @@
 .include "jab.inc"
+.include "jab_jobs.inc"
 .include "jab_f32.inc"
 .include "jab_f64.inc"
 .include "jab_rng.inc"
@@ -141,6 +142,7 @@ _start:
     divu s5, t0, t1                 # the milliseconds
     call load_report
 .endif
+    call workers_start              # the raster's workers, asleep until a round
     li s8, 0                        # the frames drawn
     la t0, cadence
     li t1, CADENCE_DEFAULT
@@ -993,6 +995,59 @@ frame_report:
     la t0, stats
     ld a1, STAT_INVALIDATED(t0)
     call append_dec
+    la a1, word_workers
+    call append_str
+    la t0, round_workers
+    lwu a1, 0(t0)
+    call append_dec
+    la a1, word_grain
+    call append_str
+    la t0, round_grain
+    lwu a1, 0(t0)
+    call append_dec
+    la a1, word_rounds
+    call append_str
+    la t0, stats
+    ld a1, STAT_ROUNDS(t0)
+    call append_dec
+    la a1, word_bands
+    call append_str
+    la t0, stats
+    ld a1, STAT_BANDS(t0)
+    call append_dec
+    la a1, word_space
+    call append_str
+    la t0, stats
+    ld a1, (STAT_BANDS + 8)(t0)
+    call append_dec
+    la a1, word_dispatch
+    call append_str
+    la t0, stats
+    ld a1, STAT_DISPATCH(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
+    la a1, word_barrier
+    call append_str
+    la t0, stats
+    ld a1, STAT_BARRIER(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
+    la a1, word_slowest
+    call append_str
+    la t0, stats
+    ld a1, STAT_SLOWEST(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
+    la a1, word_busy
+    call append_str
+    la t0, stats
+    ld a1, STAT_BUSY(t0)
+    li t0, US_TICKS
+    divu a1, a1, t0
+    call append_dec
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1466,6 +1521,22 @@ word_flushes:
     .asciz ", flushes "
 word_invalidated:
     .asciz ", invalidated "
+word_workers:
+    .asciz ", workers "
+word_grain:
+    .asciz ", grain "
+word_rounds:
+    .asciz ", rounds "
+word_bands:
+    .asciz ", bands "
+word_dispatch:
+    .asciz ", dispatch us "
+word_barrier:
+    .asciz ", barrier us "
+word_slowest:
+    .asciz ", slowest us "
+word_busy:
+    .asciz ", busy us "
 .ifdef COUNT
 msg_count:
     .asciz "fps: count "
@@ -1508,3 +1579,4 @@ k_dt_max:
 .include "src/mixer.S"
 .include "src/player.S"
 .include "src/hud.S"
+.include "src/workers.S"
