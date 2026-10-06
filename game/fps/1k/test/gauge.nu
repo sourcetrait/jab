@@ -171,9 +171,10 @@ def main [] {
 }
 
 # Play the route on the build `runs` times and read every frame: the
-# route's placements and pad rows, an R with the run's seed and a C with
-# the cadence before the first frame, the E at the route's end, the
-# capture when the final records have landed. Headless with the sound
+# route's placements, its legs' `sends` (console command frames by their
+# one-letter kind, each at its `at`), and its pad rows, an R with the
+# run's seed and a C with the cadence before the first frame, the E at
+# the route's end, the capture when the final records have landed. Headless with the sound
 # recorded, or with `--host` in the window and the audio a run of the
 # program has. `--qemu` words go on each launch's line after its own, and
 # each run's identity then takes the machine and the words the launch
@@ -213,6 +214,7 @@ def "main run" [
         $route_bytes | save --raw -f ($run_out | path join "route.nuon")
         let sends = ([{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }]
             | append ($r.legs | each {|l| $l.places | each {|p| { at: $p.at, bytes: (pose pose-frame $p) } } } | flatten)
+            | append ($r.legs | each {|l| $l | get -o sends | default [] | each {|s| { at: $s.at, bytes: (pose command-frame $s.kind) } } } | flatten)
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, end: $r.end, capture: $capture }
