@@ -3067,15 +3067,6 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert ([($n_embedded | get -o from) ($n_embedded | get -o identity_sha256)] == [embedded null] and $n_named) $"another hostname passed over at the embedded strength, no hash made for the embedded identity: ($n_embedded)"
     let n_legacy = (do $attempt { gauge identity-of $n_report ($n_run | reject identity corrections) $full_id })
     assert equal [($n_legacy | get -o from) ($n_legacy | get -o binding.strength)] [file legacy] $"the hostname, outside the legacy fields, binds at the weaker legacy strength: ($n_legacy)"
-    let l_home = ($bnd | path join "legacy")
-    let l_dir = ($l_home | path join "run_2")
-    let batch = ($full_id | reject qemu)
-    fx-id-file $l_dir ($full_id | update mode.seed 2) | ignore
-    let l_run = { run: 2, seed: 2, out: $l_dir }
-    let l_report = (fx-report $l_home "legacy" $batch [{ run: 1, seed: 1, out: ($l_home | path join "run_1") } $l_run])
-    let by_legacy = (do $attempt { gauge identity-of $l_report $l_run $batch })
-    let legacy_held = ([($by_legacy | get -o from) ($by_legacy | get -o binding.strength) ($by_legacy | get -o identity.mode.seed) ($by_legacy | get -o binding.unrecorded)] == [file legacy 2 [qemu]])
-    assert $legacy_held $"run 2 bound at the legacy strength by its own recorded seed, the field the report's identity lacks named unrecorded: ($by_legacy)"
     let alone = [
         [field path value];
         ["build.image_sha256" "build.image_sha256" "other_image"]
@@ -3099,6 +3090,15 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         let named = ($read | get -o passed.0.reasons | default [] | any {|r| $r | str contains $"its ($c.field)" })
         assert (($read | get -o from) == "legacy" and $named) $"a file differing in ($c.field) alone passed over naming it: ($read)"
     }
+    let l_home = ($bnd | path join "legacy")
+    let l_dir = ($l_home | path join "run_2")
+    let batch = ($full_id | reject qemu)
+    fx-id-file $l_dir ($full_id | update mode.seed 2) | ignore
+    let l_run = { run: 2, seed: 2, out: $l_dir }
+    let l_report = (fx-report $l_home "legacy" $batch [{ run: 1, seed: 1, out: ($l_home | path join "run_1") } $l_run])
+    let by_legacy = (do $attempt { gauge identity-of $l_report $l_run $batch })
+    let legacy_held = ([($by_legacy | get -o from) ($by_legacy | get -o binding.strength) ($by_legacy | get -o identity.mode.seed) ($by_legacy | get -o binding.unrecorded)] == [file legacy 2 [qemu]])
+    assert $legacy_held $"run 2 bound at the legacy strength by its own recorded seed, the field the report's identity lacks named unrecorded: ($by_legacy)"
     let other = ($full_id | update mode.seed 5 | update route.sha256 "other_route")
     let reused_abs = ($bnd | path join "reused_elsewhere" "run_1")
     fx-id-file $reused_abs $other | ignore
