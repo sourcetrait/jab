@@ -1224,6 +1224,64 @@ worker's its own of worker_contexts, each reached through tp.
 
 A raster context's bytes.
 
+## .set CTX_CENSUS_NEXT
+
+`addr`: on a CENSUS build, the context's next census slot, in the counts' words, which is why CENSUS refuses COUNT; and CENSUS refuses a build without DEBUG, its lines a debug build's.
+
+## .set CTX_CENSUS_END
+
+`addr`: past the context's last census slot.
+
+## .set CTX_CENSUS_DROPPED
+
+`u64`: the frame's lit mapped blocks the context's full slots could not keep.
+
+## .set CTX_CENSUS_BASE
+
+`addr`: the context's first census slot.
+
+## .set CENSUS_U
+## .set CENSUS_V
+
+`i64`: a census slot's block's first pixel's u and v, 16.16 level 0 texels from the lumel map's origin, as span_fill steps them.
+
+## .set CENSUS_DU
+## .set CENSUS_DV
+
+`i64`: the block's u and v steps a pixel, 16.16, so its last pixel samples the start plus the step times the pixels less one.
+
+## .set CENSUS_SURFACE
+
+`u32`: the block's surface, the lumel maps' index.
+
+## .set CENSUS_LEVEL
+
+`u8`: the block's level, the chain's last at most.
+
+## .set CENSUS_PIXELS
+
+`u8`: the block's pixels, 16 but a span's last.
+
+## .set CENSUS_PASSED
+
+`u8`: its pixels past the depth test.
+
+## .set CENSUS_MASKED
+
+`u8`: 1 for a masked fill, an opening, else 0.
+
+## .set CENSUS_RECORD
+
+A census slot's bytes.
+
+## .set CENSUS_SLOTS
+
+`u64`: a context's census slots, room for every block of a frame drawn on one context: a settled view enters about 140,000 lit mapped blocks.
+
+## .set CENSUS_CONTEXTS
+
+`u64`: the raster contexts the census reads, hart 0's and the workers'.
+
 ## .set SCRATCH_POISON
 
 `u64`: the word a debug build writes over the producer's scratch once the packet is published, an address no page maps.

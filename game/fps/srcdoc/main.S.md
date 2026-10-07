@@ -261,6 +261,11 @@ sets tick_reported, as the pacing step's own awaits do.
 On a debug build draw_or_stall stands in for world_draw, so an S frame can
 put a known stall where the drawing was; with no S it is world_draw itself.
 
+A CENSUS build (census.S) sizes its directory after the workers start and
+takes every frame's census after the state report, inside the reporting,
+every round joined by then; its lines are every frame's, not the reported
+frames' alone.
+
 ## frame_records
 
 Built from frame_clock and the stats, which world_draw zeroes only when the

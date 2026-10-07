@@ -244,6 +244,30 @@
 .set CTX_TILED_PIXELS, 56
 .set CTX_COUNT, 64
 .set CTX_SIZE, (CTX_COUNT + COUNT_SIZE)
+.ifdef CENSUS
+.ifndef DEBUG
+.error "CENSUS is a debug build's instrument"
+.endif
+.ifdef COUNT
+.error "CENSUS and COUNT share the raster context's counter words"
+.endif
+.set CTX_CENSUS_NEXT, CTX_COUNT
+.set CTX_CENSUS_END, (CTX_COUNT + 8)
+.set CTX_CENSUS_DROPPED, (CTX_COUNT + 16)
+.set CTX_CENSUS_BASE, (CTX_COUNT + 24)
+.set CENSUS_U, 0
+.set CENSUS_V, 8
+.set CENSUS_DU, 16
+.set CENSUS_DV, 24
+.set CENSUS_SURFACE, 32
+.set CENSUS_LEVEL, 36
+.set CENSUS_PIXELS, 37
+.set CENSUS_PASSED, 38
+.set CENSUS_MASKED, 39
+.set CENSUS_RECORD, 40
+.set CENSUS_SLOTS, (1 << 18)
+.set CENSUS_CONTEXTS, (WORKERS_MAX + 1)
+.endif
 .set SCRATCH_POISON, 0x5a5a5a5a5a5a5a5a
 .set TILE_POISON, 0xff01fe02
 .set REPORT_KIND, 0

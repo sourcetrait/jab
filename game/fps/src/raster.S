@@ -1028,6 +1028,47 @@ poly_rect:
 .endm
 .endif
 
+.ifdef CENSUS
+.macro census_start
+    ld a0, CTX_CENSUS_NEXT(tp)
+    ld a5, CTX_CENSUS_END(tp)
+    bgeu a0, a5, .Lcensus_start\@   # the slots full: the block's end counts it dropped
+    sd s8, CENSUS_U(a0)
+    sd s9, CENSUS_V(a0)
+    sd t5, CENSUS_DU(a0)
+    sd t6, CENSUS_DV(a0)
+.Lcensus_start\@:
+.endm
+
+.macro census_end
+    ld t3, 16(sp)                   # the mode
+    andi t5, t3, POLY_LIT
+    beqz t5, .Lcensus_end\@
+    ld t5, CTX_COMMAND(tp)
+    ld a0, POLY_LUMAP(t5)
+    beqz a0, .Lcensus_end\@         # lit flat, no map
+    ld a0, CTX_CENSUS_NEXT(tp)
+    ld a5, CTX_CENSUS_END(tp)
+    bltu a0, a5, .Lcensus_room\@
+    ld a5, CTX_CENSUS_DROPPED(tp)
+    addi a5, a5, 1
+    sd a5, CTX_CENSUS_DROPPED(tp)
+    j .Lcensus_end\@
+.Lcensus_room\@:
+    ld a5, POLY_SURFACE(t5)
+    sw a5, CENSUS_SURFACE(a0)
+    ld a5, 192(sp)
+    sb a5, CENSUS_LEVEL(a0)
+    sb s11, CENSUS_PIXELS(a0)
+    sb t4, CENSUS_PASSED(a0)
+    andi a5, t3, POLY_MASKED
+    sb a5, CENSUS_MASKED(a0)
+    addi a0, a0, CENSUS_RECORD
+    sd a0, CTX_CENSUS_NEXT(tp)      # the record kept
+.Lcensus_end\@:
+.endm
+.endif
+
 .balign CODE_PAGE
 packet_render:
     addi sp, sp, -48
@@ -1586,6 +1627,9 @@ span_fill:
 435:
     sd a6, 192(sp)                  # the block's level
     li t4, 0                        # the pixels past the depth test this block
+.ifdef CENSUS
+    census_start
+.endif
     ld t3, 16(sp)
     andi a5, t3, POLY_LIT
     bnez a5, 44f
@@ -2004,6 +2048,9 @@ span_fill:
     ld t5, 144(sp)
     add t5, t5, t3
     sd t5, 144(sp)
+.ifdef CENSUS
+    census_end
+.endif
     ld s8, 0(sp)
     ld s9, 8(sp)
     mul t3, s11, s6

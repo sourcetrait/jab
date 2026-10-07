@@ -143,6 +143,9 @@ _start:
     call load_report
 .endif
     call workers_start              # the raster's workers, asleep until a round
+.ifdef CENSUS
+    call census_init                # the census's directory and the contexts' slots
+.endif
     li s8, 0                        # the frames drawn
     la t0, cadence
     li t1, CADENCE_DEFAULT
@@ -246,6 +249,10 @@ frame:
     mv s9, a0                       # the step's end
 5:
     call state_report
+.ifdef CENSUS
+    mv a0, s8
+    call census_frame               # the frame's blocks counted, its lines on the UART
+.endif
 .ifdef DEBUG
     la t0, report_pending
     lbu t1, 0(t0)
@@ -1606,3 +1613,4 @@ k_dt_max:
 .include "src/player.S"
 .include "src/hud.S"
 .include "src/workers.S"
+.include "src/census.S"

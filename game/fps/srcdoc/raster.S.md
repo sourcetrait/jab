@@ -338,6 +338,24 @@ each render. The two registers it takes are the ones the site has free,
 each site's read off the code that follows it, since a count must change
 nothing the drawing reads; no build but COUNT assembles a line of it.
 
+## .macro census_start
+
+TileCensus's hook, a CENSUS build's alone: at every block's start, its level
+taken, the block's first pixel's u and v, s8 and s9, and its steps, t5 and
+t6, go into the context's next slot whatever the mode, so the slot holds them
+when the block's end decides to keep it; a0 and a5 are free there. The
+coordinates are what the pixel loop steps, so the last pixel samples the
+start plus the step times the pixels less one exactly.
+
+## .macro census_end
+
+The hook's other half at the block's end, label 60, which every path of a
+block reaches, the lit loop, the old tile loop, and the unlit loops, so the
+old cache's residency biases nothing: a lit block with a lumel map keeps its
+slot with its surface, level, pixels, the passes in t4, and the masked flag;
+a flat lit block, a sprite, keeps none. t3, t5, a0, and a5 are free there,
+the rejected count already taken.
+
 ## packet_render
 
 The serial backend, and the reference a worker's backend scales against:
