@@ -191,10 +191,12 @@ const UNKNOWN_WORKERS = "unknown"
 # the identity's fields a correction may change: the build's flags and its
 # ELF's SHA-256, each read from beside the image at the run's start
 const CORRECTABLE = ["build.flags" "build.elf_sha256"]
-# where a run's effective identity came from (identity-of)
+# where a run's effective identity came from (identity-of), none where
+# its report holds no identity evidence (no-evidence)
 const FROM_FILE = "file"
 const FROM_EMBEDDED = "embedded"
 const FROM_LEGACY = "legacy"
+const FROM_NONE = "none"
 # how a found identity file binds to its report's run, strongest first
 # (binding-of): the SHA-256 of the file the run records; the identity the
 # run embeds, on every field but CORRECTABLE's; the report's one
@@ -384,14 +386,25 @@ def "main read" [
     let target = (if $out == "" { $dir } else { $out | path expand })
     mkdir $target
     let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu-windows $ran.thread_readings $legs ($id | get -o mode.end | default 0sec) })
-    let seed = ($read_id.seed | default ($id | get -o mode.seed))
+    report $label $id [(read-run $read_id $dir $ran $measured $windows)] $target
+}
+
+# The run record `read` writes for a reading (read-identity): the seed
+# its report recorded, else, for the run's own identity, read from its
+# file or embedded, that identity's, else null, never a report's one
+# identity's; the identity the run's own for a file or an embedded
+# reading, else null, a report's one identity or the placeholder its
+# report's identity alone; the corrections, hash, source, binding, passes,
+# and reports as read; the capture's directory, outcome, measurement, and
+# CPU windows.
+export def read-run [read_id: record, dir: string, ran: record, measured: record, windows: any]: nothing -> record {
     let own = ($read_id.from in [$FROM_FILE $FROM_EMBEDDED])
-    let run = {
-        run: 1, seed: $seed, out: $dir, ran: $ran, measured: $measured, identity: (if $own { $id } else { null }), corrections: $read_id.corrections,
+    let seed = (if $read_id.seed != null { $read_id.seed } else if $own { $read_id.identity | get -o mode.seed } else { null })
+    {
+        run: 1, seed: $seed, out: $dir, ran: $ran, measured: $measured, identity: (if $own { $read_id.identity } else { null }), corrections: $read_id.corrections,
         identity_sha256: $read_id.identity_sha256, identity_from: $read_id.from, binding: $read_id.binding,
         passed: $read_id.passed, reports: $read_id.reports, cpu: $windows,
     }
-    report $label $id [$run] $target
 }
 
 # Where a run's pieces are: the game, the workspace, the tree, the
@@ -687,6 +700,13 @@ def legacy-differences [found: any, batch: any, seed: any]: nothing -> record<di
     { differ: $differ, unrecorded: $unrecorded }
 }
 
+# Whether a report's identity is no evidence of its runs: absent, or the
+# placeholder a read of the capture alone writes, `launched` false.
+def no-evidence [id: any]: nothing -> bool {
+    if $id == null { return true }
+    ($id | describe | str starts-with "record") and (($id | get -o launched) == false)
+}
+
 # An identity less CORRECTABLE's fields, the two a correction may change.
 def less-correctable [id: any]: nothing -> any {
     if not ($id | describe | str starts-with "record") { return $id }
@@ -699,14 +719,16 @@ def less-correctable [id: any]: nothing -> any {
 # its identity, the file's identity as parsed, `found`, equal to it on
 # every field but CORRECTABLE's; else at BOUND_LEGACY against the
 # report's one identity, `legacy` (legacy-differences); else at
-# BOUND_NONE, nothing to bind it to, taken unverified. Decided before any
-# correction. `found` is null for a file that does not parse, `error`
-# why, which binds at no strength but the hash. Bound or not, with the
-# reasons it is not and the fields unrecorded.
+# BOUND_NONE, nothing to bind it to, no evidence (no-evidence) and the
+# file taken unverified. Decided before any correction. `found` is null
+# for a file that does not parse, `error` why, which binds at no strength
+# but the hash. Bound or not, with the reasons it is not and the fields
+# unrecorded.
 def binding-of [found: any, error: any, sha: string, run: record, legacy: any]: nothing -> record<strength: string, bound: bool, reasons: list<string>, unrecorded: list<string>> {
     let recorded = ($run | get -o identity_sha256)
     let embedded = ($run | get -o identity)
-    let strength = (if $recorded != null { $BOUND_HASH } else if $embedded != null { $BOUND_EMBEDDED } else if $legacy != null { $BOUND_LEGACY } else { $BOUND_NONE })
+    let batch = (if (no-evidence $legacy) { null } else { $legacy })
+    let strength = (if $recorded != null { $BOUND_HASH } else if $embedded != null { $BOUND_EMBEDDED } else if $batch != null { $BOUND_LEGACY } else { $BOUND_NONE })
     if $strength == $BOUND_HASH {
         let bound = ($sha == $recorded)
         return { strength: $strength, bound: $bound, reasons: (if $bound { [] } else { [$"its SHA-256 ($sha) is not the run's recorded ($recorded)"] }), unrecorded: [] }
@@ -716,7 +738,7 @@ def binding-of [found: any, error: any, sha: string, run: record, legacy: any]: 
     let compared = (if $strength == $BOUND_EMBEDDED {
         { differ: (differing (less-correctable $found) (less-correctable $embedded) ""), unrecorded: [] }
     } else {
-        legacy-differences $found $legacy ($run | get -o seed)
+        legacy-differences $found $batch ($run | get -o seed)
     })
     let reasons = ($compared.differ | each {|d|
         let holder = (if $strength == $BOUND_EMBEDDED { "the run's embedded identity's" } else if $d.field == "mode.seed" { "the run's recorded" } else { "the report's identity's" })
@@ -731,7 +753,9 @@ def binding-of [found: any, error: any, sha: string, run: record, legacy: any]: 
 # else the identity the report embedded for the run, its correction
 # provenance and its recorded `identity_sha256` with it; else the
 # report's one identity, as a report from before per-run identities holds
-# it. A directory whose file does not bind is passed over, named with its
+# it, from `none` where that is no evidence (no-evidence), a file found
+# against it still from the file, bound at BOUND_NONE, unverified. A
+# directory whose file does not bind is passed over, named with its
 # strength and reasons, its sidecar never read; a bound file that does
 # not parse, or whose correction fails its checks, stops the read, never
 # a fallback. The `identity_sha256` is the bound file's raw SHA-256, an
@@ -760,7 +784,8 @@ export def identity-of [report: path, run: record, legacy: any]: nothing -> reco
     if $embedded != null {
         return { identity: $embedded, from: $FROM_EMBEDDED, file: null, corrections: ($run | get -o corrections), identity_sha256: ($run | get -o identity_sha256), binding: null, passed: $passed, seed: $seed }
     }
-    { identity: $legacy, from: $FROM_LEGACY, file: null, corrections: null, identity_sha256: null, binding: null, passed: $passed, seed: $seed }
+    let from = (if (no-evidence $legacy) { $FROM_NONE } else { $FROM_LEGACY })
+    { identity: $legacy, from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: $passed, seed: $seed }
 }
 
 # The identity a capture in `dir` was launched under. The reports it
@@ -770,8 +795,8 @@ export def identity-of [report: path, run: record, legacy: any]: nothing -> reco
 # through identity-of, two reconciled (reconcile). With none, the
 # capture's own identity.nuon read with its correction applied
 # (correction-of), bound to nothing, BOUND_NONE, a parse or correction
-# failure stopping the read; with no file, the capture alone. Beside the
-# identity-of fields, the reports read.
+# failure stopping the read; with no file, the capture alone, from
+# `none`. Beside the identity-of fields, the reports read.
 export def read-identity [dir: path]: nothing -> record {
     let here = ($dir | path expand)
     let reports = ([($here | path join "gauge.nuon") ($here | path dirname | path join "gauge.nuon")] | uniq | where {|f| $f | path exists })
@@ -791,7 +816,7 @@ export def read-identity [dir: path]: nothing -> record {
         return { identity: $read.identity, from: $FROM_FILE, file: $id_file, corrections: $read.corrections, identity_sha256: $sha, binding: { strength: $BOUND_NONE, unrecorded: [] }, passed: [], seed: null, reports: [] }
     }
     let alone = { launched: false, note: "read from the capture alone; no identity was written at its launch" }
-    { identity: $alone, from: null, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: null, reports: [] }
+    { identity: $alone, from: $FROM_NONE, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: null, reports: [] }
 }
 
 # A correction's substance, what two reports must agree on: its fields
@@ -803,13 +828,16 @@ def correction-key [c: any]: nothing -> any {
     { fields: ($c | get -o fields | default [] | sort-by field), sidecar_sha256: ($c | get -o sidecar_sha256), evidence: ($c | get -o evidence) }
 }
 
-# Where two readings of one run differ over LEGACY_FIELDS, the comparison
-# reconcile makes when either is a report's one identity: each field both
-# identities hold, the mode less its seed, and each reading's seed, the
-# run's recorded one for a report's one identity, else its identity's.
+# Where two readings of one run differ over LEGACY_FIELDS and
+# CORRECTABLE's two, the comparison reconcile makes when either is a
+# report's one identity: each field both identities hold, the mode less
+# its seed, and each reading's seed, the run's recorded one for a report's
+# one identity, else its identity's. A report's one identity holds its
+# image's flags and ELF, one build for every run of its batch, so they
+# compare here and reach `explains`, though binding leaves them out.
 def shared-differences [a: record, b: record]: nothing -> list<any> {
     mut differ = []
-    for name in $LEGACY_FIELDS {
+    for name in ($LEGACY_FIELDS | append $CORRECTABLE) {
         if not ((holds-field $a.identity $name) and (holds-field $b.identity $name)) { continue }
         let path = ($name | split row "." | into cell-path)
         let x = ($a.identity | get -o $path)
@@ -829,11 +857,20 @@ def explains [c: any, field: string, from: any, to: any]: nothing -> bool {
     $c | get -o fields | default [] | any {|x| $x.field == $field and $x.old == $from and $x.new == $to }
 }
 
-# Two reports' readings of one capture's run made one (read-identity).
-# Their recorded `identity_sha256`, where both hold one, equal; their
+# The reading reconcile keeps, the recorded `identity_sha256` with it,
+# both readings' passed directories, and both reports.
+def kept-of [kept: record, a: record, b: record]: nothing -> record {
+    $kept | reject report | update identity_sha256 ([$a.identity_sha256 $b.identity_sha256] | compact | get -o 0) | update passed ($a.passed | append $b.passed) | insert reports [$a.report $b.report]
+}
+
+# Two reports' readings of one capture's run made one (read-identity). A
+# reading from `none`, no evidence, yields to one with evidence, and of
+# two such the report beside the capture is kept. Otherwise, their
+# recorded `identity_sha256`, where both hold one, equal; their
 # corrections, where both hold one, the same correction (correction-key).
-# Their identities compared on every field, or over LEGACY_FIELDS with
-# each side's recorded seed where either is a report's one identity; each
+# Their identities compared on every field, or over LEGACY_FIELDS and
+# CORRECTABLE's two with each side's recorded seed where either is a
+# report's one identity (shared-differences); each
 # difference stands only where one side's correction changed that field
 # from the other side's value to its own, a correction merely present
 # explaining nothing. Anything else stops the read as ambiguous, naming
@@ -844,6 +881,12 @@ def explains [c: any, field: string, from: any, to: any]: nothing -> bool {
 # the `identity_sha256` the one recorded, both readings' passes, and
 # both reports.
 def reconcile [a: record, b: record, here: string]: nothing -> record {
+    let a_none = ($a.from == $FROM_NONE)
+    let b_none = ($b.from == $FROM_NONE)
+    if $a_none or $b_none {
+        let kept = (if $a_none and (not $b_none) { $b } else if $b_none and (not $a_none) { $a } else if ($a.report | path dirname) == $here { $a } else { $b })
+        return (kept-of $kept $a $b)
+    }
     let named = $"($a.report) and ($b.report) read the run in ($here) differently"
     if $a.identity_sha256 != null and $b.identity_sha256 != null and $a.identity_sha256 != $b.identity_sha256 {
         error make { msg: $"($named): an identity of SHA-256 ($a.identity_sha256) against ($b.identity_sha256)" }
@@ -866,7 +909,7 @@ def reconcile [a: record, b: record, here: string]: nothing -> record {
     }
     let rank = {|s: record| [$FROM_FILE $FROM_EMBEDDED $FROM_LEGACY] | enumerate | where item == $s.from | get -o 0.index | default 3 }
     let kept = (if $by == "a" { $a } else if $by == "b" { $b } else if $ka != null and $kb == null { $a } else if $kb != null and $ka == null { $b } else if (do $rank $a) < (do $rank $b) { $a } else if (do $rank $b) < (do $rank $a) { $b } else if ($a.report | path dirname) == $here { $a } else { $b })
-    $kept | reject report | update identity_sha256 ([$a.identity_sha256 $b.identity_sha256] | compact | get -o 0) | update passed ($a.passed | append $b.passed) | insert reports [$a.report $b.report]
+    kept-of $kept $a $b
 }
 
 # The workspace's commit and whether its tree held changes: where the

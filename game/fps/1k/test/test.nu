@@ -2942,8 +2942,11 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # recorded, and one holding another image's run passed over; one
     # build's runs differing in flags refused until a correction makes them
     # one. A call a mutant could make throw is attempted, so its fixture
-    # fails at its own assertion.
+    # fails at its own assertion. The fixtures' own directory starts empty:
+    # a sidecar, an identity file, or a report a run before left reads as
+    # evidence, so a rules directory used again would read another run's.
     let ids = ($dir | path join "identities")
+    if ($ids | path type) == "dir" { rm -r $ids }
     mkdir $ids
     let attempt = {|c: closure| try { do $c } catch {|e| { error: $e.msg } } }
     let debug_flags = "-I src --defsym DEBUG=1 -march=rva23u64 fx-"
@@ -3198,6 +3201,74 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     fx-report $hashes_run "hashes" $full_id [{ run: 1, seed: 1, out: $hashes_run, identity: $full_id, corrections: null, identity_sha256: "fx_second" }] | ignore
     let hashes_msg = (try { gauge read-identity $hashes_run; "" } catch {|e| $e.msg })
     assert ($hashes_msg | str contains "an identity of SHA-256 fx_second against fx_first") $"two reports recording different identity hashes are ambiguous: ($hashes_msg)"
+
+    # a batch-only parent report beside a per-run report, the run's
+    # identity file absent: the flags and the ELF compared in reconciling,
+    # though binding leaves them out, a difference no correction explains
+    # ambiguous, a correction from the batch's own value kept
+    let batch_cases = [
+        { name: "flags_unexplained", batch: ($full_id | update build.flags $debug_flags), corrections: null, says: "build.flags:" }
+        { name: "elf_unexplained", batch: ($full_id | update build.elf_sha256 "fx_elf_other"), corrections: null, says: "build.elf_sha256:" }
+        { name: "flags_wrong_old", batch: ($full_id | update build.flags "-I src other fx-"), corrections: $correction, says: "build.flags:" }
+    ]
+    for c in $batch_cases {
+        let home = ($rd | path join $"batch_($c.name)")
+        let one = ($home | path join "run_1")
+        fx-report $home "batch" $c.batch [{ run: 1, seed: 1, out: $one }] | ignore
+        fx-report $one "batch" $full_id [{ run: 1, seed: 1, out: $one, identity: $full_id, corrections: $c.corrections }] | ignore
+        let msg = (try { gauge read-identity $one; "" } catch {|e| $e.msg })
+        assert ($msg | str contains $c.says) $"a batch-only parent and a per-run report differing in ($c.name), ambiguous: ($msg)"
+    }
+    let null_elf = ($rd | path join "batch_null_elf")
+    let null_elf_run = ($null_elf | path join "run_1")
+    let elf_correction = { sidecar: ($rd | path join "c" "identity_correction.nuon"), sidecar_sha256: "fx_side_elf", fields: [{ field: "build.elf_sha256", old: null, new: "fx_elf" }], evidence: "the fixture's own" }
+    fx-report $null_elf "batch" ($full_id | update build.elf_sha256 null) [{ run: 1, seed: 1, out: $null_elf_run }] | ignore
+    fx-report $null_elf_run "batch" $full_id [{ run: 1, seed: 1, out: $null_elf_run, identity: $full_id, corrections: $elf_correction }] | ignore
+    let from_null_elf = (do $attempt { gauge read-identity $null_elf_run })
+    let null_elf_held = ([($from_null_elf | get -o identity.build.elf_sha256) ($from_null_elf | get -o corrections.fields.0.old) ($from_null_elf | get -o reports | default [] | length)] == [fx_elf null 2])
+    assert $null_elf_held $"a batch-only parent's null ELF corrected to a hash beside it, reconciled to the correction: ($from_null_elf)"
+
+    # no evidence: a capture-only report's identity file arriving later, a
+    # file source bound unverified; a capture-only report beside the capture
+    # and a parent batch report supplied later, the parent's identity and
+    # seed read, both reports and the parent's passed directory kept; two
+    # capture-only reports, no evidence
+    let placeholder = { launched: false, note: "read from the capture alone; no identity was written at its launch" }
+    let arrived = ($rd | path join "arrived")
+    fx-report $arrived "capture" $placeholder [{ run: 1, seed: null, out: $arrived }] | ignore
+    fx-id-file $arrived $full_id | ignore
+    let from_arrived = (do $attempt { gauge read-identity $arrived })
+    assert equal [($from_arrived | get -o from) ($from_arrived | get -o binding.strength) ($from_arrived | get -o identity.mode.seed)] [file none 1] $"a capture-only report's identity file arriving later, a file source bound unverified: ($from_arrived)"
+    let later = ($rd | path join "later")
+    let later_run = ($later | path join "run_1")
+    let later_elsewhere = ($rd | path join "later_elsewhere" "run_1")
+    fx-id-file $later_elsewhere ($full_id | update mode.seed 5) | ignore
+    fx-report $later_run "capture" $placeholder [{ run: 1, seed: null, out: $later_run }] | ignore
+    fx-report $later "later" $full_id [{ run: 1, seed: 1, out: $later_elsewhere }] | ignore
+    let from_later = (do $attempt { gauge read-identity $later_run })
+    let later_parent = ([($from_later | get -o from) ($from_later | get -o identity.build.image_sha256) ($from_later | get -o seed)] == [legacy fx_full 1])
+    assert $later_parent $"a capture-only report beside a parent supplied later yields to the parent's identity and seed: ($from_later)"
+    assert equal [($from_later | get -o reports | default [] | length) ($from_later | get -o passed | default [] | length)] [2 1] $"the parent's passed directory and both reports kept on a choice over no evidence: ($from_later)"
+    let blank = ($rd | path join "blank")
+    let blank_run = ($blank | path join "run_1")
+    fx-report $blank "blank" $placeholder [{ run: 1, seed: null, out: $blank_run }] | ignore
+    fx-report $blank_run "blank" $placeholder [{ run: 1, seed: null, out: $blank_run }] | ignore
+    let from_blank = (do $attempt { gauge read-identity $blank_run })
+    assert equal [($from_blank | get -o from) ($from_blank | get -o reports | default [] | length)] [none 2] $"two capture-only reports, no evidence, both named: ($from_blank)"
+
+    # read's run record (read-run): the seed its report recorded, else its
+    # own identity's for a file or an embedded reading, else null; the
+    # identity the run's own for those alone
+    let reading = {|from: string, seed: any| { identity: ($full_id | update mode.seed 4), from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: $seed, reports: [] } }
+    let run_for = {|from: string, seed: any| gauge read-run (do $reading $from $seed) "capture" {} { rows: [] } null }
+    let legacy_unseeded = (do $run_for "legacy" null)
+    assert equal $legacy_unseeded.seed null $"a legacy reading with no recorded seed keeps it unrecorded: ($legacy_unseeded.seed)"
+    assert equal $legacy_unseeded.identity null "a legacy reading's batch identity is never the run's own"
+    let none_unseeded = (do $run_for "none" null)
+    assert equal [$none_unseeded.seed $none_unseeded.identity] [null null] "no evidence leaves the seed and the run's identity unrecorded"
+    assert equal (do $run_for "embedded" null).seed 4 "an embedded reading with no recorded seed takes its own identity's"
+    assert equal (do $run_for "legacy" 7).seed 7 "a recorded seed stands"
+    assert equal (do $run_for "file" null).identity.mode.seed 4 "a file reading's identity is the run's own"
     let relocated = ($rd | path join "relocated")
     let relocated_run = ($relocated | path join "run_1")
     let moved_side = ($correction | update sidecar ($rd | path join "b" "identity_correction.nuon"))
