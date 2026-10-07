@@ -3280,6 +3280,21 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let from_old_real = (do $attempt { gauge read-identity $old_real })
     assert equal [($from_old_real | get -o from) ($from_old_real | get -o binding.strength)] [file legacy] $"an embedded placeholder falls through to the report's own real identity, its file bound at legacy: ($from_old_real)"
 
+    # read's run record (read-run): the seed its report recorded, else its
+    # own identity's for a file or an embedded reading, else null; the
+    # identity the run's own for those alone; ahead of the end-to-end read,
+    # which reaches the same record through read-capture
+    let reading = {|from: string, seed: any| { identity: ($full_id | update mode.seed 4), from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: $seed, reports: [] } }
+    let run_for = {|from: string, seed: any| gauge read-run (do $reading $from $seed) "capture" {} { rows: [] } null }
+    let legacy_unseeded = (do $run_for "legacy" null)
+    assert equal $legacy_unseeded.seed null $"a legacy reading with no recorded seed keeps it unrecorded: ($legacy_unseeded.seed)"
+    assert equal $legacy_unseeded.identity null "a legacy reading's batch identity is never the run's own"
+    let none_unseeded = (do $run_for "none" null)
+    assert equal [$none_unseeded.seed $none_unseeded.identity] [null null] "no evidence leaves the seed and the run's identity unrecorded"
+    assert equal (do $run_for "embedded" null).seed 4 "an embedded reading with no recorded seed takes its own identity's"
+    assert equal (do $run_for "legacy" 7).seed 7 "a recorded seed stands"
+    assert equal (do $run_for "file" null).identity.mode.seed 4 "a file reading's identity is the run's own"
+
     # read end to end (read-capture), the associated report holding no
     # identity at all, its run's seed recorded and unrecorded: the written
     # report opened again, the placeholder its identity alone, the run's
@@ -3301,20 +3316,6 @@ export def gauge-rules [dir: path]: nothing -> nothing {
             assert $held $"a capture whose report holds no identity read end to end, ($c.name) into ($pass.at | path basename): the placeholder the report's alone, the run's null, from none, its seed: ($read) ($run | select -o identity identity_from seed | to nuon)"
         }
     }
-
-    # read's run record (read-run): the seed its report recorded, else its
-    # own identity's for a file or an embedded reading, else null; the
-    # identity the run's own for those alone
-    let reading = {|from: string, seed: any| { identity: ($full_id | update mode.seed 4), from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: $seed, reports: [] } }
-    let run_for = {|from: string, seed: any| gauge read-run (do $reading $from $seed) "capture" {} { rows: [] } null }
-    let legacy_unseeded = (do $run_for "legacy" null)
-    assert equal $legacy_unseeded.seed null $"a legacy reading with no recorded seed keeps it unrecorded: ($legacy_unseeded.seed)"
-    assert equal $legacy_unseeded.identity null "a legacy reading's batch identity is never the run's own"
-    let none_unseeded = (do $run_for "none" null)
-    assert equal [$none_unseeded.seed $none_unseeded.identity] [null null] "no evidence leaves the seed and the run's identity unrecorded"
-    assert equal (do $run_for "embedded" null).seed 4 "an embedded reading with no recorded seed takes its own identity's"
-    assert equal (do $run_for "legacy" 7).seed 7 "a recorded seed stands"
-    assert equal (do $run_for "file" null).identity.mode.seed 4 "a file reading's identity is the run's own"
     let relocated = ($rd | path join "relocated")
     let relocated_run = ($relocated | path join "run_1")
     let moved_side = ($correction | update sidecar ($rd | path join "b" "identity_correction.nuon"))
