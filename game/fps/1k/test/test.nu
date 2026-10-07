@@ -3231,8 +3231,9 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # no evidence: a capture-only report's identity file arriving later, a
     # file source bound unverified; a capture-only report beside the capture
     # and a parent batch report supplied later, the parent's identity and
-    # seed read, both reports and the parent's passed directory kept; two
-    # capture-only reports, no evidence
+    # seed read, both reports and both readings' passed directories kept,
+    # the capture's unparseable file passed by the no-evidence reading too;
+    # two capture-only reports, no evidence
     let placeholder = { launched: false, note: "read from the capture alone; no identity was written at its launch" }
     let arrived = ($rd | path join "arrived")
     fx-report $arrived "capture" $placeholder [{ run: 1, seed: null, out: $arrived }] | ignore
@@ -3243,12 +3244,13 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let later_run = ($later | path join "run_1")
     let later_elsewhere = ($rd | path join "later_elsewhere" "run_1")
     fx-id-file $later_elsewhere ($full_id | update mode.seed 5) | ignore
+    fx-id-file $later_run {} --raw "{ not nuon" | ignore
     fx-report $later_run "capture" $placeholder [{ run: 1, seed: null, out: $later_run }] | ignore
     fx-report $later "later" $full_id [{ run: 1, seed: 1, out: $later_elsewhere }] | ignore
     let from_later = (do $attempt { gauge read-identity $later_run })
     let later_parent = ([($from_later | get -o from) ($from_later | get -o identity.build.image_sha256) ($from_later | get -o seed)] == [legacy fx_full 1])
     assert $later_parent $"a capture-only report beside a parent supplied later yields to the parent's identity and seed: ($from_later)"
-    assert equal [($from_later | get -o reports | default [] | length) ($from_later | get -o passed | default [] | length)] [2 1] $"the parent's passed directory and both reports kept on a choice over no evidence: ($from_later)"
+    assert equal [($from_later | get -o reports | default [] | length) ($from_later | get -o passed | default [] | length)] [2 3] $"both readings' passed directories and both reports kept on a choice over no evidence, the capture's unparseable file passed by each: ($from_later)"
     let blank = ($rd | path join "blank")
     let blank_run = ($blank | path join "run_1")
     fx-report $blank "blank" $placeholder [{ run: 1, seed: null, out: $blank_run }] | ignore
