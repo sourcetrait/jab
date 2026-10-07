@@ -56,7 +56,7 @@
 # room beyond it can be reached; a map whose magic is wrong, which exits
 # 6, and Render One's map cut short, which exits 7, each saying so on
 # the UART.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
@@ -1522,7 +1522,7 @@ def hot-functions [image: path]: nothing -> nothing {
 # the tool, since the test's build is a debug one.
 def release-strings [image: path]: nothing -> nothing {
     let here = ($env.FILE_PWD | path join ".." | path expand)
-    let tool = ($here | path join ".." ".." ".." "sdk" "nu" "jab.nu" | path expand)
+    let tool = ($here | path join ".." ".." "sdk" "nu" "jab.nu" | path expand)
     let built = (^nu $tool build $here | complete)
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
     let release = (jab program-out $here "release" | path join "fps.jab")

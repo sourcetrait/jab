@@ -8,11 +8,11 @@
 # everything the run writes land in `out`; a fault on the UART is
 # resolved to its routine from the ELF beside the image through the
 # toolchain the build's flags name. `just adv play` builds and runs it.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 
 def main [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let workspace = ($game | path join ".." ".." ".." | path expand)
+    let workspace = ($game | path join ".." ".." | path expand)
     let tree = (jab program-shard $game "asset" | path join $map)
     if not ($tree | path join "map.nuon" | path exists) { error make { msg: $"no tree for ($map) at ($tree)" } }
     mkdir $out

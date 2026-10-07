@@ -10,7 +10,7 @@
 # launch of a debug build with Render Zero's tree; the table it played is
 # kept beside the run as pad.nuon, so a seed that faults is replayed by
 # its number.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 use std/assert
 
 const RECORD = 64

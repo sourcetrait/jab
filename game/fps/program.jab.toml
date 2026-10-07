@@ -1,8 +1,8 @@
 name = 'fps'
-sdk = '../../../sdk'
-workspace = '../../..'
-includes = ['../../../sdk/src']
-link = '../../../sdk/src/program.ld'
+sdk = '../../sdk'
+workspace = '../..'
+includes = ['../../sdk/src']
+link = '../../sdk/src/program.ld'
 target_assets = 'render_0'
 prepare = 'nu/prepare.nu'
 adv = 'nu/adv.nu'

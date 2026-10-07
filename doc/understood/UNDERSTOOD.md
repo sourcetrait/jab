@@ -52,8 +52,8 @@ runs only under QEMU's `virt` machine.
 
 Build and run with `just` and nushell, from anywhere in the repository,
 a program named by its path from the root or by a shortcut
-`workspace.jab.toml` names, `fps` for `game/fps/1k`: `just build` (or
-`just build example`, `just build game/fps/1k`), `just test` (or `just
+`workspace.jab.toml` names, `fps` for `game/fps`: `just build` (or
+`just build example`, `just build game/fps`), `just test` (or `just
 test example/pad`), `just run example/helloworld` or `just run fps`, and
 `just watch`; `just adv` lists the commands for development. `just run`
 opens QEMU's own window when a display server is present, SDL with
@@ -76,7 +76,7 @@ or program, else the workspace's `extern/riscv`, else the tools on
 `extern/qemu`, its `qemu-system-riscv64` under `bin/` or at its top,
 `.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
 a test alike; an `extern/qemu` with no binary in it is an error, never a
-fall to `PATH`. A program the workspace does not list, `game/fps/1k`
+fall to `PATH`. A program the workspace does not list, `game/fps`
 the first, builds against it: its kernel is built here with the same
 symbols, and the generic disk, the toolchain link, the shims, and
 discovery are this workspace's, and its output lands in the one target
@@ -205,8 +205,8 @@ span beside them. `test/harts` and `test/jobs` hold an idle hart under
 0.05 of a core that way.
 
 `just bench <program>/<bench>` runs a program's bench, the NUON file of
-that name under the program's `bench/`: `just bench game/fps/1k/cadence`
-(or `fps/cadence`) is `game/fps/1k/bench/cadence.nuon`. The program is
+that name under the program's `bench/`: `just bench game/fps/cadence`
+(or `fps/cadence`) is `game/fps/bench/cadence.nuon`. The program is
 built in the bench's tree, then each step runs in order, a script of the
 program's with its arguments and its own output directory; a step a
 person attends is announced and counted down first, and a step that

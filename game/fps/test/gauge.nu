@@ -52,7 +52,7 @@
 # `bench-report` reads a run of a bench whose steps are this script's,
 # every cadence's frames pooled. `just adv gauge`, `just adv gauge-play`,
 # `just adv gauge-read`, and `just adv gauge-compare` run it, and `just
-# bench game/fps/1k/cadence` runs `play`, `run`, and `bench-report`.
+# bench game/fps/cadence` runs `play`, `run`, and `bench-report`.
 # A run's identity is read through one reader (identity-of): the run's
 # identity.nuon, its directory found beside its report before the path
 # the report recorded, with an audited correction beside it applied
@@ -62,12 +62,12 @@
 # asked. `run --cpu` reads every QEMU thread's CPU at 5 s, at each
 # placement, and at the route's end, kept whole in run.nuon and reported
 # as host-time windows (cpu-windows).
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ./pose.nu
 
 # the workspace, four directories above this script
-const WORKSPACE = (path self | path dirname | path join ".." ".." ".." ".." | path expand)
+const WORKSPACE = (path self | path dirname | path join ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
 const SCHEMAS = [1 2 3 4]
@@ -423,7 +423,7 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     if $tree not-in [release debug] { error make { msg: $"--tree is release or debug, not ($tree)" } }
     let program = ($env.FILE_PWD | path join ".." | path expand)
     let game = $program
-    let workspace = ($game | path join ".." ".." ".." | path expand)
+    let workspace = ($game | path join ".." ".." | path expand)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let built = (jab program-out $program $tree)
     let target = (if $out == "" { $built | path join "gauge" $stamp } else { $out | path expand })

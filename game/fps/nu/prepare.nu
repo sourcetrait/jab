@@ -2,7 +2,7 @@
 # the manifest's `prepare`: every map source under content/map compiled
 # into the game's asset shard of the target, the trees the program's disk
 # and its tests read, alike for every phase.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 
 def main [phase: string] {
     let game = ($env.FILE_PWD | path join ".." | path expand)

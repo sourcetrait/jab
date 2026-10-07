@@ -19,7 +19,7 @@
 # reports over the API, a round, an android's, the frame struck, a
 # pickup, or a trace, is printed with its fields. `just adv pose`
 # builds and runs it.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 use ../nu/map.nu
 
 const RECORD = 64

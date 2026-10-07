@@ -6,7 +6,7 @@
 # 1.44; `set unstable` below runs them on 1.32 to 1.43 without
 # `--unstable`, and changes nothing on a later just. A program is named
 # by its path from here, its words spaced or joined by slashes,
-# example/bounce, game/fps/1k, or by a shortcut workspace.jab.toml
+# example/bounce, game/fps, or by a shortcut workspace.jab.toml
 # names, fps. `--set debug,stats` after a
 # recipe names the build symbols. A recipe's arguments reach the tool
 # each as it was given, spaces and all. Everything the tool writes goes
@@ -27,14 +27,14 @@ jab := here / "sdk" / "nu" / "jab.nu"
 
 default: build
 
-# `just build`, `just build example`, `just build game/fps/1k --set
+# `just build`, `just build example`, `just build game/fps --set
 # debug`; what is up to date is skipped
 # Build the kernel and every program, or the programs under a path
 [script("nu")]
 build *args:
     def --wrapped main [...args] { ^nu '{{jab}}' build '{{here}}' ...$args }
 
-# `just test`, `just test example/pad`, `just test game/fps/1k`; each
+# `just test`, `just test example/pad`, `just test game/fps`; each
 # test's output, then a summary, failing if any fails
 # Build with DEBUG set, then test every program, or those under a path
 [script("nu")]
@@ -53,7 +53,7 @@ run +args:
 
 # From any shell while a program runs; when the run ends, one NUON record
 # on it to paste, per thread the steady CPU seconds a second after the
-# first five, or `--skip N`. `just watch bench game/fps/1k/cadence`, in
+# first five, or `--skip N`. `just watch bench game/fps/cadence`, in
 # a second terminal before or during that bench, records every run of it
 # and reports the whole bench when it ends, packing the run again with
 # its recording into the one .tar it names last
@@ -62,7 +62,7 @@ run +args:
 watch *args:
     def --wrapped main [...args] { ^nu '{{jab}}' watch ...$args '{{here}}' }
 
-# `just bench` lists them; `just bench game/fps/1k/cadence` runs one,
+# `just bench` lists them; `just bench game/fps/cadence` runs one,
 # `--only play0,cadence0_1` the steps named; nothing is deleted, and
 # everything is written to the target, the run packed at the end into
 # one .tar beside it, whose path the last line prints, the file to copy

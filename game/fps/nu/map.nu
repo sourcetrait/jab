@@ -8,7 +8,7 @@
 # is the compiler: `nu map.nu compile <source> <out> [--content <dir>]`
 # writes the tree the engine reads under <out>/<name>/ with a plan view
 # an SVG a storey. src/map.inc spells the same layout.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 
 const magic = 0x0042414a            # JAB and a zero, little-endian
 const header_size = 8
@@ -30,7 +30,7 @@ const plan_margin = 1.0
 const here = (path self | path dirname)
 # The plan view's labels are drawn in the kernel's console font, the
 # glyph table the kernel assembles, so the renderer needs no font
-const font_path = ($here | path join ".." ".." ".." ".." "kernel" "src" "font.S")
+const font_path = ($here | path join ".." ".." ".." "kernel" "src" "font.S")
 const glyph_width = 12
 const glyph_height = 24
 

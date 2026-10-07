@@ -2072,14 +2072,14 @@ def programs-of [ws: path]: nothing -> list<string> {
 }
 
 # A path given as words, each split on its slashes, so `example bounce`,
-# `example/bounce`, and `game/fps/1k` all read; "" for none.
+# `example/bounce`, and `game/fps` all read; "" for none.
 def path-words [words: list<string>]: nothing -> string {
     $words | each {|w| $w | split row "/" } | flatten | where {|w| $w != "" and $w != "." } | str join "/"
 }
 
 # A program's path in the workspace from words (path-words), a word the
 # workspace's `shortcuts` table names standing for its path: `fps` for
-# game/fps/1k.
+# game/fps.
 def program-path [ws: path, words: list<string>]: nothing -> string {
     let at = (path-words $words)
     let shortcuts = (open ($ws | path expand | path join "workspace.jab.toml") | get -o shortcuts | default {})
@@ -2101,7 +2101,7 @@ def programs-under [ws: path, words: list<string>] {
 # because it ends in an error.
 def program-at [ws: path, words: list<string>] {
     let at = (program-path $ws $words)
-    if $at == "" { error make {msg: "a program by its path from the workspace, or its shortcut: example/bounce, game/fps/1k, fps"} }
+    if $at == "" { error make {msg: "a program by its path from the workspace, or its shortcut: example/bounce, game/fps, fps"} }
     let all = (programs-of $ws)
     if $at not-in $all { error make {msg: $"no program at ($at); the programs: ($all | str join ', ')"} }
     $ws | path expand | path join $at
@@ -2676,7 +2676,7 @@ def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: s
 
 # Build: at a workspace's root the kernel and every program, or the
 # programs at or under a path (`example`, `example/bounce`,
-# `game/fps/1k`), each prepared first; at a program's directory that
+# `game/fps`), each prepared first; at a program's directory that
 # program, prepared; with --kernel at the kernel's, the kernel. Release
 # unless --set says otherwise.
 def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {

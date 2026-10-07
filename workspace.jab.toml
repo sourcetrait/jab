@@ -42,6 +42,6 @@ programs = [
 ]
 
 # A word standing for a program's path wherever the tool takes one:
-# `just run fps` is `just run game/fps/1k`.
+# `just run fps` is `just run game/fps`.
 [shortcuts]
-fps = 'game/fps/1k'
+fps = 'game/fps'

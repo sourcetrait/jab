@@ -2,7 +2,7 @@
 # audio: your own play at each first, then the gauge's route at each,
 # three seeded runs a batch, the batches in the order 0, 1, 2, 2, 1, 0 so
 # a drift of the host's falls on every cadence alike. `just bench
-# game/fps/1k/cadence` runs it, `just watch bench game/fps/1k/cadence` in
+# game/fps/cadence` runs it, `just watch bench game/fps/cadence` in
 # a second terminal records every run of it.
 {
   summary: "the three cadences: your play at each, then the route at each, 0 1 2 2 1 0, in your window with live audio"

@@ -3,7 +3,7 @@
 # the content rendered and compiled, a capture of placed poses, the smoke
 # test, robojab's play, and the gauge. A command that runs the program
 # builds it first through the SDK, its maps compiled with it.
-use ../../../../sdk/nu/jab.nu
+use ../../../sdk/nu/jab.nu
 
 const here = (path self | path dirname)
 
@@ -14,7 +14,7 @@ def main [] {
 # The game's directory, the workspace's, and the SDK's tool.
 def places []: nothing -> record<game: string, workspace: string, tool: string> {
     let game = ($here | path join ".." | path expand)
-    let workspace = ($game | path join ".." ".." ".." | path expand)
+    let workspace = ($game | path join ".." ".." | path expand)
     { game: $game, workspace: $workspace, tool: ($workspace | path join "sdk" "nu" "jab.nu") }
 }
 
@@ -22,7 +22,7 @@ def places []: nothing -> record<game: string, workspace: string, tool: string> 
 # compiled first.
 def build [set: string]: nothing -> nothing {
     let p = (places)
-    ^nu $p.tool build $p.workspace "game/fps/1k" --set $set
+    ^nu $p.tool build $p.workspace "game/fps" --set $set
 }
 
 # Every asset under content/ rendered to the file beside it the engine
