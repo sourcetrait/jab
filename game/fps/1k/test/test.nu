@@ -3258,6 +3258,50 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let from_blank = (do $attempt { gauge read-identity $blank_run })
     assert equal [($from_blank | get -o from) ($from_blank | get -o reports | default [] | length)] [none 2] $"two capture-only reports, no evidence, both named: ($from_blank)"
 
+    # 7c37b3b's capture-only reports, the placeholder embedded in the run as
+    # well as the report's own: no evidence, so a real parent's identity and
+    # seed read, a file supplied later bound unverified and never passed
+    # over, and where the report's own identity is real, binding falling
+    # through to it at legacy
+    let old_alone = ($rd | path join "old_alone")
+    let old_alone_run = ($old_alone | path join "run_1")
+    fx-report $old_alone_run "capture" $placeholder [{ run: 1, seed: null, out: $old_alone_run, identity: $placeholder, corrections: null }] | ignore
+    fx-report $old_alone "parent" $full_id [{ run: 1, seed: 1, out: $old_alone_run }] | ignore
+    let from_old_alone = (do $attempt { gauge read-identity $old_alone_run })
+    assert equal [($from_old_alone | get -o from) ($from_old_alone | get -o identity.build.image_sha256) ($from_old_alone | get -o seed)] [legacy fx_full 1] $"a 7c37b3b capture-only report, its placeholder embedded, yields to a real parent's identity and seed: ($from_old_alone)"
+    let old_later = ($rd | path join "old_later")
+    fx-report $old_later "capture" $placeholder [{ run: 1, seed: null, out: $old_later, identity: $placeholder, corrections: null }] | ignore
+    fx-id-file $old_later $full_id | ignore
+    let from_old_later = (do $attempt { gauge read-identity $old_later })
+    assert equal [($from_old_later | get -o from) ($from_old_later | get -o binding.strength) ($from_old_later | get -o passed | default [] | length)] [file none 0] $"a 7c37b3b capture-only report's identity file supplied later, a file source bound unverified, never passed over: ($from_old_later)"
+    let old_real = ($rd | path join "old_real")
+    fx-report $old_real "batch" $full_id [{ run: 1, seed: 1, out: $old_real, identity: $placeholder, corrections: null }] | ignore
+    fx-id-file $old_real $full_id | ignore
+    let from_old_real = (do $attempt { gauge read-identity $old_real })
+    assert equal [($from_old_real | get -o from) ($from_old_real | get -o binding.strength)] [file legacy] $"an embedded placeholder falls through to the report's own real identity, its file bound at legacy: ($from_old_real)"
+
+    # read end to end (read-capture), the associated report holding no
+    # identity at all, its run's seed recorded and unrecorded: the written
+    # report opened again, the placeholder its identity alone, the run's
+    # null, from none, the recorded seed kept and the unrecorded null; read
+    # first beside the capture, then once more beside that report, the same
+    let capture_bytes = (fx-bytes (fx-items 3 --schema 4 --asked))
+    for c in [{ name: "seeded", seed: 1 } { name: "unseeded", seed: null }] {
+        let home = ($rd | path join $"absent_($c.name)")
+        let one = ($home | path join "run_1")
+        mkdir $one
+        $capture_bytes | save --raw -f ($one | path join "api.out")
+        { label: "absent", runs: [{ run: 1, seed: $c.seed, out: $one }] } | to nuon | save --raw -f ($home | path join "gauge.nuon")
+        for pass in [{ out: "", at: $one } { out: ($home | path join "again"), at: ($home | path join "again") }] {
+            let read = (do $attempt { gauge read-capture ($one | path join "api.out") "" $pass.out "absent"; { ok: true } })
+            let written = ($pass.at | path join "gauge.nuon")
+            let doc = (if ($written | path exists) { open $written } else { {} })
+            let run = ($doc | get -o runs.0 | default {})
+            let held = ([($read | get -o ok) ($doc | get -o identity.launched) ($run | get -o identity) ($run | get -o identity_from) ($run | get -o seed)] == [true false null none $c.seed])
+            assert $held $"a capture whose report holds no identity read end to end, ($c.name) into ($pass.at | path basename): the placeholder the report's alone, the run's null, from none, its seed: ($read) ($run | select -o identity identity_from seed | to nuon)"
+        }
+    }
+
     # read's run record (read-run): the seed its report recorded, else its
     # own identity's for a file or an embedded reading, else null; the
     # identity the run's own for those alone

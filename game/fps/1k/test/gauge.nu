@@ -197,6 +197,9 @@ const FROM_FILE = "file"
 const FROM_EMBEDDED = "embedded"
 const FROM_LEGACY = "legacy"
 const FROM_NONE = "none"
+# the identity a reading with no evidence carries, the capture alone's,
+# its report's identity and never its run's (read-run)
+const ALONE = { launched: false, note: "read from the capture alone; no identity was written at its launch" }
 # how a found identity file binds to its report's run, strongest first
 # (binding-of): the SHA-256 of the file the run records; the identity the
 # run embeds, on every field but CORRECTABLE's; the report's one
@@ -353,22 +356,28 @@ def "main play" [
     report $label $ran_id [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: null }] $at.out
 }
 
-# Read a capture, a run's api.out: under the identity it was launched
-# with (read-identity), through the reports it belongs to when there are
-# any, else its own identity.nuon with its correction applied, else what
-# the capture alone says, every directory passed over and every report
-# reconciled named, the reading from a report's one identity or the
-# capture alone the report's identity and never the run's own; the
-# run.nuon its launch wrote beside it; the legs
-# from `--route`, else the route kept beside the capture, else the one
-# the identity names, refused unless it is the route that played
-# (legs-for), and one leg, play, when no route is recorded.
+# Read a capture, a run's api.out (read-capture).
 def "main read" [
     api: path                    # the capture
     --route: string = ""         # the route the capture played, for its legs
     --out: string = ""           # where gauge.nuon lands, beside the capture unless given
     --label: string = ""         # a name for the build in the summary
 ] {
+    read-capture $api $route $out $label
+}
+
+# Read a capture, a run's api.out: under the identity it was launched
+# with (read-identity), through the reports it belongs to when there are
+# any, else its own identity.nuon with its correction applied, else what
+# the capture alone says, every directory passed over and every report
+# reconciled named, the reading from a report's one identity or no
+# evidence the report's identity and never the run's own (read-run); the
+# run.nuon its launch wrote beside it; the legs from `route`, else the
+# route kept beside the capture, else the one the identity names, refused
+# unless it is the route that played (legs-for), and one leg, play, when
+# no route is recorded; the report written in `out`, beside the capture
+# when empty.
+export def read-capture [api: path, route: string, out: string, label: string]: nothing -> nothing {
     let file = ($api | path expand)
     let dir = ($file | path dirname)
     let read_id = (read-identity $dir)
@@ -700,11 +709,19 @@ def legacy-differences [found: any, batch: any, seed: any]: nothing -> record<di
     { differ: $differ, unrecorded: $unrecorded }
 }
 
-# Whether a report's identity is no evidence of its runs: absent, or the
-# placeholder a read of the capture alone writes, `launched` false.
+# Whether an identity, a report's or the one embedded for a run, is no
+# evidence of its run: absent, or the placeholder a read of the capture
+# alone writes, `launched` false (ALONE, and in a run as 7c37b3b's read
+# embedded it).
 def no-evidence [id: any]: nothing -> bool {
     if $id == null { return true }
     ($id | describe | str starts-with "record") and (($id | get -o launched) == false)
+}
+
+# An identity as evidence of its run, or null where it is none
+# (no-evidence).
+def evidence-of [id: any]: nothing -> any {
+    if (no-evidence $id) { null } else { $id }
 }
 
 # An identity less CORRECTABLE's fields, the two a correction may change.
@@ -716,7 +733,8 @@ def less-correctable [id: any]: nothing -> any {
 # How an identity file found for a report's run binds to it: at
 # BOUND_HASH when the run records `identity_sha256`, the file's raw
 # SHA-256, `sha`, equal to it; else at BOUND_EMBEDDED when the run embeds
-# its identity, the file's identity as parsed, `found`, equal to it on
+# an identity that is evidence (evidence-of), a placeholder none, the
+# file's identity as parsed, `found`, equal to it on
 # every field but CORRECTABLE's; else at BOUND_LEGACY against the
 # report's one identity, `legacy` (legacy-differences); else at
 # BOUND_NONE, nothing to bind it to, no evidence (no-evidence) and the
@@ -726,8 +744,8 @@ def less-correctable [id: any]: nothing -> any {
 # unrecorded.
 def binding-of [found: any, error: any, sha: string, run: record, legacy: any]: nothing -> record<strength: string, bound: bool, reasons: list<string>, unrecorded: list<string>> {
     let recorded = ($run | get -o identity_sha256)
-    let embedded = ($run | get -o identity)
-    let batch = (if (no-evidence $legacy) { null } else { $legacy })
+    let embedded = (evidence-of $run.identity?)
+    let batch = (evidence-of $legacy)
     let strength = (if $recorded != null { $BOUND_HASH } else if $embedded != null { $BOUND_EMBEDDED } else if $batch != null { $BOUND_LEGACY } else { $BOUND_NONE })
     if $strength == $BOUND_HASH {
         let bound = ($sha == $recorded)
@@ -750,11 +768,12 @@ def binding-of [found: any, error: any, sha: string, run: record, legacy: any]: 
 # A run's effective identity and where it came from. The run's identity
 # file, tried in each of its directories (run-dirs), when it binds to the
 # run (binding-of), read with its correction applied (correction-of);
-# else the identity the report embedded for the run, its correction
-# provenance and its recorded `identity_sha256` with it; else the
-# report's one identity, as a report from before per-run identities holds
-# it, from `none` where that is no evidence (no-evidence), a file found
-# against it still from the file, bound at BOUND_NONE, unverified. A
+# else the identity the report embedded for the run where it is evidence
+# (evidence-of), its correction provenance and its recorded
+# `identity_sha256` with it; else the report's one identity, as a report
+# from before per-run identities holds it; else, with no evidence
+# (no-evidence), ALONE from `none`, a file found against no evidence
+# still from the file, bound at BOUND_NONE, unverified. A
 # directory whose file does not bind is passed over, named with its
 # strength and reasons, its sidecar never read; a bound file that does
 # not parse, or whose correction fails its checks, stops the read, never
@@ -780,12 +799,12 @@ export def identity-of [report: path, run: record, legacy: any]: nothing -> reco
         let read = (correction-of $file)
         return { identity: $read.identity, from: $FROM_FILE, file: $file, corrections: $read.corrections, identity_sha256: $sha, binding: { strength: $b.strength, unrecorded: $b.unrecorded }, passed: $passed, seed: $seed }
     }
-    let embedded = ($run | get -o identity)
+    let embedded = (evidence-of ($run | get -o identity))
     if $embedded != null {
         return { identity: $embedded, from: $FROM_EMBEDDED, file: null, corrections: ($run | get -o corrections), identity_sha256: ($run | get -o identity_sha256), binding: null, passed: $passed, seed: $seed }
     }
     let from = (if (no-evidence $legacy) { $FROM_NONE } else { $FROM_LEGACY })
-    { identity: $legacy, from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: $passed, seed: $seed }
+    { identity: (if $from == $FROM_NONE { $ALONE } else { $legacy }), from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: $passed, seed: $seed }
 }
 
 # The identity a capture in `dir` was launched under. The reports it
@@ -815,8 +834,7 @@ export def read-identity [dir: path]: nothing -> record {
         let sha = (open --raw $id_file | into binary | hash sha256)
         return { identity: $read.identity, from: $FROM_FILE, file: $id_file, corrections: $read.corrections, identity_sha256: $sha, binding: { strength: $BOUND_NONE, unrecorded: [] }, passed: [], seed: null, reports: [] }
     }
-    let alone = { launched: false, note: "read from the capture alone; no identity was written at its launch" }
-    { identity: $alone, from: $FROM_NONE, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: null, reports: [] }
+    { identity: $ALONE, from: $FROM_NONE, file: null, corrections: null, identity_sha256: null, binding: null, passed: [], seed: null, reports: [] }
 }
 
 # A correction's substance, what two reports must agree on: its fields
