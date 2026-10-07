@@ -6,7 +6,7 @@ and `sprite/` the images, `ambient/` the pieces played by sector, and
 the file the engine reads: an image as an SVG rendered to a PNG by
 `rust/svg2png`, an ambient piece as a note list rendered to a MIDI
 file by `nu/ambient.nu`, a sound as a synthesis recipe rendered to PCM
-by `nu/sound.nu`; `just adv render` makes each from the other. A map
+by `nu/sound.nu`; `just do render` makes each from the other. A map
 source compiles through `nu/map.nu` into the tree a run carries.
 
 ## The look

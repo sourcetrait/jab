@@ -28,7 +28,7 @@
 # programs alike. DEBUG picks the target's debug tree, and every other
 # build lands in its release tree, so the two coexist. A program's
 # manifest may name a `prepare` script, run before it is built, tested,
-# or run, and an `adv` script, whose commands `just adv` lists. `test`
+# or run, and an `adv` script, whose commands `just do` lists. `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -2178,7 +2178,7 @@ def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> 
     if not ($results | all {|r| $r.passed }) { exit 1 }
 }
 
-# The development commands, `just adv`: with no command the list, the
+# The development commands, `just do`: with no command the list, the
 # SDK's own, probe and clean, then the kernel's and every program's, the
 # `main <command>` definitions of the nushell script its manifest's `adv`
 # names; with one, the SDK's or the script's that defines it, run with
@@ -2194,7 +2194,7 @@ def --wrapped "main adv" [dir: path, ...words: string] {
     if $name == "probe" { ^nu $self probe $ws ...$rest; return }
     if $name == "clean" { adv-clean $ws $rest; return }
     let hit = ($commands | where command == $name)
-    if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just adv` lists them"} }
+    if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just do` lists them"} }
     ^nu ($hit | first | get script) $name ...$rest
 }
 
@@ -2222,7 +2222,7 @@ def adv-commands [ws: path]: nothing -> table<command: string, usage: string, ow
     } | flatten
 }
 
-# A command's arguments as `just adv` shows them, from its definition's
+# A command's arguments as `just do` shows them, from its definition's
 # parameters: a required one `<name>`, one with a default `[name]`, a
 # flag `[--flag value]` or `[--flag]`, the rest `[args...]`.
 def adv-usage [params: string]: nothing -> string {
@@ -2235,7 +2235,7 @@ def adv-usage [params: string]: nothing -> string {
     } | str join " "
 }
 
-# The list `just adv` prints: each command with its arguments and its
+# The list `just do` prints: each command with its arguments and its
 # owner, and its description up to its first example or full stop.
 def adv-list [commands: table]: nothing -> string {
     let sdk = [
@@ -2246,9 +2246,9 @@ def adv-list [commands: table]: nothing -> string {
     let shown = ($all | each {|c|
         let cut = ($c.summary | split row ": `" | first | split row ". " | first)
         let usage = (if $c.usage == "" { "" } else { $" ($c.usage)" })
-        $"  just adv ($c.command)($usage)  [($c.owner)]\n      ($cut)"
+        $"  just do ($c.command)($usage)  [($c.owner)]\n      ($cut)"
     })
-    (["the commands for development, `just adv <command> [args]`:"] ++ $shown) | str join "\n"
+    (["the commands for development, `just do <command> [args]`:"] ++ $shown) | str join "\n"
 }
 
 # `just clean`: the workspace's target retired whole under one stamp
@@ -2267,7 +2267,7 @@ def clean-target [ws: path]: nothing -> nothing {
     print $"jab: retired ($target) to ($home.tmp | path join 'retired' $stamp); `just retire` deletes everything retired"
 }
 
-# `just adv clean`: with no path the whole target, as `just clean`
+# `just do clean`: with no path the whole target, as `just clean`
 # (clean-target); with one, the build outputs of the programs at or
 # under it, or the kernel's with `kernel`, in both trees or the one
 # `--tree` names, each retired (retire) under one stamp. A program's

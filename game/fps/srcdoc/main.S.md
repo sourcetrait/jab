@@ -35,7 +35,7 @@ instructions, is the pacing, a phase.
 
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
-the ownership alone; the build is debug with owner beside it, `just adv
+the ownership alone; the build is debug with owner beside it, `just do
 pose <map> <poses> <out> --set debug,owner`.
 
 The three type libraries are included after jab.inc: their macros expand in

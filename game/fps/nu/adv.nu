@@ -1,5 +1,5 @@
 # adv.nu: the game's commands for development, the manifest's `adv`,
-# which the repository's `just adv <command>` runs and `just adv` lists:
+# which the repository's `just do <command>` runs and `just do` lists:
 # the content rendered and compiled, a capture of placed poses, the smoke
 # test, robojab's play, and the gauge. A command that runs the program
 # builds it first through the SDK, its maps compiled with it.
@@ -8,7 +8,7 @@ use ../../../sdk/nu/jab.nu
 const here = (path self | path dirname)
 
 def main [] {
-    print "nu adv.nu <command> [args]; `just adv` at the repository's root lists the commands"
+    print "nu adv.nu <command> [args]; `just do` at the repository's root lists the commands"
 }
 
 # The game's directory, the workspace's, and the SDK's tool.
@@ -45,7 +45,7 @@ def "main compile" [] {
     ^nu ($here | path join "prepare.nu") build
 }
 
-# A run's screen capture as a PNG to look at, every Nth pixel: `just adv
+# A run's screen capture as a PNG to look at, every Nth pixel: `just do
 # shot <screen.ppm> frame.png`
 def "main shot" [ppm: path, png: path, --step: int = 4] {
     ^nu ($here | path join "shot.nu") $ppm $png --step $step
@@ -53,7 +53,7 @@ def "main shot" [ppm: path, png: path, --step: int = 4] {
 
 # Build with the symbols given, then capture a map from placed camera
 # poses, a NUON list of {name, x, y, z, yaw, pitch}, as PNGs under out:
-# `just adv pose render_1 poses.nuon out`; `--set debug,owner` captures the
+# `just do pose render_1 poses.nuon out`; `--set debug,owner` captures the
 # surface each pixel belongs to
 def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
     build $set
@@ -64,7 +64,7 @@ def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
 
 # Build with DEBUG set, then play Render Zero on the pad from seeded
 # random tables for that many seconds a seed, the seeds separated by
-# commas, a fault resolved to its routine: `just adv smoke 1,2,3 60`
+# commas, a fault resolved to its routine: `just do smoke 1,2,3 60`
 def "main smoke" [seeds: string = "1", seconds: int = 60] {
     let list = ($seeds | split row "," | each {|s| $s | str trim } | where {|s| $s != "" } | each {|s| $s | into int })
     build "debug"
@@ -74,9 +74,9 @@ def "main smoke" [seeds: string = "1", seconds: int = 60] {
 }
 
 # Build with DEBUG set, then hand a map to robojab for an agent or a
-# script to play: `just adv play` prints the MCP server line and config
-# record for a subagent; `just adv play <socket>` serves commands on that
-# socket in the foreground; `just adv play mcp render_1 300` another map
+# script to play: `just do play` prints the MCP server line and config
+# record for a subagent; `just do play <socket>` serves commands on that
+# socket in the foreground; `just do play mcp render_1 300` another map
 # and bound
 def "main play" [target: string = "mcp", map: string = "render_0", seconds: int = 600] {
     build "debug"
@@ -87,9 +87,9 @@ def "main play" [target: string = "mcp", map: string = "render_0", seconds: int 
 
 # Build, then play the gauge's route (test/route_render_0.nuon) on that
 # build headless, every frame of each run read from the program's clock
-# records, gauge.nuon written and the summary printed: `just adv gauge`,
+# records, gauge.nuon written and the summary printed: `just do gauge`,
 # the release build three times at the program's own cadence, 1; `just
-# adv gauge debug 1`; `--host` in the host's window and audio; `--cadence
+# do gauge debug 1`; `--host` in the host's window and audio; `--cadence
 # 0`, `1`, or `2`; `--out` and `--label` as gauge.nu takes them
 def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
     build (if $tree == "debug" { "debug" } else { "" })
@@ -99,8 +99,8 @@ def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
 
 # Build, then put Render Zero in the host's window, with its audio and
 # its own gamepad, for you to play; the measurement closes after that
-# many seconds and the window with it: `just adv gauge-play 120`, or
-# `just adv gauge-play 60 release --cadence 2`
+# many seconds and the window with it: `just do gauge-play 120`, or
+# `just do gauge-play 60 release --cadence 2`
 def --wrapped "main gauge-play" [seconds: int = 120, tree: string = "release", ...rest] {
     build (if $tree == "debug" { "debug" } else { "" })
     let p = (places)
@@ -108,14 +108,14 @@ def --wrapped "main gauge-play" [seconds: int = 120, tree: string = "release", .
 }
 
 # Read a run's capture as the gauge reads its own, the identity its
-# launch wrote beside it taken up: `just adv gauge-read <run>/api.out`
+# launch wrote beside it taken up: `just do gauge-read <run>/api.out`
 def --wrapped "main gauge-read" [api: path, ...rest] {
     let p = (places)
     ^nu ($p.game | path join "test" "gauge.nu") read ($api | path expand) ...$rest
 }
 
 # Set builds' gauge.nuon files side by side, each walked leg per half
-# metre of its path, the method and every bin kept: `just adv
+# metre of its path, the method and every bin kept: `just do
 # gauge-compare a/gauge.nuon b/gauge.nuon`; a run measured incomplete,
 # invalid, or before validity was recorded is refused unless
 # `--diagnostic` admits it, marked, and one with nothing to compare is

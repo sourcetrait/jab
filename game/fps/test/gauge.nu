@@ -50,8 +50,8 @@
 # is a build older than them: it holds no measurement and is read from
 # its state records alone, the drawing's and the game's microseconds.
 # `bench-report` reads a run of a bench whose steps are this script's,
-# every cadence's frames pooled. `just adv gauge`, `just adv gauge-play`,
-# `just adv gauge-read`, and `just adv gauge-compare` run it, and `just
+# every cadence's frames pooled. `just do gauge`, `just do gauge-play`,
+# `just do gauge-read`, and `just do gauge-compare` run it, and `just
 # bench game/fps/cadence` runs `play`, `run`, and `bench-report`.
 # A run's identity is read through one reader (identity-of): the run's
 # identity.nuon, its directory found beside its report before the path

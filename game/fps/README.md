@@ -45,10 +45,10 @@ first (`nu/prepare.nu`); the game's commands for development are
     just build game/fps          # the game and the probe
     just test game/fps           # the game's test and the probe's
     just run game/fps            # the game in a window
-    just adv render              # every asset under content/ rendered
-    just adv compile             # every map source into the asset shard
-    just adv gauge               # every frame of the gauge's route, three runs
-    just adv                     # every command for development
+    just do render               # every asset under content/ rendered
+    just do compile              # every map source into the asset shard
+    just do gauge                # every frame of the gauge's route, three runs
+    just do                      # every command for development
 
 The bench `bench/cadence.nuon` measures the frame's three cadences in
 your window with live audio, your own play at each and then the gauge's
@@ -56,4 +56,4 @@ route at each: run `just watch bench game/fps/cadence` in one
 terminal and `just bench game/fps/cadence` in another, and the watch
 reports the whole bench when it ends.
 
-`just adv shot` turns a run's capture into a PNG to look at.
+`just do shot` turns a run's capture into a PNG to look at.

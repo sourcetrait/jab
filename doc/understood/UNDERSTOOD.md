@@ -55,7 +55,7 @@ a program named by its path from the root or by a shortcut
 `workspace.jab.toml` names, `fps` for `game/fps`: `just build` (or
 `just build example`, `just build game/fps`), `just test` (or `just
 test example/pad`), `just run example/helloworld` or `just run fps`, and
-`just watch`; `just adv` lists the commands for development. `just run`
+`just watch`; `just do` lists the commands for development. `just run`
 opens QEMU's own window when a display server is present, SDL with
 OpenGL on Linux and Windows and Cocoa on macOS, and otherwise serves the
 console over VNC on 127.0.0.1:5930, to tunnel and view; `JAB_DISPLAY`
@@ -63,7 +63,7 @@ overrides with any `-display` value. Nothing the tools clear away is
 deleted, robojab included: a build's, a test's, or a bench's is moved
 whole into the retire home, `tmp/retired/<stamp>/` at its place there.
 `just clean` retires the whole target, so the next build starts from
-nothing, and `just adv clean <path>` retires only the outputs of the
+nothing, and `just do clean <path>` retires only the outputs of the
 programs under a path, or the kernel's, in one tree with `--tree`.
 `just retire` is the one command that deletes: it removes the retire
 home's `tmp` and everything in it. Neither `just clean` nor
@@ -232,7 +232,7 @@ again with its recording into that same tar, the old one moved aside,
 and names it last. `just bench` alone lists the benches, and `--only`
 runs the steps its comma-separated labels name.
 
-`just adv probe sdl example/walk` looks at the window itself: it runs
+`just do probe sdl example/walk` looks at the window itself: it runs
 the program under SDL with OpenGL for twelve seconds (`--seconds N`)
 with a small library preloaded into QEMU, `shim/crates/sdl`, built with
 cargo into the target's `shim/`, which logs every SDL call the window

@@ -1,7 +1,7 @@
 # spleen.nu: generate the kernel's console font from a Spleen BDF, the
 # kernel's command for development `font`:
 #
-#   just adv font <spleen-12x24.bdf>
+#   just do font <spleen-12x24.bdf>
 #
 # Takes the printable ASCII glyphs, 32 to 126, from the BDF, each 24
 # rows of 16 bits with the 12-pixel glyph in the high bits, and writes
@@ -10,11 +10,11 @@
 use std/assert
 
 def main [] {
-    print "nu spleen.nu font <spleen-12x24.bdf>; `just adv font <bdf>` at the repository's root"
+    print "nu spleen.nu font <spleen-12x24.bdf>; `just do font <bdf>` at the repository's root"
 }
 
 # The kernel's console font regenerated into src/font.S from a Spleen
-# 12x24 BDF: `just adv font <spleen-12x24.bdf>`
+# 12x24 BDF: `just do font <spleen-12x24.bdf>`
 def "main font" [bdf: path] {
     let out = ($env.FILE_PWD | path join ".." "src" "font.S" | path expand)
     let text = (open --raw ($bdf | path expand) | decode)

@@ -14,7 +14,7 @@
 # where that is set, but for the cargo builds of tool/ and the game's
 # rust/, which keep cargo's own. Nothing is deleted but by `just retire`:
 # what the tools clear away is retired to the tmp beside the targets.
-# `just adv` lists the commands for development.
+# `just do` lists the commands for development.
 
 set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]
@@ -85,10 +85,10 @@ clean:
 retire:
     ^nu '{{jab}}' retire '{{here}}'
 
-# `just adv` lists them; `just adv <command> [args]` runs one, a relative
+# `just do` lists them; `just do <command> [args]` runs one, a relative
 # path among its args taken from where you are
 # The commands for development
 [no-cd]
 [script("nu")]
-adv *args:
+do *args:
     def --wrapped main [...args] { ^nu '{{jab}}' adv '{{here}}' ...$args }
