@@ -271,6 +271,16 @@ const FIXTURE_POSES = [
     { name: "mid", distance: 5.5, level: 1 },
     { name: "far", distance: 10.0, level: 2 },
 ]
+# The alpha fixture past the old four levels the atlases held: the same
+# texture on the grate wall of a second tree at 16 times its scale, 8,192
+# texels a metre, posed head-on where the wall's blocks read levels 3 to
+# 6, each distance the middle of its level's octave
+const FIXTURE_DEEP = { scale: 32.0, poses: [
+    { name: "deep3", distance: 1.33, level: 3 },
+    { name: "deep4", distance: 2.65, level: 4 },
+    { name: "deep5", distance: 5.3, level: 5 },
+    { name: "deep6", distance: 10.6, level: 6 },
+] }
 # A view read from the tile pool is placed twice: the pool builds at a
 # frame's boundary what the frame before asked for, so the first
 # placement's frame draws the view at first sight and the second's
@@ -1311,6 +1321,50 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     let level_pairs = ($fixture_runs.near_tiled.read | zip $fixture_runs.mid_tiled.read | where {|p| $p.0.uniform })
     assert (($level_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
+    # past the old four: the texture at FIXTURE_DEEP's scale on a second
+    # tree, levels 3 to 6 by the block's rule, a level-6 tile holding its
+    # 4 by 4 texels eight times over as the chain's masks wrap them; tiled
+    # and held off under the bright frame, identical over the opening
+    let deep_tree = (alpha-tree $render_1_source $game ($out | path join "alpha_deep") --scale $FIXTURE_DEEP.scale)
+    let deep_read = (map read ($deep_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
+    let deep_material = ($deep_read.materials | enumerate | where {|m| $m.item.name == $ALPHA_FIXTURE.name } | get 0.index)
+    let deep_wall = ($deep_read.walls | where {|w| $w.surface.material == $deep_material } | get 0)
+    let deep_a = ($deep_read.vertices | get $deep_wall.a)
+    let deep_b = ($deep_read.vertices | get $deep_wall.b)
+    let deep_disk = (romfs $deep_tree ($out | path join "alpha_deep.romfs"))
+    let deep_texels = ($deep_wall.surface.u_scale * $ALPHA_FIXTURE.w)
+    mut deep_levels = []
+    for fp in $FIXTURE_DEEP.poses {
+        let step = ($deep_texels * $fp.distance / 960)
+        mut octave = 0
+        mut s = $step
+        while $s >= 2 { $s = $s / 2; $octave += 1 }
+        assert equal $octave $fp.level $"the ($fp.name) pose reads level ($fp.level) by the block's rule at ($step) texels a pixel"
+        let eye = { x: ($deep_a.x - $fp.distance), y: (($deep_a.y + $deep_b.y) / 2), z: $EYE_HEIGHT }
+        let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
+        mut deep_captures = {}
+        for mode in [tiled lit] {
+            let sends = ([{ at: 1400ms, bytes: (level-frame true ($mode == "lit")) }] | append (settled $placed))
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $deep_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let label = $"the ($fp.name) pose with the tiles ($mode)"
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+            let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+            assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
+            let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+            assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
+            if $mode == "tiled" {
+                assert ($frame.tiles_built == 0 and $frame.tiled > 0) $"the view settled on its tiles on ($label): ($frame)"
+            } else {
+                assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
+            }
+            assert ($run.screen != "") $"a screen was taken on ($label)"
+            $deep_captures = ($deep_captures | insert $mode (open --raw $run.screen | into binary))
+        }
+        let opening = (fixture-opening $deep_read $deep_wall $eye)
+        let differing = (rows-differ $deep_captures.tiled $deep_captures.lit $opening)
+        assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level ($fp.level), past the old four: rows ($differing | first 5) differ, ($differing | length) in all"
+        $deep_levels = ($deep_levels | append $fp.level)
+    }
     # the same poses under the room's own light, the spotlight's
     # gradient across the wall, tiled against the lit loop over the
     # opening: a tile holds lit texels filtered where the loop lights a
@@ -2022,9 +2076,9 @@ def fixture-tree [source: record, game: path, out: path, material: string, scale
 }
 
 # The alpha fixture's tree: the grate wall given the fixture's texture
-# at its scale, the texture laid in; the tree's path.
-def alpha-tree [source: record, game: path, out: path]: nothing -> string {
-    let tree = (fixture-tree $source $game $out $ALPHA_FIXTURE.name $ALPHA_FIXTURE.scale)
+# at its scale, or at `--scale`, the texture laid in; the tree's path.
+def alpha-tree [source: record, game: path, out: path, --scale: float]: nothing -> string {
+    let tree = (fixture-tree $source $game $out $ALPHA_FIXTURE.name ($scale | default $ALPHA_FIXTURE.scale))
     let file = ($tree | path join (map tile-path $ALPHA_FIXTURE.name | str substring 1..))
     mkdir ($file | path dirname)
     let pixels = (0..<$ALPHA_FIXTURE.h | each {|y| (fixture-row $y).bytes } | bytes collect)

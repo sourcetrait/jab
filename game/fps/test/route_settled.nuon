@@ -1,11 +1,12 @@
 # Render Zero's seven settled views as a gauge route, the settled gauge's
 # poses read from the program's own records in any build: each view placed
 # at its leg's start, a bare L 300 ms later, which forgets the tiles and
-# lifts the build budget so the next frame builds the view whole, then
-# held. A view's settled frames are those after its leg's last frame
-# building a cell. Played on the still copy, `--map render_0_still`, which
-# has no androids. The frames before the first placement, the spawn's
-# after the load, are their own leg, start.
+# lifts the quota, the allowance, and the merge's share, so the frame
+# after the forget asks for the view's tiles and the next builds them
+# all, then held. A view's settled frames are those after its leg's last
+# frame building a tile. Played on the still copy, `--map
+# render_0_still`, which has no androids. The frames before the first
+# placement, the spawn's after the load, are their own leg, start.
 {
     map: "render_0_still",
     end: 33000ms,
