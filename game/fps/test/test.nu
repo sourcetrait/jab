@@ -434,9 +434,14 @@ const POOL_LIFTED = 1
 const POOL_FROZEN = 2
 const POOL_STALE = 4
 const POOL_PLACE_AT = 1500ms
-const POOL_END_AT = 5000ms
+const POOL_END_AT = 4500ms
 const POOL_ROTATION = { guarantee: 1, ring: 4, merge_us: 1, workers: 2, grain: 16 }
 const TILE_CONTEXTS = 3
+# the stale entries' cap, under the 669 tiles the spawn view asks, so
+# every pass evicts and builds, and the capture's time, past the E since
+# a capture ends its run
+const POOL_STALE_SLOTS = 64
+const POOL_CAPTURE_AT = 5000ms
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -571,6 +576,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # it through a pointer faults here, on hart 0 or on a worker
     let plain_faulted = (($plain_run.serial | str contains "jab: program fault") or ($plain_run.serial | str contains "jab: worker fault"))
     assert (not $plain_faulted) $"no program or worker fault drawing the plain run's frames: ($plain_run.serial | lines | where {|l| $l starts-with 'jab: ' })"
+    assert (not ($plain_run.serial | str contains "fps: tile pool changed in flight")) $"the tile pool held unchanged through every frame's renders on the plain run: ($plain_run.serial | lines | last 2)"
     assert ($plain_run.screen != "") "a screen was taken on the plain run"
     let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
@@ -673,6 +679,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let render_1_disk = (romfs $render_1_tree ($out | path join "render_1.romfs"))
     let render_1_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_1") --set $set --sound --api --disk $render_1_disk --serial "fps" --send $render_1_sends --capture 5500ms --seconds 6)
     assert equal (open --raw $render_1_run.qemu_log) "" "QEMU has no complaint about the guest on render_1"
+    assert (not ($render_1_run.serial | str contains "fps: tile pool changed in flight")) $"the tile pool held unchanged through every frame's renders on render_1: ($render_1_run.serial | lines | last 2)"
     let render_1_lines = ($render_1_run.serial | lines)
     let render_1_reports = ($render_1_lines | where {|l| $l starts-with "fps: render_1 loaded" })
     assert equal ($render_1_reports | length) 1 $"the load reported once on render_1: ($render_1_run.serial)"
@@ -1090,8 +1097,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 
     # the tile pool's own fixtures (pool-holds): the merge's rotation,
     # first sight settling, and the rings at the warming frame
-    let pool = (pool-holds $kernel $image $out $set ($out | path join "still.romfs"))
-    print $"fps: the tile pool: under a tier of one and a ring of four, ($pool.rotation_surfaces) surfaces requesting each built within ($pool.rotation_wait) frames of its first request; first sight settled under the ordinary budget in ($pool.sight_frames) frames on ($pool.sight_slots) slots; the warming frame merged ($pool.rings_merged) keys past tiers of one"
+    let pool = (pool-holds $kernel $image $out $set ($out | path join "still.romfs") $spawn_captures.held.bytes)
+    print $"fps: the tile pool: under a tier of one and a ring of four, ($pool.rotation_surfaces) surfaces requesting each built within ($pool.rotation_wait) frames of its first request; first sight settled under the ordinary budget in ($pool.sight_frames) frames on ($pool.sight_slots) slots; the warming frame merged ($pool.rings_merged) keys past tiers of one; ($pool.stale_evicted) tiles evicted on ($POOL_STALE_SLOTS) slots with their entries left, the picture the lit loop's"
 
     # the raster's workers: the default, every worker started in bands of
     # GRAIN_DEFAULT rows, drew the views above; the same spawn view drawn
@@ -1784,14 +1791,19 @@ def pool-trace [serial: string]: nothing -> table<frame: int, requesting: list<i
 # - the rings under the lift with a tier of one request: the frame after
 #   first sight merging and building every request the cold start's frame
 #   made, past what the tiers can hold, and asking for none, the warming
-#   frame valid; the view settled at the frame after it.
+#   frame valid; the view settled at the frame after it;
+# - the stale entries: the bright view under the lift, the stale mode,
+#   and a cap of POOL_STALE_SLOTS, every pass evicting and building, each
+#   evicted tile's entry left naming its slot's next tile, the capture
+#   the lit loop's picture (`lit`) byte for byte and every frame valid,
+#   the generation check alone keeping a stale entry from its slot.
 # Returns the most surfaces a rotation pass found requesting and the
 # longest wait, the frames first sight took to settle and the slots it
-# holds, and the keys the warming frame merged.
-def pool-holds [kernel: path, image: path, out: path, set: string, disk: path]: nothing -> record<rotation_surfaces: int, rotation_wait: int, sight_frames: int, sight_slots: int, rings_merged: int> {
+# holds, the keys the warming frame merged, and the stale run's evictions.
+def pool-holds [kernel: path, image: path, out: path, set: string, disk: path, lit: binary]: nothing -> record<rotation_surfaces: int, rotation_wait: int, sight_frames: int, sight_slots: int, rings_merged: int, stale_evicted: int> {
     let launch = {|name: string, sends: list<any>|
         let all = ($sends | append [{ at: $POOL_PLACE_AT, bytes: (pose pose-frame $SPAWN_POSE) }, { at: $POOL_END_AT, bytes: (pose command-frame "E") }] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --seconds 7)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --capture $POOL_CAPTURE_AT --seconds 7)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the pool's ($name)"
         let m = (gauge measure $run.api [{ name: "start", places: [], pad: [] }, { name: "sight", places: [$SPAWN_POSE], pad: [] }])
         assert ($m.complete and $m.valid and $m.schema == 5) $"the pool's ($name) complete and valid at schema 5: ($m.problems | str join '; ') ($m.invalid | str join '; ')"
@@ -1847,9 +1859,22 @@ def pool-holds [kernel: path, image: path, out: path, set: string, disk: path]: 
     assert ($warming.merged > ($warming.requesting * $TILE_CONTEXTS)) $"the warming frame merged past what tiers of one request hold, the open rings merged: ($warming.merged) keys for ($warming.requesting) surfaces"
     assert ($warming.admitted == 0 and $warming.missed_blocks == 0) $"the warming frame drew every block from its tile and asked for none: ($warming | select frame admitted missed_blocks)"
     assert (do $settled $after) $"the view settled at the frame after the warming frame: ($after | select frame missed_blocks admitted building tiles_built)"
+
+    let stale = (do $launch "stale" [
+        { at: 1400ms, bytes: (level-frame true false) }
+        { at: $POOL_PLACE_AT, bytes: (pool-frame --modes ($POOL_LIFTED + $POOL_STALE) --cold --slots $POOL_STALE_SLOTS) }
+    ])
+    let held = ($stale.rows | where {|r| $r.frame > $stale.cold })
+    assert ($held | all {|r| $r.config_flags == ($POOL_LIFTED + $POOL_STALE) and $r.slots_effective == $POOL_STALE_SLOTS }) $"the stale entries' run under the lift and the stale mode on ($POOL_STALE_SLOTS) slots: ($held | first | select config_flags slots_effective)"
+    let evicted = ($held | get evicted | math sum)
+    assert ($evicted > 0) $"the stale entries' run evicted under its cap: ($held | first 3 | select frame tiles_built evicted slots_used)"
+    assert ($stale.run.screen != "") "a screen was taken on the stale entries' run"
+    let stale_rows = (rows-differ (open --raw $stale.run.screen | into binary) $lit [0 0 1920 1080])
+    assert ($stale_rows | is-empty) $"the stale entries read no tile: the bright spawn view on ($POOL_STALE_SLOTS) slots, ($evicted) tiles evicted with their entries left, the lit loop's picture: rows ($stale_rows | first 5) differ, ($stale_rows | length) in all"
     {
         rotation_surfaces: $most, rotation_wait: ($waits | each {|w| $w.built - $w.asked } | math max),
         sight_frames: ($settled_at - $sight.cold), sight_slots: $holds, rings_merged: $warming.merged,
+        stale_evicted: $evicted,
     }
 }
 
@@ -2862,7 +2887,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         assert ((not $mc.complete) and ($c.says in $mc.problems)) $"($c.name) leaves the window incomplete: ($mc.problems)"
     }
     let alone5 = (do $measure ($good5 | where {|i| $i.kind in ["ack" "cack" "state" "tile" "storage" "config"] }))
-    assert ($alone5.clocked and (not $alone5.complete)) $"states with the tile pool's records alone are clocked and incomplete: ($alone5.problems)"
+    assert ($alone5.clocked and $alone5.schema == 5 and (not $alone5.complete)) $"states with the tile pool's records alone are clocked at schema 5 and incomplete: ($alone5.schema) ($alone5.problems)"
     let capped5 = (fx-set-all (fx-set-config $good5 { effective: 4 }) "storage" { effective: 4 })
     let wide5 = (fx-set-all (fx-set-config $good5 { effective: 8193 }) "storage" { effective: 8193 })
     let memory_says = "1 frames whose memory in use passes TILE_MEMORY or its high-water, or whose high-water passes TILE_MEMORY"
