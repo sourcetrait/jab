@@ -35,14 +35,9 @@
 # levels, each patch present in its exact colour where the oracle's
 # scaled means pass, the weighted mean of the shrink among those
 # colours, and the solid backdrop behind where they do not, the lit
-# loop's picture from the same build agreeing at every level, and with
-# level 0 alone built the mid pose's blocks taking the chain at their
-# own level and agreeing too, fewer tiles built and read than with
-# every level, the same poses under the room's own light within
-# TheUser's bound, tiled against lit, and the near pose with the tile
-# arena reset after the frame's first binds every frame, each pixel the
-# tiled picture's or the lit loop's and none the poison a stale binding
-# would read; the texel-centre rule, a white
+# loop's picture from the same build agreeing at every level, the same
+# poses under the room's own light within TheUser's bound, tiled against
+# lit; the texel-centre rule, a white
 # texture on that wall under lumels set as a checkerboard, each texel
 # beside a node read from its tile at the light of its centre by the
 # test's own bilinear; one level a block, the still copy's spawn view
@@ -67,7 +62,7 @@ use ./census_holds.nu [census-reader-holds]
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, commands {commands}, flushes {flushes}, invalidated {invalidated}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}, cancelled {cancelled}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, slots {slots}, commands {commands}, flushes {flushes}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}, cancelled {cancelled}"
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -99,7 +94,7 @@ const CLOCK_SEED = 7
 const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
-const CLOCK_SCHEMA = 4
+const CLOCK_SCHEMA = 5
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
@@ -261,14 +256,17 @@ const FIXTURE_KINDS = {
 }
 const FIXTURE_GRID = [[A, B, A, D], [C, A, E, D], [A, F, A, G], [D, E, C, F]]
 const FIXTURE_REPEATS = [[1, 1], [2, 2]]
-# The mid pose is run a third time with level 0 alone built (the L
-# frame's byte 6), its blocks asking level 1: they take the chain at
-# level 1, never a sharper tile, so its picture is the lit loop's
 const FIXTURE_POSES = [
-    { name: "near", distance: 2.0, level: 0, capped: false },
-    { name: "mid", distance: 5.5, level: 1, capped: true },
-    { name: "far", distance: 10.0, level: 2, capped: false },
+    { name: "near", distance: 2.0, level: 0 },
+    { name: "mid", distance: 5.5, level: 1 },
+    { name: "far", distance: 10.0, level: 2 },
 ]
+# A view read from the tile pool is placed twice: the pool builds at a
+# frame's boundary what the frame before asked for, so the first
+# placement's frame draws the view at first sight and the second's
+# draws it settled, and the frame line read is the second's
+const PLACE_AT = 1500ms
+const SETTLE_AT = 2300ms
 const FIXTURE_INSET = 8
 # The radius a sample must lie outside of about the screen's centre,
 # the crosshair's five and a pixel of rounding
@@ -405,24 +403,12 @@ const WORKER_MACHINES = [
     { harts: 2, started: 1, line: "fps: workers 1 on harts 1" }
     { harts: 1, started: 0, line: "fps: workers 0 on harts" }
 ]
-# The packet's bounds and the stale binding, through the console's K
-# frame on a debug build. The still copy of Render Zero's spawn view,
-# every level built, drawn in packets of at most PACKET_CAPS' commands and
-# spans, so a frame flushes many times, each full packet rendered whole
-# before preparation goes on: the capture the uncapped one's. The alpha
-# fixture's near pose under the room's own light with the tile arena
-# reset after the frame's first STALE_BINDS binds every frame and every
-# surface after the reset rebuilt whole, the commands bound before it
-# holding atlases the reset took back, which a debug build poisons with
-# TILE_POISON: those commands take the chain at their own level, so every
-# pixel is the tiled picture's or the lit loop's, some of each, and none
-# the poison a stale read would show. Measured: a reset after the near
-# pose's first three binds invalidates nothing on screen, every pixel the
-# tiled picture's; after five, two commands on screen take the chain,
-# 793,002 pixels the lit loop's and 514,469 the tiled picture's
+# The packet's bounds, through the console's K frame on a debug build.
+# The still copy of Render Zero's spawn view, settled on its tiles,
+# drawn in packets of at most PACKET_CAPS' commands and spans, so a frame
+# flushes many times, each full packet rendered whole before preparation
+# goes on: the capture the uncapped one's
 const PACKET_CAPS = { commands: 7, spans: 500 }
-const STALE_BINDS = 5
-const TILE_POISON = 0x[01 fe 02]
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -445,6 +431,7 @@ const DEBUG_TEXT = [
     "fps: worker refused on hart "
     "fps: round lost bands\n"
     "fps: round unjoined\n"
+    "fps: tile pool changed in flight\n"
 ]
 const EXIT_TEXT = [
     "fps: "
@@ -906,13 +893,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # and no pacing, one flip attempt, a refusal only when it came early;
     # each frame's start, critical path, wait, and await adding up to its
     # next start, the next frame's start; each frame's phases within its
-    # critical path and the drawing's parts, the raster among them, within
-    # the drawing, the tiles' time within the planes' and the walls', the
-    # tiled pixels within the lit, the arena's peak at or past what it
-    # holds; each frame's drawing its preparation and its raster, the
+    # critical path and the drawing's parts, the raster and the tile
+    # pool's boundary among them, within the drawing, the tiled pixels
+    # within the lit, the pool's peak at or past what it holds, and its
+    # tile and storage records at the schema; each frame's drawing its
+    # preparation and its raster, the
     # bytes its packets held its commands' and span records', and its
     # packets prepared from its own simulation, and its workers' round
-    # times within its raster, the gauge's rules at schema 4 which its
+    # times within its raster, the gauge's rules at schema 5 which its
     # validity holds; commands and spans in every frame; every frame drawn
     # by the default, every worker started in bands of GRAIN_DEFAULT rows,
     # with a slowest worker's time; and the game going on past the
@@ -934,15 +922,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($walk_clock.past_window > 0) $"the game went on past the measurement: ($walk_clock.past_window) frames"
     let outside = ($clock_rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
     assert ($outside | is-empty) $"every phase within its frame and every part within its drawing: ($outside | first 3)"
-    assert ($clock_rows | all {|r| $r.tiles_us <= ($r.planes_us + $r.walls_us) }) "the tiles' time within the planes' and the walls'"
     assert ($clock_rows | all {|r| $r.tiled_pixels <= $r.lit_pixels }) "the tiled pixels within the lit"
-    assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile arena's peak at or past what it holds"
+    assert ($clock_rows | all {|r| $r.tile_peak >= $r.tile_bytes }) "the tile pool's peak at or past what it holds"
+    assert ($clock_rows | all {|r| $r.slots_used != null and $r.admitted != null }) "every frame of the walk with its tile and storage records"
     assert ($clock_rows | all {|r| $r.aligned }) "each frame record carries its state's drawing and game times"
     let unprepared = ($clock_rows | where {|r| $r.commands == null or $r.commands == 0 or $r.spans == 0 })
     assert ($unprepared | is-empty) $"each frame of the walk prepares commands and spans into its packets: ($unprepared | select frame commands spans | first 3)"
     let undrawn = ($clock_rows | where {|r| $r.workers != $WORKERS_STARTED or $r.grain != $GRAIN_DEFAULT or $r.slowest_us == 0 or $r.busy_us == 0 })
     assert ($undrawn | is-empty) $"every frame of the walk drawn by the ($WORKERS_STARTED) workers started in bands of ($GRAIN_DEFAULT) rows, a slowest worker and busy time recorded:($undrawn | select frame workers grain slowest_us busy_us | first 3)"
-    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.invalidated) bindings invalidated, ($walk_clock.whole.packet_bytes_max) packet bytes at most; ($walk_clock.workers | str join ', ') workers, the slowest's median ($walk_clock.whole.slowest.median) us, dispatch ($walk_clock.whole.dispatch.median) and barrier ($walk_clock.whole.barrier.median)"
+    print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.packet_bytes_max) packet bytes at most; ($walk_clock.whole.tiles_built) tiles built, ($walk_clock.whole.tile_peak) bytes of tiles at most; ($walk_clock.workers | str join ', ') workers, the slowest's median ($walk_clock.whole.slowest.median) us, dispatch ($walk_clock.whole.dispatch.median) and barrier ($walk_clock.whole.barrier.median)"
 
     # the three cadences on a schedule of stalls and trigger reports and
     # on a timed walk (cadence-holds)
@@ -981,8 +969,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # from the spawn's eye at two yaws on a copy of Render Zero with its
     # androids dropped, so no sprite crosses a point, once as lit and
     # once with every lumel set full bright by the console's L frame,
-    # both runs rebuilding their tiles from nothing under no budget at
-    # the pose so the texture is sampled the same way in both; the lit
+    # both runs forgetting their tiles and reading the pose settled under
+    # no quota or allowance, so the texture is sampled the same way in
+    # both; the lit
     # reading over the bright at a point, the light alone, holds within
     # a few levels across the yaws at every point in view at both
     let view_still = (variant-tree $render_0_source "render_0_still" [android] ($out | path join "still") $game)
@@ -991,11 +980,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let view_pose = { name: $"view($yaw)", x: $VIEW_EYE.x, y: $VIEW_EYE.y, z: $VIEW_EYE.z, yaw: $yaw, pitch: 0 }
         mut captures = {}
         for v in [{ name: "still", bright: false }, { name: "bright", bright: true }] {
-            let view_sends = [{ at: 1400ms, bytes: (level-frame $v.bright false 0) }, { at: 1500ms, bytes: (pose pose-frame $view_pose) }]
+            let view_sends = ([{ at: 1400ms, bytes: (level-frame $v.bright false) }] | append (settled $view_pose))
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $view_still ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the ($v.name) view at yaw ($yaw)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-            assert equal ($frames | length) 2 $"the first frame and the pose's reported on the ($v.name) view at yaw ($yaw): ($run.serial)"
+            assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on the ($v.name) view at yaw ($yaw): ($run.serial)"
             let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
             assert ($frame.uncovered < $CRACKS) $"the ($v.name) view at yaw ($yaw) has no pixel uncovered: ($frame)"
             assert ($run.screen != "") $"a screen was taken on the ($v.name) view at yaw ($yaw)"
@@ -1023,19 +1012,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     assert (($view_spread | length) >= 3) $"floor points in view at both yaws: ($view_readings)"
 
-    # one level a block: the still copy's spawn view under the bright
-    # frame with every level of the tiles built against the tiles held
-    # off, identical over the whole screen; the bay's far floor asks
-    # levels past the tiles' four, which take the chain at their own
-    # level whether the tiles are built or not, and every nearer block
-    # reads its level from the tiles or the chain alike
+    # one level a block, and the pool's tiles the chain's texels under
+    # the bright frame: the still copy's spawn view settled on its tiles
+    # against the tiles held off by frozen construction, identical over
+    # the whole screen, every block at its own level reading the same
+    # texel from its tile or the chain
     mut spawn_captures = {}
     for v in [{ name: "tiled", held: false }, { name: "held", held: true }] {
-        let sends = [{ at: 1400ms, bytes: (level-frame true $v.held 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let sends = ([{ at: 1400ms, bytes: (level-frame true $v.held) }] | append (settled $SPAWN_POSE))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_($v.name)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the spawn view with the tiles ($v.name)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 2 $"the first frame and the pose's reported on the spawn view with the tiles ($v.name): ($run.serial)"
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on the spawn view with the tiles ($v.name): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert ($frame.uncovered < $CRACKS) $"the spawn view with the tiles ($v.name) has no pixel uncovered: ($frame)"
         assert ($run.screen != "") $"a screen was taken on the spawn view with the tiles ($v.name)"
@@ -1046,19 +1034,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let spawn_rows = (rows-differ $spawn_captures.tiled.bytes $spawn_captures.held.bytes [0 0 1920 1080])
     assert ($spawn_rows | is-empty) $"the spawn view the same whether its tiles are built or held off: rows ($spawn_rows | first 5) differ, ($spawn_rows | length) in all"
 
-    # the packet bounded: the same view, every level built, drawn in
+    # the packet bounded: the same view settled on its tiles, drawn in
     # packets of a few commands and spans (PACKET_CAPS), each full packet
     # rendered whole before preparation goes on, the capture the uncapped
     # one's over the whole screen
-    let capped_sends = [
-        { at: 1300ms, bytes: (packet-frame $PACKET_CAPS.commands $PACKET_CAPS.spans 0) }
-        { at: 1400ms, bytes: (level-frame true false 0) }
-        { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
-    ]
+    let capped_sends = ([
+        { at: 1300ms, bytes: (packet-frame $PACKET_CAPS.commands $PACKET_CAPS.spans) }
+        { at: 1400ms, bytes: (level-frame true false) }
+    ] | append (settled $SPAWN_POSE))
     let capped_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_capped") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $capped_sends --capture 3000ms --seconds 5)
     assert equal (open --raw $capped_run.qemu_log) "" "QEMU has no complaint about the guest on the spawn view in capped packets"
     let capped_frames = ($capped_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-    assert equal ($capped_frames | length) 2 $"the first frame and the pose's reported on the spawn view in capped packets: ($capped_run.serial)"
+    assert equal ($capped_frames | length) 3 $"the first frame and the pose's two placements reported on the spawn view in capped packets: ($capped_run.serial)"
     let capped_frame = ($capped_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
     assert ($capped_frame.flushes > 0) $"the spawn view's packets flushed under the caps: ($capped_frame)"
     assert ($capped_run.screen != "") "a screen was taken on the spawn view in capped packets"
@@ -1078,11 +1065,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($default_frame.rounds == 1 and ($default_frame.bands0 + $default_frame.bands1) == $default_bands and $default_frame.clear == 0) $"the default's one round, its ($default_bands) bands each rendered once, the clear theirs: ($default_frame)"
     for m in $WORKER_MODES {
         let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
-        let sends = [{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_w($m.workers)_g($m.grain)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert ($frame.workers == $m.workers and $frame.grain == $m.grain) $"($label) drawn as the W frame chose: ($frame)"
         let bands = (if $m.workers == 0 { 0 } else if $m.grain == 0 { $m.workers } else { ($SCREEN_ROWS + $m.grain - 1) // $m.grain })
@@ -1105,13 +1092,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # and counts
     for h in $WORKER_MACHINES {
         let label = $"the spawn view on ($h.harts) harts with two workers asked"
-        let sends = [{ at: 1300ms, bytes: (gauge workers-frame 2 0) }, { at: 1400ms, bytes: (level-frame true false 0) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
+        let sends = ([{ at: 1300ms, bytes: (gauge workers-frame 2 0) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_harts_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5 --harts $h.harts)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let lines = ($run.serial | lines)
         assert ($h.line in $lines) $"($label) names its workers, ($h.line): ($lines | where {|l| $l starts-with 'fps: worker' })"
         let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert equal $frame.workers $h.started $"($label) drawn by the ($h.started) workers started: ($frame)"
         let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
@@ -1124,16 +1111,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # fault, and idle workers asleep
     for j in $JOB_CASES {
         let label = $"the spawn view with ($j.name)"
-        let sends = [
+        let sends = ([
             { at: 1300ms, bytes: (gauge workers-frame 2 $j.grain) }
             { at: 1300ms, bytes: (jobs-frame $j.delayed $j.delay_us $j.cancel 0) }
-            { at: 1400ms, bytes: (level-frame true false 0) }
-            { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
-        ]
+            { at: 1400ms, bytes: (level-frame true false) }
+        ] | append (settled $SPAWN_POSE))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_jobs_($j.grain)_($j.delayed)_($j.cancel)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         let bands = (if $j.grain == 0 { 2 } else { ($SCREEN_ROWS + $j.grain - 1) // $j.grain })
         if $j.cancel {
@@ -1181,9 +1167,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
-    # every lumel full bright and the tiles rebuilt whole by the
-    # console's L frame at each pose, so a pixel reads a tile's texel as
-    # the shrink made it from the texture; each patch's centre projected
+    # every lumel full bright and the tiles forgotten by the console's L
+    # frame, each pose read settled, so a pixel reads a tile's texel, the
+    # chain's at the tile's level; each patch's centre projected
     # onto a pixel and read: its exact colour where the oracle's plane
     # for the pose's level passes, the backdrop exactly where it does
     # not, so at level 0 the 128 patches show and the 127 ones do not,
@@ -1216,9 +1202,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert equal $level $fp.level $"the ($fp.name) pose reads level ($fp.level) by the block's rule at ($step) texels a pixel"
         let eye = { x: ($wall_a.x - $fp.distance), y: (($wall_a.y + $wall_b.y) / 2), z: $EYE_HEIGHT }
         let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
-        for mode in ([tiled lit] | append (if $fp.capped { [capped] } else { [] })) {
-            let level_send = (level-frame true ($mode == "lit") (if $mode == "capped" { 1 } else { 0 }))
-            let sends = [{ at: 1400ms, bytes: $level_send }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
+        for mode in [tiled lit] {
+            let sends = ([{ at: 1400ms, bytes: (level-frame true ($mode == "lit")) }] | append (settled $placed))
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
@@ -1234,21 +1219,12 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert equal $got.coverage $fixture_levels.coverage $"the fixture's coverage at every level as the rule gives it: ($alpha_line | get 0)"
             assert equal $got.scale $fixture_levels.scale $"the fixture's scales at every coarser level as the rule gives them: ($alpha_line | get 0)"
             let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
-            assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+            assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
             let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
             assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
-            assert equal $frame.resets 0 $"the arena holds on ($label): ($frame)"
+            assert equal $frame.resets 1 $"the pool forgotten once, by the L frame, on ($label): ($frame)"
             if $mode == "tiled" {
-                assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
-            } else if $mode == "capped" {
-                # the cap proven against the same pose built whole, the
-                # frame after the reset and the pose in each: fewer tiles
-                # built, and fewer pixels read from tiles, the blocks
-                # asking a coarser level taking the chain
-                let whole = ($fixture_runs | get $"($fp.name)_tiled" | get frame)
-                assert ($frame.tiles_built > 0) $"the view built its level 0 tiles on ($label): ($frame)"
-                assert ($frame.tiles_built < $whole.tiles_built) $"the cap held back the levels past 0 on ($label): ($frame.tiles_built) tiles built against ($whole.tiles_built) with every level"
-                assert ($frame.tiled < $whole.tiled) $"the blocks asking level ($fp.level) read the chain, not tiles, on ($label): ($frame.tiled) pixels tiled against ($whole.tiled) with every level"
+                assert ($frame.tiles_built == 0 and $frame.tiled > 0) $"the view settled on its tiles on ($label): ($frame)"
             } else {
                 assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
             }
@@ -1267,12 +1243,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         }
     }
     # the lit loop's picture against the tiled one over the whole
-    # opening at every level: the tiles are built from the texture by
-    # the shrink's rule a level at a time and the loop reads the
-    # texture's chain, built by the same rule, each at the level the
-    # block's footprint asks for, so under the bright frame the two
-    # agree texel for texel; the solid alcove behind reads one colour at
-    # any level
+    # opening at every level: a tile's texels are the chain's at its
+    # level and the loop reads the chain, each at the level the block's
+    # footprint asks for, so under the bright frame the two agree texel
+    # for texel; the solid alcove behind reads one colour at any level
     mut openings = []
     for fp in $FIXTURE_POSES {
         let tiled = ($fixture_runs | get $"($fp.name)_tiled")
@@ -1280,13 +1254,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let opening = (fixture-opening $fixture_read $fixture_wall $tiled.eye)
         let differing = (rows-differ $tiled.bytes $lit.bytes $opening)
         assert ($differing | is-empty) $"the tiled and the lit pictures agree over the opening ($opening) at level ($fp.level): rows ($differing | first 5) differ, ($differing | length) in all"
-        if $fp.capped {
-            # level 0 alone built: a block asking level 1 takes the chain
-            # at level 1, so the picture is the lit loop's
-            let capped = ($fixture_runs | get $"($fp.name)_capped")
-            let partial = (rows-differ $capped.bytes $lit.bytes $opening)
-            assert ($partial | is-empty) $"with level 0 alone built the ($fp.name) pose's blocks take the chain at level ($fp.level), the lit picture over the opening ($opening): rows ($partial | first 5) differ, ($partial | length) in all"
-        }
         $openings = ($openings | append [$opening])
     }
     let level_pairs = ($fixture_runs.near_tiled.read | zip $fixture_runs.mid_tiled.read | where {|p| $p.0.uniform })
@@ -1299,22 +1266,21 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # pixels that differ and the largest difference in a channel, held
     # within TheUser's bound, each run proven on its path
     mut light_report = []
-    mut light_captures = {}
     for fp in $FIXTURE_POSES {
         let eye = ($fixture_runs | get $"($fp.name)_tiled" | get eye)
         let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
         mut lit_captures = {}
         for mode in [tiled lit] {
-            let sends = [{ at: 1400ms, bytes: (level-frame false ($mode == "lit") 0) }, { at: 1500ms, bytes: (pose pose-frame $placed) }]
+            let sends = ([{ at: 1400ms, bytes: (level-frame false ($mode == "lit")) }] | append (settled $placed))
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_light_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose under the room's light with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-            assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+            assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
             let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
             assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
             if $mode == "tiled" {
-                assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+                assert ($frame.tiles_built == 0 and $frame.tiled > 0) $"the view settled on its tiles on ($label): ($frame)"
             } else {
                 assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
             }
@@ -1324,40 +1290,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let opening = (fixture-opening $fixture_read $fixture_wall $eye)
         let delta = (region-delta $lit_captures.tiled $lit_captures.lit $opening)
         $light_report = ($light_report | append ($delta | insert pose $fp.name | insert level $fp.level))
-        $light_captures = ($light_captures | insert $fp.name ($lit_captures | insert placed $placed))
     }
     print $"fps: the alpha poses under the room's light, tiled against lit over the opening: ($light_report | each {|r| $'($r.pose) at level ($r.level), ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most' } | str join '; ')"
     for r in $light_report {
         assert ($r.largest <= $REAL_LIGHT_BOUND) $"the ($r.pose) pose under the room's light, tiled against lit over the opening, within ($REAL_LIGHT_BOUND) of 255 a channel: ($r.differing) of ($r.pixels) pixels differ, by ($r.largest) at most"
     }
 
-    # a stale binding: the near pose under the room's light with the tile
-    # arena reset after the frame's first STALE_BINDS binds every frame
-    # (the K frame), every surface after the reset rebuilt whole under the
-    # lifted budget; the commands bound before the reset take the chain at
-    # their own level, so every pixel is the tiled picture's or the lit
-    # loop's, some of each, none the poison of the arena they held
-    let near = ($light_captures | get near)
-    let stale_sends = [
-        { at: 1300ms, bytes: (packet-frame 0 0 $STALE_BINDS) }
-        { at: 1400ms, bytes: (level-frame false false 0) }
-        { at: 1500ms, bytes: (pose pose-frame $near.placed) }
-    ]
-    let stale_run = (jab launch --kernel $kernel --image $image --out ($out | path join "alpha_light_near_stale") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $stale_sends --capture 3500ms --seconds 5)
-    assert equal (open --raw $stale_run.qemu_log) "" "QEMU has no complaint about the guest on the near pose with stale bindings"
-    let stale_frames = ($stale_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-    assert equal ($stale_frames | length) 2 $"the first frame and the pose's reported on the near pose with stale bindings: ($stale_run.serial)"
-    let stale_frame = ($stale_frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
-    assert ($stale_run.screen != "") "a screen was taken on the near pose with stale bindings"
-    let stale = (pixels-from (open --raw $stale_run.screen | into binary) $near.tiled $near.lit [0 0 1920 1080])
-    assert equal $stale.neither 0 $"every pixel of the near pose with stale bindings the tiled picture's or the lit loop's: ($stale.neither) neither, ($stale.poisoned) of them the poison"
-    assert ($stale.second > 0) $"the commands bound before the reset on the chain, the lit loop's pixels: ($stale)"
-    assert ($stale.first > 0) $"the commands bound after it on their tiles, the tiled picture's pixels: ($stale)"
-    assert ($stale_frame.invalidated > 0 and $stale_frame.resets > 0) $"the reset counted and the bindings before it invalidated: ($stale_frame)"
-
     # the texel-centre rule (CENTRE_FIXTURE): the fixture's wall white
     # under lumels set by their nodes' parity, posed head-on at level 0
-    # with the tiles built whole and again held off; every sampled texel
+    # settled on its tiles and again with them held off; every sampled texel
     # beside a node read on the tiled run at its centre against the
     # light of its centre, the four nodes of its cell bilinear there, and
     # one colour over the pixels about its centre, which a tile holds and
@@ -1382,16 +1323,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let centre_placed = { name: "centre", x: $centre_eye.x, y: $centre_eye.y, z: $centre_eye.z, yaw: 0, pitch: 0 }
     mut centre_runs = {}
     for mode in [tiled held] {
-        let sends = [{ at: 1400ms, bytes: (level-frame false ($mode == "held") 0 --parity) }, { at: 1500ms, bytes: (pose pose-frame $centre_placed) }]
+        let sends = ([{ at: 1400ms, bytes: (level-frame false ($mode == "held") --parity) }] | append (settled $centre_placed))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"centre_($mode)") --set $set --sound --api --disk $centre_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
         let label = $"the white wall under the parity lumels with the tiles ($mode)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 2 $"the first frame and the pose's reported on ($label): ($run.serial)"
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert ($frame.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($frame)"
         if $mode == "tiled" {
-            assert ($frame.tiles_built > 0 and $frame.tiled > 0) $"the view built its tiles whole and read them on ($label): ($frame)"
+            assert ($frame.tiles_built == 0 and $frame.tiled > 0) $"the view settled on its tiles on ($label): ($frame)"
         } else {
             assert ($frame.tiles_built == 0 and $frame.tiled == 0) $"no tile built or read with the tiles held off on ($label): ($frame)"
         }
@@ -1707,14 +1648,20 @@ def chain-levels [w: int, h: int]: nothing -> int {
     $levels
 }
 
-# The console's L frame: every tile forgotten, every lumel set full
-# bright first when `bright`, the build budget held at zero when `held`
-# so every span takes the lit loop, else lifted, and on a debug build the
-# levels a surface builds capped at `cap`, 0 for every level, and every
-# lumel set by its node's parity after the bright with `--parity`.
-def level-frame [bright: bool, held: bool, cap: int, --parity]: nothing -> binary {
+# The console's L frame: every tile forgotten at the next boundary,
+# every lumel set full bright first when `bright`, construction frozen
+# when `held` so every span takes the lit loop, else the quota and the
+# allowance lifted, and on a debug build every lumel set by its node's
+# parity after the bright with `--parity`.
+def level-frame [bright: bool, held: bool, --parity]: nothing -> binary {
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
-    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), ($cap | into binary | bytes at 0..<1), (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), 0x[00], (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# A view placed at PLACE_AT and again at SETTLE_AT, so the frame line
+# read, the second placement's, draws it settled on its tiles.
+def settled [placed: record]: nothing -> list<any> {
+    [{ at: $PLACE_AT, bytes: (pose pose-frame $placed) }, { at: $SETTLE_AT, bytes: (pose pose-frame $placed) }]
 }
 
 # The console's J frame, a debug build's: the delayed worker's index plus
@@ -1732,43 +1679,10 @@ def census-frame [chunk: int]: nothing -> binary {
 }
 
 # The console's K frame, a debug build's: the commands and the spans a
-# packet holds, 0 for the engine's own bounds, and the binds each frame
-# before the tile arena is reset, 0 for none, each a word from byte 4.
-def packet-frame [commands: int, spans: int, reset: int]: nothing -> binary {
+# packet holds, 0 for the engine's own bounds, each a word from byte 4.
+def packet-frame [commands: int, spans: int]: nothing -> binary {
     let word = {|v: int| $v | into binary | bytes at 0..<4 }
-    [("K" | into binary), 0x[00 00 00], (do $word $commands), (do $word $spans), (do $word $reset), (0..<48 | each {|i| 0x[00] } | bytes collect)] | bytes collect
-}
-
-# Where a capture's pixels come from over a rectangle, [x0, y0, x1, y1]
-# with the pixel past the last, given two pictures of the same view: the
-# pixels, those equal to the first's alone where the two differ, to the
-# second's alone, to neither, and among those the poison's.
-def pixels-from [c: binary, a: binary, b: binary, rect: list<int>]: nothing -> record<pixels: int, first: int, second: int, neither: int, poisoned: int> {
-    let hc = (ppm-head $c)
-    let ha = (ppm-head $a)
-    let hb = (ppm-head $b)
-    let rows = ($rect.1..<$rect.3 | each {|y|
-        let from = ((($y * 1920) + $rect.0) * 3)
-        let to = ((($y * 1920) + $rect.2) * 3)
-        let rc = ($c | bytes at ($hc + $from)..<($hc + $to))
-        let ra = ($a | bytes at ($ha + $from)..<($ha + $to))
-        let rb = ($b | bytes at ($hb + $from)..<($hb + $to))
-        if $rc == $ra and $rc == $rb { { first: 0, second: 0, neither: 0, poisoned: 0 } } else {
-            let px = ($rc | chunks 3 | zip ($ra | chunks 3) | zip ($rb | chunks 3) | each {|t| { c: $t.0.0, a: $t.0.1, b: $t.1 } } | where {|t| $t.a != $t.b or $t.c != $t.a })
-            let neither = ($px | where {|t| $t.c != $t.a and $t.c != $t.b })
-            {
-                first: ($px | where {|t| $t.c == $t.a and $t.c != $t.b } | length),
-                second: ($px | where {|t| $t.c == $t.b and $t.c != $t.a } | length),
-                neither: ($neither | length),
-                poisoned: ($neither | where {|t| $t.c == $TILE_POISON } | length),
-            }
-        }
-    })
-    {
-        pixels: (($rect.2 - $rect.0) * ($rect.3 - $rect.1)),
-        first: ($rows | get first | math sum), second: ($rows | get second | math sum),
-        neither: ($rows | get neither | math sum), poisoned: ($rows | get poisoned | math sum),
-    }
+    [("K" | into binary), 0x[00 00 00], (do $word $commands), (do $word $spans), (0..<52 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # How two captures differ over a rectangle, [x0, y0, x1, y1] with the
@@ -3851,7 +3765,7 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
     mkdir $dir
     let still_tree = (variant-tree (open ($game | path join "content" "map" "render_0.nuon")) "render_0_still" [android] ($dir | path join "still") $game)
     let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
-    let lights = ($CENSUS_LIGHTS | each {|l| { at: $l.at, bytes: (level-frame $l.bright true 0 --parity=$l.parity) } })
+    let lights = ($CENSUS_LIGHTS | each {|l| { at: $l.at, bytes: (level-frame $l.bright true --parity=$l.parity) } })
     let sends = ([
         { at: $CENSUS_SHRINK.from, bytes: (census-frame $CENSUS_SHRUNK) }
         { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }

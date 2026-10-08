@@ -1,5 +1,27 @@
 .section .text
 
+.macro tile_wrote address, count
+.ifdef DEBUG
+    la \address, tile_writes
+    ld \count, 0(\address)
+    addi \count, \count, 1
+    sd \count, 0(\address)       # a tag or an entry written
+.endif
+.endm
+
+.macro tile_edge dst, column
+    slli t4, \column, 3
+    add t5, s9, t4
+    ld t5, 0(t5)                    # the node above
+    add t6, s10, t4
+    ld t6, 0(t6)                    # and below
+    li t4, 256
+    sub t4, t4, s11
+    mul t5, t5, t4
+    mul t6, t6, s11
+    add \dst, t5, t6                # the cell's edge on the row, packed
+.endm
+
 tiles_init:
     addi sp, sp, -80
     sd ra, 72(sp)
@@ -139,6 +161,23 @@ tiles_init:
     addi s2, s2, 1
     j 22b
 23:
+    la t0, tile_merge_heads
+    li t1, LUMAP_COUNT
+    li t2, -1
+24:
+    sd t2, 0(t0)                    # every surface's merged chain none
+    addi t0, t0, 8
+    addi t1, t1, -1
+    bnez t1, 24b
+    li t1, TILE_GUARANTEE
+    la t0, tile_pending_guarantee
+    sd t1, 0(t0)
+    li t1, TILE_RING
+    la t0, tile_pending_ring
+    sd t1, 0(t0)
+    li t1, 1
+    la t0, tile_config_changed
+    sb t1, 0(t0)                    # the first boundary's configuration record
     la t0, tile_tables_end
     la t1, tile_pool
     sub t0, t0, t1
@@ -217,174 +256,135 @@ tile_context:
     la a0, raster_context
     ret
 
-tiles_reset:
-    la t0, tile_generation
-    ld t1, 0(t0)
-    addi t1, t1, 1
-    sd t1, 0(t0)                    # every binding made before it stale
-    la t0, tile_cursor
-    la t1, tile_arena
-    sd t1, 0(t0)
-    la t0, tilemaps
-    li t1, (LUMAP_COUNT * TILE_SIZE)
-    add t1, t1, t0
-1:
-    sd zero, 0(t0)
-    addi t0, t0, 8
-    bltu t0, t1, 1b
-    ret
 
-tiles_bind:
-    addi sp, sp, -32
-    sd ra, 24(sp)
-    sd s2, 16(sp)
-    sd s3, 8(sp)
-    la t0, poly
-    ld t1, POLY_MODE(t0)
-    andi t1, t1, POLY_LIT
-    beqz t1, 9f
-    ld s2, POLY_LUMAP(t0)
-    beqz s2, 9f
-    ld t1, LUMAP_BASE(s2)
-    beqz t1, 9f
-    la t1, lumaps
-    sub t1, s2, t1
-    li t2, LUMAP_SIZE
-    divu t1, t1, t2
-    li t2, TILE_SIZE
-    mul t1, t1, t2
-    la s3, tilemaps
-    add s3, s3, t1
-.ifdef DEBUG
-    la t0, tile_binds
-    ld t1, 0(t0)
-    addi t1, t1, 1
-    sd t1, 0(t0)                    # the frame's binds
-    la t0, tile_reset_after
-    lwu t2, 0(t0)
-    beqz t2, 1f
-    addi t2, t2, 1
-    bne t1, t2, 1f
-    call tiles_poison               # the console's reset after its binds, what the arena held poisoned first
-    call tiles_reset
+tiles_forget:
+    li t0, 0                        # the slot
+    la t1, tile_tags
+    la t2, tile_slots
+    la t3, tile_directory
+1:
+    li t4, TILE_SLOTS
+    bgeu t0, t4, 3f
+    slli t4, t0, 2
+    add t4, t4, t1
+    lwu t5, 0(t4)                   # its tag
+    andi t6, t5, 0xff
+    beqz t6, 2f                     # free already
+    li a0, SLOT_READY
+    bne t6, a0, 11f
+    li a0, SLOT_SIZE
+    mul a0, t0, a0
+    add a0, a0, t2
+    lwu a0, SLOT_KEY(a0)
+    slli a0, a0, 2
+    add a0, a0, t3                  # its tile's entry
+    lwu a1, 0(a0)
+    srli a2, t5, 16
+    slli a2, a2, 16
+    addi a3, t0, 1
+    or a2, a2, a3                   # the entry naming this slot
+    bne a1, a2, 11f
+    sw zero, 0(a0)                  # cleared before the generation advances
+    tile_wrote a4, a5
+11:
+    srli t5, t5, 16
+    addi t5, t5, 1
+    slli t5, t5, 48
+    srli t5, t5, 32                 # the next generation, FREE
+    sw t5, 0(t4)
+    tile_wrote a4, a5
+2:
+    addi t0, t0, 1
+    j 1b
+3:
+    la t0, tile_effective
+    ld t1, 0(t0)                    # the slots the pool may use
+    la t0, tile_free_count
+    sd t1, 0(t0)
+    la t0, tile_free
+4:
+    beqz t1, 5f
+    addi t1, t1, -1
+    sw t1, 0(t0)                    # every one free, slot 0 on top
+    addi t0, t0, 4
+    j 4b
+5:
+    la t0, tile_used
+    sd zero, 0(t0)
+    li t1, -1
+    la t0, tile_building
+    sd t1, 0(t0)
     la t0, stats
     ld t1, STAT_TILE_RESETS(t0)
     addi t1, t1, 1
     sd t1, STAT_TILE_RESETS(t0)
+    ret
+
+tile_boundary:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
+    rdtime s2                       # the boundary's start
+    call tile_configure
+    la t0, tile_pass
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # this pass, its builds' mark
+    la t0, tile_forget
+    lbu t1, 0(t0)
+    beqz t1, 1f
+    sb zero, 0(t0)
+    call tiles_forget               # the console's L
 1:
-.endif
-    ld t1, TILE_BASE(s3)
+    la t0, tile_flags
+    ld t1, 0(t0)
+    andi t1, t1, CONFIG_UNLIMITED
+    li t2, TILE_UNLIMITED
+    mv t3, t2
+    mv t4, t2
     bnez t1, 2f
-    rdtime t1
-    sd t1, 0(sp)                    # the reservation's start
-    mv a0, s3
-    mv a1, s2
-    call tiles_alloc
-    rdtime t1
-    ld t2, 0(sp)
-    sub t1, t1, t2
-    la t0, stats
-    ld t2, STAT_TILE_TICKS(t0)
-    add t2, t2, t1
-    sd t2, STAT_TILE_TICKS(t0)
+    li t2, (TILE_ALLOWANCE_US * US_TICKS)
+    add t2, t2, s2                  # the allowance's end
+    li t3, (TILE_MERGE_US * US_TICKS)
+    add t3, t3, s2                  # the merge's share's
+    li t4, TILE_QUOTA
 2:
-    ld t1, TILE_BASE(s3)
-    bltz t1, 9f
-3:
-    ld t1, TILE_READY(s3)
-    ld t2, TILE_LEVELS(s3)
-    bgeu t1, t2, 5f
-.ifdef DEBUG
-    la t0, tile_level_cap
-    ld t3, 0(t0)
-    beqz t3, 36f
-    bgeu t1, t3, 5f                 # the console's cap on the levels built
-36:
-.endif
-    la t0, tile_budget
-    ld t2, 0(t0)
-    ld t5, LUMAP_K(s2)
-    beqz t1, 31f
-    sub t5, t5, t1
-    addi t5, t5, 1                  # the coarser cell's texels, four reads each
-31:
-    slli t5, t5, 1
-    li t6, 1
-    sll t6, t6, t5
-    bltu t2, t6, 5f
-    sub t2, t2, t6
+    la t0, tile_deadline
     sd t2, 0(t0)
-    ld a2, TILE_CURSOR(s3)
-    mv a0, s3
-    mv a1, s2
-    mv a3, t1
-    rdtime t4
-    sd t4, 0(sp)                    # the build's start
-    beqz t1, 32f
-    call tile_shrink
-    j 33f
-32:
-    call tile_build
-33:
-    rdtime t1
-    ld t2, 0(sp)
-    sub t1, t1, t2
-    la t0, stats
-    ld t2, STAT_TILE_TICKS(t0)
-    add t2, t2, t1
-    sd t2, STAT_TILE_TICKS(t0)
-    ld t1, STAT_TILES_BUILT(t0)
-    addi t1, t1, 1
-    sd t1, STAT_TILES_BUILT(t0)
-    ld t1, TILE_CURSOR(s3)
-    addi t1, t1, 1
-    ld t2, TILE_COLS_SHIFT(s3)
-    li t3, 1
-    sll t3, t3, t2
-    addi t3, t3, -1                 # the column mask
-    and t4, t1, t3
-    ld t2, TILE_COLS(s3)
-    bltu t4, t2, 35f
-    or t1, t1, t3
-    addi t1, t1, 1
-35:
-    ld t2, TILE_CELLS(s3)
-    bltu t1, t2, 34f
-    li t1, 0
-    ld t2, TILE_READY(s3)
-    addi t2, t2, 1
-    sd t2, TILE_READY(s3)           # the level whole
-34:
-    sd t1, TILE_CURSOR(s3)
-    j 3b
-5:
-    ld t1, TILE_READY(s3)
-    beqz t1, 9f
-    la t0, poly
-    ld t2, POLY_MODE(t0)
-    ori t2, t2, POLY_TILED
-    sd t2, POLY_MODE(t0)
-    sd t1, POLY_TILE_READY(t0)
-    la t2, tile_generation
-    ld t2, 0(t2)
-    sd t2, POLY_TILE_GENERATION(t0) # the arena's generation the binding holds for
-    ld t1, TILE_COLS_SHIFT(s3)
-    sd t1, POLY_TILE_COLS_SHIFT(t0)
-    ld t1, TILE_COLS(s3)
-    sd t1, POLY_TILE_COLS(t0)
-    ld t1, TILE_ROWS(s3)
-    sd t1, POLY_TILE_ROWS(t0)
-    li t2, 0
-52:
-    li t3, TILE_LEVEL_COUNT
-    bgeu t2, t3, 9f
-    slli t3, t2, 3
-    add t4, t3, s3
-    add t5, t3, t0
-    ld t1, TILE_BASE(t4)
-    sd t1, POLY_TILES(t5)
-    addi t2, t2, 1
-    j 52b
+    la t0, tile_merge_deadline
+    sd t3, 0(t0)
+    la t0, tile_quota_left
+    sd t4, 0(t0)
+    call tile_batch                 # the frame before's requests counted
+    call tile_merge                 # and merged
+    call tile_fold                  # the slots read since, CLOCK's references
+    la t0, tile_flags
+    ld t1, 0(t0)
+    andi t1, t1, CONFIG_FROZEN
+    bnez t1, 3f
+    rdtime s3
+    call tile_construct
+    rdtime t0
+    sub t0, t0, s3
+    la t1, stats
+    sd t0, STAT_TILE_BUILD_TICKS(t1)
+3:
+    call tile_discard               # the requests not served
+    call tile_stamp                 # this frame's stamp, its requests'
+    call tile_occupancy
+    rdtime t0
+    sub t1, t0, s2
+    la t2, stats
+    sd t1, STAT_TILE_TICKS(t2)      # the whole boundary
+    la t3, tile_flags
+    ld t3, 0(t3)
+    andi t3, t3, CONFIG_UNLIMITED
+    bnez t3, 9f
+    li t3, (TILE_ALLOWANCE_US * US_TICKS)
+    sub t1, t1, t3
+    blez t1, 9f
+    sd t1, STAT_TILE_OVERRUN(t2)    # past the allowance
 9:
     ld ra, 24(sp)
     ld s2, 16(sp)
@@ -393,359 +393,1228 @@ tiles_bind:
     ret
 
 .ifdef DEBUG
-tiles_poison:
-    la t0, tile_arena
-    la t1, tile_cursor
-    ld t1, 0(t1)                    # the arena in use
-    li t2, TILE_POISON
-    slli t3, t2, 32
-    or t2, t2, t3                   # two poison texels a word
-1:
-    bgeu t0, t1, 9f
-    sd t2, 0(t0)
-    addi t0, t0, 8
-    j 1b
-9:
+tile_stall:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    call tile_batch
+    la t0, tile_batch_admitted
+    ld t1, 0(t0)
+    la t0, stats
+    sd t1, STAT_TILE_UNPROCESSED(t0)    # the batch discarded whole
+    call tile_discard
+    call tile_stamp
+    call tile_occupancy
+    ld ra, 8(sp)
+    addi sp, sp, 16
     ret
 .endif
 
-tiles_alloc:
+tile_stamp:
+    la t0, frame_clock
+    ld t1, CLOCK_SNAPSHOT(t0)
+    addi t1, t1, 1
+    la t0, tile_frame
+    sd t1, 0(t0)
+    ret
+
+tile_configure:
+    la t0, tile_config_changed
+    lbu t1, 0(t0)
+    beqz t1, 9f
+    sb zero, 0(t0)
+    la t0, tile_pending_flags
+    ld t1, 0(t0)
+    la t0, tile_flags
+    sd t1, 0(t0)
+    la t0, tile_pending_guarantee
+    ld t2, 0(t0)
+    la t0, tile_guarantee
+    sd t2, 0(t0)
+    la t0, tile_pending_ring
+    ld t3, 0(t0)
+    la t0, tile_ring
+    sd t3, 0(t0)
+    la t4, tile_config_record
+    li t5, REPORT_CONFIG
+    sw t5, REPORT_KIND(t4)
+    la t5, frame_clock
+    ld t5, CLOCK_SNAPSHOT(t5)
+    sw t5, CONFIG_FRAME(t4)         # the frame whose boundary first uses it
+    li t5, TILE_SHIFT
+    sw t5, CONFIG_SHIFT(t4)
+    li t5, TILE_BYTES
+    sw t5, CONFIG_BYTES(t4)
+    li t5, TILE_SLOTS
+    sw t5, CONFIG_SLOTS(t4)
+    la t5, tile_effective
+    ld t5, 0(t5)
+    sw t5, CONFIG_EFFECTIVE(t4)
+    li t5, TILE_QUOTA
+    sw t5, CONFIG_QUOTA(t4)
+    li t5, TILE_ALLOWANCE_US
+    sw t5, CONFIG_ALLOWANCE(t4)
+    sw t1, CONFIG_FLAGS(t4)
+    sw t2, CONFIG_GUARANTEE(t4)
+    sw t3, CONFIG_RING(t4)
+    li t5, TILE_RECENT
+    sw t5, CONFIG_RECENT(t4)
+    la t5, tile_entries
+    ld t5, 0(t5)
+    slli t5, t5, 2
+    sw t5, CONFIG_DIRECTORY(t4)
+    la t5, tile_memory
+    ld t5, 0(t5)
+    sw t5, CONFIG_MEMORY(t4)
+    li t5, REPORT_SCHEMA_VERSION
+    sw t5, REPORT_SCHEMA(t4)
+    li t5, REPORT_SIZE
+    jab.sys.api.write t4, t5
+9:
+    ret
+
+tile_batch:
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
+    la t0, tile_frame
+    ld t1, 0(t0)                    # the batch's stamp
+    addi t1, t1, -1                 # its frame, all ones at the first boundary
+    la t0, tile_batch_frame
+    sd t1, 0(t0)
+    li s2, 0                        # its requests admitted
+    li s3, 0                        # its greatest ring
+    li s4, 0                        # its requesting surfaces
+    li s5, 0                        # the context
+1:
+    li t0, TILE_CONTEXTS
+    bgeu s5, t0, 5f
+    mv a0, s5
+    call tile_context
+    ld s6, CTX_TILE_ADMIT(a0)       # its admission
+    lwu t0, TA_RING_FILL(s6)
+    add s2, s2, t0
+    bgeu s3, t0, 2f
+    mv s3, t0
+2:
+    lwu t1, TA_LISTED(s6)
+    li t2, TA_LIST
+    add t2, t2, s6                  # its first listed surface
+    slli t1, t1, 2
+    add t1, t1, t2                  # past its last
+    li t3, TA_TIERS
+    add t3, t3, s6                  # its tiers
+3:
+    bgeu t2, t1, 4f
+    lwu t4, 0(t2)                   # a surface
+    li t5, TT_SIZE
+    mul t5, t4, t5
+    add t5, t5, t3
+    lwu t5, TT_COUNT(t5)
+    add s2, s2, t5                  # its tier's requests
+    srli t5, t4, 6
+    slli t5, t5, 3
+    la t6, tile_requesting
+    add t5, t5, t6
+    ld t6, 0(t5)
+    li a1, 1
+    sll a1, a1, t4
+    and a2, t6, a1
+    bnez a2, 31f
+    or t6, t6, a1
+    sd t6, 0(t5)                    # in the union
+    addi s4, s4, 1
+31:
+    addi t2, t2, 4
+    j 3b
+4:
+    addi s5, s5, 1
+    j 1b
+5:
+    la t0, tile_batch_admitted
+    sd s2, 0(t0)
+    la t0, tile_batch_ring
+    sd s3, 0(t0)
+    la t0, tile_batch_surfaces
+    sd s4, 0(t0)
+    la t0, tile_processed
+    sd zero, 0(t0)
+    ld ra, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 64
+    ret
+
+tile_merge:
+    addi sp, sp, -96
+    sd ra, 88(sp)
+    sd s2, 80(sp)
+    sd s3, 72(sp)
+    sd s4, 64(sp)
+    sd s5, 56(sp)
+    sd s6, 48(sp)
+    sd s7, 40(sp)
+    sd s8, 32(sp)
+    sd s9, 24(sp)
+    la t0, tile_frame
+    ld s2, 0(t0)                    # the batch's stamp
+    beqz s2, 90f                    # the first boundary: no batch
+    la t0, tile_merge_cursor
+    ld s3, 0(t0)                    # the word of surfaces
+    li s4, 0                        # the words visited
+10:
+    li t0, (LUMAP_COUNT / 64)
+    bgeu s4, t0, 30f                # every word: the tiers merged
+    slli t0, s3, 3
+    la t1, tile_requesting
+    add t0, t0, t1
+    ld s5, 0(t0)                    # the word's requesting surfaces
+    slli s6, s3, 6                  # its first surface
+11:
+    beqz s5, 20f
+    andi t0, s5, 1
+    beqz t0, 19f
+    li s7, 0                        # the context
+12:
+    li t0, TILE_CONTEXTS
+    bgeu s7, t0, 18f
+    mv a0, s7
+    call tile_context
+    ld t0, CTX_TILE_ADMIT(a0)
+    li t1, TT_SIZE
+    mul t1, s6, t1
+    add t0, t0, t1
+    li t1, TA_TIERS
+    add s8, t0, t1                  # the surface's tier in the context
+    lwu t0, TT_STAMP(s8)
+    bne t0, s2, 17f                 # none in the batch
+    li s9, 0                        # the key
+13:
+    lwu t0, TT_COUNT(s8)
+    bgeu s9, t0, 17f
+    slli t0, s9, 2
+    add t0, t0, s8
+    lwu a0, TT_KEYS(t0)
+    mv a1, s6
+    call tile_merge_key
+    bnez a0, 80f                    # the list full: stopped at this word
+    addi s9, s9, 1
+    j 13b
+17:
+    addi s7, s7, 1
+    j 12b
+18:
+    rdtime t0
+    la t1, tile_merge_deadline
+    ld t1, 0(t1)
+    bgeu t0, t1, 80f                # the merge's share spent: stopped at this word
+19:
+    srli s5, s5, 1
+    addi s6, s6, 1
+    j 11b
+20:
+    addi s4, s4, 1
+    addi s3, s3, 1
+    li t0, (LUMAP_COUNT / 64)
+    bltu s3, t0, 10b
+    li s3, 0
+    j 10b
+30:
+    addi s3, s3, 1                  # whole: the next boundary starts a word on
+    li t0, (LUMAP_COUNT / 64)
+    bltu s3, t0, 31f
+    li s3, 0
+31:
+    la t0, tile_merge_cursor
+    sd s3, 0(t0)
+    la t0, tile_context_cursor
+    ld s3, 0(t0)                    # the context
+    li s4, 0                        # the contexts visited
+40:
+    li t0, TILE_CONTEXTS
+    bgeu s4, t0, 50f                # every context: the rings merged
+    mv a0, s3
+    call tile_context
+    ld s5, CTX_TILE_ADMIT(a0)
+    li s6, 0                        # the entry
+41:
+    lwu t0, TA_RING_FILL(s5)
+    bgeu s6, t0, 45f
+    slli t0, s6, 3
+    add t0, t0, s5
+    li t1, TA_RING
+    add t0, t0, t1
+    ld t1, 0(t0)
+    slli a0, t1, 32
+    srli a0, a0, 32                 # its key
+    srli a1, t1, 32                 # its surface
+    call tile_merge_key
+    bnez a0, 85f                    # the list full: stopped in this context
+    addi s6, s6, 1
+    andi t0, s6, 15
+    bnez t0, 41b
+    rdtime t0
+    la t1, tile_merge_deadline
+    ld t1, 0(t1)
+    bltu t0, t1, 41b
+    j 85f                           # the merge's share spent: stopped in this context
+45:
+    addi s4, s4, 1
+    addi s3, s3, 1
+    li t0, TILE_CONTEXTS
+    bltu s3, t0, 40b
+    li s3, 0
+    j 40b
+50:
+    addi s3, s3, 1                  # whole: the next boundary starts a context on
+    li t0, TILE_CONTEXTS
+    bltu s3, t0, 51f
+    li s3, 0
+51:
+    la t0, tile_context_cursor
+    sd s3, 0(t0)
+    j 90f
+80:
+    la t0, tile_merge_cursor
+    sd s3, 0(t0)                    # the next boundary resumes at this word
+    j 90f
+85:
+    la t0, tile_context_cursor
+    sd s3, 0(t0)                    # and in this context
+90:
+    la t0, tile_merged_count
+    ld t1, 0(t0)
+    la t2, stats
+    sd t1, STAT_TILE_MERGED(t2)
+    la t0, tile_batch_admitted
+    ld t3, 0(t0)
+    la t0, tile_processed
+    ld t4, 0(t0)
+    sub t3, t3, t4
+    sd t3, STAT_TILE_UNPROCESSED(t2)    # left past the merge's share
+    ld ra, 88(sp)
+    ld s2, 80(sp)
+    ld s3, 72(sp)
+    ld s4, 64(sp)
+    ld s5, 56(sp)
+    ld s6, 48(sp)
+    ld s7, 40(sp)
+    ld s8, 32(sp)
+    ld s9, 24(sp)
+    addi sp, sp, 96
+    ret
+
+tile_merge_key:
+    la t0, tile_merged_count
+    ld t1, 0(t0)                    # the list's entries
+    srli t2, a0, 6
+    slli t2, t2, 3
+    la t3, tile_merge_bits
+    add t2, t2, t3                  # the key's word
+    ld t3, 0(t2)
+    li t4, 1
+    sll t4, t4, a0
+    and t5, t3, t4
+    bnez t5, 8f                     # merged already: a duplicate
+    li t5, TILE_MERGE
+    bgeu t1, t5, 9f                 # the list full: unprocessed
+    or t3, t3, t4
+    sd t3, 0(t2)                    # merged
+    la t2, tile_merged
+    slli t3, t1, 3
+    add t3, t3, t2                  # its entry
+    li t4, -1
+    slli t4, t4, 32
+    or t4, t4, a0
+    sd t4, 0(t3)                    # the key, no next yet
+    slli t4, a1, 3
+    la t5, tile_merge_heads
+    add t4, t4, t5                  # the surface's chain
+    lwu t5, 0(t4)                   # its head
+    li t6, -1
+    srli t6, t6, 32                 # none
+    bne t5, t6, 1f
+    sw t1, 0(t4)                    # its first: head and tail
+    sw t1, 4(t4)
+    la t5, tile_order_count
+    ld t6, 0(t5)
+    slli a2, t6, 2
+    la a3, tile_merge_order
+    add a2, a2, a3
+    sw a1, 0(a2)                    # in the merge's order
+    addi t6, t6, 1
+    sd t6, 0(t5)
+    j 2f
+1:
+    lwu t5, 4(t4)                   # its tail
+    slli t5, t5, 3
+    add t5, t5, t2
+    sw t1, 4(t5)                    # the tail's next
+    sw t1, 4(t4)                    # the new tail
+2:
+    addi t1, t1, 1
+    sd t1, 0(t0)
+8:
+    la t2, tile_processed
+    ld t3, 0(t2)
+    addi t3, t3, 1
+    sd t3, 0(t2)
+    li a0, 0
+    ret
+9:
+    li a0, 1
+    ret
+
+tile_fold:
     addi sp, sp, -16
     sd ra, 8(sp)
-0:
-    ld t1, LUMAP_W(a1)              # the cells across
-    ld t2, LUMAP_H(a1)              # and down
-    li t3, 0                        # the columns' shift
-    li t4, 1
+    sd s2, 0(sp)
+    li s2, 0                        # the context
 1:
-    bgeu t4, t1, 2f
-    slli t4, t4, 1
-    addi t3, t3, 1
-    j 1b
+    li t0, TILE_CONTEXTS
+    bgeu s2, t0, 9f
+    mv a0, s2
+    call tile_context
+    ld t0, CTX_TILE_TOUCHED(a0)     # its touched slots
+    li t1, 0                        # the word
 2:
-    sll t5, t2, t3                  # the cells: the rows by the padded columns
-    ld t6, LUMAP_K(a1)
-    addi a4, t6, 1                  # the levels: k + 1 or TILE_LEVEL_COUNT
-    li a5, TILE_LEVEL_COUNT
-    bleu a4, a5, 21f
-    mv a4, a5
-21:
-    slli t6, t6, 1
-    addi t6, t6, 2                  # level 0's tile bytes as a shift
-    sll t0, t5, t6                  # level 0's atlas bytes
-    li a3, TILE_ATLAS_MAX
-    bleu t0, a3, 22f
-    li a3, -1
-    sd a3, TILE_BASE(a0)
-    j 9f
-22:
-    mv a6, t0
-    li a3, 1
-23:
-    bgeu a3, a4, 24f
-    slli a5, a3, 1
-    srl a5, t0, a5
-    add a6, a6, a5
-    addi a3, a3, 1
-    j 23b
-24:
-    la t4, tile_cursor
-    ld t4, 0(t4)
-    add t4, t4, a6
-    la a5, tile_arena
-    li a6, TILE_ARENA_BYTES
-    add a5, a5, a6
-    bleu t4, a5, 6f
-    la t4, stats
-    ld t5, STAT_TILE_RESETS(t4)
-    addi t5, t5, 1
-    sd t5, STAT_TILE_RESETS(t4)
-    call tiles_reset
-    j 0b
+    li t2, (TILE_SLOTS / 64)
+    bgeu t1, t2, 8f
+    slli t2, t1, 3
+    add t2, t2, t0
+    ld t3, 0(t2)
+    beqz t3, 7f
+    sd zero, 0(t2)
+    slli t4, t1, 6                  # its first slot
+    li t6, SLOT_SIZE
+    mul t6, t4, t6
+    la t5, tile_slots
+    add t5, t5, t6                  # its record
+    li a1, 1
+3:
+    beqz t3, 7f
+    andi t6, t3, 1
+    beqz t6, 4f
+    sb a1, SLOT_REFERENCE(t5)       # read since its last sweep
+4:
+    srli t3, t3, 1
+    addi t5, t5, SLOT_SIZE
+    j 3b
+7:
+    addi t1, t1, 1
+    j 2b
+8:
+    addi s2, s2, 1
+    j 1b
+9:
+    ld ra, 8(sp)
+    ld s2, 0(sp)
+    addi sp, sp, 16
+    ret
+
+tile_construct:
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
+    la t0, tile_building
+    ld a0, 0(t0)
+    bltz a0, 1f
+    call tile_build                 # the tile in construction first
+    beqz a0, 90f                    # unfinished: the budget is spent
+    la t0, tile_building
+    ld a0, 0(t0)
+    call tile_publish
+    li t1, -1
+    la t0, tile_building
+    sd t1, 0(t0)
+    call tile_spent
+    bnez a0, 90f
+1:
+    la t0, tile_order_count
+    ld s2, 0(t0)                    # the merged surfaces
+    beqz s2, 90f
+    la t0, tile_merged_count
+    ld s3, 0(t0)                    # the keys left
+    la t0, tile_build_cursor
+    ld t1, 0(t0)
+    la t2, tile_merge_order
+    li s4, 0                        # the rotation's start
+    li t3, LUMAP_COUNT              # its distance past the cursor
+    li t4, 0                        # the order's entry
+2:
+    bgeu t4, s2, 4f
+    slli t5, t4, 2
+    add t5, t5, t2
+    lwu t5, 0(t5)
+    sub t6, t5, t1
+    bgez t6, 3f
+    li a1, LUMAP_COUNT
+    add t6, t6, a1                  # past the cursor in rotation
+3:
+    bgeu t6, t3, 31f
+    mv t3, t6
+    mv s4, t4
+31:
+    addi t4, t4, 1
+    j 2b
+4:
+    beqz s3, 90f                    # every key taken
+    slli t0, s4, 2
+    la t1, tile_merge_order
+    add t0, t0, t1
+    lwu s5, 0(t0)                   # the surface in turn
+    slli t0, s5, 3
+    la t1, tile_merge_heads
+    add s6, t0, t1                  # its chain
+    lwu t0, 0(s6)                   # its next key's entry
+    li t1, -1
+    srli t1, t1, 32
+    beq t0, t1, 6f                  # its keys taken: the next surface
+    slli t1, t0, 3
+    la t2, tile_merged
+    add t1, t1, t2
+    ld t2, 0(t1)
+    srli t3, t2, 32
+    sw t3, 0(s6)                    # its chain past it
+    addi s3, s3, -1
+    addi t3, s5, 1
+    li t4, LUMAP_COUNT
+    bltu t3, t4, 5f
+    li t3, 0
+5:
+    la t4, tile_build_cursor
+    sd t3, 0(t4)                    # the rotation resumes after it
+    slli a0, t2, 32
+    srli a0, a0, 32                 # the key
+    mv a1, s5
+    call tile_make
+    bnez a0, 90f                    # the budget spent, or no slot to take
 6:
-    sd t3, TILE_COLS_SHIFT(a0)
-    sd t1, TILE_COLS(a0)
-    sd t2, TILE_ROWS(a0)
-    sd t5, TILE_CELLS(a0)
-    sd a4, TILE_LEVELS(a0)
-    sd zero, TILE_READY(a0)
-    sd zero, TILE_CURSOR(a0)
-    la t6, tile_cursor
-    ld t4, 0(t6)                    # the arena's cursor
-    ld t2, LUMAP_K(a1)
-    slli t2, t2, 1
-    addi t2, t2, 2                  # the level's tile bytes as a shift
-    li a2, 0                        # the level
-62:
-    bgeu a2, a4, 63f
-    slli t1, a2, 3
-    add t1, t1, a0
-    sd t4, TILE_BASE(t1)
-    sll t0, t5, t2
-    add t4, t4, t0
-    addi t2, t2, -2
-    addi a2, a2, 1
-    j 62b
-63:
-    sd t4, 0(t6)
-    la t5, tile_arena
-    sub t5, t4, t5                  # the arena in use
-    la t6, tile_peak
-    ld t1, 0(t6)
-    bgeu t1, t5, 9f
-    sd t5, 0(t6)                    # the most it has held since the load
+    addi s4, s4, 1
+    bltu s4, s2, 4b
+    li s4, 0
+    j 4b
+90:
+    ld ra, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 64
+    ret
+
+tile_spent:
+    la t0, tile_quota_left
+    ld t1, 0(t0)
+    blez t1, 1f
+    rdtime t1
+    la t0, tile_deadline
+    ld t0, 0(t0)
+    bgeu t1, t0, 1f
+    li a0, 0
+    ret
+1:
+    li a0, 1
+    ret
+
+tile_make:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s2, 32(sp)
+    sd s3, 24(sp)
+    sd s4, 16(sp)
+    mv s2, a0                       # the key
+    mv s3, a1                       # its surface
+    slli t0, s2, 2
+    la t1, tile_directory
+    add t0, t0, t1
+    lwu t0, 0(t0)                   # its entry
+    slli t1, t0, 48
+    srli t1, t1, 48
+    beqz t1, 1f
+    addi t1, t1, -1
+    slli t1, t1, 2
+    la t2, tile_tags
+    add t1, t1, t2
+    lwu t1, 0(t1)
+    srli t2, t0, 16
+    slli t2, t2, 16
+    ori t2, t2, SLOT_READY
+    beq t1, t2, 80f                 # built already
+1:
+    la t0, tile_free_count
+    ld t1, 0(t0)
+    beqz t1, 2f
+    addi t1, t1, -1
+    sd t1, 0(t0)
+    slli t1, t1, 2
+    la t2, tile_free
+    add t1, t1, t2
+    lwu s4, 0(t1)                   # a free slot
+    j 3f
+2:
+    call tile_evict
+    bltz a0, 90f                    # no slot to take: the build stops
+    mv s4, a0
+3:
+    li t0, TS_SIZE
+    mul t0, s3, t0
+    la t1, tile_surfaces
+    add t0, t0, t1                  # the surface's record
+    lbu t1, TS_LEVELS(t0)
+    li t2, 0                        # the level
+4:
+    bgeu t2, t1, 85f                # no grid of the surface holds it
+    slli t3, t2, 3
+    add t3, t3, t0
+    lwu t4, (TS_GRIDS + TS_GRID_BASE)(t3)
+    lhu t5, (TS_GRIDS + TS_GRID_W)(t3)
+    lhu t6, (TS_GRIDS + TS_GRID_H)(t3)
+    mul t6, t6, t5
+    sub a2, s2, t4                  # the key within the level's grid
+    bltu a2, t6, 5f
+    addi t2, t2, 1
+    j 4b
+5:
+    divu a3, a2, t5                 # its row
+    mul a4, a3, t5
+    sub a2, a2, a4                  # its column
+    li t0, SLOT_SIZE
+    mul t0, s4, t0
+    la t1, tile_slots
+    add t0, t0, t1                  # the slot's record
+    sw s2, SLOT_KEY(t0)
+    sw s3, SLOT_SURFACE(t0)
+    sw a2, SLOT_TX(t0)
+    sw a3, SLOT_TY(t0)
+    sb t2, SLOT_LEVEL(t0)
+    sb zero, SLOT_REFERENCE(t0)
+    sh zero, SLOT_ROW(t0)
+    slli t1, s4, 2
+    la t2, tile_tags
+    add t1, t1, t2
+    lwu t2, 0(t1)
+    srli t2, t2, 16
+    slli t2, t2, 16
+    ori t2, t2, SLOT_BUILDING
+    sw t2, 0(t1)                    # in construction, its generation kept
+    tile_wrote t3, t4
+    la t0, tile_used
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)
+    la t0, tile_building
+    sd s4, 0(t0)
+    mv a0, s4
+    call tile_build
+    beqz a0, 90f                    # unfinished: kept BUILDING, the budget spent
+    mv a0, s4
+    call tile_publish
+    li t1, -1
+    la t0, tile_building
+    sd t1, 0(t0)
+80:
+    call tile_spent
+    j 99f
+85:
+    la t0, tile_free_count
+    ld t1, 0(t0)
+    slli t2, t1, 2
+    la t3, tile_free
+    add t2, t2, t3
+    sw s4, 0(t2)                    # the slot back, free
+    addi t1, t1, 1
+    sd t1, 0(t0)
+    li a0, 0
+    j 99f
+90:
+    li a0, 1
+99:
+    ld ra, 40(sp)
+    ld s2, 32(sp)
+    ld s3, 24(sp)
+    ld s4, 16(sp)
+    addi sp, sp, 48
+    ret
+
+tile_evict:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, tile_effective
+    ld t1, 0(t0)                    # the slots it sweeps
+    slli t2, t1, 1                  # two sweeps at most
+    la t0, tile_hand
+    ld t3, 0(t0)                    # the hand
+    la t4, tile_pass
+    ld t4, 0(t4)                    # this pass
+1:
+    beqz t2, 8f
+    addi t2, t2, -1
+    mv a0, t3
+    addi t3, t3, 1
+    bltu t3, t1, 2f
+    li t3, 0
+2:
+    slli t5, a0, 2
+    la t6, tile_tags
+    add t5, t5, t6
+    lwu t5, 0(t5)
+    andi t5, t5, 0xff
+    li t6, SLOT_READY
+    bne t5, t6, 1b                  # free or in construction
+    li t5, SLOT_SIZE
+    mul t5, a0, t5
+    la t6, tile_slots
+    add t5, t5, t6
+    lwu t6, SLOT_BUILT(t5)
+    beq t6, t4, 1b                  # built this pass
+    lbu t6, SLOT_REFERENCE(t5)
+    beqz t6, 3f
+    sb zero, SLOT_REFERENCE(t5)     # read: spared one sweep
+    j 1b
+3:
+    la t0, tile_hand
+    sd t3, 0(t0)
+    sd a0, 0(sp)
+    call tile_retire
+    ld a0, 0(sp)
+    j 9f
+8:
+    la t0, tile_hand
+    sd t3, 0(t0)
+    li a0, -1
 9:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
 
-.balign CODE_PAGE
-tile_build:
-    addi sp, sp, -144
-    sd ra, 136(sp)
-    sd s2, 128(sp)
-    sd s3, 120(sp)
-    sd s4, 112(sp)
-    sd s5, 104(sp)
-    sd s6, 96(sp)
-    sd s7, 88(sp)
-    sd s8, 80(sp)
-    sd s9, 72(sp)
-    sd s10, 64(sp)
-    sd s11, 56(sp)
-    mv s2, a0
-    mv s3, a1
-    ld t0, TILE_COLS_SHIFT(s2)
-    srl s7, a2, t0                  # the cell's row
-    li t1, 1
-    sll t1, t1, t0
-    addi t1, t1, -1
-    and s6, a2, t1                  # and column
-    ld s9, LUMAP_K(s3)              # k
-    li s8, 1
-    sll s8, s8, s9                  # the cell's texels a side
-    ld t1, LUMAP_BASE(s3)
-    ld t2, LUMAP_W(s3)
-    slli t2, t2, 3                  # a row's bytes
-    mul t3, s7, t2
-    add t1, t1, t3
-    slli t3, s6, 3
-    add t1, t1, t3                  # the node above left
-    ld t3, 0(t1)
-    sd t3, 0(sp)
-    ld t4, LUMAP_W(s3)
-    addi t5, s6, 1
-    bltu t5, t4, 1f
-    li t5, 0
-    j 2f
+tile_retire:
+    slli t0, a0, 2
+    la t1, tile_tags
+    add t0, t0, t1                  # its tag
+    lwu t1, 0(t0)
+    li t2, SLOT_SIZE
+    mul t2, a0, t2
+    la t3, tile_slots
+    add t2, t2, t3
+    lwu t2, SLOT_KEY(t2)
+    slli t2, t2, 2
+    la t3, tile_directory
+    add t2, t2, t3                  # its tile's entry
+    lwu t3, 0(t2)
+    srli t4, t1, 16
+    slli t4, t4, 16
+    addi t5, a0, 1
+    or t4, t4, t5                   # the entry naming this slot
+    bne t3, t4, 1f
+    sw zero, 0(t2)                  # cleared before the generation advances
+    tile_wrote t5, t6
 1:
-    li t5, 8
-2:
-    add t6, t1, t5
-    ld t3, 0(t6)
-    sd t3, 8(sp)                    # above right
-    ld t4, LUMAP_H(s3)
-    addi t6, s7, 1
-    bltu t6, t4, 3f
-    li t2, 0
-3:
-    add t1, t1, t2
-    ld t3, 0(t1)
-    sd t3, 16(sp)                   # below left
-    add t6, t1, t5
-    ld t3, 0(t6)
-    sd t3, 24(sp)                   # below right
-    ld t1, TILE_BASE(s2)
-    slli t4, s9, 1
-    addi t4, t4, 2
-    sll t3, a2, t4
-    add s4, t1, t3                  # the tile's first row
-    sll s11, s6, s9                 # the cell's first texel along u
-    sll s6, s7, s9                  # and along v
-    li s7, 0                        # the row
-10:
-    bgeu s7, s8, 90f
-    slli t0, s7, 1
-    addi t0, t0, 1
-    slli t0, t0, 7
-    srl t0, t0, s9                  # the fraction at the row's centre
-    li t1, 256
-    sub t1, t1, t0
-    ld t4, 0(sp)
-    mul t4, t4, t1
-    ld t5, 16(sp)
-    mul t5, t5, t0
-    add t3, t4, t5                  # the start, at the cell's edge
-    ld t4, 8(sp)
-    mul t4, t4, t1
-    ld t5, 24(sp)
-    mul t5, t5, t0
-    add t4, t4, t5                  # the end
-    slli t2, s8, 1                  # the half texels across the cell
-    li a0, ((1 << CHANNEL_BITS) - 1)
-    and a5, t3, a0
-    and a6, t4, a0
-    sub a6, a6, a5
-    div s10, a6, s8
-    div a7, a6, t2
-    srli a5, t3, CHANNEL_BITS
-    and a5, a5, a0
-    srli a6, t4, CHANNEL_BITS
-    and a6, a6, a0
-    sub a6, a6, a5
-    div t6, a6, s8
-    slli t6, t6, CHANNEL_BITS
-    add s10, s10, t6
-    div t6, a6, t2
-    slli t6, t6, CHANNEL_BITS
-    add a7, a7, t6
-    srli a5, t3, (2 * CHANNEL_BITS)
-    srli a6, t4, (2 * CHANNEL_BITS)
-    sub a6, a6, a5
-    div t6, a6, s8
-    slli t6, t6, (2 * CHANNEL_BITS)
-    add s10, s10, t6
-    div t6, a6, t2
-    slli t6, t6, (2 * CHANNEL_BITS)
-    add a7, a7, t6
-    add t3, t3, a7                  # at the first texel's centre
-    la t0, poly
-    ld a1, POLY_TEX(t0)
-    ld a2, POLY_VMASK(t0)
-    ld a3, POLY_UMASK(t0)
-    ld a4, POLY_WSHIFT(t0)
-    add t5, s6, s7
-    and t5, t5, a2
-    sll t5, t5, a4
-    add s5, a1, t5
-    mv t2, s8                       # the texels left
-    mv t6, s11                      # the texel along u
-    mv t1, s4                       # the tile's texel
-11:
-    and a5, t6, a3
-    slli a5, a5, 2
-    add a5, a5, s5
-    lw a0, 0(a5)
-    slli a5, t3, (64 - 3 * CHANNEL_BITS)
-    srli a5, a5, (64 - CHANNEL_BITS + 8)    # blue's brightness, 8.8
-    andi a6, a0, 0xff
-    mul a6, a6, a5
-    srli a6, a6, 8
-    slli a5, t3, (64 - 2 * CHANNEL_BITS)
-    srli a5, a5, (64 - CHANNEL_BITS + 8)    # green's
-    srli a7, a0, 8
-    andi a7, a7, 0xff
-    mul a7, a7, a5
-    srli a7, a7, 8
-    slli a7, a7, 8
-    or a6, a6, a7
-    slli a5, t3, (64 - CHANNEL_BITS)
-    srli a5, a5, (64 - CHANNEL_BITS + 8)    # red's
-    srli a7, a0, 16
-    andi a7, a7, 0xff
-    mul a7, a7, a5
-    srli a7, a7, 8
-    slli a7, a7, 16
-    or a6, a6, a7
-    srli a7, a0, 24
-    slli a7, a7, 24
-    or a6, a6, a7                   # the alpha kept
-    sw a6, 0(t1)
-    add t3, t3, s10
-    addi t6, t6, 1
-    addi t1, t1, 4
-    addi t2, t2, -1
-    bnez t2, 11b
-    slli t0, s8, 2
-    add s4, s4, t0
-    addi s7, s7, 1
-    j 10b
-90:
-    ld ra, 136(sp)
-    ld s2, 128(sp)
-    ld s3, 120(sp)
-    ld s4, 112(sp)
-    ld s5, 104(sp)
-    ld s6, 96(sp)
-    ld s7, 88(sp)
-    ld s8, 80(sp)
-    ld s9, 72(sp)
-    ld s10, 64(sp)
-    ld s11, 56(sp)
-    addi sp, sp, 144
+    srli t1, t1, 16
+    addi t1, t1, 1
+    slli t1, t1, 48
+    srli t1, t1, 32                 # the next generation, FREE
+    sw t1, 0(t0)
+    tile_wrote t5, t6
+    la t0, tile_used
+    ld t1, 0(t0)
+    addi t1, t1, -1
+    sd t1, 0(t0)
+    la t0, stats
+    ld t1, STAT_TILE_EVICTED(t0)
+    addi t1, t1, 1
+    sd t1, STAT_TILE_EVICTED(t0)
     ret
 
-tile_shrink:
-    addi sp, sp, -80
-    sd ra, 72(sp)
-    sd s2, 64(sp)
-    sd s3, 56(sp)
-    sd s4, 48(sp)
-    sd s5, 40(sp)
-    sd s6, 32(sp)
-    sd s7, 24(sp)
-    sd s8, 16(sp)
-    ld t0, LUMAP_K(a1)
-    sub t0, t0, a3                  # the tile's texels a side at the level, as a shift
-    li s4, 1
-    sll s4, s4, t0                  # the texels a side
-    slli t2, t0, 1
-    addi t2, t2, 2
-    slli t3, a3, 3
-    add t3, t3, a0
-    ld s2, TILE_BASE(t3)
-    sll t5, a2, t2
-    add s2, s2, t5                  # the tile
-    ld s3, -8(t3)                   # the level below's atlas, TILE_BASE a level back
-    addi t2, t2, 2
-    sll t6, a2, t2
-    add s3, s3, t6                  # its tile
-    slli s5, s4, 3                  # the finer tile's row pitch in bytes, twice the texels
-    la t0, poly
-    lw t0, POLY_MATERIAL(t0)
-    li t1, ALPHA_MATERIAL_SIZE
-    mul t0, t0, t1
-    la t1, material_alpha
+tile_publish:
+    slli t0, a0, 2
+    la t1, tile_tags
     add t0, t0, t1
-    slli t1, a3, 2
-    add t0, t0, t1
-    lwu s6, 0(t0)
-    li s7, 0                        # the row
+    lwu t1, 0(t0)
+    srli t1, t1, 16
+    slli t1, t1, 16                 # its generation
+    ori t2, t1, SLOT_READY
+    sw t2, 0(t0)                    # whole
+    tile_wrote t3, t4
+    li t2, SLOT_SIZE
+    mul t2, a0, t2
+    la t3, tile_slots
+    add t2, t2, t3
+    la t3, tile_pass
+    ld t3, 0(t3)
+    sw t3, SLOT_BUILT(t2)
+    sb zero, SLOT_REFERENCE(t2)     # unread until a frame reads it
+    lwu t3, SLOT_KEY(t2)
+    slli t3, t3, 2
+    la t4, tile_directory
+    add t3, t3, t4
+    addi t4, a0, 1
+    or t4, t4, t1
+    sw t4, 0(t3)                    # the entry: the slot plus one, its generation
+    tile_wrote t5, t6
+    la t0, stats
+    ld t1, STAT_TILES_BUILT(t0)
+    addi t1, t1, 1
+    sd t1, STAT_TILES_BUILT(t0)
+    ret
+
+tile_discard:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd s2, 0(sp)
+    la t0, tile_merged_count
+    ld t1, 0(t0)
+    sd zero, 0(t0)
+    la t2, tile_merged
+    la t3, tile_merge_bits
 1:
-    bgeu s7, s4, 9f
-    li s8, 0                        # the texel along the row
+    beqz t1, 2f
+    addi t1, t1, -1
+    slli t4, t1, 3
+    add t4, t4, t2
+    lwu t4, 0(t4)                   # a merged key
+    srli t5, t4, 6
+    slli t5, t5, 3
+    add t5, t5, t3
+    ld t6, 0(t5)
+    li a1, 1
+    sll a1, a1, t4
+    not a1, a1
+    and t6, t6, a1
+    sd t6, 0(t5)                    # its bit cleared
+    j 1b
 2:
-    bgeu s8, s4, 3f
-    slli a6, s8, 3
-    add a6, a6, s3                  # the finer texel above left
-    lwu a0, 0(a6)
-    lwu a7, 4(a6)
-    add a6, a6, s5
-    lwu t2, 0(a6)
-    lwu t3, 4(a6)
-    texel_shrink
-    slli a6, s8, 2
-    add a6, a6, s2
-    sw a2, 0(a6)
-    addi s8, s8, 1
+    la t0, tile_order_count
+    ld t1, 0(t0)
+    sd zero, 0(t0)
+    la t2, tile_merge_order
+    la t3, tile_merge_heads
+    li t4, -1
+3:
+    beqz t1, 4f
+    addi t1, t1, -1
+    slli t5, t1, 2
+    add t5, t5, t2
+    lwu t5, 0(t5)
+    slli t5, t5, 3
+    add t5, t5, t3
+    sd t4, 0(t5)                    # its chain none
+    j 3b
+4:
+    la t0, tile_requesting
+    li t1, (LUMAP_COUNT / 64)
+5:
+    sd zero, 0(t0)
+    addi t0, t0, 8
+    addi t1, t1, -1
+    bnez t1, 5b
+    li s2, 0                        # the context
+6:
+    li t0, TILE_CONTEXTS
+    bgeu s2, t0, 9f
+    mv a0, s2
+    call tile_context
+    ld t0, CTX_TILE_ADMIT(a0)
+    sw zero, TA_LISTED(t0)
+    sw zero, TA_RING_FILL(t0)       # its requests discarded
+    addi s2, s2, 1
+    j 6b
+9:
+    ld ra, 8(sp)
+    ld s2, 0(sp)
+    addi sp, sp, 16
+    ret
+
+tile_occupancy:
+    la t0, tile_used
+    ld t1, 0(t0)
+    slli t1, t1, TILE_BYTES_SHIFT   # the pool's bytes in use
+    la t0, tile_peak
+    ld t2, 0(t0)
+    bgeu t2, t1, 1f
+    sd t1, 0(t0)
+1:
+    la t0, tile_fixed
+    ld t2, 0(t0)
+    add t1, t1, t2                  # the memory in use
+    la t0, tile_memory_peak
+    ld t2, 0(t0)
+    bgeu t2, t1, 2f
+    sd t1, 0(t0)
+2:
+    ret
+
+tile_request:
+    ld a2, CTX_TILE_ADMIT(tp)       # the context's admission
+    la a3, tile_frame
+    lwu a3, 0(a3)                   # the frame's stamp
+    slli a4, a0, (64 - TILE_RECENT_SHIFT)
+    srli a4, a4, (64 - TILE_RECENT_SHIFT - 3)
+    add a4, a4, a2
+    li a5, TA_FILTER
+    add a4, a4, a5                  # the key's filter entry
+    slli a5, a3, 32
+    or a5, a5, a0                   # the key under the frame's stamp
+    ld a6, 0(a4)
+    beq a6, a5, 8f                  # asked already this frame
+    sd a5, 0(a4)
+    li a4, TT_SIZE
+    mul a4, a1, a4
+    li a5, TA_TIERS
+    add a4, a4, a5
+    add a4, a4, a2                  # the surface's tier
+    lwu a5, TT_STAMP(a4)
+    beq a5, a3, 1f
+    sw a3, TT_STAMP(a4)             # the surface's first request this frame
+    sw zero, TT_COUNT(a4)
+    lwu a5, TA_LISTED(a2)
+    slli a6, a5, 2
+    add a6, a6, a2
+    li a7, TA_LIST
+    add a6, a6, a7
+    sw a1, 0(a6)                    # listed
+    addi a5, a5, 1
+    sw a5, TA_LISTED(a2)
+1:
+    lwu a5, TT_COUNT(a4)
+    addi a6, a4, TT_KEYS
+    slli a7, a5, 2
+    add a7, a7, a6                  # past its last key
+2:
+    beq a6, a7, 3f
+    lwu a3, 0(a6)
+    beq a3, a0, 8f                  # one of its own: asked already
+    addi a6, a6, 4
     j 2b
 3:
-    slli a6, s4, 2
-    add s2, s2, a6                  # the tile's next row
-    add s3, s3, s5
-    add s3, s3, s5                  # the finer tile's, two rows on
-    addi s7, s7, 1
-    j 1b
-9:
-    ld ra, 72(sp)
-    ld s2, 64(sp)
-    ld s3, 56(sp)
-    ld s4, 48(sp)
-    ld s5, 40(sp)
-    ld s6, 32(sp)
-    ld s7, 24(sp)
-    ld s8, 16(sp)
-    addi sp, sp, 80
+    la a6, tile_guarantee
+    ld a6, 0(a6)                    # the guarantee in force
+    bgeu a5, a6, 4f                 # its tier full: the open ring
+    sw a0, 0(a7)
+    addi a5, a5, 1
+    sw a5, TT_COUNT(a4)
+    j 6f
+4:
+    lwu a5, TA_RING_FILL(a2)
+    la a6, tile_ring
+    ld a6, 0(a6)                    # the ring in force
+    bgeu a5, a6, 7f                 # full: dropped
+    slli a6, a5, 3
+    add a6, a6, a2
+    li a7, TA_RING
+    add a6, a6, a7
+    slli a7, a1, 32
+    or a7, a7, a0
+    sd a7, 0(a6)
+    addi a5, a5, 1
+    sw a5, TA_RING_FILL(a2)
+6:
+    ld a5, CTX_TILE_ADMITTED(tp)
+    addi a5, a5, 1
+    sd a5, CTX_TILE_ADMITTED(tp)
+    ret
+7:
+    ld a5, CTX_TILE_DROPPED(tp)
+    addi a5, a5, 1
+    sd a5, CTX_TILE_DROPPED(tp)
+    ret
+8:
+    ld a5, CTX_TILE_FILTERED(tp)
+    addi a5, a5, 1
+    sd a5, CTX_TILE_FILTERED(tp)
+    ret
+
+.ifdef DEBUG
+tile_check:
+    la t0, tile_writes
+    ld t0, 0(t0)
+    la t1, tile_writes_frozen
+    ld t1, 0(t1)
+    bne t0, t1, 1f
+    ret
+1:
+    jab.sys.uart.print msg_tile_flight
+    jab.sys.exit 15
+.endif
+
+.balign CODE_PAGE
+tile_build:
+    addi sp, sp, -208
+    sd ra, 200(sp)
+    sd s0, 192(sp)
+    sd s2, 184(sp)
+    sd s3, 176(sp)
+    sd s4, 168(sp)
+    sd s5, 160(sp)
+    sd s6, 152(sp)
+    sd s7, 144(sp)
+    sd s8, 136(sp)
+    sd s9, 128(sp)
+    sd s10, 120(sp)
+    sd s11, 112(sp)
+    li t0, SLOT_SIZE
+    mul t0, a0, t0
+    la t1, tile_slots
+    add t0, t0, t1
+    sd t0, 0(sp)                    # the slot's record
+    slli t1, a0, TILE_BYTES_SHIFT
+    la t2, tile_pool
+    add t1, t1, t2
+    sd t1, 96(sp)                   # its tile
+    lhu t1, SLOT_ROW(t0)
+    sd t1, 104(sp)                  # the row in hand
+    lwu t1, SLOT_TX(t0)
+    slli t1, t1, TILE_SHIFT
+    sd t1, 80(sp)                   # the tile's first column at its level
+    lwu t1, SLOT_TY(t0)
+    slli t1, t1, TILE_SHIFT
+    sd t1, 88(sp)                   # and first row
+    lbu t2, SLOT_LEVEL(t0)
+    sd t2, 16(sp)                   # m
+    lwu t1, SLOT_SURFACE(t0)
+    li t3, TS_SIZE
+    mul t3, t1, t3
+    la t4, tile_surfaces
+    add t3, t3, t4                  # the surface's record
+    li t4, LUMAP_SIZE
+    mul t4, t1, t4
+    la t5, lumaps
+    add t4, t4, t5                  # its lumel map
+    lbu t5, TS_K(t3)
+    sd t5, 8(sp)                    # k
+    sub s0, t5, t2                  # k - m, a cell's texels at the level as a shift, below 0 past k
+    ld t5, LUMAP_W(t4)
+    addi t6, t5, -1
+    sd t6, 24(sp)                   # the last node column
+    slli t5, t5, 3
+    sd t5, 48(sp)                   # a node row's bytes
+    ld t5, LUMAP_H(t4)
+    addi t5, t5, -1
+    sd t5, 32(sp)                   # the last node row
+    ld t5, LUMAP_BASE(t4)
+    sd t5, 40(sp)                   # the nodes
+    lwu t5, TS_UMASK(t3)
+    srl s4, t5, t2                  # the level's masks
+    lwu t5, TS_VMASK(t3)
+    srl t5, t5, t2
+    sd t5, 64(sp)
+    lbu t5, TS_WSHIFT(t3)
+    sub t5, t5, t2
+    sd t5, 72(sp)                   # a texel row's bytes at the level as a shift
+    lwu t5, TS_MATERIAL(t3)
+    li t6, MIP_ENTRY
+    mul t5, t5, t6
+    la t6, material_mips
+    add t5, t5, t6
+    slli t6, t2, 3
+    add t5, t5, t6
+    ld t5, 0(t5)
+    sd t5, 56(sp)                   # the chain's texels at the level
+10:
+    ld t0, 104(sp)                  # the row
+    li t1, TILE_SIDE
+    bgeu t0, t1, 80f                # whole
+    ld t1, 88(sp)
+    add t1, t1, t0                  # its row at the level
+    ld t2, 64(sp)
+    and t2, t1, t2
+    ld t3, 72(sp)
+    sll t2, t2, t3
+    ld t3, 56(sp)
+    add s3, t3, t2                  # the chain's row
+    slli t2, t0, TILE_ROW_SHIFT
+    ld t3, 96(sp)
+    add s2, t3, t2                  # the tile's row
+    slli t2, t1, 1
+    addi t2, t2, 1
+    ld t3, 16(sp)
+    addi t3, t3, 15
+    sll t2, t2, t3                  # v at the row's centre, 16.16 at level 0
+    ld t3, 8(sp)
+    addi t4, t3, 16
+    srl t5, t2, t4                  # its node row
+    ld t6, 32(sp)
+    ld a0, 48(sp)
+    bltu t5, t6, 11f
+    mul t5, t6, a0
+    ld t6, 40(sp)
+    add s9, t6, t5                  # past the last node row: the last row's nodes
+    mv s10, s9
+    li s11, 0
+    j 12f
+11:
+    addi t4, t3, 8
+    srl s11, t2, t4
+    andi s11, s11, 0xff             # v's fraction in 256ths, as lumel_sample takes it
+    mul t5, t5, a0
+    ld t6, 40(sp)
+    add s9, t6, t5                  # the row's nodes above
+    add s10, s9, a0                 # and below
+12:
+    ld s5, 80(sp)                   # the texel
+    addi s6, s5, TILE_SIDE          # past the row's last
+20:
+    bgeu s5, s6, 70f
+    bltz s0, 40f                    # a texel past a lumel cell
+    srl t0, s5, s0                  # its centre's cell column
+    ld t1, 24(sp)
+    bgeu t0, t1, 30f                # at or past the last node
+    tile_edge t2, t0                # the cell's left edge
+    addi t0, t0, 1
+    tile_edge t3, t0                # and its right
+    addi t0, t0, -1
+    sll t1, t0, s0
+    sub t1, s5, t1                  # the texel within the cell
+    li a0, 1
+    sll a0, a0, s0
+    sub a0, a0, t1                  # the cell's texels from it
+    sub a1, s6, s5
+    bleu a0, a1, 21f
+    mv a0, a1                       # cut short by the row's end
+21:
+    slli t1, t1, 1
+    addi t1, t1, 1                  # its centre in half texels from the cell's edge
+    li s7, 0
+    li s8, 0
+    li a1, 0                        # the lane's shift
+    li a2, ((1 << CHANNEL_BITS) - 1)
+    addi a3, s0, 1
+    li a4, 1
+    sll a4, a4, a3
+    addi a4, a4, -1                 # the centre's rounding toward zero
+    li a5, 1
+    sll a5, a5, s0
+    addi a5, a5, -1                 # a step's
+22:
+    srl t4, t2, a1
+    and t4, t4, a2                  # the lane at the left edge
+    srl t5, t3, a1
+    and t5, t5, a2
+    sub t5, t5, t4                  # its change across the cell
+    mul t6, t5, t1
+    srai a6, t6, 63
+    and a6, a6, a4
+    add t6, t6, a6
+    sra t6, t6, a3
+    add t4, t4, t6                  # at the texel's centre, toward the left edge
+    sll t4, t4, a1
+    or s7, s7, t4
+    srai a6, t5, 63
+    and a6, a6, a5
+    add t5, t5, a6
+    sra t5, t5, s0                  # a texel's step, toward zero
+    sll t5, t5, a1
+    add s8, s8, t5
+    addi a1, a1, CHANNEL_BITS
+    li a6, (3 * CHANNEL_BITS)
+    bltu a1, a6, 22b
+    j 50f
+30:
+    ld t0, 24(sp)
+    tile_edge s7, t0                # the clamp's limit, the last node column
+    li s8, 0
+    sub a0, s6, s5                  # the row's rest
+    j 50f
+40:
+    slli t0, s5, 1
+    addi t0, t0, 1
+    ld t1, 16(sp)
+    ld t2, 8(sp)
+    sub t1, t1, t2
+    addi t1, t1, -1
+    sll t0, t0, t1                  # the node column under the texel's centre
+    ld t1, 24(sp)
+    bleu t0, t1, 41f
+    mv t0, t1
+41:
+    tile_edge s7, t0
+    li s8, 0
+    li a0, 1
+50:
+    and t4, s5, s4
+    slli t4, t4, 2
+    add t4, t4, s3
+    lwu a1, 0(t4)                   # the chain's texel at the level
+    slli a2, s7, (64 - 3 * CHANNEL_BITS)
+    srli a2, a2, (64 - CHANNEL_BITS + 8)    # blue's brightness, 8.8
+    andi a3, a1, 0xff
+    mul a3, a3, a2
+    srli a3, a3, 8
+    slli a2, s7, (64 - 2 * CHANNEL_BITS)
+    srli a2, a2, (64 - CHANNEL_BITS + 8)    # green's
+    srli a4, a1, 8
+    andi a4, a4, 0xff
+    mul a4, a4, a2
+    srli a4, a4, 8
+    slli a4, a4, 8
+    or a3, a3, a4
+    slli a2, s7, (64 - CHANNEL_BITS)
+    srli a2, a2, (64 - CHANNEL_BITS + 8)    # red's
+    srli a4, a1, 16
+    andi a4, a4, 0xff
+    mul a4, a4, a2
+    srli a4, a4, 8
+    slli a4, a4, 16
+    or a3, a3, a4
+    srli a4, a1, 24
+    slli a4, a4, 24
+    or a3, a3, a4                   # the alpha kept
+    sw a3, 0(s2)
+    add s7, s7, s8
+    addi s5, s5, 1
+    addi s2, s2, 4
+    addi a0, a0, -1
+    bnez a0, 50b
+    j 20b
+70:
+    ld t0, 104(sp)
+    addi t0, t0, 1
+    sd t0, 104(sp)                  # the row built
+    la t1, tile_quota_left
+    ld t2, 0(t1)
+    addi t2, t2, -TILE_SIDE
+    sd t2, 0(t1)
+    li t3, TILE_SIDE
+    bgeu t0, t3, 80f                # whole
+    blez t2, 85f                    # the quota spent
+    rdtime t3
+    la t1, tile_deadline
+    ld t1, 0(t1)
+    bgeu t3, t1, 85f                # the allowance spent
+    j 10b
+80:
+    li a0, 1
+    j 90f
+85:
+    li a0, 0
+90:
+    ld t0, 0(sp)
+    ld t1, 104(sp)
+    sh t1, SLOT_ROW(t0)             # the next row to build
+    ld ra, 200(sp)
+    ld s0, 192(sp)
+    ld s2, 184(sp)
+    ld s3, 176(sp)
+    ld s4, 168(sp)
+    ld s5, 160(sp)
+    ld s6, 152(sp)
+    ld s7, 144(sp)
+    ld s8, 136(sp)
+    ld s9, 128(sp)
+    ld s10, 120(sp)
+    ld s11, 112(sp)
+    addi sp, sp, 208
     ret
 
 alphas_measure:
@@ -1191,19 +2060,59 @@ word_tile_uncached:
     .asciz " uncached, memory "
 word_tile_bytes:
     .asciz " bytes"
+msg_tile_flight:
+    .asciz "fps: tile pool changed in flight\n"
 .endif
 
 .section .bss
 .balign 8
-tile_cursor:
-    .skip 8
-tile_budget:
-    .skip 8
-tile_budget_frame:
-    .skip 8
 tile_peak:
     .skip 8
-tile_generation:
+tile_frame:
+    .skip 8
+tile_pass:
+    .skip 8
+tile_hand:
+    .skip 8
+tile_used:
+    .skip 8
+tile_deadline:
+    .skip 8
+tile_merge_deadline:
+    .skip 8
+tile_quota_left:
+    .skip 8
+tile_merge_cursor:
+    .skip 8
+tile_context_cursor:
+    .skip 8
+tile_build_cursor:
+    .skip 8
+tile_merged_count:
+    .skip 8
+tile_order_count:
+    .skip 8
+tile_processed:
+    .skip 8
+tile_batch_frame:
+    .skip 8
+tile_batch_admitted:
+    .skip 8
+tile_batch_ring:
+    .skip 8
+tile_batch_surfaces:
+    .skip 8
+tile_flags:
+    .skip 8
+tile_guarantee:
+    .skip 8
+tile_ring:
+    .skip 8
+tile_pending_flags:
+    .skip 8
+tile_pending_guarantee:
+    .skip 8
+tile_pending_ring:
     .skip 8
 tile_entries:
     .skip 8
@@ -1224,16 +2133,18 @@ tile_fixed:
 tile_memory_peak:
     .skip 8
 .ifdef DEBUG
-tile_level_cap:
+tile_writes:
     .skip 8
-tile_binds:
+tile_writes_frozen:
     .skip 8
-tile_reset_after:
-    .skip 4
 .endif
+tile_config_record:
+    .skip REPORT_SIZE
+tile_forget:
+    .skip 1
+tile_config_changed:
+    .skip 1
 .balign 8
-tilemaps:
-    .skip (LUMAP_COUNT * TILE_SIZE)
 material_alpha:
     .skip (MAX_MATERIALS * ALPHA_MATERIAL_SIZE)
 alpha_hist:
@@ -1273,6 +2184,3 @@ tile_requesting:
 tile_admission:
     .skip (TILE_CONTEXTS * TA_SIZE)
 tile_tables_end:
-.balign 64
-tile_arena:
-    .skip TILE_ARENA_BYTES

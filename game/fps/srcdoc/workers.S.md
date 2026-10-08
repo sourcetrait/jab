@@ -77,7 +77,9 @@ on rdtime before each band and claim (job_delay).
 
 At a band a worker, a worker whose job holds no band read its cancel
 before its band, and its rows are rendered here; at a grain the counter
-hands on the bands no worker claimed, every band once.
+hands on the bands no worker claimed, every band once. A debug build
+checks the tile pool frozen first (tile.S's tile_check), the cancelled
+round's renders held to the boundary's pool as the round's own are.
 
 ## job_delay
 

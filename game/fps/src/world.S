@@ -91,13 +91,23 @@ world_draw:
     sd zero, STAT_RASTER_TICKS(t1)
     sd zero, STAT_COMMANDS(t1)
     sd zero, STAT_FLUSHES(t1)
-    sd zero, STAT_INVALIDATED(t1)
     sd zero, STAT_DISPATCH(t1)
     sd zero, STAT_BARRIER(t1)
     sd zero, STAT_SLOWEST(t1)
     sd zero, STAT_BUSY(t1)
     sd zero, STAT_ROUNDS(t1)
     sd zero, STAT_CANCELLED(t1)
+    sd zero, STAT_TILE_ADMITTED(t1)
+    sd zero, STAT_TILE_DROPPED(t1)
+    sd zero, STAT_TILE_FILTERED(t1)
+    sd zero, STAT_TILE_HITS(t1)
+    sd zero, STAT_TILE_STRADDLING(t1)
+    sd zero, STAT_TILE_MISSES(t1)
+    sd zero, STAT_TILE_BUILD_TICKS(t1)
+    sd zero, STAT_TILE_OVERRUN(t1)
+    sd zero, STAT_TILE_EVICTED(t1)
+    sd zero, STAT_TILE_MERGED(t1)
+    sd zero, STAT_TILE_UNPROCESSED(t1)
     sd zero, STAT_BANDS(t1)
     sd zero, (STAT_BANDS + 8)(t1)
 .ifdef COUNT
@@ -111,19 +121,18 @@ world_draw:
     sd zero, COUNT_FLAT(t1)
     sd zero, COUNT_MISMATCHES(t1)
 .endif
-    la t0, tile_budget_frame
+    call tile_boundary              # the pool's one change a frame, before any bind
+.ifdef DEBUG
+    la t0, tile_writes
     ld t1, 0(t0)
-    la t0, tile_budget
-    sd t1, 0(t0)
+    la t0, tile_writes_frozen
+    sd t1, 0(t0)                    # the pool frozen from here to the last join
+.endif
     call sky_setup
     la t0, span_count
     sd zero, 0(t0)
     la t0, command_count
     sd zero, 0(t0)                  # the frame's first packet empty
-.ifdef DEBUG
-    la t0, tile_binds
-    sd zero, 0(t0)
-.endif
     rdtime s2
     call world_flow
     rdtime t0
@@ -744,7 +753,6 @@ sector_draw:
 
 material_bind:
     la t1, poly
-    sw a0, POLY_MATERIAL(t1)
     bltz a0, 8f
     la t0, material_record
     slli t2, a0, 3
@@ -943,7 +951,6 @@ plane_draw:
     ld t1, STAT_PLANES(t0)
     addi t1, t1, 1
     sd t1, STAT_PLANES(t0)
-    call tiles_bind
     call poly_fill
 90:
     ld ra, 56(sp)
@@ -1275,7 +1282,6 @@ wall_draw:
     beqz a0, 20f
     li a0, POLY_MASKED
     call poly_mode
-    call tiles_bind
     call poly_fill
 20:
     bge s6, s5, 21f
@@ -1314,7 +1320,6 @@ wall_draw:
     ld t1, STAT_PIECES(t0)
     addi t1, t1, 1
     sd t1, STAT_PIECES(t0)
-    call tiles_bind
     call poly_fill
 30:
     addi s6, s6, 1

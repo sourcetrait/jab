@@ -10,10 +10,11 @@ sets up each polygon in `poly` and its edges, and fills it into the packet:
 at its first span the polygon is copied whole into the packet's command
 table, POLY_SIZE bytes, and each span is recorded with its command's index.
 The packet is immutable once published: a command's coefficients, modes,
-texture, chain, lumel word, flat brightness, and tile binding are its own
-copy, never a pointer into `poly`, whose next polygon overwrites it.
-packet_render then resolves every command's tile binding against the
-arena's generation and renders the spans in the order they were recorded
+texture, chain, lumel word, flat brightness, and surface are its own copy,
+never a pointer into `poly`, whose next polygon overwrites it. A command
+carries no tile: its surface names the tile pool's directory, which stands
+still from the frame's boundary to its last join (tile.S). packet_render
+renders the spans in the order they were recorded
 through span_fill on a raster context, which holds the command in hand and
 the span's counters, so the depth test meets the surfaces in the order the
 immediate fill met them and the picture is the same. A packet full of
@@ -202,9 +203,8 @@ span's ends across the call at 0 and 24.
 ## span_record
 
 The span record, sixteen bytes a span, is the packet's work list and the
-interface the tile pool and a sorted span renderer share: packet_render
-draws the records in order, the pool will read them to learn which cells
-the spans touch, and a span sorter produces the same records from its own
+interface a sorted span renderer shares: packet_render draws the records
+in order, and a span sorter produces the same records from its own
 machinery. A record carries the row and the span's two ends in sixteen bits
 each, the polygon's mode, the surface index, and its command's index in the
 packet: the surface is the stable identity the owner build shares, and the
@@ -224,10 +224,9 @@ packet emits it there.
 
 ## command_emit
 
-The whole record copied, thirty-nine words, so a command holds every field
-span_fill reads at its POLY_* offset, the tile binding's generation
-(POLY_TILE_GENERATION) among them, and fields only preparation reads
-besides; the frame line counts the frame's commands. A packet full of
+The whole record copied, twenty-nine words, so a command holds every field
+span_fill reads at its POLY_* offset, the surface among them, and fields
+only preparation reads besides; the frame line counts the frame's commands. A packet full of
 commands is rendered whole first. The command's index is its record's
 position in the table, and its run's first span, the packet's span count
 then, goes into the run table at the same index; the run ends at the next
@@ -239,21 +238,12 @@ A flush is a packet rendered before preparation ends, the commands or the
 spans full; STAT_FLUSHES counts them, the final render being none. The
 phases around it subtract its render's ticks (world.S's phase_mark).
 
-## packet_resolve
-
-A command bound to tiles in a generation of the arena before the last
-reset holds atlases the reset took back, which later binds may have
-rebuilt with other surfaces' cells: its tiled flag is cleared, so its
-blocks take the chain at their own level, the same-level fallback, and it
-is counted in STAT_INVALIDATED. A frame with no reset resolves nothing.
-The resolve runs at every render, so a flush before a reset keeps its
-commands' tiles, which were still the arena's.
-
 ## context_counts
 
 span_fill counts into the context, so contexts never share a counter; the
-frame's stats take the sum after each render. A COUNT build's counts go the
-same way, the context's into count_stats.
+frame's stats take the sum after each render, the tile pool's requests and
+blocks among them. A COUNT build's counts go the same way, the context's
+into count_stats.
 
 ## scratch_poison
 
@@ -350,8 +340,8 @@ start plus the step times the pixels less one exactly.
 ## .macro census_end
 
 The hook's other half at the block's end, label 60, which every path of a
-block reaches, the lit loop, the old tile loop, and the unlit loops, so the
-old cache's residency biases nothing: a lit block with a lumel map keeps its
+block reaches, the lit loop, the tile loop, and the unlit loops, so the
+pool's residency biases nothing: a lit block with a lumel map keeps its
 slot with its surface, level, pixels, the passes in t4, and the masked flag;
 a flat lit block, a sprite, keeps none. t3, t5, a0, and a5 are free there,
 the rejected count already taken.
@@ -360,14 +350,15 @@ the rejected count already taken.
 
 The serial backend, and the reference a worker's backend scales against:
 one context, the spans in their order, so the frame is the immediate
-fill's to the byte wherever no reset invalidated a binding. Its per-span
-loop, a record's fields, the command's address by a multiply, and the
-call, shares span_fill's page, so the call chains within the page where
-poly_fill's call to span_fill crossed one every span. The render's ticks
-go to STAT_RASTER_TICKS, a flush's with the last render's. With the
-frame's workers above 0 the resolve is followed by the round in place of
-the loop (workers.S's round_run), which sums the workers' contexts; the
-packet is emptied and the ticks taken the same way.
+fill's to the byte. Its per-span loop, a record's fields, the command's
+address by a multiply, and the call, shares span_fill's page, so the call
+chains within the page where poly_fill's call to span_fill crossed one
+every span. The render's ticks go to STAT_RASTER_TICKS, a flush's with
+the last render's. With the frame's workers above 0 the round takes the
+loop's place (workers.S's round_run), which sums the workers' contexts;
+the packet is emptied and the ticks taken the same way. A debug build
+checks the tile pool frozen at the render's start and after its joins
+(tile.S's tile_check), so every flush, round, and the last join holds it.
 
 ## band_render
 
@@ -384,10 +375,11 @@ page as the serial loop's does.
 ## span_fill
 
 The polygon is the context's command, `CTX_COMMAND(tp)`, at every place
-the fill once read `poly`: the prologue's coefficients and modes, the
-lumel sample's word, the chain's bind, the tiled block's atlases, the
-sky's texture size. Its counts, the spans, the pixels entered, the lit
-ones, the rejected, the samples, and the tiled pixels, go to the context.
+the fill once read `poly`: the prologue's coefficients, modes, and
+surface, the lumel sample's word, the chain's bind, the sky's texture
+size. Its counts, the spans, the pixels entered, the lit ones, the
+rejected, the samples, the tiled pixels, and the tile pool's blocks and
+requests, go to the context.
 A load through tp costs about what the `la` it replaced did, once a span
 or a block, never a pixel.
 
@@ -447,7 +439,7 @@ the divide's to the byte.
 
 Where the polygon's 1/z holds along the row, POLY_IZA zero, z is one value
 along the span: s2 steps by s3 a pixel and never moves. The prologue's z at
-the first pixel, kept in slot 232 (the frame 240 bytes), then serves the
+the first pixel, kept in slot 232 (the frame 272 bytes), then serves the
 span's end, every block's end, and every lit interval's end, each a divide
 whose input would be the same clamp of s2. The span's end keeps its
 clamped 1/z in t3 all the same, since the row below the end reads it, and
@@ -477,9 +469,9 @@ Lit spans are counted. u and v at the start are 16.16. Every span's
 footprint, for its blocks' levels: the end's texel coordinates at one
 divide, the step down a row at each end at a divide each, and the row step's
 change a pixel, which ride the frame for the blocks; the texture's four
-registers serve as scratch and are reloaded after. A tiled surface's span is
-judged once for its tiles: its ends inside the map, else the lit loop, which
-clamps; the levels the surface has whole bound every block's level. Lit: a
+registers serve as scratch and are reloaded after. A span of a surface the
+tile pool caches takes the surface's tile record (the tiled modes, below).
+Lit: a
 polygon with no map takes its one brightness over the whole span, no step
 and no sample; a mapped one samples its map at the span's start, an interval
 starting at the first block.
@@ -488,13 +480,12 @@ The block: its length, its end's u and v, the steps. The block's level by
 its footprint: the largest of its texel steps along the span and down a row,
 the row's interpolated along the span; level m where the step is under 2^(m
 + 1) texels, held once under the chain's last, which the prologue keeps in
-slot 224. One level a block, chosen before the cache or the chain: lit, a
-span judged for its tiles (the prologue) reads a block's tile only where the
-block's level is built whole, and any other block takes the lit loop through
-the chain at that same level, so a block never reads a sharper level than it
-asks, while the cache builds or past its four levels; a block read from
-tiles pays no sample, no interval, and no brightness carry. A span with no
-tiles takes the lit loop at the chain's level. The texel step a pixel, the larger of |du| and |dv|, against the
+slot 224. One level a block, chosen before the tile or the chain: lit, a
+block of a span with tiles reads its tile at that level when the tile is
+READY, and any other block takes the lit loop through the chain at that
+same level, so a block never reads a sharper level than it asks; a block
+read from a tile pays no sample, no interval, and no brightness carry. The
+texel step a pixel, the larger of |du| and |dv|, against the
 lumel's 2^k texels: four blocks when they stay within half a lumel over 64
 pixels, two when within it over 32, else one, so a lumel spans at least two
 samples wherever one block allows it. The end's u and v: the block's own
@@ -510,19 +501,17 @@ Textured and lit: the depth first, then the texel, each channel scaled by
 its brightness, the texel's bytes blue, green, red from the low end. Masked
 and lit: the depth, the texel, its alpha at or above the pass. A lit block's
 brightness is carried into the next block of its interval; where the
-interval ended, the exact end sample is there. A block on its tiles at its
-level: the depth first, then the texel read from the level's atlas, the cell
-from the coordinate shifted by k, the texel within the cell at the level's
-resolution; no multiply, no sample, no brightness. The constants ride the
-texture's four registers, the brightness's two, and one spilled saved
-register, all free here. Masked, on its tiles: the tile's texel, whose alpha
-under the pass leaves the pixel. The tiled block's end: the pixels counted as
-read from tiles, the spilled register back, the interval over and the
-brightness entering the next block marked stale, so a lit block after
+interval ended, the exact end sample is there. A block on its tile: the
+depth first, then the texel read from the tile by the coordinates' low bits
+at the level; no multiply, no sample, no brightness. Masked, on its tile:
+the tile's texel, whose alpha under the pass leaves the pixel. The tiled
+block's end: the pixels counted as read from tiles, the interval over and
+the brightness entering the next block marked stale, so a lit block after
 samples its own start. Textured: the depth test, then the texel and the
 stores. Masked: the depth test, then the texel, whose alpha under the pass
 leaves the pixel. The block's end is the next block's start; its rejected
-pixels, the block's less those past the depth test, are kept.
+pixels, the block's less those past the depth test, are kept, and a missed
+block's tile asked for when a pixel passed.
 
 Sky: the texel by screen position, the texture's width across the screen's
 and its height down the same count of rows, offset by the sky's yaw and
@@ -573,13 +562,12 @@ slot already holds the exact end sample.
 Every span but the sky's computes its footprint in the prologue: the
 end's texel coordinates at one divide, the step down a row at each end
 at a divide each from the coordinates a row below by the polygon's
-gradients, and the row step's change a pixel, four divides a span where
-the tiled spans alone paid them before. Every block then takes its level
-from its own step along the span and the row step interpolated along the
-span, the step's octave, under two texels level 0, under four 1, under
-eight 2, and so on, held under the chain's last, about twenty-five ops a
-block; a tiled span reads the tile where the level is built whole, and
-every other block reads the texture's level through mip_bind: the level's
+gradients, and the row step's change a pixel, four divides a span. Every block then takes
+its level from its own step along the span and the row step interpolated
+along the span, the step's octave, under two texels level 0, under four 1,
+under eight 2, and so on, held under the chain's last, about twenty-five
+ops a block; a block on a READY tile reads it, and every other block reads
+the texture's level through mip_bind: the level's
 texels from the table the bind named, the masks and the row shift shifted
 by the level, and the shift from a 16.16 coordinate to its texel at the
 level, the coordinates themselves staying at level 0 as the tile loop reads
@@ -589,39 +577,39 @@ lumel sample, which reads level 0 coordinates, and before the loop. So a block
 reads about a texel a pixel at any distance, a far floor stops touching a
 cache line a pixel, and the lit loop and a tile at one level hold the same
 texel under one brightness, which the alpha fixture holds identical over
-the opening at levels 0, 1, and 2, and with level 0 alone built at the mid
-pose's level 1, and which TilePool's handoff between the loop and the
-cache rests on. The level was chosen after the path before: a tiled span
-held its blocks under the levels whole, so a block asking level 2 read
-the chain at 2 before the cache arrived, then tile 0, 1, and 2, and a
-block past the cache's four levels read tile 3 where the chain read
-deeper. The unlit loops pay the prologue's divides and the level for the
+the opening at levels 0, 1, and 2 and the spawn view over the whole
+screen, and which TileHandoff's lighting between the loop and the pool
+rests on. The unlit loops pay the prologue's divides and the level for the
 same picture; the sky reads its texture at level 0 by screen position,
 under a texel a pixel.
 
 ### The tiled modes
 
-A tiled surface's span is judged once in the prologue, after every
-span's footprint (the chain's level, above): its ends inside the map,
-and the bound on every block's level, the levels the surface has whole;
-a span whose ends lie past the map takes the lit loop at the chain's
-level, which clamps. Nothing else is checked, since a
-surface is built whole a level at a time (tile.S): the second to sixth
-cuts checked cells, per block or per span, and the measured cost of
-that judgement was 3 to 6 ms a view, more than the lighting's whole,
-with the per-span box of a diagonal line quadratic at a coarse level. A
-block whose level is built whole then reads that level's atlas, its
-shifts and mask riding the texture's four registers, the brightness's
-two, and one spilled saved register, since a hit needs no brightness: the
-cell shift k + 16 and the texel shift m + 16 from a 16.16 coordinate; a
-block asking a level the tiles do not hold whole, one still building or
-past the four, takes the lit loop at the chain's level instead. The
-seventh cut held the block's level between two levels taken at the span's
-ends as well, each the larger of the row step there and the step along
-the span averaged over the whole span, which cost two divides a span and
-clamped every block of a receding wall to the average's level wherever
-the row steps sat under it (tile.S); of the stack slots those bounds
-rode, 32 holds the owner build's surface and 224 the chain's last level.
+A span is judged once in the prologue for its tiles: lit, mapped, of a
+class TILE_CLASSES caches, its surface with a directory (tile.S's
+tiles_init); its tile record then rides slot 200, else 0. Every block of
+such a span is judged at its start: its level's grid, the tiles of its
+first sampled pixel and its last, the start plus the step times the
+pixels less one, both at the level by a shift of 16 + m + TILE_SHIFT; a
+block in two tiles is counted straddling and a block past the grid, a
+negative column among them, is not counted; both take the lit loop. One
+tile inside the grid gives the key, its directory entry's index, the
+entry, and the slot's tag, held against the entry's generation with
+SLOT_READY: equal, a hit, counted, its slot's bit set in the context's
+touched bitmap for CLOCK, and the tile loop; else a miss, counted, its key
+kept in slot 240 for the block's end, and the lit loop at the same level.
+The judgement is about thirty ops a block, a directory load and a tag
+load among them. The atlas cache's second to sixth cuts judged cells per
+block or per span against bit maps and measured that judgement at 3 to 6
+ms a view, more than the lighting's whole, so the pool's is a cost to
+measure (PoolCore's measurements), never assumed.
+
+At the block's end a kept key whose block passed a pixel is asked for
+(tile.S's tile_request) on the block's context, the key cleared first so
+no block after it asks again; t0 and t1, the pixel's and the depth's
+addresses, ride slots 248 and 256 across the call, the frame 272 bytes.
+The request stays out of the packet's render family, whose page holds
+little room past the hit path.
 
 A hit pays nothing of the lighting: no sample, no interval, no brightness
 carry. The tile loop ends by marking the interval over and the brightness
@@ -629,53 +617,35 @@ entering the next block stale, a -1 in its slot, and a lit block that
 finds the slot stale samples its own start before its interval; the span
 start no longer samples at all, so a span whose first block is tiled pays
 no sample, and one whose first block is lit samples there instead. The
-second cut decided after the lighting setup and carried the brightness
-across every tiled block, so a hit still paid the sample and the
-interval; the ceiling probe priced that bookkeeping at 0.2 to 3.0 ms a
-view and the multiplies at 1.0 to 2.8, the whole prize of a cache 1.6 to
-5.4 ms a view.
+atlas cache's second cut decided after the lighting setup and carried
+the brightness across every tiled block, so a hit still paid the sample
+and the interval; the ceiling probe priced that bookkeeping at 0.2 to 3.0
+ms a view and the multiplies at 1.0 to 2.8, the whole prize of a cache
+1.6 to 5.4 ms a view.
 
-The tiled pixel is the depth load and compare, the cell's row and
-column from the texel coordinates shifted by k, the row shifted by the
-atlas's column shift and the two added, shifted to the tile's bytes, the
-texel within the tile by the cell mask on each axis, one load, and the
-two stores; fourteen integer ops and one load against the lit loop's
-twenty-eight and one, and the unlit loop's eight. The texture's four
-binding registers serve the decision as scratch and the tile loop as
-constants, reloaded by the lit setup, so a lit block costs five loads it
-did not before; one saved register is spilled for the tile shift. Far
-blocks keep the lit loop because their sixteen pixels step texels apart
-in the texture, 64 KiB and cache-resident, where the same pixels' tiles
-lie a tile apart in an atlas of megabytes and miss: the whole-surface
-first cut read every block from tiles and measured the settled planes
-phase near twice the lit loop's. The masked tiled loop is the same with
-the alpha test, the tile keeping the texel's alpha. Every masked loop,
-lit, unlit, and tiled, passes a texel whose alpha is at or above 128,
-read as the loaded word's top bit, where before any nonzero alpha drew:
-the coarser tile levels scale their alphas to hold the texture's share
-at that pass (tile.S), and a pass taken at the texture's level too keeps
-the levels consistent with it; an antialiased edge thins by up to half
-a texel. A sign-extended load puts copies of that bit above it, which a
-logical shift by 31 leaves nonzero either way.
+The tiled pixel is the depth load and compare, v and u at the level by
+the texel shift m + 16, each masked to the tile's side and shifted to its
+row and its texel, added to the slot's tile, one load, and the two
+stores: nine integer ops and one load against the lit loop's twenty-eight
+and one, and the unlit loop's eight. The texel shift rides s0, the tile's
+address a1, and s5 is spilled to slot 40 as the chain's bind spills it,
+since the block's end takes it back for every path. The masked tiled loop
+is the same with the alpha test, the tile keeping the texel's alpha.
+Every masked loop, lit, unlit, and tiled, passes a texel whose alpha is
+at or above 128, read as the loaded word's top bit: the chain's coarser
+levels scale their alphas to hold the texture's share at that pass
+(tile.S's alphas_measure), and a tile copies them. A sign-extended load
+puts copies of that bit above it, which a logical shift by 31 leaves
+nonzero either way.
 
-Every surface's tiles are row-major. The fourth cut laid a plane's tiles in
-blocks of four by four texels with a swizzled pair of loops, the texel's
-block row by a shift of k plus four, its block along the row by a shift of
-six, and its row and place in the block from the low two bits of each
-coordinate, ten more ops a pixel and a second spilled saved register. The
-third cut, with every tile row-major, read the walls gaining 2.5 to 4.7 ms
-and the planes losing 5 to 10 in their phase on every view but the yard,
-whose floor at yaw 90 walks along the rows; the lit setup's reload of the
-texture's four registers is skipped for a polygon with no tiles, since
-every lit block of every polygon took it before. The fourth cut, blocks for
-planes, measured against a build with no binds in the same batch: walls
-level to the microsecond, planes 8 to 12 ms worse, the blocks no better
-than rows, so they went; and with every tile read pinned to one cache-hot
-tile, the judgement and the address work kept, the frame reads level with
-no binds on every view, so the hit path's own work costs exactly what the
-hit saves, and the tile data costs the rest. The combined ceiling, the
-multiplies and the sampling both cut on a no-bind build, measures the
-lighting's whole at 0 to 4.5 ms a view.
+A tile's texels are row-major. The atlas cache's fourth cut laid a
+plane's cells in blocks of four by four texels, ten more ops a pixel and a
+second spilled saved register, and measured walls level and planes 8 to
+12 ms worse against a build with no binds, the blocks no better than rows;
+with every tile read pinned to one cache-hot tile the frame read level
+with no binds on every view, so that hit path's own work cost what the
+hit saves and the tile data cost the rest. TileLayout's experiment reads
+the pool's layout again.
 
 The tile loop's end jumps forward to the block's end, 60f. The numeric
 local labels are shared across every file the program includes into its
@@ -687,7 +657,8 @@ fault at sector_draw's wall read through a garbage chain of saved
 registers, deterministic at 1.2 s, that three probes placed in this block
 before the disassembly of the jump named the target. A numeric label
 referenced across a function's end is the suspect whenever a block's
-exit lands in another routine.
+exit lands in another routine; the judgement's own labels, 4320 and 4330,
+and the request's 62 are unused elsewhere in span_fill.
 
 ### The flat path
 

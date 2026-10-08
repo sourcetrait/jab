@@ -794,34 +794,6 @@ packet_flush:
     sd t1, STAT_FLUSHES(t0)
     j packet_render
 
-packet_resolve:
-    la t0, commands
-    la t1, command_count
-    ld t1, 0(t1)
-    la t2, tile_generation
-    ld t2, 0(t2)
-    li t5, 0                        # the bindings invalidated
-1:
-    beqz t1, 9f
-    ld t3, POLY_MODE(t0)
-    andi t4, t3, POLY_TILED
-    beqz t4, 2f
-    ld t4, POLY_TILE_GENERATION(t0)
-    beq t4, t2, 2f
-    andi t3, t3, ~POLY_TILED        # bound before a reset: the chain at each block's level
-    sd t3, POLY_MODE(t0)
-    addi t5, t5, 1
-2:
-    addi t0, t0, POLY_SIZE
-    addi t1, t1, -1
-    j 1b
-9:
-    la t0, stats
-    ld t1, STAT_INVALIDATED(t0)
-    add t1, t1, t5
-    sd t1, STAT_INVALIDATED(t0)
-    ret
-
 context_counts:
     la t0, stats
     ld t1, CTX_SPANS(tp)
@@ -852,6 +824,30 @@ context_counts:
     ld t2, STAT_TILED_PIXELS(t0)
     add t2, t2, t1
     sd t2, STAT_TILED_PIXELS(t0)
+    ld t1, CTX_TILE_ADMITTED(tp)
+    ld t2, STAT_TILE_ADMITTED(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_ADMITTED(t0)
+    ld t1, CTX_TILE_DROPPED(tp)
+    ld t2, STAT_TILE_DROPPED(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_DROPPED(t0)
+    ld t1, CTX_TILE_FILTERED(tp)
+    ld t2, STAT_TILE_FILTERED(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_FILTERED(t0)
+    ld t1, CTX_TILE_HITS(tp)
+    ld t2, STAT_TILE_HITS(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_HITS(t0)
+    ld t1, CTX_TILE_STRADDLING(tp)
+    ld t2, STAT_TILE_STRADDLING(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_STRADDLING(t0)
+    ld t1, CTX_TILE_MISSES(tp)
+    ld t2, STAT_TILE_MISSES(t0)
+    add t2, t2, t1
+    sd t2, STAT_TILE_MISSES(t0)
 .ifdef COUNT
     la t0, count_stats
     li t3, 0
@@ -874,6 +870,12 @@ context_counts:
     sd zero, CTX_REJECTED(tp)
     sd zero, CTX_SAMPLES(tp)
     sd zero, CTX_TILED_PIXELS(tp)
+    sd zero, CTX_TILE_ADMITTED(tp)
+    sd zero, CTX_TILE_DROPPED(tp)
+    sd zero, CTX_TILE_FILTERED(tp)
+    sd zero, CTX_TILE_HITS(tp)
+    sd zero, CTX_TILE_STRADDLING(tp)
+    sd zero, CTX_TILE_MISSES(tp)
     ret
 
 .ifdef DEBUG
@@ -1078,7 +1080,9 @@ packet_render:
     sd s4, 16(sp)
     rdtime t0
     sd t0, 0(sp)                    # the render's start
-    call packet_resolve
+.ifdef DEBUG
+    call tile_check                 # the pool as the boundary left it
+.endif
     la t0, round_workers
     lwu t0, 0(t0)
     beqz t0, 1f
@@ -1111,6 +1115,9 @@ packet_render:
     sd zero, 0(t0)
     la t0, command_count
     sd zero, 0(t0)                  # the packet emptied
+.ifdef DEBUG
+    call tile_check                 # and after every join
+.endif
     rdtime t0
     ld t1, 0(sp)
     sub t0, t0, t1
@@ -1240,7 +1247,7 @@ band_render:
     ret
 
 span_fill:
-    addi sp, sp, -240
+    addi sp, sp, -272
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -1337,8 +1344,9 @@ span_fill:
     srai s8, s8, 16                 # u
     mul s9, s5, t4
     srai s9, s9, 16                 # v
+    sd zero, 200(sp)                # no tiles for the span until its surface has them
     li t3, -1
-    sd t3, 200(sp)                  # no tiles for the span
+    sd t3, 240(sp)                  # no request in hand
     ld a0, CTX_COMMAND(tp)
     mul t3, s10, s3
     add t3, s2, t3                  # 1/z at the end, kept for the row below it
@@ -1453,30 +1461,22 @@ span_fill:
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
     ld t3, 16(sp)
-    andi t3, t3, POLY_TILED
-    beqz t3, 29f
-    ld a7, POLY_LUMEL(a0)
-    srli a7, a7, LUMEL_K_SHIFT
-    addi a7, a7, 16                 # k + 16: a coordinate to its cell
-    sra a1, s8, a7
-    bltz a1, 29f
-    ld a5, 168(sp)
-    sra a2, a5, a7
-    bltz a2, 29f
-    ld t4, POLY_TILE_COLS(a0)
-    bge a1, t4, 29f
-    bge a2, t4, 29f
-    sra a1, s9, a7
-    bltz a1, 29f
-    ld a6, 184(sp)
-    sra a2, a6, a7
-    bltz a2, 29f
-    ld t4, POLY_TILE_ROWS(a0)
-    bge a1, t4, 29f
-    bge a2, t4, 29f
-    ld t3, POLY_TILE_READY(a0)
-    addi t3, t3, -1
-    sd t3, 200(sp)
+    andi t3, t3, POLY_LIT
+    beqz t3, 29f                    # unlit: no tiles
+    ld t4, POLY_LUMAP(a0)
+    beqz t4, 29f                    # lit flat: no tiles
+    ld t4, POLY_SURFACE(a0)
+.if (TILE_CLASSES & TILE_CLASS_PLANES) == 0
+    li t5, LUMAP_PLANES
+    bltu t4, t5, 29f                # a plane, a class the pool leaves to the lit loop
+.endif
+    li t5, TS_SIZE
+    mul t4, t4, t5
+    la t5, tile_surfaces
+    add t4, t4, t5                  # the surface's tile record
+    lbu t5, TS_LEVELS(t4)
+    beqz t5, 29f                    # no directory: the lit loop
+    sd t4, 200(sp)                  # the span's tiles
 29:
     ld a0, CTX_COMMAND(tp)
     ld t3, POLY_MIP_COUNT(a0)
@@ -1638,10 +1638,56 @@ span_fill:
     j 400f
 44:
     ld a5, 200(sp)
-    bltz a5, 4300f
+    beqz a5, 4300f                  # no tiles for the span: the lit loop
     ld a6, 192(sp)
-    bgt a6, a5, 4300f               # the level not whole in the tiles: the chain's at it
-    j 80f
+    slli a7, a6, 3
+    add a7, a7, a5                  # the level's grid
+    addi a6, a6, (16 + TILE_SHIFT)  # a coordinate to its tile at the level
+    addi a2, s11, -1
+    mul a3, t5, a2
+    add a3, a3, s8                  # u at the block's last pixel
+    sra a3, a3, a6
+    sra a0, s8, a6                  # the first pixel's tile column
+    bne a0, a3, 4330f               # two tiles: straddling
+    mul a3, t6, a2
+    add a3, a3, s9
+    sra a3, a3, a6
+    sra a1, s9, a6                  # its row
+    bne a1, a3, 4330f
+    lhu a3, (TS_GRIDS + TS_GRID_W)(a7)
+    bgeu a0, a3, 4300f              # past the grid, a negative column too: the lit loop
+    lhu a4, (TS_GRIDS + TS_GRID_H)(a7)
+    bgeu a1, a4, 4300f
+    lwu a4, (TS_GRIDS + TS_GRID_BASE)(a7)
+    mul a1, a1, a3
+    add a1, a1, a0
+    add a1, a1, a4                  # the key, the tile's directory entry
+    slli a2, a1, 2
+    la a3, tile_directory
+    add a2, a2, a3
+    lwu a2, 0(a2)                   # the entry
+    slli a3, a2, 48
+    srli a3, a3, 48                 # its slot plus one
+    beqz a3, 4320f                  # no tile
+    addi a3, a3, -1
+    slli a4, a3, 2
+    la a0, tile_tags
+    add a4, a4, a0
+    lwu a4, 0(a4)                   # the slot's tag
+    srli a0, a2, 16
+    slli a0, a0, 16
+    ori a0, a0, SLOT_READY
+    beq a0, a4, 80f                 # its generation's, READY: the tile
+4320:
+    sd a1, 240(sp)                  # missed: asked for at the block's end
+    ld a0, CTX_TILE_MISSES(tp)
+    addi a0, a0, 1
+    sd a0, CTX_TILE_MISSES(tp)
+    j 4300f
+4330:
+    ld a0, CTX_TILE_STRADDLING(tp)
+    addi a0, a0, 1
+    sd a0, CTX_TILE_STRADDLING(tp)
 4300:
     ld t3, 160(sp)
     ld a5, 152(sp)
@@ -1895,24 +1941,26 @@ span_fill:
     sd t3, 160(sp)
     j 60f
 80:
+    ld a0, CTX_TILE_HITS(tp)
+    addi a0, a0, 1
+    sd a0, CTX_TILE_HITS(tp)
+    ld a0, CTX_TILE_TOUCHED(tp)
+    srli a2, a3, 6
+    slli a2, a2, 3
+    add a0, a0, a2
+    ld a2, 0(a0)
+    li a4, 1
+    sll a4, a4, a3
+    or a2, a2, a4
+    sd a2, 0(a0)                    # the slot read this frame, for CLOCK
+    slli a1, a3, TILE_BYTES_SHIFT
+    la a2, tile_pool
+    add a1, a1, a2                  # the slot's tile
+    ld a5, 192(sp)
+    addi s0, a5, 16                 # a coordinate to its texel at the level
     li t4, 0
     sd s5, 40(sp)
-    ld a0, CTX_COMMAND(tp)
-    ld a5, 192(sp)                  # the block's level
-    slli a6, a5, 3
-    add a6, a6, a0
-    ld a1, POLY_TILES(a6)           # the level's atlas
-    ld a4, POLY_TILE_COLS_SHIFT(a0)
-    ld a3, POLY_LUMEL(a0)
-    srli a3, a3, LUMEL_K_SHIFT      # k
-    addi t3, a3, 16                 # a coordinate to its cell
-    addi s0, a5, 16                 # a coordinate to its texel at the level
-    sub a3, a3, a5                  # the cell's texels a side at the level, as a shift
-    li a2, 1
-    sll a2, a2, a3
-    addi a2, a2, -1                 # the texels of a cell less one, at the level
-    slli s5, a3, 1
-    addi s5, s5, 2                  # a tile's bytes as a shift
+    mv t2, s11
     ld a6, 16(sp)
     andi a6, a6, POLY_MASKED
     bnez a6, 85f
@@ -1920,21 +1968,15 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 82f
     addi t4, t4, 1
-    srl a5, s9, t3                  # the cell's row
-    sll a7, a5, a4
-    srl a0, s8, t3                  # and column
-    add a7, a7, a0                  # the tile's index
-    sll a7, a7, s5                  # the tile
     srl a5, s9, s0                  # v at the level
-    and a5, a5, a2
-    sll a5, a5, a3
+    andi a5, a5, (TILE_SIDE - 1)
+    slli a5, a5, TILE_ROW_SHIFT
     srl a6, s8, s0                  # u
-    and a6, a6, a2
+    andi a6, a6, (TILE_SIDE - 1)
+    slli a6, a6, 2
     add a5, a5, a6
-    slli a5, a5, 2
-    add a7, a7, a5
-    add a7, a7, a1
-    lw a0, 0(a7)
+    add a5, a5, a1
+    lw a0, 0(a5)
     owner_pixel a0
     sw a0, 0(t0)
     sw s2, 0(t1)
@@ -1951,21 +1993,15 @@ span_fill:
     lwu a7, 0(t1)
     bgeu a7, s2, 86f
     addi t4, t4, 1
-    srl a5, s9, t3
-    sll a7, a5, a4
-    srl a0, s8, t3
-    add a7, a7, a0
-    sll a7, a7, s5
     srl a5, s9, s0
-    and a5, a5, a2
-    sll a5, a5, a3
+    andi a5, a5, (TILE_SIDE - 1)
+    slli a5, a5, TILE_ROW_SHIFT
     srl a6, s8, s0
-    and a6, a6, a2
+    andi a6, a6, (TILE_SIDE - 1)
+    slli a6, a6, 2
     add a5, a5, a6
-    slli a5, a5, 2
-    add a7, a7, a5
-    add a7, a7, a1
-    lw a0, 0(a7)
+    add a5, a5, a1
+    lw a0, 0(a5)
     srli a5, a0, 31
     beqz a5, 86f
     owner_pixel a0
@@ -2051,6 +2087,19 @@ span_fill:
 .ifdef CENSUS
     census_end
 .endif
+    ld a0, 240(sp)
+    bltz a0, 62f                    # nothing to ask for
+    li a1, -1
+    sd a1, 240(sp)
+    beqz t4, 62f                    # no pixel past the depth test: nothing asked
+    sd t0, 248(sp)
+    sd t1, 256(sp)
+    ld a1, CTX_COMMAND(tp)
+    ld a1, POLY_SURFACE(a1)
+    call tile_request               # the missed tile asked of the next boundary
+    ld t0, 248(sp)
+    ld t1, 256(sp)
+62:
     ld s8, 0(sp)
     ld s9, 8(sp)
     mul t3, s11, s6
@@ -2133,7 +2182,7 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 240
+    addi sp, sp, 272
     ret
 
 .section .bss

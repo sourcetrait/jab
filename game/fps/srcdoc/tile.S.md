@@ -1,86 +1,126 @@
 # tile.S
 
-The lit texture cached a surface at a time, in levels: a surface's atlas a
-level, a tile one lumel cell at the texture's resolution at level 0 and half a
-side each level after, each level 0 texel the texture's times the lumel
-brightness bilinear across the cell and each coarser texel the average of
-four below it; a surface is built whole, a level at a time from the finest,
-under a budget a frame, and a lit span reads the levels built whole in place
-of the texture and the map; the arena reset whole when an atlas does not fit.
+The tile pool: the lit texture cached a tile at a time in a bounded pool, a
+tile TILE_SIDE texels square at one level of the material's chain, built on
+hart 0 at the frame's boundary from what the frame before asked for, read
+by the span's blocks through a directory, and evicted by CLOCK. Then the
+alpha coverage policy the chains carry, and the console's lumel rewrites.
 
-The lit loop's cost over the unlit loop's is its three channel
-multiplies and the unpacking around them, about twenty ops a pixel, and
-its sampling of the lumel map once an interval; a tile pays them once.
-The tile is one lumel cell at the texture's resolution, 2^k texels
-square, because the brightness across a cell is one bilinear patch of
-the map's four nodes, so a tile is exactly what the lit loop would store
-for that cell if every texel of it were drawn at one texel a pixel, and
-because a cell is the grain at which a surface comes into view a piece
-at a time; a per-surface cache at texel resolution is the same memory
-laid out as an atlas, which is what this is.
+The lit loop's cost over the unlit loop's is its three channel multiplies
+and the unpacking around them, about twenty ops a pixel, and its sampling
+of the lumel map once an interval; a tile pays them once for every pixel
+that reads it. The pool replaced whole-surface atlases in a 1 GiB arena,
+reset whole when one did not fit, built finest level first under a budget
+a frame: every surface in view was built whole before its first tile was
+read, a distant surface's level 0 included, and the arena reset four or
+five times over the factory route.
 
-The prize is bounded and measured: on a build with no binds the gauge's
-seven views read 0 to 4.5 ms a view less when the lit loop's multiplies
-and its sampling were both cut in one build, the lighting being under a
-fifth of the lit frame, the rest the rasterizer's. Every cut of the
-cache is read against that ceiling, and seven cuts have been.
+### The tile
 
-The cuts before this one, each measured on the gauge against a build
-with no binds in the same batch: a whole-surface build read for every
-block, the settled planes phase near twice the lit loop's; a hybrid
-reading near blocks only, judged after the lighting setup, 8 to 13 ms
-worse on plane views; the block judged before the lighting setup with
-every cell of its box covered, level on walls and 5 to 10 worse on
-planes; planes in four-by-four blocks, no better; levels chosen from
-both gradients, the garage from 10 ms worse to 6; the level's atlas as
-one image with a six-op address, 65 and 78 ms, since a plane's
-consecutive rows then sit an image row apart, kilobytes and a page
-each; and the measurement that decided this cut, the frame after a
-reset with nothing tiled costing 3 to 6 ms a view over no binds, the
-per-block judgement and marking alone.
+Tile (m, tx, ty) of a surface covers the texels of level m from tx and ty
+times TILE_SIDE to the next, in the surface's lumel frame: the map's first
+node is the origin, as lumap_bind folds U0 and V0 into the coefficients, so
+a block's coordinate from span_fill names its tile by a shift, 16 + m +
+TILE_SHIFT. Every level of the chain has tiles, coarser than a lumel cell
+included, so no shift is negative and no tile empty. A tile's texel is the
+chain's at its level, mip_bind's addressing, lit at its centre by the
+lumel map and scaled as the lit loop scales one, its alpha the chain's,
+already scaled for coverage at that level (alphas_measure). Under the
+bright frame every lumel is one and the tile equals the chain: the spawn
+view settled on its tiles is the lit loop's picture byte for byte, which
+the test holds.
 
-### The levels
+### The directory and the slots
 
-A tile is built at one of the levels, each half a side of the one
-before. The block picks its level from its texel step a pixel, the
-largest of the step along the span and the step down a row on each
-axis, so a block reads about a texel a pixel from its level and the
-spans a row apart read the same lines: the fourth cut judged nearness
-along the span alone, and a receding floor whose rows sat four texels
-apart along the screen's rows still read level 0, so the spans a row
-apart shared no cache lines and every pixel fetched one, Astra's point.
-The step down a row is measured at the span's two ends, a divide each,
-and interpolated along it, so a block's level costs about twenty-five
-ops, and the only bound on it is the levels the surface has whole. The
-seventh cut bounded it further by two levels taken at the span's ends,
-each the larger of the row step there and the step along the span, the
-end's coordinate less the start's over the pixels, an average over the
-whole span; where the row steps at both ends sat under that average,
-the common case on a wall receding into the distance, the two bounds
-met at the average's level and every block of the span took it, near
-blocks blurred and far blocks read a finer level than their step and
-missed the cache for it, Astra's finding on the seventh cut. The bounds
-added nothing a correct level needs and cost two divides a span. A
-level 1 tile and up is built from the level below by averaging two by
-two at four reads a texel, the colour weighted by alpha and the alpha
-scaled for its coverage (tile_shrink); the fifth cut box-filtered the
-texture at every level from the full square, which read every source
-texel for every level.
+The pool holds TILE_SLOTS tiles of TILE_BYTES, a page each at 32. A slot's
+tag holds its generation and its state, FREE, BUILDING, or READY; PINNED is
+the frame-wide rule that nothing changes between the boundary's end and the
+frame's last join, so a READY tag read in the frame stays READY through it,
+and RETIRED is eviction's step inside the boundary, never seen by a reader.
+The directory holds an entry for every tile of every mapped surface at
+every level of its chain, sized at load (tiles_init): 0 for no tile, else
+the slot plus one and the slot's generation at publication. A lookup takes
+the entry and holds its generation, with SLOT_READY, against the slot's
+tag, so an entry left by a missed clear, its slot since retired and its
+generation advanced, reads no tile. A retirement clears the entry naming
+its slot before the generation advances, so a wrap of the sixteen-bit
+generation cannot alias a live entry; the check guards the clear.
 
-### What the data costs
+### Requests and admission
 
-With the hit path's work under what it saves, measured by pinning every
-tile read to one cache-hot tile (the garage 19.9 ms against 20 to 21
-with no binds), the garage's remaining 7 ms is the tile data: a floor's
-spans at yaw 0 walk across the tile rows and read sixteen lines a
-block, the spans a row apart reading the same lines, so the lines come
-from the second-level cache, about 4 ns each, where the 64 KiB
-texture's come from the first; a frame's tiles at the right level are
-the screen's pixels, 8 MB, whatever the layout. Four-by-four blocks or
-Morton order would cut a block's lines to four on any walk, about a
-quarter of the loss and about what the hit saves, the floor views being
-where the next cuts work; a wall's spans walk along the rows and read
-level to a millisecond better.
+A block asks for its tile only when it could use it: its first sampled
+pixel and its last, the start plus the step times the pixels less one, in
+one tile inside the level's grid, a pixel of it past the depth test, the
+tile not READY. A straddling block asks nothing. The request goes to the
+block's raster context alone (tile_request), so the render path stores
+nothing another context writes: a repeat filter of TILE_RECENT entries,
+each a key under the frame's stamp, direct-mapped by the key's low bits,
+so a displaced key's repeat is admitted again, a duplicate and never a
+loss; then the surface's guaranteed tier, its first TILE_GUARANTEE
+requests of the frame checked against its own keys, so no surface's
+demand takes another's; then the context's open ring of TILE_RING
+entries, its overflow dropped and counted. A request lives one frame:
+every stamp is the frame's, and the boundary empties the rings and the
+lists after the merge.
+
+### The boundary
+
+Hart 0 runs it at world_draw's start, after the frame before's last join
+and before any bind (tile_boundary): the console's changes come in force,
+an L's forget is done, then the frame before's batch is counted and
+merged, deduplicated through the merge bitmap, the guaranteed tiers first
+by surface from a rotating cursor, then the open rings from a rotating
+context, stopping at the merge's share of the allowance or the merged
+list's end, counted unprocessed, the cursors resuming there; the touched
+bitmaps folded into CLOCK's reference bits; the tile in construction
+finished first; then construction round-robin over the merged surfaces
+from a cursor kept between boundaries, a tile a surface a pass, until
+TILE_ALLOWANCE or TILE_QUOTA; the requests not served discarded. The
+allowance covers the whole boundary, and the time past it is recorded.
+An L lifts the quota and the allowance, or freezes construction with its
+byte 5.
+
+### Eviction
+
+CLOCK over the effective slots: a READY slot read since its last sweep
+has its reference bit cleared and is passed over once; one unread is
+retired; a slot published in this pass is never evicted in it, so a slot
+changes at most once a pass, and a new slot's bit starts clear, so a tile
+unread through the frame after its publication is evictable at the next
+boundary. Two sweeps find a victim if one exists.
+
+### The frozen frame
+
+On a debug build every tag and entry write is counted (tile_wrote), the
+count snapshotted in world_draw right after the boundary and checked at
+every packet render's start and end, so at every flush, round, and the
+last join, and in round_finish (tile_check); a change exits 15 with `fps:
+tile pool changed in flight`. A boundary moved after the first bind would
+pass the picture and fail here.
+
+### What the earlier caches taught
+
+The atlas cache's cuts, each measured on the gauge against a build with no
+binds: judging every block's or every span's cells against bit maps of
+built and wanted cells cost 3 to 6 ms a view, more than the lighting's
+whole; a hit path whose work about equalled what the hit saves gained
+nothing, walls gaining and planes losing on the tile data's cache level
+(the garage 19.9 ms with every read pinned to one cache-hot tile against
+20 to 21 with no binds, its remaining 7 ms the tile data); a floor's spans
+at yaw 0 walk across a tile's rows and read sixteen lines a block where
+four-by-four blocks or Morton order would read four. The pool's block
+lookup is a directory load and a tag compare a block, and TileLayout's
+experiment and TileClasses' planes measure against these.
+
+## .macro tile_wrote
+
+A debug build's count of a tag or an entry written, the frozen frame's
+evidence; a release build expands it to nothing.
+
+## .macro tile_edge
+
+A lumel cell's edge on the row in hand, the column's two nodes weighted by
+the row's fraction, packed as lumel_sample packs its sum.
 
 ## tiles_init
 
@@ -93,11 +133,14 @@ directory line's at 32. A surface whose grid passes sixteen bits a side or
 whose grids would pass TILE_DIRECTORY_ENTRIES stays uncached, counted, and
 the next surface is tried. Every slot starts free, slot 0 on top of the free
 stack, the effective slots all of them, no tile in construction; each
-context gets its admission block and its touched-slot bitmap.
+context gets its admission block and its touched-slot bitmap; every
+surface's merged chain is none; the configuration pending is the build's,
+TILE_GUARANTEE and TILE_RING, flagged changed so the first boundary sends
+its record.
 
 TILE_MEMORY is every table of the pool and the pool itself, tile_tables_end
 less tile_pool, read once here; the memory in use counts the tables with the
-directory at this map's entries, and later the slots in use. A debug build
+directory at this map's entries, and the slots in use. A debug build
 prints both with the side, the slots, the directory's entries, and the maps
 held and left uncached:
 
@@ -111,180 +154,163 @@ producer's polygon its scratch at load as lumaps_bake's is.
 The raster context of index 0 is hart 0's, raster_context, and index n the
 worker n - 1's in worker_contexts, CTX_SHIFT apart.
 
-## tiles_reset
+## tiles_forget
 
-The arena is a bump allocator with one policy, a reset of the whole when
-an atlas does not fit: every record forgotten, the next frames
-rebuilding what they see. No eviction, since a tile's cost is its build
-and the arena, 1 GiB of a nearly 4 GiB window, holds most of Render
-Zero's level 0 (1,011 MiB at 64-texel cells before the columns'
-padding); the program's bss costs nothing until touched, RAM being zero
-at QEMU's start and the kernel zeroing only its own. The frame line
-counts the resets since the load; the gauge's views read none.
+The console's L, at the boundary: every READY slot's entry cleared where
+it names the slot, every slot's generation advanced and its state FREE,
+the free stack rebuilt over the effective slots, nothing in construction,
+and the resets since the load counted. STAT_TILE_RESETS counts these alone.
 
-A reset advances the arena's generation, and a binding holds the
-generation it was made in (POLY_TILE_GENERATION), so a command of the
-frame's packet bound before a reset in the same frame is known stale when
-the packet renders (raster.S's packet_resolve) and takes the chain at its
-own level, never an atlas a later surface may have rebuilt over its own.
-Nothing resets while a packet renders: construction and reservation are
-preparation's.
+## tile_boundary
 
-## tiles_bind
+The pool's one change a frame, its order fixed: the configuration, the
+pass's mark, the forget, the deadlines (the allowance's, the merge's
+share's, and the quota, all past reach under an L's lift), the batch and
+its merge, the fold, construction unless frozen, the discard, the frame's
+stamp, the occupancy. Its whole time is STAT_TILE_TICKS, the draw record's
+`tiles_us`, a part of the drawing beside the others; the construction's
+within it is STAT_TILE_BUILD_TICKS, and the time past the allowance
+STAT_TILE_OVERRUN.
 
-A surface is built whole, a level at a time from the finest, the cells
-in index order under the frame's budget, and the polygon takes the tiled
-flag once level 0 is whole, with the count of levels whole for the span
-to hold its levels under. No cell is ever checked by a span: the second
-to sixth cuts tracked built and wanted cells in bit maps and judged
-every block's or every span's cells, and that judgement cost 3 to 6 ms
-a view, more than the lighting's whole, where the whole-surface build
-costs a big floor some hundreds of frames on the lit loop at first
-sight and nothing after. The budget is in the texture's texels read: a
-level 0 cell its square, a coarser cell four reads a texel of its own,
-and a cell the budget cannot hold whole waits for the next frame.
+## tile_stall
 
-The cursor steps over the padding columns. The atlas keeps them so a
-cell row is a shift, and the seventh cut walked the cursor through them
-and built them, tile_build addressing the lumel map with the padded
-column, so the nodes it read were the next row's, or past the map's end
-on the last row, inside the zeroed lumel arena; the span never read one
-back, since its prologue rejects an end in a padding column, so the
-cost was the budget alone. Render Zero's 64,726 cells pad to 88,568, 27
-percent over the map, and the bay view's L frame, which builds every
-surface in view whole under no budget, built 73,888 cells before the
-skip and 53,704 after, with the tiled pixel count unchanged at
-2,423,311. The skip is two loads and a mask at the cursor's step, off
-the pixel path.
+A debug build's S frame draws nothing, so its boundary serves nothing: the
+batch the frame before made is counted and discarded whole, recorded as
+unprocessed, and the frame's stamp taken, so every boundary consumes the
+frame before's batch, drawn or stalled.
 
-The record sits at the map's index. Cells are built at the level in hand
-while the budget holds; a level whole moves the hand to the next. A column
-at the map's width is padding: the cursor moves on to the next row's first
-cell, so no padding tile is built.
+## tile_stamp
 
-The tiles' time is read around the reservation, with any reset it makes,
-and around each cell built or shrunk, so a polygon whose surface is whole
-reads no clock.
+The frame's stamp is its number plus one, CLOCK_SNAPSHOT's, 0 never; every
+request of the frame is stamped with it, and the next boundary consumes the
+batch under it.
 
-On a debug build the console's L frame caps the levels a surface builds
-(its byte 6, tile_level_cap), so a fixture can hold a surface at level 0
-alone while its blocks ask level 1, and read that they take the chain at
-level 1 rather than a sharper tile; a release build carries none of it.
+## tile_configure
 
-On a debug build the console's K frame resets the arena after the frame's
-first binds, every frame (tile_reset_after, counted in tile_binds), the
-arena in use poisoned first: the stale binding's fixture, whose commands
-bound before the reset must draw the chain and never the poison. The
-forced reset counts with the arena's own.
+The console's changes within a frame coalesce into one snapshot that the
+frame's boundary puts in force and records: the configuration record goes
+out ahead of that frame's own records and names it, so a capture carries
+the configuration each frame ran under, a debug cap's or another
+TILE_SIDE's build alike. A changed limit governs the admissions after it,
+while the boundary consumes the frame before's batch by that batch's own
+counts.
 
-The binding takes the arena's generation with the tiled flag, so the
-command copied from the polygon carries it.
+## tile_batch
 
-## tiles_poison
+The frame before's batch: its source frame, the stamp less one, all ones
+at the first boundary; its admitted requests, every listed surface's tier
+and every ring, from the batch's own counts; its greatest ring; and the
+union of the contexts' requesting surfaces, a bit a surface, which the
+merge scans.
 
-TILE_POISON is written two a word over the arena up to its cursor, so a
-stale read through an atlas the forced reset took back draws the poison
-where the tiled and the lit pictures hold the surface's own colours; the
-fixture counts such pixels.
+## tile_merge
 
-## tiles_alloc
+The guaranteed tiers first: the union's words from the merge cursor, each
+requesting surface's tier in each context under the batch's stamp, key by
+key; then the open rings, contexts from the context cursor. The merge's
+share is checked after each surface and every sixteenth ring entry; a stop
+at the share or at the merged list's end leaves its cursor where it stood,
+so the next boundary begins there, and a whole merge moves the cursor on
+one, so no surface's or context's place in the order is fixed. What the
+batch admitted and the merge never took is STAT_TILE_UNPROCESSED; the
+duplicates among the rest follow, the admitted less the unprocessed less
+the merged.
 
-The cells across and down are the map's nodes, not the nodes less one:
-the last cell's far nodes read the greatest, as lumel_sample clamps, so a
-texel coordinate up to the lumel past the surface's end, which the span
-can reach by a block's interpolation at a grazing edge, has a cell of
-its own. The columns are padded to a power of two so a cell row is a
-shift, the padding reserved and never built; the rows are the map's,
-since a span reads tiles only when its ends lie inside the map. The
-levels are TILE_LEVEL_COUNT or k + 1, the fewer, each atlas a quarter
-of the one before, reserved together on first sight. An atlas past
-TILE_ATLAS_MAX marks the surface never, the lit loop for good.
+## tile_merge_key
 
-The atlases' bytes are summed over the levels, each a quarter of the last.
-With the arena full it is emptied, every surface forgotten, and this one
-reserved at its start, counted for the frame line; each level's atlas comes
-from the arena's cursor. tile_peak takes the cursor after each reservation,
-so it holds the most the arena has held since the load; a reset lowers the
-cursor and leaves the peak.
+A key merged already this boundary is a duplicate; else it goes on the
+merged list and on its surface's chain, a surface's first key putting the
+surface in the merge's order. The list's end stops the merge with the key
+unprocessed.
+
+## tile_fold
+
+Each context's touched-slot bitmap folded into the slots' reference bits
+and cleared, a word at a time, skipping empty words.
+
+## tile_construct
+
+The tile in construction finished first, then the rotation: from the
+merged surface at or after the build cursor, one key a surface a pass,
+the cursor moved past each surface served, until the keys run out, the
+budget is spent, or no slot can be taken.
+
+## tile_make
+
+A key whose entry names a READY slot of its generation is built already, a
+merge's key whose tile the BUILDING tile turned out to be among them. A
+slot comes from the free stack, else from CLOCK; the key gives the tile's
+level by the grid that holds it, and its row and column. The slot is
+BUILDING under its generation until whole, so a tile the budget cuts short
+stays BUILDING with its next row and is finished first at the next
+boundary.
+
+## tile_evict
+
+CLOCK's sweep over the effective slots from its hand, two turns at most: a
+slot not READY or published this pass is passed over, a read one has its
+bit cleared and is passed over, the first unread one is retired.
+
+## tile_retire
+
+The entry cleared only where it still names this slot under its
+generation, the generation then advanced and the slot free; the pool's
+slots in use and the evictions counted.
+
+## tile_publish
+
+The tag READY before the entry names it, both under the slot's generation;
+the slot marked with this pass and its reference bit clear.
+
+## tile_discard
+
+What the boundary did not serve is forgotten: the merge bitmap cleared over
+the merged keys alone, the merged chains of the surfaces in the order
+reset, the union cleared, and every context's list and ring emptied. The
+tiers and the filter need no clearing, their stamps a frame's.
+
+## tile_occupancy
+
+The pool's bytes in use, the slots in use times TILE_BYTES with a BUILDING
+slot counted, and their high-water, tile_peak, the draw record's
+`tile_bytes` and `tile_peak`; the memory in use, those bytes and the
+tables', and its high-water.
+
+## tile_request
+
+Called at a missed block's end with a pixel past the depth test, on the
+block's raster context; its counts are the context's, summed with the rest
+by context_counts.
+
+## tile_check
+
+A debug build's frozen frame: the pool's writes since the snapshot taken
+in world_draw after the boundary, none allowed.
 
 ## tile_build
 
-Each texel is lit at its centre. A row's brightness is the two side nodes
-weighted by the fraction at the row's centre, (2 row + 1) 128 over the
-cell's texels in 256ths, truncated as lumel_sample truncates its fraction,
-the lanes whole as in lumel_sample; it steps along the row by each lane's
-change over the cell's texels, and starts half a step in, each lane's
-change over twice the texels, both divided toward zero so no lane runs past
-its end into a negative value, which would borrow from the lane above; a
-shift would floor a negative change and overshoot. The texel is scaled as
-the lit loop scales one, the same two shifts a channel, so under one
-brightness the tile holds the bytes the loop would store. The lit loop
-lights a pixel's own coordinate, the half pixel in it, which lies within
-half a texel of its texel's centre, and where the two points meet they
-differ by their rounding alone: the bilinear read's eight-bit fraction and
-the interval's stepped lanes against the row's stepped lanes here. A tile
-lights its texel once for every pixel that reads it, where the loop's
-light moves across the texel; at a coarser level the tile averages lit
-texels where the loop lights an averaged one. Under the full-bright frame
-every node is one and the two agree exactly, which the alpha fixture
-holds; under real light the test reports how far they part. The build lit
-each texel at the cell's corner before, half a texel off the loop's point
-across every surface. Page-aligned and under a page, since its inner loop
-runs a texel, which the test holds.
-
-The four nodes are read first, the far ones the greatest at the map's end;
-the tile is found by its index, with the cell's first texel; then each row's
-brightness at its start and end, the nodes weighted by the fraction at the
-row's centre in 256ths, the lanes whole, its step a texel and half a step
-in, and the texture's row.
-
-## tile_shrink
-
-The level below's tile of the same cell is four times the texels, so
-each coarser texel is the mean of a two-by-two square under it. The
-finer tile is TILE_BASE a level back in the record, the level fields
-eight bytes apart. The texel's rule is texel_shrink (mip.S), one macro
-the tile and the texture's chain both expand, so the two cannot drift: a
-tile at a level and the chain's level agree under one brightness, which
-the alpha fixture holds identical over the opening at every level.
-
-The seventh cut averaged the colour channels plainly and kept the
-upper-left texel's alpha, so a square with one opaque texel was either
-an opaque dark texel or nothing by which corner the opaque one sat in,
-and the fence and the grate changed density and darkened with distance
-by sampling phase, Astra's finding. Now the colour is weighted by the
-four alphas, so a transparent texel's colour, black in the content's
-PNGs, counts for nothing, and the alpha is the mean of the four, scaled
-by the material's factor for the level (alphas_measure) and capped at
-255. The weighting divides once a texel by one reciprocal of the alpha
-sum in 8.24, three multiplies in place of three divides, each product
-rounded to the nearest before its shift: the reciprocal's truncation
-puts a product under the true mean by at most a sixtieth of a level,
-so with the half added an exact mean, a constant colour under any
-alphas among them, comes back exact, where a plain shift returned 254
-for one opaque white texel among three transparent ones (Astra's
-review), and a half-way case may fall by one. The four texels are
-loaded unsigned, since a sign-extended word's top byte is not its
-alpha. The alike case, four
-equal alphas, which is every texel of an opaque texture and most of a
-masked one, takes the plain mean and the alpha as it is, with no divide,
-so an opaque texture's shrink costs what it did.
-
-The scale lands a mean at or above the chosen threshold T at or above
-the pass and nothing under T there, which an 8.8 scale, ceil(32768 / T),
-fails above T 194 (brute force over every T and alpha: T 195 with alpha
-194 passes, and twenty more pairs up to T 254); ceil(2^23 / T) in 16.16
-holds for every T to 2896, so every T. The masked loops then test the
-word's top bit, the alpha at or above 128, in place of any nonzero
-alpha, the same op count.
-
-The scale is the level's of the material bound.
+A tile is built a row at a time, the row's v at its texels' centre, (2Y +
+1) << (m + 15) in 16.16 of level 0, giving its lumel row and its 8-bit
+fraction as lumel_sample takes them. Along the row, below k each lumel cell
+is a segment of 2^(k - m) texels whose light is linear between the cell's
+edges (tile_edge): each lane starts at the segment's first texel's centre
+and steps a texel at a time, both divided toward zero, so no lane runs past
+its end into a negative value, which would borrow from the lane above; at
+level k a texel is half a cell and takes its edges' mean; past k a texel's
+centre lies on a node column and takes its light. A texel or row past the
+last node takes the last node's column or row, the limit of lumel_sample's
+clamp, within 1/256 of a node's difference of the clamped coordinate's
+light. The texel is the chain's at the level, scaled as the lit loop scales
+one, the same two shifts a channel, the alpha kept. The quota is charged a
+row's texels and the clock read between rows; whole, the routine answers 1,
+and cut short, 0 with the next row kept. Page-aligned and under a page,
+since its inner loop runs a texel, which the test holds.
 
 ## alphas_measure
 
 Level 0's share of texels at or above the pass is the target; each coarser
-level's alphas are the means of the level before, as tile_shrink makes them,
-and the threshold T whose share at or above it lies nearest the target
+level's alphas are the means of the level before, as texel_shrink makes them
+for the chain (mip.S), and the threshold T whose share at or above it lies nearest the target
 becomes the level's scale, ceil(2^23 / T), so the scaled means pass exactly
 where the raw ones reach T. The least error wins, a tie goes to the lower
 share, and among equal shares to the T nearest the pass, so a texture whose
@@ -305,12 +331,11 @@ the share nearest it. The coverage is measured with the engine's own
 rule, the loops' point sample against the pass, not NVIDIA's bilinear
 subsamples.
 
-The chain is the tile build's exactly: the means are integer means of
-the level before, and the level before is the scaled plane, as the tile
-of level L is shrunk from the stored tile of level L - 1, whose alphas
-are already scaled; so the analysis runs the same arithmetic over the
-whole texture once, and the cells, aligned to the texture by the map's
-origin, meet the same values. The search walks T from 256, which passes
+The analysis is the chain's arithmetic exactly: the means are integer
+means of the level before, and the level before is the scaled plane, as
+mips_build shrinks level L from its stored level L - 1, whose alphas are
+already scaled; a tile copies the chain's texels at its level, so the
+tiles and the lit loop meet the same alphas. The search walks T from 256, which passes
 nothing, down to 1, the count at or above T accumulating from the
 histogram, and compares the share against the target as cov times the
 texture's texels against the target count times the level's, exact in
@@ -368,9 +393,9 @@ each lane, in a lumel's 256ths, which lumel_pack packs from a 16.16
 brightness word by a shift of eight; a first version wrote 1 << 16 and
 drew black. The test's bright capture then samples the texture as the
 lit one does, tile for tile, so the lit over the bright is the light
-alone; a dark copy on the unlit loop point-samples where a tile at a
-level averages, and read 8 of 256 of view dependence that was the
-texture's.
+alone; a dark copy on the unlit loop read 8 of 256 of view dependence
+that was the texture's sampling. Every tile is forgotten with it, its
+light the old lumels'.
 
 ## lumels_parity
 
@@ -435,25 +460,99 @@ room's light changes too little across a texel to tell the two.
 
 `7 u8`.
 
-## tile_cursor
+## msg_tile_flight
 
-`addr`: the arena's next free byte.
-
-## tile_budget
-
-`u64`: the frame's budget left, in texels.
-
-## tile_budget_frame
-
-`u64`: the budget a frame starts with, TILE_BUDGET until the console lifts it.
+`34 u8`.
 
 ## tile_peak
 
-`u64`: the most the arena has held since the load, in bytes.
+`u64`: the pool's tile bytes' high-water since the load, the slots in use's.
 
-## tile_generation
+## tile_frame
 
-`u64`: the arena's generation, advanced by every reset.
+`u64`: the frame's stamp, its number plus one, 0 before the first boundary.
+
+## tile_pass
+
+`u64`: the boundaries since the load, the mark a slot published in one keeps.
+
+## tile_hand
+
+`u64`: CLOCK's hand, the slot its next sweep starts at.
+
+## tile_used
+
+`u64`: the slots in use, a BUILDING slot counted.
+
+## tile_deadline
+
+`u64`: the allowance's end, in rdtime's ticks.
+
+## tile_merge_deadline
+
+`u64`: the merge's share's end.
+
+## tile_quota_left
+
+`i64`: the texels construction may still build this boundary.
+
+## tile_merge_cursor
+
+`u64`: the requesting surfaces' word the next merge starts at.
+
+## tile_context_cursor
+
+`u64`: the context whose ring the next merge's rings start at.
+
+## tile_build_cursor
+
+`u64`: the surface the next rotation starts at or after.
+
+## tile_merged_count
+
+`u64`: the merged list's entries.
+
+## tile_order_count
+
+`u64`: the surfaces merged.
+
+## tile_processed
+
+`u64`: the batch's requests the merge took, merged or a duplicate.
+
+## tile_batch_frame
+
+`u64`: the last batch's source frame, all ones for the first boundary's none.
+
+## tile_batch_admitted
+
+`u64`: its admitted requests, by its own counts.
+
+## tile_batch_ring
+
+`u64`: its greatest open ring.
+
+## tile_batch_surfaces
+
+`u64`: its requesting surfaces, the union's.
+
+## tile_flags
+
+`u64`: the configuration in force's flags, CONFIG_UNLIMITED and CONFIG_FROZEN.
+
+## tile_guarantee
+
+`u64`: the guarantee in force, TILE_GUARANTEE unless a debug knob holds fewer.
+
+## tile_ring
+
+`u64`: the open ring in force, TILE_RING unless a debug knob holds fewer.
+
+## tile_pending_flags
+## tile_pending_guarantee
+## tile_pending_ring
+
+`u64`: the console's values for the next boundary to put in force.
 
 ## tile_entries
 
@@ -491,21 +590,25 @@ room's light changes too little across a texel to tell the two.
 
 `u64`: the most the pool's memory has held in use since the load.
 
-## tile_level_cap
+## tile_writes
 
-`u64`: on a debug build alone, the levels a surface builds, the console's L frame's byte 6, 0 for every level.
+`u64`: on a debug build alone, the pool's tag and entry writes since the load.
 
-## tile_binds
+## tile_writes_frozen
 
-`u64`: on a debug build alone, the frame's binds so far, for the console's forced reset.
+`u64`: on a debug build alone, their count when the boundary ended, held until the next.
 
-## tile_reset_after
+## tile_config_record
 
-`u32`: on a debug build alone, the binds each frame before the forced reset, the console's K frame's, 0 for none.
+`REPORT_SIZE u8`: the configuration record, REPORT_CONFIG's, CONFIG_* fields.
 
-## tilemaps
+## tile_forget
 
-`LUMAP_COUNT*11 u64`: every surface's tiles at the map's index, TILE_* fields; eight-aligned past the debug build's four-byte tile_reset_after, as the tables after it need.
+`u8`: 1 when the console's L asks every tile forgotten at the next boundary.
+
+## tile_config_changed
+
+`u8`: 1 when the console changed the configuration since the last boundary.
 
 ## material_alpha
 
@@ -561,11 +664,11 @@ room's light changes too little across a texel to tell the two.
 
 ## tile_merged
 
-`TILE_MERGE u64`: the boundary's merged keys.
+`TILE_MERGE u64`: the boundary's merged keys, each the key in the low word and the next entry on its surface's chain in the high, all ones for none.
 
 ## tile_merge_heads
 
-`LUMAP_COUNT u64`: each surface's merged keys at the boundary.
+`LUMAP_COUNT u64`: each surface's merged chain, its next entry in the low word and its last in the high, all ones for none.
 
 ## tile_merge_order
 
@@ -582,7 +685,3 @@ room's light changes too little across a texel to tell the two.
 ## tile_tables_end
 
 The end of the pool's tables from `tile_pool`, TILE_MEMORY's bound.
-
-## tile_arena
-
-`TILE_ARENA_BYTES u8`: the atlases.

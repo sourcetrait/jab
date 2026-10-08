@@ -124,10 +124,6 @@ _start:
     call soundfont_load
     call lights_gather
     call lumaps_bake
-    call tiles_reset
-    la t0, tile_budget_frame
-    li t1, TILE_BUDGET
-    sd t1, 0(t0)
     call tiles_init                 # the tile pool's directory, slots, and contexts
     call actors_place
     call player_reset
@@ -513,11 +509,10 @@ frame_records:
     sw t3, DRAW_LIT_PIXELS(t1)
     ld t3, STAT_SPANS(t0)
     sw t3, DRAW_SPANS(t1)
-    la t2, tile_cursor
+    la t2, tile_used
     ld t3, 0(t2)
-    la t2, tile_arena
-    sub t3, t3, t2
-    sw t3, DRAW_TILE_BYTES(t1)
+    slli t3, t3, TILE_BYTES_SHIFT
+    sw t3, DRAW_TILE_BYTES(t1)      # the pool's bytes in use at the boundary's end
     la t2, tile_peak
     ld t3, 0(t2)
     sw t3, DRAW_TILE_PEAK(t1)
@@ -577,8 +572,7 @@ frame_records:
     sw t2, PACKET_BYTES(t1)         # the commands and span records the frame's packets held
     ld t2, STAT_FLUSHES(t3)
     sw t2, PACKET_FLUSHES(t1)
-    ld t2, STAT_INVALIDATED(t3)
-    sw t2, PACKET_INVALIDATED(t1)
+    sw zero, PACKET_INVALIDATED(t1) # no binding to invalidate: the commands carry no tiles
     ld t2, CLOCK_SNAPSHOT(t0)
     sw t2, PACKET_SNAPSHOT(t1)      # the frame whose simulation the packets were prepared from
     la t3, round_workers
@@ -600,8 +594,77 @@ frame_records:
     ld t2, STAT_BARRIER(t3)
     divu t2, t2, t6
     sw t2, PACKET_BARRIER(t1)
+    addi t1, t1, REPORT_SIZE        # the tile record
+    li t2, REPORT_TILE
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    ld t2, STAT_TILE_ADMITTED(t3)
+    sw t2, TILES_ADMITTED(t1)       # this frame's requests, admitted while it rendered
+    ld t2, STAT_TILE_DROPPED(t3)
+    sw t2, TILES_DROPPED(t1)
+    ld t2, STAT_TILE_FILTERED(t3)
+    sw t2, TILES_FILTERED(t1)
+    la t2, tile_batch_frame
+    ld t2, 0(t2)
+    sw t2, TILES_SOURCE(t1)         # the batch its boundary consumed, the frame before's
+    la t2, tile_batch_admitted
+    ld t2, 0(t2)
+    sw t2, TILES_BATCH(t1)
+    ld t2, STAT_TILE_MERGED(t3)
+    sw t2, TILES_MERGED(t1)
+    ld t2, STAT_TILE_UNPROCESSED(t3)
+    sw t2, TILES_UNPROCESSED(t1)
+    ld t2, STAT_TILE_EVICTED(t3)
+    sw t2, TILES_EVICTED(t1)
+    ld t2, STAT_TILE_BUILD_TICKS(t3)
+    divu t2, t2, t6
+    sw t2, TILES_BUILD(t1)
+    ld t2, STAT_TILE_OVERRUN(t3)
+    divu t2, t2, t6
+    sw t2, TILES_OVERRUN(t1)
+    ld t2, STAT_TILE_HITS(t3)
+    sw t2, TILES_HITS(t1)
+    ld t2, STAT_TILE_STRADDLING(t3)
+    sw t2, TILES_STRADDLING(t1)
+    ld t2, STAT_TILE_MISSES(t3)
+    sw t2, TILES_MISSES(t1)
+    addi t1, t1, REPORT_SIZE        # the storage record, at the boundary's end
+    li t2, REPORT_STORAGE
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    la t2, tile_used
+    ld t2, 0(t2)
+    sw t2, STORE_USED(t1)
+    slli t2, t2, TILE_BYTES_SHIFT
+    la t4, tile_fixed
+    ld t4, 0(t4)
+    add t2, t2, t4
+    sw t2, STORE_MEMORY(t1)         # the memory in use, the tables and the slots
+    la t2, tile_effective
+    ld t2, 0(t2)
+    sw t2, STORE_EFFECTIVE(t1)
+    la t2, tile_building
+    ld t2, 0(t2)
+    slti t2, t2, 0
+    xori t2, t2, 1
+    sw t2, STORE_BUILDING(t1)       # one tile in construction at most
+    la t2, tile_batch_ring
+    ld t2, 0(t2)
+    sw t2, STORE_RING(t1)
+    la t2, tile_batch_surfaces
+    ld t2, 0(t2)
+    sw t2, STORE_SURFACES(t1)
+    ld t2, STAT_TILE_MERGED(t3)
+    sw t2, STORE_MERGED(t1)
+    la t2, tile_memory_peak
+    ld t2, 0(t2)
+    sw t2, STORE_PEAK(t1)
     la t0, clock_records
-    li t1, (REPORT_SIZE * 4)
+    li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
     la t0, measure_end
     lbu t1, 0(t0)
@@ -775,10 +838,13 @@ draw_or_stall:
     la t0, stall_us
     lwu a0, 0(t0)
 1:
+    addi sp, sp, -16
+    sd ra, 8(sp)
     li t1, US_TICKS
     mul a0, a0, t1
     rdtime t1
-    add a0, a0, t1                  # the stall's end
+    add a0, a0, t1
+    sd a0, 0(sp)                    # the stall's end
     la t1, stats
     li t2, 0
 3:
@@ -790,11 +856,15 @@ draw_or_stall:
     addi t2, t2, 8
     li t3, STAT_SIZE
     bltu t2, t3, 3b
+    call tile_stall                 # the frame before's requests discarded, nothing drawn to serve
     la t1, span_count
     sd zero, 0(t1)
+    ld a0, 0(sp)
 5:
     rdtime t1
     bltu t1, a0, 5b
+    ld ra, 8(sp)
+    addi sp, sp, 16
     ret
 .endif
 
@@ -1007,6 +1077,11 @@ frame_report:
     la t0, stats
     ld a1, STAT_TILE_RESETS(t0)
     call append_dec
+    la a1, word_slots
+    call append_str
+    la t0, tile_used
+    ld a1, 0(t0)
+    call append_dec
     la a1, word_commands
     call append_str
     la t0, stats
@@ -1016,11 +1091,6 @@ frame_report:
     call append_str
     la t0, stats
     ld a1, STAT_FLUSHES(t0)
-    call append_dec
-    la a1, word_invalidated
-    call append_str
-    la t0, stats
-    ld a1, STAT_INVALIDATED(t0)
     call append_dec
     la a1, word_workers
     call append_str
@@ -1395,7 +1465,7 @@ tick_reported:
 frame_clock:
     .skip CLOCK_SIZE
 clock_records:
-    .skip (REPORT_SIZE * 4)
+    .skip (REPORT_SIZE * REPORT_FRAME_RECORDS)
 end_record:
     .skip REPORT_SIZE
 .balign 8
@@ -1547,12 +1617,12 @@ word_tiled:
     .asciz ", tiled "
 word_resets:
     .asciz ", resets "
+word_slots:
+    .asciz ", slots "
 word_commands:
     .asciz ", commands "
 word_flushes:
     .asciz ", flushes "
-word_invalidated:
-    .asciz ", invalidated "
 word_workers:
     .asciz ", workers "
 word_grain:

@@ -1,15 +1,15 @@
 # mip.S
 
 The texture's mip chain: each material's coarser levels built at load from the
-level before by the tile shrink's rule under the level's alpha scale, so a
-span reads the level a block's footprint asks for, and a tile at a level and
-the lit loop at the same level draw the same texel.
+level before by texel_shrink under the level's alpha scale, so a span reads
+the level a block's footprint asks for, and a tile of the pool, which copies
+the chain's texels at its level lit, and the lit loop at the same level draw
+the same texel.
 
 The chain exists so a block reads the texture at about a texel a pixel
 whatever its distance: the lit and unlit loops read level 0 at any
 distance before it, a far floor sampling every fourth to sixteenth texel,
-which aliases and touches a cache line a pixel, and the tile cache's
-coarser levels had no cheaper source than averaging the level below. The
+which aliases and touches a cache line a pixel. The
 level is still chosen per block by its footprint (raster.S); a level per
 surface at its nearest point, which an engine with faces capped at a few
 hundred units can afford, would leave the far end of a twenty-metre floor
@@ -43,14 +43,35 @@ counts for nothing, by one reciprocal of their sum, each product rounded to
 the nearest so an exact mean survives, the alpha their mean; the alpha then
 scaled by the level's factor and capped at 255.
 
-One macro for the tile and the chain, lifted from tile_shrink's loop
-instruction for instruction, so a tile at a level and the chain's level
-hold the same texel under one brightness and the two cannot drift; the
-alpha fixture holds the tiled and the lit pictures identical over the
-opening at levels 0, 1, and 2. The rule and its history are tile_shrink's
-(tile.S.md): alike alphas the plain mean, unalike the alpha-weighted mean
-by one reciprocal with each product rounded, the alpha the mean scaled by
-the level's factor and capped.
+An earlier rule averaged the colour channels plainly and kept the
+upper-left texel's alpha, so a square with one opaque texel was either an
+opaque dark texel or nothing by which corner the opaque one sat in, and
+the fence and the grate changed density and darkened with distance by
+sampling phase, Astra's finding. Now the colour is weighted by the four
+alphas, so a transparent texel's colour, black in the content's PNGs,
+counts for nothing, and the alpha is the mean of the four, scaled by the
+material's factor for the level (alphas_measure) and capped at 255. The
+weighting divides once a texel by one reciprocal of the alpha sum in 8.24,
+three multiplies in place of three divides, each product rounded to the
+nearest before its shift: the reciprocal's truncation puts a product under
+the true mean by at most a sixtieth of a level, so with the half added an
+exact mean, a constant colour under any alphas among them, comes back
+exact, where a plain shift returned 254 for one opaque white texel among
+three transparent ones (Astra's review), and a half-way case may fall by
+one. The four texels are loaded unsigned, since a sign-extended word's top
+byte is not its alpha. The alike case, four equal alphas, which is every
+texel of an opaque texture and most of a masked one, takes the plain mean
+and the alpha as it is, with no divide.
+
+The scale lands a mean at or above the chosen threshold T at or above the
+pass and nothing under T there, which an 8.8 scale, ceil(32768 / T), fails
+above T 194 (brute force over every T and alpha: T 195 with alpha 194
+passes, and twenty more pairs up to T 254); ceil(2^23 / T) in 16.16 holds
+for every T to 2896, so every T. The masked loops then test the word's top
+bit, the alpha at or above 128, in place of any nonzero alpha, the same op
+count. A tile copies the chain's texels at its level, so the tiled and the
+lit pictures agree over the alpha fixture's opening at every level, which
+the test holds.
 
 ## mip_levels
 
@@ -69,7 +90,8 @@ built from the one before, the finer row pair walked two texels at a
 time, the output written straight into the arena from a bump cursor; a
 chain the arena cannot finish stops at the level in hand and the
 material's count says so, span_fill holding every block's level under the
-count before it chooses the tiles or the chain.
+count before it chooses the tile or the chain, and the tile pool's
+directory holding a grid for every level the count names.
 Nothing is freed: the chain is a property of the load, as the lumel maps
 are. The arena is bss, free until touched, and a chain is a third of its
 texture, so Render Zero's chains take about six megabytes of the thirty-two.

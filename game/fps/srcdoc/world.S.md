@@ -26,13 +26,14 @@ every pixel, so an opening is never tested against what is drawn, and
 the sampled test that could miss an opening narrower than its stride is
 gone with the allowance that hid such a miss.
 
-Every plane and wall piece, and a masked opening's fill, binds its tiles
-right before its fill (tiles_bind, tile.S): after the mode and the map's
-bind, since the tiled flag rides the lit one, and after the loops'
-projection, which is why the plane's bind sits at the end of its loop
-rather than beside the map's. The frame's tile budget is set beside the
-stats' zeroing, so the first polygons prepared build first; a COUNT build
-zeroes its count_stats there too (raster.S).
+The tile pool's boundary runs at the frame's start, after the stats'
+zeroing and before any bind, on hart 0 while every worker sleeps since
+the frame before's last join (tile.S's tile_boundary): the pool's one
+change a frame, so no polygon binds tiles and a command carries none. A
+debug build then snapshots the pool's write count, which every render
+checks until the last join (tile_check); a boundary moved after the first
+bind fails there. A COUNT build zeroes its count_stats beside the stats
+(raster.S).
 
 The frame is prepared, then rendered: the flow, the sectors, the sprites,
 and the actors fill their polygons into the frame's packet, and the

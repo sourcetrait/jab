@@ -10,10 +10,18 @@
 # prepared from, the drawing's planes, walls, and sprites then
 # preparation alone; and at schema 4 the raster's workers that drew them,
 # 0 the serial backend, the grain, and the rounds' slowest worker, every
-# worker's busy time, the dispatch, and the barrier. After the console's E
+# worker's busy time, the dispatch, and the barrier; and at schema 5 the
+# tile pool: the drawing's tiles_us its boundary's own part, no longer
+# within the planes and walls, the packets' bindings invalidated 0, its
+# tile record (kind 13), the requests the frame admitted, dropped, and
+# filtered, the batch its boundary consumed, the merge, the eviction, the
+# construction, and the blocks hit, straddling, and missed, its storage
+# record (kind 15), the slots and memory at the boundary's end, and a
+# configuration record (kind 14) ahead of the first frame it governs.
+# After the console's E
 # the end marker (kind 9) names the final frame of the measurement, which
 # the frames from 0 to it make up. render.inc lays the records out; this
-# reader takes schemas 1 to 4. `run` plays a route on a build `--runs`
+# reader takes schemas 1 to 5. `run` plays a route on a build `--runs`
 # times, headless or with `--host` in the host's window and audio, each
 # run seeded by the console's R, asking its cadence by the console's C and
 # with `--workers` its workers and grain by the console's W before its
@@ -40,13 +48,16 @@
 # end, and next start in that order, from schema 3 every frame's
 # drawing its preparation and its raster, the bytes its packets held its
 # commands' and its span records', and its packets prepared from its own
-# simulation, and at schema 4 every frame's workers at most WORKERS_MAX at
+# simulation, from schema 4 every frame's workers at most WORKERS_MAX at
 # a grain within the screen's rows, its round times none under the serial
 # backend and its slowest worker, dispatch, and barrier within its raster,
 # its busy time at least its slowest worker's and at most W times it with
-# the W - 1 microseconds its conversions drop, and passes when it is
-# valid and every frame in it passes.
-# A capture holding no record of the clock's kinds, 7, 8, 9, 10, or 12,
+# the W - 1 microseconds its conversions drop, and at schema 5 every
+# frame's tile pool within its slots and memory, its batch the frame
+# before's and accounted, its records agreeing with each other and with
+# the configuration in force (invalidity), and passes when it is valid
+# and every frame in it passes.
+# A capture holding no record of the clock's kinds, 7 to 10 and 12 to 15,
 # is a build older than them: it holds no measurement and is read from
 # its state records alone, the drawing's and the game's microseconds.
 # `bench-report` reads a run of a bench whose steps are this script's,
@@ -70,7 +81,7 @@ use ./pose.nu
 const WORKSPACE = (path self | path dirname | path join ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
-const SCHEMAS = [1 2 3 4]
+const SCHEMAS = [1 2 3 4 5]
 const CEILING_US = 15000
 const KIND_STATE = 1
 const KIND_FRAME = 7
@@ -79,6 +90,11 @@ const KIND_END = 9
 const KIND_PRESENT = 10
 const KIND_CONSOLE = 11
 const KIND_PACKET = 12
+const KIND_TILE = 13
+const KIND_CONFIG = 14
+const KIND_STORAGE = 15
+# the batch source of the first boundary, which consumes none
+const NO_BATCH = 4294967295
 # the console's commands as its records name them: P a placement, R a
 # seed, C a cadence, W the raster's workers and grain
 const CONSOLE_P = 80
@@ -102,28 +118,32 @@ const HARTS = 4
 const RESIDUAL_US = 4
 # the span records a frame holds before its spans go unrecorded
 const SPAN_RECORDS = 65536
-# a command's bytes in a packet, the polygon's record copied whole, and a
-# span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
-const COMMAND_BYTES = 312
+# a command's bytes in a packet by schema, the polygon's record copied
+# whole, 312 while it carried its tile bindings and 232 from the pool on,
+# and a span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
+const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232 }
 const SPAN_BYTES = 16
 # a frame's drawing less its preparation and its raster: the microsecond
 # the three conversions drop, at most this
 const PACKET_RESIDUAL_US = 1
 # the critical path's phases at each schema and the drawing's parts, each
-# exclusive; tiles_us lies within planes_us and walls_us and is never
-# added to them; from schema 3 the planes, walls, and sprites are
+# exclusive; below schema 5 tiles_us lies within planes_us and walls_us
+# and is never added to them, and at 5 it is the pool's boundary, a part
+# of its own; from schema 3 the planes, walls, and sprites are
 # preparation alone and the raster a part of its own
 const PHASES = {
     "1": [game_us draw_us hud_us mix_us flip_us report_us],
     "2": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "3": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "4": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+    "5": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
 }
 const PARTS = {
     "1": [clear_us portals_us planes_us walls_us sprites_us],
     "2": [clear_us portals_us planes_us walls_us sprites_us],
     "3": [clear_us portals_us planes_us walls_us sprites_us raster_us],
     "4": [clear_us portals_us planes_us walls_us sprites_us raster_us],
+    "5": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
 }
 # the drawing's parts whose meaning moved with the packets (compare): the
 # phases, holding their rendering before the packets and preparation
@@ -137,6 +157,13 @@ const PREPARATION_ALONE = "preparation alone"
 const NO_RENDERING = "holding no rendering"
 const HOLDING_RASTER = "holding the raster"
 const UNKNOWN_PARTS = "unknown"
+# the fields whose meaning moved with the tile pool at schema 5: below it
+# the tiles were built inside the plane and wall phases, a cell a frame
+# counted, in an arena; from it the pool's boundary is a part of its own,
+# its builds whole tiles, its bytes its slots'
+const TILE_FIELDS = [planes_us walls_us tiles_us tiles_built tile_bytes tile_peak]
+const BUILT_IN_PHASES = "built inside the plane and wall phases"
+const BUILT_AT_BOUNDARY = "built at the pool's boundary"
 # the schema 2 images whose parts are known, by the SHA-256 of the .jab
 # image a run's identity records (build.image_sha256): f59f7a7's three
 # sets, each built twice from a `git archive` export of that commit in
@@ -1071,17 +1098,22 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # a W, the game's events with the frame each fell in, the frame, draw,
 # presentation, and packet records, kinds 7, 8, 10, and 12, each field
 # microseconds or a count, a packet record's workers, grain, and round
-# times from its schema 4 and null below it, and the marker, kind 9, with
+# times from its schema 4 and null below it, the tile, storage, and
+# configuration records, kinds 13, 15, and 14, a configuration's frame
+# the first it governs, and the marker, kind 9, with
 # its frame and schema, null when none came. What follows the marker is
 # outside the measurement: its state records are counted as `past` and
 # nothing else in it is read.
-export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
     mut states = []
     mut events = []
     mut frames = []
     mut draws = []
     mut presents = []
     mut packets = []
+    mut tiles = []
+    mut storages = []
+    mut configs = []
     mut placed = 0
     mut seeded = false
     mut late_seed = false
@@ -1151,6 +1183,27 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 flushes: (u32-at $r 20), invalidated: (u32-at $r 24), packet_bytes: (u32-at $r 28), snapshot: (u32-at $r 32),
                 schema: $schema,
             } | merge $workers))
+        } else if $kind == $KIND_TILE {
+            $tiles = ($tiles | append {
+                frame: (u32-at $r 4), admitted: (u32-at $r 8), dropped: (u32-at $r 12), filtered: (u32-at $r 16),
+                batch_source: (u32-at $r 20), batch_admitted: (u32-at $r 24), merged: (u32-at $r 28),
+                unprocessed: (u32-at $r 32), evicted: (u32-at $r 36), build_us: (u32-at $r 40), overrun_us: (u32-at $r 44),
+                hit_blocks: (u32-at $r 48), straddling_blocks: (u32-at $r 52), missed_blocks: (u32-at $r 56),
+                schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_STORAGE {
+            $storages = ($storages | append {
+                frame: (u32-at $r 4), slots_used: (u32-at $r 8), slots_effective: (u32-at $r 12), building: (u32-at $r 16),
+                ring_fill: (u32-at $r 20), requesting: (u32-at $r 24), merge_entries: (u32-at $r 28),
+                memory: (u32-at $r 32), memory_peak: (u32-at $r 36), schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_CONFIG {
+            $configs = ($configs | append {
+                from: (u32-at $r 8), tile_shift: (u32-at $r 12), tile_size: (u32-at $r 16), slots: (u32-at $r 20),
+                config_effective: (u32-at $r 24), quota: (u32-at $r 28), allowance_us: (u32-at $r 32),
+                config_flags: (u32-at $r 36), guarantee: (u32-at $r 40), ring: (u32-at $r 44), recent: (u32-at $r 48),
+                directory_bytes: (u32-at $r 52), tile_memory: (u32-at $r 56), schema: (u32-at $r 60),
+            })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
@@ -1158,7 +1211,8 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
     {
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
-        draws: $draws, presents: $presents, packets: $packets, end: $end, past: $past,
+        draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
+        end: $end, past: $past,
     }
 }
 
@@ -1166,7 +1220,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
 # first clock record's; null for a capture with none.
 def schema-of [s: record]: nothing -> oneof<int, nothing> {
     if $s.end != null { return $s.end.schema }
-    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | get -o 0)
+    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | get -o 0)
     if $first == null { null } else { $first.schema }
 }
 
@@ -1182,27 +1236,29 @@ def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
     $PARTS | get -o ($schema | default 1 | into string) | default ($PARTS | get "1")
 }
 
-# What a run's moved parts measure, the phases' class and the
-# remainder's, with the evidence: schema 1 its phases with rendering and
-# its remainder holding none, the rendering inside the phases; schemas 3
-# and 4 their phases preparation alone and their remainder holding no
-# rendering, the raster a part of its own, by the workers or not; schema
-# 2 a listed image's classes
+# What a run's moved parts measure, the phases' class, the remainder's,
+# and the tiles', with the evidence: schema 1 its phases with rendering
+# and its remainder holding none, the rendering inside the phases;
+# schemas 3 to 5 their phases preparation alone and their remainder
+# holding no rendering, the raster a part of its own, by the workers or
+# not; schema 2 a listed image's classes
 # (PHASE_IMAGES) by the SHA-256 its identity records, whatever its
 # identity's commit or dirty flag says, since the commit is the
-# checkout's at launch and never the image's; any other run unknown. A
-# measurement written before schema 2 was read is at schema 1, as compare
-# hands it here.
-def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, evidence: string> {
-    if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, evidence: "schema 1" } }
-    if $schema == 3 { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, evidence: "schema 3" } }
-    if $schema == 4 { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, evidence: "schema 4" } }
+# checkout's at launch and never the image's; any other run unknown. The
+# tiles were built inside the plane and wall phases at every schema below
+# 5, whatever the image, and at the pool's boundary at 5. A measurement
+# written before schema 2 was read is at schema 1, as compare hands it
+# here.
+def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, tiles: string, evidence: string> {
+    let tiles = (if $schema == 5 { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
+    if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, tiles: $tiles, evidence: "schema 1" } }
+    if $schema in [3 4 5] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
     let listed = (if $schema == 2 and $image != null { $PHASE_IMAGES | transpose image entry | where image == $image | get -o 0.entry } else { null })
     if $listed != null {
-        return { phases: $listed.phases, remainder: $listed.remainder, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }
+        return { phases: $listed.phases, remainder: $listed.remainder, tiles: $tiles, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }
     }
     let why = (if $schema == 2 { "schema 2 with no listed image" } else { $"schema ($schema | default 'none')" })
-    { phases: $UNKNOWN_PARTS, remainder: $UNKNOWN_PARTS, evidence: $why }
+    { phases: $UNKNOWN_PARTS, remainder: $UNKNOWN_PARTS, tiles: $tiles, evidence: $why }
 }
 
 # The schema 2 images whose parts are known (PHASE_IMAGES), by SHA-256.
@@ -1216,22 +1272,24 @@ export def phase-images []: nothing -> record {
 # complete when its clock records sit at one schema this reader takes,
 # the marker names the final frame, and every frame from 0 to it has its
 # state, its frame record, its draw record, from schema 2 its
-# presentation record, and from schema 3 its packet record before the
+# presentation record, from schema 3 its packet record, and at schema 5
+# its tile and storage records and a configuration in force before the
 # marker, numbered in order with none twice; what follows the marker
 # counts for nothing, a record sent late or a second marker alike. A
 # complete window is valid unless a flip was never shown or not presented
 # as its cadence requires, a phase or a part sums past its whole, a
 # frame's clock disagrees with its state, or from schema 2 a frame's
-# presentation or from schema 3 its packets break their rules (invalidity);
-# it passes when it is valid and no frame reaches the ceiling. A frame is
-# fast when its critical path is under the period of `cap`, whatever its
-# cadence. A capture with no record of the clock's kinds, 7, 8, 9, 10, or
-# 12, is a build older than them: its rows are its state records' alone
-# and it holds no window. Any one of them marks the capture clocked and
-# holds it to its window.
+# presentation, from schema 3 its packets, from schema 4 its workers, or
+# at schema 5 its tile pool break their rules (invalidity); it passes
+# when it is valid and no frame reaches the ceiling. A frame is fast when
+# its critical path is under the period of `cap`, whatever its cadence. A
+# capture with no record of the clock's kinds, 7 to 10 and 12 to 15, is a
+# build older than them: its rows are its state records' alone and it
+# holds no window. Any one of them marks the capture clocked and holds it
+# to its window.
 export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
     let s = (stream $api)
-    let clocked = (([$s.frames $s.draws $s.presents $s.packets] | any {|k| not ($k | is-empty) }) or $s.end != null)
+    let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs] | any {|k| not ($k | is-empty) }) or $s.end != null)
     let schema = (if $clocked { schema-of $s } else { null })
     let final = (if $s.end == null { null } else { $s.end.frame })
     let problems = (if not $clocked { [] } else { window-problems $s $schema })
@@ -1277,8 +1335,10 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 # its end marker alone: no marker, a capture whose schema this reader
 # does not take, a clock record at a schema other than the capture's, a
 # record numbered out of order or twice, and a frame short of a record or
-# one too many, the presentation records counted from schema 2 and the
-# packet records from schema 3.
+# one too many, the presentation records counted from schema 2, the
+# packet records from schema 3, and the tile and storage records at
+# schema 5, where a frame with no configuration in force, none from it
+# or before, leaves the window incomplete too.
 def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<string> {
     mut problems = []
     if $s.end == null {
@@ -1291,15 +1351,21 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
     let at = ($schema | default 1)
     let records = ([[name items]; [frame $s.frames] [draw $s.draws]]
         | append (if $at >= 2 { [[name items]; [presentation $s.presents]] } else { [] })
-        | append (if $at >= 3 { [[name items]; [packet $s.packets]] } else { [] }))
+        | append (if $at >= 3 { [[name items]; [packet $s.packets]] } else { [] })
+        | append (if $at >= 5 { [[name items]; [tile $s.tiles] [storage $s.storages]] } else { [] }))
     for kind in $records {
         let order = ($kind.items | enumerate | where {|e| $e.item.frame != $e.index } | length)
         if $order > 0 { $problems = ($problems | append $"($order) ($kind.name) records out of order or repeated") }
         if ($kind.items | length) != ($last + 1) { $problems = ($problems | append $"($kind.items | length) ($kind.name) records before the end marker for ($last + 1) frames") }
     }
     if ($s.states | length) != ($last + 1) { $problems = ($problems | append $"($s.states | length) state records before the end marker for ($last + 1) frames") }
+    if $at >= 5 {
+        let froms = ($s.configs | each {|c| $c.from })
+        let first = (if ($froms | is-empty) { null } else { $froms | math min })
+        if $first == null or $first > 0 { $problems = ($problems | append $"frames before any configuration of the tile pool: the first from frame ($first | default 'none')") }
+    }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
-    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
+    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
     if not ($others | is-empty) { $problems = ($problems | append $"clock records at schemas ($others | str join ', ') in a capture at schema ($schema)") }
     $problems
 }
@@ -1370,7 +1436,8 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     let unpacked = ($every | where {|r| $r.raster_us == null })
     let packed = ($every | where {|r| $r.raster_us != null })
     let unsplit = ($packed | where {|r| $r.packet_residual_us < 0 or $r.packet_residual_us > $PACKET_RESIDUAL_US })
-    let unsized = ($packed | where {|r| $r.packet_bytes != ($r.commands * $COMMAND_BYTES + $r.spans * $SPAN_BYTES) })
+    let command_bytes = ($COMMAND_BYTES | get ($at | into string))
+    let unsized = ($packed | where {|r| $r.packet_bytes != ($r.commands * $command_bytes + $r.spans * $SPAN_BYTES) })
     let stale = ($packed | where {|r| $r.snapshot != $r.frame })
     let packets = [
         (if ($unpacked | is-empty) { null } else { $"($unpacked | length) frames without a packet record" }),
@@ -1385,14 +1452,74 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     let overtimed = ($packed | where {|r| ($r.workers | default 0) > 0 and ([$r.slowest_us $r.dispatch_us $r.barrier_us] | any {|t| ($t | default 0) > $r.raster_us }) })
     let short_busy = ($packed | where {|r| ($r.workers | default 0) > 0 and ($r.busy_us | default 0) < ($r.slowest_us | default 0) })
     let long_busy = ($packed | where {|r| let w = ($r.workers | default 0); $w > 0 and ($r.busy_us | default 0) > ($w * ($r.slowest_us | default 0) + $w - 1) })
-    $base | append $presented | append $packets | append [
+    let workers = [
         (if ($crowded | is-empty) { null } else { $"($crowded | length) frames drawn by more than ($WORKERS_MAX) workers" }),
         (if ($coarse | is-empty) { null } else { $"($coarse | length) frames at a grain past the screen's ($SCREEN_ROWS) rows" }),
         (if ($serial_timed | is-empty) { null } else { $"($serial_timed | length) frames of the serial backend carrying a round's time" }),
         (if ($overtimed | is-empty) { null } else { $"($overtimed | length) frames whose slowest worker, dispatch, or barrier is past their raster" }),
         (if ($short_busy | is-empty) { null } else { $"($short_busy | length) frames whose workers' busy time is less than their slowest's" }),
         (if ($long_busy | is-empty) { null } else { $"($long_busy | length) frames whose workers' busy time is past W times their slowest's" }),
-    ] | compact
+    ]
+    if $at < 5 { return ($base | append $presented | append $packets | append $workers | compact) }
+    $base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | compact
+}
+
+# What makes a complete window at schema 5 invalid in its tile pool: a
+# frame without its tile record, its storage record, or a configuration
+# in force, which the rest are read without; slots in use or BUILDING
+# slots past the effective slots, the effective past the physical,
+# builds or evictions past the effective, more BUILDING slots than in
+# use; the construction's time past its boundary's; a batch merged past
+# its admitted count, or merged and left unprocessed past it; a batch
+# whose source is not the frame before, or at the first frame not the
+# sentinel with no request admitted, merged, or left; the memory in use
+# past TILE_MEMORY or past its high-water, the high-water past
+# TILE_MEMORY, or either high-water falling. Across the records: a
+# batch's admitted count other than the admissions its source frame
+# recorded, where that frame is in the window; the effective slots other
+# than the configuration's in force; and the tile bytes other than the
+# slots in use times the configuration's tile, BUILDING slots counted as
+# occupied. Each rule reads one copy of a quantity against another, so
+# two contradictory records cannot each pass alone.
+def pool-invalidity [rows: list<any>]: nothing -> list<any> {
+    let untiled = ($rows | where {|r| $r.admitted == null })
+    let unstored = ($rows | where {|r| $r.slots_used == null })
+    let unconfigured = ($rows | where {|r| $r.tile_memory == null })
+    let pooled = ($rows | where {|r| $r.admitted != null and $r.slots_used != null and $r.tile_memory != null })
+    let by_frame = ($pooled | reduce --fold {} {|r, acc| $acc | upsert ($r.frame | into string) $r.admitted })
+    let overfull = ($pooled | where {|r| $r.slots_used > $r.slots_effective or $r.building > $r.slots_effective })
+    let beyond = ($pooled | where {|r| $r.slots_effective > $r.slots })
+    let overbuilt = ($pooled | where {|r| $r.tiles_built > $r.slots_effective or $r.evicted > $r.slots_effective })
+    let unbuilt = ($pooled | where {|r| $r.building > $r.slots_used })
+    let overtime = ($pooled | where {|r| $r.build_us > $r.tiles_us })
+    let overmerged = ($pooled | where {|r| $r.merged > $r.batch_admitted })
+    let overspent = ($pooled | where {|r| ($r.merged + $r.unprocessed) > $r.batch_admitted })
+    let unsourced = ($pooled | where {|r| if $r.frame == 0 { $r.batch_source != $NO_BATCH } else { $r.batch_source != ($r.frame - 1) } })
+    let unsentinel = ($pooled | where {|r| $r.frame == 0 and ($r.batch_admitted != 0 or $r.merged != 0 or $r.unprocessed != 0) })
+    let overmemory = ($pooled | where {|r| $r.memory > $r.tile_memory or $r.memory > $r.memory_peak or $r.memory_peak > $r.tile_memory })
+    let falling = ($pooled | window 2 | where {|w| $w.1.memory_peak < $w.0.memory_peak or $w.1.tile_peak < $w.0.tile_peak })
+    let unbatched = ($pooled | where {|r| $r.frame > 0 and ($by_frame | get -o ($r.batch_source | into string)) != null and ($by_frame | get ($r.batch_source | into string)) != $r.batch_admitted })
+    let unconfigured_slots = ($pooled | where {|r| $r.slots_effective != $r.config_effective })
+    let unsized = ($pooled | where {|r| $r.tile_bytes != ($r.slots_used * $r.tile_size) })
+    [
+        (if ($untiled | is-empty) { null } else { $"($untiled | length) frames without a tile record" }),
+        (if ($unstored | is-empty) { null } else { $"($unstored | length) frames without a storage record" }),
+        (if ($unconfigured | is-empty) { null } else { $"($unconfigured | length) frames with no configuration of the tile pool in force" }),
+        (if ($overfull | is-empty) { null } else { $"($overfull | length) frames whose slots in use or BUILDING slots pass the effective slots" }),
+        (if ($beyond | is-empty) { null } else { $"($beyond | length) frames whose effective slots pass the physical" }),
+        (if ($overbuilt | is-empty) { null } else { $"($overbuilt | length) frames that built or evicted past the effective slots" }),
+        (if ($unbuilt | is-empty) { null } else { $"($unbuilt | length) frames with more BUILDING slots than slots in use" }),
+        (if ($overtime | is-empty) { null } else { $"($overtime | length) frames whose construction passes their boundary's time" }),
+        (if ($overmerged | is-empty) { null } else { $"($overmerged | length) frames that merged past their batch's admitted requests" }),
+        (if ($overspent | is-empty) { null } else { $"($overspent | length) frames that merged and left unprocessed past their batch's admitted requests" }),
+        (if ($unsourced | is-empty) { null } else { $"($unsourced | length) frames whose batch is not the frame before's" }),
+        (if ($unsentinel | is-empty) { null } else { $"($unsentinel | length) first boundaries whose sentinel batch holds requests" }),
+        (if ($overmemory | is-empty) { null } else { $"($overmemory | length) frames whose memory in use passes TILE_MEMORY or its high-water, or whose high-water passes TILE_MEMORY" }),
+        (if ($falling | is-empty) { null } else { $"($falling | length) frames whose memory's or tiles' high-water fell" }),
+        (if ($unbatched | is-empty) { null } else { $"($unbatched | length) frames whose batch's admitted requests are not its source frame's admissions" }),
+        (if ($unconfigured_slots | is-empty) { null } else { $"($unconfigured_slots | length) frames whose effective slots are not their configuration's" }),
+        (if ($unsized | is-empty) { null } else { $"($unsized | length) frames whose tile bytes are not their slots in use's" }),
+    ]
 }
 
 # Every frame from 0 to `last` as one row: its leg (by the placements
@@ -1405,11 +1532,14 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
 # its start, critical path, wait, and await; from schema 3 its packets,
 # the preparation, the raster, the commands, the flushes, the bindings
 # invalidated, the bytes, the snapshot, and what its drawing leaves past
-# its preparation and its raster, and at schema 4 the workers, the grain,
-# and the rounds' slowest worker, busy time, dispatch, and barrier.
-# Without the clock records the clock's columns are null, the
+# its preparation and its raster, from schema 4 the workers, the grain,
+# and the rounds' slowest worker, busy time, dispatch, and barrier, and at
+# schema 5 the tile record's columns, the storage record's, and the
+# configuration's in force, the last whose first frame is at or before
+# the row's. Without the clock records the clock's columns are null, the
 # presentation's below schema 2 or without its record, the packets' below
-# schema 3 or without theirs, and the workers' below schema 4.
+# schema 3 or without theirs, the workers' below schema 4, and the
+# pool's below schema 5 or without theirs.
 def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]: nothing -> list<any> {
     let names = ($legs | get name)
     let reach = ($legs | enumerate | each {|e| $legs | first ($e.index + 1) | each {|l| $l.places | length } | math sum })
@@ -1426,12 +1556,18 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let d = ($s.draws | get -o $st.frame)
         let p = (if $at >= 2 { $s.presents | get -o $st.frame } else { null })
         let k = (if $at >= 3 { $s.packets | get -o $st.frame } else { null })
+        let t = (if $at >= 5 { $s.tiles | get -o $st.frame } else { null })
+        let o = (if $at >= 5 { $s.storages | get -o $st.frame } else { null })
+        let governing = (if $at >= 5 { $s.configs | where {|x| $x.from <= $st.frame } } else { [] })
+        let pool = ((if $t == null { tileless } else { $t | reject frame schema })
+            | merge (if $o == null { storageless } else { $o | reject frame schema })
+            | merge (if ($governing | is-empty) { configless } else { $governing | last | reject schema }))
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
         }
         if $f == null or $d == null {
-            $rows = ($rows | append ($base | merge (clockless)))
+            $rows = ($rows | append ($base | merge (clockless) | merge $pool))
         } else {
             let presented = ($f.flip_status == $FLIP_PRESENTED)
             let interval = (if $presented and $previous_flip != null { $f.flip_done_us - $previous_flip } else { null })
@@ -1465,7 +1601,7 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 tile_bytes: $d.tile_bytes, tile_peak: $d.tile_peak, spans: $d.spans, spans_over: ($d.spans > $SPAN_RECORDS),
                 over: ($f.critical_us >= $CEILING_US),
                 aligned: ($f.draw_us == $st.draw_us and $f.game_us == $st.game_us),
-            } | merge $shown | merge $packed))
+            } | merge $shown | merge $packed | merge $pool))
         }
     }
     $rows
@@ -1490,6 +1626,27 @@ def presentationless []: nothing -> record {
 # among them.
 def packetless []: nothing -> record {
     [preparation_us raster_us commands flushes invalidated packet_bytes snapshot packet_residual_us workers grain slowest_us busy_us dispatch_us barrier_us]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
+}
+
+# The tile record's columns of a row below schema 5 or without its
+# record, all null.
+def tileless []: nothing -> record {
+    [admitted dropped filtered batch_source batch_admitted merged unprocessed evicted build_us overrun_us hit_blocks straddling_blocks missed_blocks]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
+}
+
+# The storage record's columns of a row below schema 5 or without its
+# record, all null.
+def storageless []: nothing -> record {
+    [slots_used slots_effective building ring_fill requesting merge_entries memory memory_peak]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
+}
+
+# The configuration's columns of a row below schema 5 or with none in
+# force, all null.
+def configless []: nothing -> record {
+    [from tile_shift tile_size slots config_effective quota allowance_us config_flags guarantee ring recent directory_bytes tile_memory]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
@@ -1574,7 +1731,27 @@ def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> r
         busy: (stats ($clocked | get busy_us)),
         dispatch: (stats ($clocked | get dispatch_us)),
         barrier: (stats ($clocked | get barrier_us)),
+        admitted: (total ($clocked | get admitted)),
+        dropped: (total ($clocked | get dropped)),
+        filtered: (total ($clocked | get filtered)),
+        merged: (total ($clocked | get merged)),
+        unprocessed: (total ($clocked | get unprocessed)),
+        evicted: (total ($clocked | get evicted)),
+        build: (stats ($clocked | get build_us)),
+        overrun: (stats ($clocked | get overrun_us)),
+        hit_blocks: (total ($clocked | get hit_blocks)),
+        straddling_blocks: (total ($clocked | get straddling_blocks)),
+        missed_blocks: (total ($clocked | get missed_blocks)),
+        slots_used_max: (greatest ($clocked | get slots_used)),
+        ring_fill_max: (greatest ($clocked | get ring_fill)),
+        memory_peak: (greatest ($clocked | get memory_peak)),
     }
+}
+
+# A list's greatest value, null for no values.
+def greatest [values: list<any>]: nothing -> any {
+    let v = ($values | compact)
+    if ($v | is-empty) { null } else { $v | math max }
 }
 
 # The unexplained phase outliers: in a frame no placement opened, a
@@ -1828,13 +2005,18 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         let head = $"the runs ran on ($machines | length) machines, a comparison's runs on one unless --diagnostic admits them"
         error make { msg: ([$head] | append ($machines | each {|m| machine-text $m }) | str join "\n  ") }
     }
-    let class = (if $field in $PHASE_FIELDS { "phases" } else if $field in $REMAINDER_FIELDS { "remainder" } else { null })
-    if $class != null {
+    let moved = ([
+        (if $field in $PHASE_FIELDS { "phases" } else { null })
+        (if $field in $REMAINDER_FIELDS { "remainder" } else { null })
+        (if $field in $TILE_FIELDS { "tiles" } else { null })
+    ] | compact)
+    for class in $moved {
         let classes = ($covered | each {|r| $r.parts | get $class } | uniq)
         if ($classes | length) > 1 or ($UNKNOWN_PARTS in $classes) {
             let head = ([
                 $"the comparison on ($field) refuses runs whose ($class) measure different things or unknown ones,"
-                "--diagnostic or not: a schema 2 run's parts are known by a listed image alone"
+                "--diagnostic or not: a schema 2 run's parts are known by a listed image alone, and the tiles"
+                "moved to the pool's boundary at schema 5"
             ] | str join " ")
             let named = ($covered | each {|r| $"($r.file) run ($r.run), schema ($r.schema | default 'none'), image ($r.image): ($r.parts | get $class), by ($r.parts.evidence)" })
             error make { msg: ([$head] | append $named | str join "\n  ") }
@@ -1964,10 +2146,12 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             ] | str join " "),
             parts: ([
                 "planes_us, walls_us, and sprites_us hold their rendering at schema 1 and are preparation alone at"
-                "schemas 3 and 4; parts_unattributed_us holds no rendering at all three and the raster in f59f7a7's"
+                "schemas 3 to 5; parts_unattributed_us holds no rendering at those and the raster in f59f7a7's"
                 "schema 2 images; a schema 2 run's parts are known by a listed image's SHA-256 alone, whatever its"
-                "identity's commit says, else unknown; a comparison on these fields is refused, --diagnostic or"
-                "not, when its runs' classes differ or any is unknown, and every other field compares across schemas"
+                "identity's commit says, else unknown; planes_us, walls_us, tiles_us, tiles_built, tile_bytes, and"
+                "tile_peak hold the tiles' construction inside the plane and wall phases below schema 5 and the"
+                "pool's boundary apart at 5; a comparison on these fields is refused, --diagnostic or not, when its"
+                "runs' classes differ or any is unknown, and every other field compares across schemas"
             ] | str join " "),
             admitted: $diagnostic,
             machines: $machines,

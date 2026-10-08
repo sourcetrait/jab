@@ -1,13 +1,13 @@
 # console.S
 
 The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
-kind, P placing the camera, T a trace, F a round, N a noise, L the tiles reset
-with the lumels bright or set by parity, the tiles held off, or the levels built
-capped, R the generator seeded, E the gauge's measurement closed, C the
+kind, P placing the camera, T a trace, F a round, N a noise, L the tiles
+forgotten with the lumels bright or set by parity and construction lifted or
+frozen, R the generator seeded, E the gauge's measurement closed, C the
 cadence chosen, W the raster's workers and grain chosen, S on a debug build the
-cadence fixture's stalls, K on a debug build the packet's bounds and a forced
-reset, J on a debug build the jobs' hold, cancel, and fault, Q on a CENSUS build
-the census's chunk, each reported back as REPORT_CONSOLE.
+cadence fixture's stalls, K on a debug build the packet's bounds, J on a debug
+build the jobs' hold, cancel, and fault, Q on a CENSUS build the census's
+chunk, each reported back as REPORT_CONSOLE.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
@@ -49,10 +49,8 @@ so a fixture carries the standing stall and the spin in each.
 K is the packet's knob, on a debug build alone, standing from the frame
 that reads it: bytes 4 to 7 the commands a packet holds and bytes 8 to 11
 the spans, each 0 for the engine's own bound, so a fixture makes a frame
-flush many times (raster.S's command_emit and span_cap); bytes 12 to 15 the
-binds each frame after which the tile arena is reset, poisoned first, 0
-for none (tile.S), the stale binding's fixture. The test's `packet-frame`
-builds it.
+flush many times (raster.S's command_emit and span_cap). The test's
+`packet-frame` builds it.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start
@@ -70,22 +68,24 @@ frame is reported on the UART as the first was. The console's record carries
 the command's byte where the state's sector sits, which is how a test counts
 the placements apart from the traces.
 
-L is the test's hand on the tile cache. Byte 4 set runs `lumels_bright` first,
+L is the test's hand on the tile pool. Byte 4 set runs `lumels_bright` first,
 so a capture after it reads every texel as the texture holds it, times one,
-and the lit reading over the bright one is the light alone. The reset and the
-budget come after in every case. Byte 5 set leaves the frame's budget at zero
-in place of unbound, so no surface ever completes level 0 and every span takes
-the lit loop: the lit loop's picture from the same build, which the alpha
-fixture reads against the tiled one. Byte 6, on a debug build alone, caps the
-levels a surface builds, 0 for every level: at 1 a surface builds level 0 and
-stops, so a block asking a coarser level takes the chain at it, which the
-alpha fixture reads against the lit loop's picture too. Byte 7, on a debug
-build alone, runs `lumels_parity` after the bright, every lumel a quarter or
-one by its node's parity, so the light across a cell is a gradient the
-texel-centre fixture computes for itself. On a CENSUS build an L that
-rewrites the lumels, by byte 4 or byte 7, marks the census's uniformity stale
-(census.S's census_stale), so its next frame judges every tile again. The
-bytes exist for the test; play never sends the frame.
+and the lit reading over the bright one is the light alone. The forget and
+the configuration come after in every case: every tile is forgotten at the
+next boundary, whose light came from the lumels before, and the quota and
+the allowance are lifted from that boundary on, so a view settles in the
+frame after its first sight. Byte 5 set freezes construction in place of
+the lift, so no tile is built and every span takes the lit loop: the lit
+loop's picture from the same build, which the fixtures read against the
+tiled one. Byte 6 is unused. Byte 7, on a debug build alone, runs
+`lumels_parity` after the bright, every lumel a quarter or one by its node's
+parity, so the light across a cell is a gradient the texel-centre fixture
+computes for itself. The configuration's change goes out as a
+configuration record from that boundary (tile.S's tile_configure). On a
+CENSUS build an L that rewrites the lumels, by byte 4 or byte 7, marks the
+census's uniformity stale (census.S's census_stale), so its next frame
+judges every tile again. The bytes exist for the test; play never sends the
+frame.
 
 ## .set CONSOLE_FRAME
 
@@ -101,13 +101,12 @@ The partial frame is moved to the front of the buffer.
 
 ## console_frame
 
-L: the tiles forgotten and rebuilt under no budget from the next frame, every
-lumel set full bright first when the frame's byte 4 is 1, so a capture reads
-the texture sampled as the lit one is; under a budget of nothing instead when
-byte 5 is 1, so every surface stays on the lit loop; and on a debug build
-every lumel set by its node's parity when byte 7 is 1, before the reset, and
-the levels a surface builds held to byte 6 when it is not 0; on a CENSUS
-build either rewrite marks the census stale. Q: the census's chunk from
+L: every lumel set full bright first when the frame's byte 4 is 1, so a
+capture reads the texture sampled as the lit one is, and on a debug build by
+its node's parity when byte 7 is 1; then the pool's forget asked of the next
+boundary and its flags pending, the lift, or construction frozen when byte 5
+is 1, the configuration marked changed; on a CENSUS build either rewrite
+marks the census stale. Q: the census's chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.
 

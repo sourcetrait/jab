@@ -18,10 +18,11 @@ the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The frame's whole time is measured too, its critical path from its start to
 the end of its reporting less any wait before the flip, with the crosshair,
 the mix, the flip, and the reporting timed apart and the await after the path
-alone; the frame before's four records go over the API at a frame's start,
+alone; the frame before's six records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
 frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW,
-REPORT_PRESENT, and REPORT_PACKET, read by test/gauge.nu). A frame presents under one of
+REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, and REPORT_STORAGE, read by
+test/gauge.nu). A frame presents under one of
 three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
 a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits
 the display's tick or the pad after its reporting, the loop as it first
@@ -283,9 +284,15 @@ raster's, one division, so the drawing's microseconds less its preparation's
 and its raster's are 0 or 1; its bytes are the commands at POLY_SIZE and the
 spans at SPAN_RECORD_SIZE, what the frame's packets held across its flushes;
 its workers and grain are the frame's latch, still the frame before's at
-this frame's start, and its rounds' times the stats', one division each.
-The four records go in one write, the API's write being the one call
-besides the await that can wait, and its cost is the reporting's. An E the
+this frame's start, and its rounds' times the stats', one division each;
+its bindings invalidated are 0, a command carrying no tile. The tile
+record takes the frame's requests from the stats and its boundary's batch
+from tile.S's batch fields; the storage record takes the pool at the
+boundary's end, which nothing changes before the next boundary, so both
+are still the frame before's at this frame's start; the draw record's tile
+bytes are the slots in use's. The six records go in one write, the API's
+write being the one call besides the await that can wait, and its cost is
+the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker
 goes out right after that frame's records, so every record of the
 measurement precedes it and the frames past it are outside.
@@ -337,9 +344,11 @@ cadence fixture reads in the pacing and never in the wait.
 ## draw_or_stall
 
 The stall's microseconds become ticks at US_TICKS and it spins on rdtime to
-the end, calling nothing; it zeroes the drawing's statistics as world_draw
-does at its start, the tile resets since the load kept, and the span count,
-so the frame's draw record reads a drawing of nothing beside its time. This
+the end; it zeroes the drawing's statistics as world_draw does at its
+start, the tile resets since the load kept, and the span count, so the
+frame's draw record reads a drawing of nothing beside its time, and the
+tile pool discards the frame before's requests (tile.S's tile_stall), so
+the next boundary's batch is this frame's, empty. This
 frame's own stall, an S's bytes 12 to 15, is taken once; the standing one,
 bytes 8 to 11 while byte 4 is set, every frame.
 
@@ -366,14 +375,14 @@ surfaces read baked maps, say what the frame still evaluates, and the
 samples against the pixels' blocks of sixteen say how often the lit spans
 read their maps. The load line carries the maps baked, and the bake's own
 line their lumels and time. The tiles built that frame and the pixels read
-from tiles follow: the first is the build's share of the frame, zero once
-the view has settled, and the second against the lit pixels is the near
-blocks' share, the far and edge ones staying on the lit loop (tile.S). The
-tile arena is reset after the bake, since a map's maps are the tiles'
-frame, and the tile pool's directory is sized from them (tiles_init). The
-packet follows: the raster's microseconds among the phases, the
-commands the frame's packets held, the flushes, and the bindings a reset
-invalidated (raster.S). The workers close the line: the frame's workers and
+from tiles follow: the first is the boundary's construction, zero once the
+view has settled, and the second against the lit pixels is the blocks on
+READY tiles, the straddling, the missing, and the uncached classes staying
+on the lit loop (tile.S); then the pool's forgets since the load and its
+slots in use. The tile pool's directory is sized from the maps after the
+bake (tiles_init). The packet follows: the raster's microseconds among
+the phases, the commands the frame's packets held, and the flushes
+(raster.S). The workers close the line: the frame's workers and
 grain, its rounds, each worker's bands, the rounds' dispatch, barrier,
 slowest worker, and every worker's busy time in microseconds, and the
 rounds cancelled (workers.S), the two band counts WORKERS_MAX's.
@@ -479,7 +488,7 @@ carries none.
 
 ## clock_records
 
-`256 u8`: the frame's clock, drawing, presentation, and packet records, written as one.
+`REPORT_SIZE*REPORT_FRAME_RECORDS u8`: the frame's clock, drawing, presentation, packet, tile, and storage records, written as one.
 
 ## end_record
 
@@ -769,6 +778,10 @@ COUNT build alone.
 
 `10 u8`.
 
+## word_slots
+
+`9 u8`.
+
 ## word_commands
 
 `12 u8`.
@@ -776,10 +789,6 @@ COUNT build alone.
 ## word_flushes
 
 `11 u8`.
-
-## word_invalidated
-
-`15 u8`.
 
 ## word_workers
 

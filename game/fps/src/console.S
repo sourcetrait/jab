@@ -117,19 +117,18 @@ console_frame:
 .endif
 62:
 .endif
-    call tiles_reset
-    li t1, TILE_BUDGET_UNBOUND
+    li t1, 1
+    la t0, tile_forget
+    sb t1, 0(t0)                    # every tile forgotten at the next boundary
+    la t0, tile_config_changed
+    sb t1, 0(t0)
+    li t1, CONFIG_UNLIMITED         # the quota and the allowance lifted
     lbu t2, 5(s2)
     beqz t2, 7f
-    li t1, 0
+    li t1, CONFIG_FROZEN            # or construction frozen
 7:
-    la t0, tile_budget_frame
+    la t0, tile_pending_flags
     sd t1, 0(t0)
-.ifdef DEBUG
-    lbu t1, 6(s2)
-    la t0, tile_level_cap
-    sd t1, 0(t0)                    # the levels a surface builds, 0 for all
-.endif
     j 8f
 9:
     li t1, 'R'
@@ -205,9 +204,6 @@ console_frame:
     lwu t1, 8(s2)
     la t2, packet_span_cap
     sw t1, 0(t2)                    # the spans a packet holds, 0 for SPAN_RECORDS
-    lwu t1, 12(s2)
-    la t2, tile_reset_after
-    sw t1, 0(t2)                    # the binds each frame before a forced reset, 0 for none
     j 8f
 15:
     li t1, 'J'

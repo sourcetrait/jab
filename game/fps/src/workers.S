@@ -406,6 +406,9 @@ round_finish:
     sd s3, 24(sp)
     sd s4, 16(sp)
     sd s5, 8(sp)
+.ifdef DEBUG
+    call tile_check                 # the pool as the boundary left it
+.endif
     la tp, raster_context
     la s0, round
     lwu s1, ROUND_GRAIN(s0)

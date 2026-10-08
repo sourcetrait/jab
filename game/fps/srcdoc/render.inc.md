@@ -217,7 +217,7 @@ row.
 
 ## .set POLY_MODE
 
-`u64`: a POLY_TEXTURED, POLY_MASKED, or POLY_SKY, with POLY_LIT and POLY_TILED over it.
+`u64`: a POLY_TEXTURED, POLY_MASKED, or POLY_SKY, with POLY_LIT over it.
 
 ## .set POLY_TEXW
 
@@ -292,35 +292,9 @@ first reading the node there.
 
 `u64`: the brightness word of a polygon with no map.
 
-## .set POLY_TILES
-
-`4 addr`: each level's atlas, TILE_LEVEL_COUNT of them.
-
-The atlases sit eight bytes apart, one a level.
-
-## .set POLY_TILE_READY
-
-`u64`: the levels built whole; a block reads its tile only at one of them, else the chain at its level.
-
-## .set POLY_TILE_COLS_SHIFT
-
-`u64`: a cell row's tiles as a shift, the columns padded to a power of two.
-
-## .set POLY_TILE_COLS
-
-`u64`: the cells across, which a span's ends lie within.
-
-## .set POLY_TILE_ROWS
-
-`u64`: the cells down, which a span's ends lie within.
-
-## .set POLY_MATERIAL
-
-`u32`: the material bound, for the level's alpha scale at a tile's build.
-
 ## .set POLY_SURFACE
 
-`u64`: the surface the polygon is, for the span record and the owner build.
+`u64`: the surface the polygon is, for the span record, the tile pool's directory, and the owner build.
 
 A plane at twice its sector's index and its ceiling after and a wall at
 LUMAP_PLANES past them, as the lumel maps are indexed, a map sprite at
@@ -341,13 +315,9 @@ The chain's table is mip.S's.
 
 `u64`: the levels the chain has, which a block's level is held under.
 
-## .set POLY_TILE_GENERATION
-
-`u64`: the tile arena's generation when the tiled flag was set, which the packet's resolve holds against the arena's.
-
 ## .set POLY_SIZE
 
-The polygon in hand's bytes, and a command's, the packet's copy of it.
+A polygon's record's bytes, and a command's in a packet: 232 from the tile pool on, 312 while the record carried its tile bindings and its material.
 
 ## .set LUMEL_OFFSET_BITS
 
@@ -582,106 +552,6 @@ texel step a pixel against the lumel's 2^k texels.
 ## .set POLY_LIT
 
 `u64`: a flag over the textured and masked modes, the span lit.
-
-## .set POLY_TILED
-
-`u64`: a flag over a lit mode, the surface's tiles read.
-
-The surface has tiles, the lit texture cached, which a near block of the span
-reads in place of the texture and the lumel map when its cells are built.
-
-## .set TILE_LEVEL_COUNT
-
-The levels of a surface's tiles at most.
-
-A surface's tiles: the lit texture cached a cell at a time, a cell a lumel's
-2^k texels square, each texel the texture's times the lumel brightness
-bilinear across the cell; the cells across and down are the map's nodes, a
-node past each end of the surface, the last cell's far nodes the greatest, so
-a texel coordinate the span can reach has a cell. The atlas holds the cells
-row-major with the columns padded to a power of two, TILE_COLS_SHIFT, the
-rows as they are, reserved whole on first sight, which costs no memory until
-a cell is written; the padding columns are never built, the build's cursor
-stepping over them to the next row. The record's base is 0 before the atlas
-is reserved and -1 for a surface whose atlas is larger than TILE_ATLAS_MAX,
-which stays on the lit loop. The arena is reset whole, every surface
-forgotten, when an atlas does not fit. The tiles come in levels, a surface's
-atlases one a level: level 0 a cell at the texture's resolution, each level
-after it half a side, built from the level before by averaging two by two,
-the colour weighted by alpha and the alpha scaled for its coverage
-(alphas_measure), TILE_LEVEL_COUNT levels or k + 1 if fewer. A surface is
-built whole, a level at a time from the finest, under the frame's budget in
-texels read, and a span reads tiles only from the levels built whole, so no
-cell is ever checked; until level 0 is whole the surface draws on the lit
-loop. A block takes its own level from its texel step a pixel, the largest of
-the steps along the span and down a row on each axis, 16.16, level m where
-the step is under 2^(m + 1) texels, held under the chain's last, so a block
-reads about a texel a pixel and the spans a row apart read the same lines;
-it reads its tile where that level is built whole and the chain at that
-level otherwise, never a sharper tile; a span whose ends lie past the map's
-edge keeps the lit loop, which clamps. The records' and the polygon's level
-fields sit eight bytes apart.
-
-The tile record and the polygon's tile fields carry what the span's
-judgement and its tile loop need beyond the map's word: the atlases a level,
-the levels whole, the column shift, and the cells across and down that a
-span's ends must lie within (tile.S). The arena's size, the largest atlas,
-and the frame's build budget are one constant each, the budget in texels so
-a carpet's 128-texel cell counts four of a brick's. The budget's first
-reading on the whole-surface cut, 48 cells of 64 texels, cost about three
-milliseconds on the spawn's first frame, 26.7 against 23 ms.
-
-## .set TILE_BASE
-
-`4 addr`: each level's atlas, 0 before it is reserved and -1 for a surface past TILE_ATLAS_MAX.
-
-## .set TILE_READY
-
-`u64`: the levels built whole.
-
-## .set TILE_CURSOR
-
-`u64`: the next cell to build at the level in hand.
-
-## .set TILE_LEVELS
-
-`u64`: the levels the surface has, TILE_LEVEL_COUNT or k + 1, the fewer.
-
-## .set TILE_COLS_SHIFT
-
-`u64`: a cell row's tiles as a shift.
-
-## .set TILE_COLS
-
-`u64`: the cells across, the map's nodes.
-
-## .set TILE_ROWS
-
-`u64`: the cells down, the map's nodes.
-
-## .set TILE_CELLS
-
-`u64`: the cells, the rows by the padded columns.
-
-## .set TILE_SIZE
-
-A tile record's bytes.
-
-## .set TILE_ARENA_BYTES
-
-The tile arena's bytes.
-
-## .set TILE_ATLAS_MAX
-
-The largest level 0 atlas, a surface past it staying on the lit loop.
-
-## .set TILE_BUDGET
-
-The texture's texels a frame's builds may read.
-
-## .set TILE_BUDGET_UNBOUND
-
-A budget no frame reaches.
 
 ## .set MIP_LEVELS
 
@@ -1057,7 +927,7 @@ each cell built or shrunk, and is never added to them.
 
 ## .set STAT_TILES_BUILT
 
-`u64`: the tiles built this frame.
+`u64`: the whole tiles the frame's boundary published, at any level.
 
 ## .set STAT_TILED_PIXELS
 
@@ -1065,11 +935,11 @@ each cell built or shrunk, and is never added to them.
 
 ## .set STAT_TILE_RESETS
 
-`u64`: the tile arena's resets since the load, never zeroed by the frame.
+`u64`: the pool's forgets since the load, the console's L alone, never zeroed by the frame.
 
 ## .set STAT_TILE_TICKS
 
-`u64`: the tiles' ticks, reserving, building, and shrinking, within the planes' and the walls'.
+`u64`: the tile pool's boundary's ticks, the whole of it, a part of the drawing apart from every phase.
 
 ## .set STAT_RASTER_TICKS
 
@@ -1087,10 +957,6 @@ inside one is no part of it (world.S's phase_mark).
 ## .set STAT_FLUSHES
 
 `u64`: the packets rendered before preparation ended, full of commands or spans.
-
-## .set STAT_INVALIDATED
-
-`u64`: the commands whose tiles a reset took back before their render, drawn on the chain.
 
 ## .set STAT_DISPATCH
 
@@ -1119,6 +985,50 @@ backend drew.
 ## .set STAT_CANCELLED
 
 `u64`: the rounds a job of was cancelled, their left bands finished on hart 0.
+
+## .set STAT_TILE_ADMITTED
+
+`u64`: the tile requests the frame's contexts admitted while it rendered, summed after each render.
+
+## .set STAT_TILE_DROPPED
+
+`u64`: the requests a full open ring dropped.
+
+## .set STAT_TILE_FILTERED
+
+`u64`: the requests the repeat filter or a surface's own tier turned away as asked already.
+
+## .set STAT_TILE_HITS
+
+`u64`: the blocks read from a READY tile.
+
+## .set STAT_TILE_STRADDLING
+
+`u64`: the blocks with tiles whose first and last sampled pixels lie in two tiles, which ask for none.
+
+## .set STAT_TILE_MISSES
+
+`u64`: the blocks eligible for one tile inside the grid whose tile was not READY.
+
+## .set STAT_TILE_BUILD_TICKS
+
+`u64`: the boundary's construction, within STAT_TILE_TICKS.
+
+## .set STAT_TILE_OVERRUN
+
+`u64`: the boundary's ticks past its allowance, 0 under the L's lift.
+
+## .set STAT_TILE_EVICTED
+
+`u64`: the slots CLOCK retired at the boundary.
+
+## .set STAT_TILE_MERGED
+
+`u64`: the batch's requests merged at the boundary, each tile once.
+
+## .set STAT_TILE_UNPROCESSED
+
+`u64`: the batch's requests the merge never took, past its share or its list's end, or a stalled frame's batch whole.
 
 ## .set STAT_BANDS
 
@@ -1224,6 +1134,30 @@ worker's its own of worker_contexts, each reached through tp.
 
 `addr`: the context's touched-slot bitmap, within its admission block.
 
+## .set CTX_TILE_ADMITTED
+
+`u64`: the requests the context admitted since its counts were last summed.
+
+## .set CTX_TILE_DROPPED
+
+`u64`: the requests its full open ring dropped.
+
+## .set CTX_TILE_FILTERED
+
+`u64`: the requests it turned away as asked already.
+
+## .set CTX_TILE_HITS
+
+`u64`: its blocks read from a READY tile.
+
+## .set CTX_TILE_STRADDLING
+
+`u64`: its straddling blocks with tiles.
+
+## .set CTX_TILE_MISSES
+
+`u64`: its eligible blocks whose tile was not READY.
+
 ## .set CTX_COUNT
 
 `COUNT_SIZE u8`: a COUNT build's counts, COUNT_* fields, the context's.
@@ -1237,6 +1171,7 @@ worker's its own of worker_contexts, each reached through tp.
 A raster context's bytes, the counts span_fill keeps, the tile pool's fields, and a COUNT build's counts.
 
 ## .set TILE_SHIFT
+
 ## .set TILE_SIDE
 
 `u64`: a tile's texels a side as a shift, and the side, 32.
@@ -1252,6 +1187,7 @@ between the two on release measurements.
 `u64`: a tile row's bytes as a shift, four bytes a texel.
 
 ## .set TILE_BYTES_SHIFT
+
 ## .set TILE_BYTES
 
 `u64`: a tile's bytes as a shift, and the bytes, 4 KiB at 32.
@@ -1291,9 +1227,10 @@ guarantee over every frame of both routes and backends, rounded up to a power
 of two. That fill counts distinct tiles, every repeat assumed filtered, so the
 ring is provisional with TILE_GUARANTEE.
 
+## .set TILE_RECENT_SHIFT
 ## .set TILE_RECENT
 
-`u64`: a context's repeat filter's keys, direct-mapped by their low bits, a power of two.
+`u64`: a context's repeat filter's keys as a shift, and the keys, direct-mapped by their low bits, so a key that displaces another lets the other's repeat in again, a duplicate and never a loss.
 
 ## .set TILE_CONTEXTS
 
@@ -1303,8 +1240,35 @@ ring is provisional with TILE_GUARANTEE.
 
 `u64`: the boundary's merged list, a key a slot, since one boundary builds no more tiles than the pool has slots.
 
+## .set TILE_QUOTA
+
+`u64`: the texels a boundary's construction may build, 96 tiles at 32.
+
+## .set TILE_ALLOWANCE_US
+
+`u64`: the boundary's allowance in microseconds, merge, eviction, and construction included, about a millisecond on the critical path to start, a proposal and not a measured cost.
+
+## .set TILE_MERGE_US
+
+`u64`: the merge's share of the allowance in microseconds; a merge past it stops where it stands.
+
+## .set TILE_UNLIMITED
+
+`u64`: a deadline and a quota no boundary reaches, the L's lift.
+
+## .set TILE_CLASS_PLANES
+## .set TILE_CLASS_WALLS
+
+`u64`: the surface classes the pool may cache, the planes and the walls with their masked openings.
+
+## .set TILE_CLASSES
+
+`u64`: the classes cached, the walls with their openings, the planes on the lit loop until TileClasses shows they gain: on the bay the atlas cache's planes cost 13.3 ms against 9.0 uncached, while its walls helped the stairwells.
+
 ## .set SLOT_FREE
+
 ## .set SLOT_BUILDING
+
 ## .set SLOT_READY
 
 `u64`: a slot's states, the low bits of its tag, the slot's generation above them: free, a tile in construction, a tile published whole.
@@ -1318,6 +1282,7 @@ ring is provisional with TILE_GUARANTEE.
 `u32`: the tile's surface, the lumel maps' index.
 
 ## .set SLOT_TX
+
 ## .set SLOT_TY
 
 `u32`: the tile's column and row in its level's grid.
@@ -1367,6 +1332,7 @@ the census's sizing at one side.
 `u32`: the surface's material.
 
 ## .set TS_UMASK
+
 ## .set TS_VMASK
 
 `u32`: the texture's masks at level 0, POLY_UMASK's and POLY_VMASK's.
@@ -1380,6 +1346,7 @@ the census's sizing at one side.
 `u32`: the level's first directory entry.
 
 ## .set TS_GRID_W
+
 ## .set TS_GRID_H
 
 `u16`: the level's tiles across and down.
@@ -1465,11 +1432,13 @@ An admission block's bytes, rounded up to 64.
 `addr`: the context's first census slot.
 
 ## .set CENSUS_U
+
 ## .set CENSUS_V
 
 `i64`: a census slot's block's first pixel's u and v, 16.16 level 0 texels from the lumel map's origin, as span_fill steps them.
 
 ## .set CENSUS_DU
+
 ## .set CENSUS_DV
 
 `i64`: the block's u and v steps a pixel, 16.16, so its last pixel samples the start plus the step times the pixels less one.
@@ -1510,10 +1479,6 @@ A census slot's bytes.
 
 `u64`: the word a debug build writes over the producer's scratch once the packet is published, an address no page maps.
 
-## .set TILE_POISON
-
-`u32`: the texel a debug build writes over the tile arena before the console's forced reset.
-
 ## .set REPORT_KIND
 
 `u32`: a record's kind over the API, a REPORT_*.
@@ -1521,12 +1486,14 @@ A census slot's bytes.
 The records over the API are 64 bytes each. An event carries the state's
 fields and its own from REPORT_FIELD0.
 
-The clock records, REPORT_FRAME, REPORT_DRAW, REPORT_PRESENT, and
-REPORT_PACKET, and the end marker, REPORT_END, put the frame's number where
-the state puts its sector and the schema's version in the last word, so a
-reader refuses a layout it does not know; the state record keeps its layout
-and meanings. The four clock records of a frame go out in one write at the
-next frame's start. The frame record's start and flip's end are 64 bits on 8-byte
+The clock records, REPORT_FRAME, REPORT_DRAW, REPORT_PRESENT,
+REPORT_PACKET, REPORT_TILE, and REPORT_STORAGE, and the end marker,
+REPORT_END, put the frame's number where the state puts its sector and the
+schema's version in the last word, so a reader refuses a layout it does not
+know; the state record keeps its layout and meanings. The six clock records
+of a frame go out in one write at the next frame's start, and a
+configuration record, REPORT_CONFIG, ahead of the first frame it governs.
+The frame record's start and flip's end are 64 bits on 8-byte
 boundaries and every other field 32. Its critical path runs from the frame's
 start to its reporting's end less the wait, the time a frame waits before
 its flip so it presents no earlier than the cap allows. Its phases are
@@ -1535,9 +1502,10 @@ reporting, with the presentation record's pacing beside them, and the
 critical path less their sum is time no phase holds; the flip is every
 attempt's call and its status the final attempt's, FLIP_NONE when the frame
 reached no flip (main.S). The drawing's parts are exclusive within the
-drawing, the clear, the portals, the planes, the walls, the sprites, and
-the packet record's raster, with DRAW_TILES inside the planes and the
-walls: the planes, the walls, and the sprites are their preparation alone,
+drawing, the clear, the portals, the planes, the walls, the sprites, the
+packet record's raster, and DRAW_TILES, the tile pool's boundary, which
+below schema 5 lay inside the planes and the walls: the planes, the walls,
+and the sprites are their preparation alone,
 since a packet flushed among them renders apart from their marks (world.S's
 phase_mark), and the raster is every render of the frame's packets. The
 packet record splits the drawing in two, its preparation and its raster,
@@ -1561,11 +1529,11 @@ presents and its await is the loop's few instructions to the next start.
 The pixel counts are candidates before the
 depth test and the masked pass: DRAW_TILED_PIXELS the blocks read from
 tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
-fallback loop took, which holds blocks off the tile grid as well as cells
-not yet built. DRAW_TILE_BYTES is the arena in use at the frame's end and
-DRAW_TILE_PEAK the most it has held since the load, which a reset lowers
-the first and never the second. DRAW_SPANS counts every span the frame
-drew, over all its packets.
+fallback loop took: blocks straddling two tiles, off a grid, missing their
+tile, or of a class or surface the pool leaves uncached. DRAW_TILE_BYTES is
+the pool's bytes in use at the boundary's end and DRAW_TILE_PEAK their
+high-water since the load, which an L lowers the first and never the
+second. DRAW_SPANS counts every span the frame drew, over all its packets.
 
 ## .set REPORT_SECTOR
 
@@ -1683,9 +1651,25 @@ A record's bytes, zero to the end.
 
 `u32`: the frame before's packets, PACKET_* fields, beside its clock.
 
+## .set REPORT_TILE
+
+`u32`: the frame before's tile pool activity, TILES_* fields, beside its clock.
+
+## .set REPORT_CONFIG
+
+`u32`: the tile pool's configuration, CONFIG_* fields, ahead of the first frame it governs.
+
+## .set REPORT_STORAGE
+
+`u32`: the frame before's tile pool at its boundary's end, STORE_* fields, beside its clock.
+
+## .set REPORT_FRAME_RECORDS
+
+`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, and storage records.
+
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out, 4 with the packet record's workers.
+`u32`: the clock records' layout as this source lays them out, 5 with the tile pool's records.
 
 ## .set TIME_START
 
@@ -1741,11 +1725,11 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_PLANES
 
-`u32`: the planes' preparation, their tiles' time within.
+`u32`: the planes' preparation; below schema 5 their tiles' construction within.
 
 ## .set DRAW_WALLS
 
-`u32`: the walls' preparation, their tiles' time within.
+`u32`: the walls' preparation; below schema 5 their tiles' construction within.
 
 ## .set DRAW_SPRITES
 
@@ -1753,15 +1737,15 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_TILES
 
-`u32`: the tiles' time, STAT_TILE_TICKS.
+`u32`: the tile pool's boundary, STAT_TILE_TICKS, a part of the drawing of its own; below schema 5 the atlases' time within the planes and the walls.
 
 ## .set DRAW_TILES_BUILT
 
-`u32`: the cells built or shrunk.
+`u32`: the whole tiles of TILE_SIDE the frame's boundary published, at any level, a row resumed no build; below schema 5 the cells built at a level.
 
 ## .set DRAW_TILE_RESETS
 
-`u32`: the arena's resets since the load.
+`u32`: the pool's forgets since the load, the console's L alone; below schema 5 the arena's resets.
 
 ## .set DRAW_TILED_PIXELS
 
@@ -1773,11 +1757,11 @@ A record's bytes, zero to the end.
 
 ## .set DRAW_TILE_BYTES
 
-`u32`: the arena in use at the frame's end.
+`u32`: the pool's bytes in use at the boundary's end, the slots in use times TILE_BYTES, a BUILDING slot counted; below schema 5 the arena in use.
 
 ## .set DRAW_TILE_PEAK
 
-`u32`: the most the arena has held since the load.
+`u32`: their high-water since the load.
 
 ## .set DRAW_SPANS
 
@@ -1825,7 +1809,7 @@ A record's bytes, zero to the end.
 
 ## .set PACKET_RASTER
 
-`u32`: every render of the frame's packets, the flushes' and the last, each with its resolve and its counts.
+`u32`: every render of the frame's packets, the flushes' and the last, each with its counts.
 
 ## .set PACKET_COMMANDS
 
@@ -1837,7 +1821,7 @@ A record's bytes, zero to the end.
 
 ## .set PACKET_INVALIDATED
 
-`u32`: the bindings the resolves took off their tiles, STAT_INVALIDATED.
+`u32`: 0 from schema 5, a command carrying no tile binding to invalidate; below it the bindings a reset took off their tiles before their render.
 
 ## .set PACKET_BYTES
 
@@ -1877,6 +1861,161 @@ worker's, at least the slowest's (test/gauge.nu's rules).
 ## .set PACKET_BARRIER
 
 `u32`: the rounds' barrier, STAT_BARRIER.
+
+## .set TILES_ADMITTED
+
+`u32`: the requests the frame admitted while it rendered.
+
+The tile record keeps the admissions with the frame that made them and the
+merge with the batch it consumed, its source the frame before, all ones at
+the first boundary with nothing admitted, merged, or left. The duplicates
+among the processed requests follow: the batch's admitted less its
+unprocessed less its merged.
+
+## .set TILES_DROPPED
+
+`u32`: the requests a full open ring dropped.
+
+## .set TILES_FILTERED
+
+`u32`: the repeats turned away.
+
+## .set TILES_SOURCE
+
+`u32`: the frame whose requests the boundary merged, the frame before, all ones at the first boundary.
+
+## .set TILES_BATCH
+
+`u32`: that batch's admitted requests, by its own counts.
+
+## .set TILES_MERGED
+
+`u32`: the batch's requests merged, each tile once.
+
+## .set TILES_UNPROCESSED
+
+`u32`: the batch's requests left past the merge's share or its list's end.
+
+## .set TILES_EVICTED
+
+`u32`: the slots CLOCK retired.
+
+## .set TILES_BUILD
+
+`u32`: the construction's microseconds, within DRAW_TILES.
+
+## .set TILES_OVERRUN
+
+`u32`: the boundary's microseconds past its allowance.
+
+## .set TILES_HITS
+
+`u32`: the blocks read from a READY tile.
+
+## .set TILES_STRADDLING
+
+`u32`: the blocks with tiles that straddle two.
+
+## .set TILES_MISSES
+
+`u32`: the eligible blocks whose tile was not READY.
+
+## .set CONFIG_FRAME
+
+`u32`: the frame whose boundary first uses the configuration.
+
+A configuration record goes out whenever the configuration is set, after
+the load and when the console changes it, ahead of the first frame it
+governs, so a capture carries what each frame ran under and a reader
+consults no checkout. A changed capacity governs the admissions after it.
+
+## .set CONFIG_SHIFT
+
+`u32`: TILE_SHIFT.
+
+## .set CONFIG_BYTES
+
+`u32`: TILE_BYTES.
+
+## .set CONFIG_SLOTS
+
+`u32`: the physical slots, TILE_SLOTS.
+
+## .set CONFIG_EFFECTIVE
+
+`u32`: the slots the pool may use.
+
+## .set CONFIG_QUOTA
+
+`u32`: TILE_QUOTA in texels.
+
+## .set CONFIG_ALLOWANCE
+
+`u32`: TILE_ALLOWANCE_US.
+
+## .set CONFIG_FLAGS
+
+`u32`: CONFIG_UNLIMITED and CONFIG_FROZEN.
+
+## .set CONFIG_GUARANTEE
+
+`u32`: the guarantee in force.
+
+## .set CONFIG_RING
+
+`u32`: the open ring in force.
+
+## .set CONFIG_RECENT
+
+`u32`: TILE_RECENT.
+
+## .set CONFIG_DIRECTORY
+
+`u32`: the directory's bytes, this map's entries.
+
+## .set CONFIG_MEMORY
+
+`u32`: TILE_MEMORY's bytes.
+
+## .set CONFIG_UNLIMITED
+
+`u32`: the flag of a boundary under no quota or allowance, an L's lift.
+
+## .set CONFIG_FROZEN
+
+`u32`: the flag of construction frozen, the L's byte 5.
+
+## .set STORE_USED
+
+`u32`: the slots in use at the boundary's end, a BUILDING slot counted.
+
+## .set STORE_EFFECTIVE
+
+`u32`: the effective slots.
+
+## .set STORE_BUILDING
+
+`u32`: the BUILDING slots, one at most.
+
+## .set STORE_RING
+
+`u32`: the greatest open ring of the batch the boundary consumed.
+
+## .set STORE_SURFACES
+
+`u32`: that batch's requesting surfaces.
+
+## .set STORE_MERGED
+
+`u32`: the merged list's entries.
+
+## .set STORE_MEMORY
+
+`u32`: the pool's memory in use, the tables with this map's directory and the slots in use.
+
+## .set STORE_PEAK
+
+`u32`: its high-water since the load.
 
 ## .set CADENCE_AFTER_FLIP
 
