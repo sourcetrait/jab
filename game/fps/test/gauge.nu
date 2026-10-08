@@ -1875,17 +1875,19 @@ export def report-doc [label: string, id: record, runs: list<any>]: nothing -> r
 
 # The report: every run's measurement and outcome under the identity
 # (report-doc), written as gauge.nuon in `out`, a previous one there
-# retired, its legs and its outliers printed.
+# retired, its legs and its outliers printed, the tiles built named
+# cells below schema 5 and tiles at it.
 def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
     let file = ($out | path join "gauge.nuon")
     jab retire $file (jab target-root $WORKSPACE)
     report-doc $label $id $runs | to nuon | save --raw $file
     for r in $runs {
+        let built = (if ($r.measured | get -o schema | default 1) >= 5 { "tiles" } else { "cells" })
         for l in $r.measured.legs {
             if ($l.critical? | default null) == null {
                 print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames; draw (spread $l.draw), game (spread $l.game)"
             } else {
-                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) cells built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
+                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) ($built) built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
             }
         }
         let o = $r.measured.outliers
