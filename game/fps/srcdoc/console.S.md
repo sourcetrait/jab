@@ -6,8 +6,14 @@ with the lumels bright or set by parity, the tiles held off, or the levels built
 capped, R the generator seeded, E the gauge's measurement closed, C the
 cadence chosen, W the raster's workers and grain chosen, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds and a forced
-reset, J on a debug build the jobs' hold, cancel, and fault, each reported back
-as REPORT_CONSOLE.
+reset, J on a debug build the jobs' hold, cancel, and fault, Q on a CENSUS build
+the census's chunk, each reported back as REPORT_CONSOLE.
+
+Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
+census context line holds before its continuation, 0 for the build's own
+bound (census.S's CENSUS_CHUNK), standing from the frame's census lines on,
+so a fixture splits every context's list. The test's `census-frame` builds
+it.
 
 J is the jobs' knob, on a debug build alone, read by the rounds after it
 (workers.S): byte 4 the worker to hold, its index plus one, 0 for none,
@@ -76,8 +82,10 @@ stops, so a block asking a coarser level takes the chain at it, which the
 alpha fixture reads against the lit loop's picture too. Byte 7, on a debug
 build alone, runs `lumels_parity` after the bright, every lumel a quarter or
 one by its node's parity, so the light across a cell is a gradient the
-texel-centre fixture computes for itself. The bytes exist for the test; play
-never sends the frame.
+texel-centre fixture computes for itself. On a CENSUS build an L that
+rewrites the lumels, by byte 4 or byte 7, marks the census's uniformity stale
+(census.S's census_stale), so its next frame judges every tile again. The
+bytes exist for the test; play never sends the frame.
 
 ## .set CONSOLE_FRAME
 
@@ -98,7 +106,10 @@ lumel set full bright first when the frame's byte 4 is 1, so a capture reads
 the texture sampled as the lit one is; under a budget of nothing instead when
 byte 5 is 1, so every surface stays on the lit loop; and on a debug build
 every lumel set by its node's parity when byte 7 is 1, before the reset, and
-the levels a surface builds held to byte 6 when it is not 0.
+the levels a surface builds held to byte 6 when it is not 0; on a CENSUS
+build either rewrite marks the census stale. Q: the census's chunk from
+bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
+it, where a build without the symbol falls through to the answer.
 
 ## k_thousand_d
 

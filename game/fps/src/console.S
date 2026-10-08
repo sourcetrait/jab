@@ -100,11 +100,21 @@ console_frame:
     lbu t1, 4(s2)
     beqz t1, 6f
     call lumels_bright
+.ifdef CENSUS
+    la t0, census_stale
+    li t1, 1
+    sb t1, 0(t0)                    # the census's uniformity unknown again
+.endif
 6:
 .ifdef DEBUG
     lbu t1, 7(s2)
     beqz t1, 62f
     call lumels_parity              # every lumel by its node's parity
+.ifdef CENSUS
+    la t0, census_stale
+    li t1, 1
+    sb t1, 0(t0)
+.endif
 62:
 .endif
     call tiles_reset
@@ -201,7 +211,11 @@ console_frame:
     j 8f
 15:
     li t1, 'J'
+.ifdef CENSUS
+    bne t0, t1, 16f
+.else
     bne t0, t1, 8f
+.endif
     lbu t1, 4(s2)
     la t2, job_delay_worker
     sb t1, 0(t2)                    # the delayed worker's index plus one, 0 for none
@@ -214,6 +228,15 @@ console_frame:
     lbu t1, 13(s2)
     la t2, job_fault_worker
     sb t1, 0(t2)                    # the faulting worker's index plus one, its next round
+.ifdef CENSUS
+    j 8f
+16:
+    li t1, 'Q'
+    bne t0, t1, 8f
+    lwu t1, 4(s2)
+    la t2, census_chunk
+    sw t1, 0(t2)                    # a census context line's chunk, 0 for the build's bound
+.endif
 .endif
 8:
     la t0, console_record

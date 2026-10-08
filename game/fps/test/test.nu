@@ -55,12 +55,14 @@
 # a map where a hall's rectangle grows through a later path before the
 # room beyond it can be reached; a map whose magic is wrong, which exits
 # 6, and Render One's map cut short, which exits 7, each saying so on
-# the UART.
+# the UART. On a CENSUS build the test runs the census's own fixtures
+# alone (census-holds).
 use ../../../sdk/nu/jab.nu
 use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
 use ./gauge.nu
+use ./census.nu
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
@@ -483,9 +485,29 @@ const VIEW_SLACK = 4
 # block: the bay's floor runs to some twenty metres from it, where a
 # block asks a level past the tiles' four
 const SPAWN_POSE = { name: "spawn", x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 }
+# The census's fixtures (census-holds), a CENSUS build's, on the still copy
+# of Render Zero's spawn view: the console's Q frame shrinking a context
+# line's chunk to CENSUS_SHRUNK bytes over CENSUS_SHRINK, so every list of
+# two surfaces or more splits; the L frames setting every lumel full
+# bright, by its node's parity, and full bright again, each lighting
+# revision two seconds long and each frame with the build budget held so
+# no surface builds tiles under it; the capture ending the run
+const CENSUS_SHRUNK = 96
+const CENSUS_SHRINK = { from: 1400ms, to: 2400ms }
+const CENSUS_LIGHTS = [
+    { at: 3000ms, bright: true, parity: false }
+    { at: 5000ms, bright: false, parity: true }
+    { at: 7000ms, bright: true, parity: false }
+]
+const CENSUS_END = 9000ms
 
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
     assert (($assets | path exists)) "the sdk built the assets image"
+    if ("CENSUS" in ($set | split row ",")) {
+        census-holds $kernel $image $out $set ($env.FILE_PWD | path join ".." | path expand)
+        print "fps: ok"
+        return
+    }
     hot-functions $image
     release-strings $image
     gauge-rules ($out | path join "gauge_rules")
@@ -1699,6 +1721,12 @@ def level-frame [bright: bool, held: bool, cap: int, --parity]: nothing -> binar
 # publish; byte 13 the faulting worker's index plus one, its next round.
 def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int]: nothing -> binary {
     [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (0..<50 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's Q frame, a CENSUS build's: a census context line's chunk
+# in bytes, a word from byte 4, 0 for the build's own bound.
+def census-frame [chunk: int]: nothing -> binary {
+    [("Q" | into binary), 0x[00 00 00], ($chunk | into binary | bytes at 0..<4), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # The console's K frame, a debug build's: the commands and the spans a
@@ -3802,3 +3830,135 @@ def fx-u32 [v: int]: nothing -> binary { $v | into binary --endian little | byte
 def fx-u64 [v: int]: nothing -> binary { $v | into binary --endian little | bytes at 0..<8 }
 def fx-zeros [n: int]: nothing -> binary { if $n <= 0 { 0x[] } else { 1..$n | each { 0x[00] } | bytes collect } }
 def fx-pad [b: binary]: nothing -> binary { [$b (fx-zeros ($RECORD - ($b | bytes length)))] | bytes collect }
+
+# The census's own fixtures, a CENSUS build's (census.S, census.nu), on
+# the still copy of Render Zero's spawn view in one launch: the clamped
+# edge's case at the load, a tile past a map's last node read shaded by
+# its nodes and by lumel_sample, where nodes clamped to the last column
+# alone read it uniform; every frame complete with every context's list
+# reassembled from its chunks, the shrunk chunk splitting every list of
+# two surfaces or more and the build's own bound splitting none, every
+# pair a surface the directory holds, once a list; each side's working
+# sets the planes' and the walls' summed, this frame's its demand, the
+# planes' this frame the demand's planes and the walls' between the
+# demand's larger of walls and openings and their sum; the lighting's
+# revisions in order, no tile uniform by its nodes and not by
+# lumel_sample, the ordinary light's uniform tiles checked, every
+# demanded tile uniform and checked in a full bright revision's first
+# frame and uniform through it, none uniform or checked under the
+# parity; and the log with one continuation dropped refusing that frame
+# alone.
+export def census-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
+    let dir = ($out | path join "census")
+    mkdir $dir
+    let still_tree = (variant-tree (open ($game | path join "content" "map" "render_0.nuon")) "render_0_still" [android] ($dir | path join "still") $game)
+    let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
+    let lights = ($CENSUS_LIGHTS | each {|l| { at: $l.at, bytes: (level-frame $l.bright true 0 --parity=$l.parity) } })
+    let sends = ([
+        { at: $CENSUS_SHRINK.from, bytes: (census-frame $CENSUS_SHRUNK) }
+        { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
+        { at: $CENSUS_SHRINK.to, bytes: (census-frame 0) }
+    ] | append $lights | sort-by at)
+    let run = (jab launch --kernel $kernel --image $image --out ($dir | path join "run") --set $set --sound --api --disk $still_disk --serial "fps" --send $sends --capture $CENSUS_END --seconds 10)
+    assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the census run"
+    let faults = ($run.serial | lines | where {|l| $l starts-with "jab: " })
+    assert ($faults | is-empty) $"no fault on the census run: ($faults)"
+
+    # the clamped edge: a 3 by 3 map whose last column's nodes are alike
+    # and whose penultimate column's last node is a level under, a tile at
+    # level 1 past the last node, which lumel_sample reads through the
+    # penultimate cell; its nodes from the sampler's clamp and the sampler
+    # itself both find it shaded
+    let edge = (census edge $run.serial)
+    assert ($edge != null) "the clamped edge's line after the load"
+    assert (not $edge.skipped) $"the clamped edge's case ran: ($edge)"
+    assert equal $edge.nodes 0 $"the tile past the last node shaded by its nodes, the penultimate column's in reach as lumel_sample clamps: ($edge)"
+    assert equal $edge.sampler 0 $"the tile past the last node shaded at lumel_sample's texel centres: ($edge)"
+
+    let directory = (census directory $run.serial)
+    assert ($directory != null) "the census's directory after the load"
+    assert ($directory.maps > 0 and $directory.planes_below > 0 and $directory.surfaces > $directory.planes_below) $"the directory's maps and surfaces: ($directory)"
+    let read = (census frames $run.serial)
+    let cut = ($read | enumerate | where {|e| not $e.item.ended } | get index)
+    assert ($cut | all {|i| $i == (($read | length) - 1) }) $"only the log's last frame cut by the run's end: frames ($cut) of ($read | length)"
+    let frames = ($read | where ended)
+    assert (($frames | length) > 50) $"census frames through the run: ($frames | length)"
+    let invalid = ($frames | where {|f| not $f.valid })
+    assert ($invalid | is-empty) $"every census frame complete, every context's list reassembled: ($invalid | first 3 | select frame reasons)"
+    let lists = {|fs: list| $fs | each {|f| $f.sides | each {|s| $s.contexts } | flatten } | flatten }
+
+    # the line's bound: the shrunk chunk splits every list of two surfaces
+    # or more, each reassembled whole, and the build's own bound none here
+    let shrunk = ($frames | where chunk == $CENSUS_SHRUNK)
+    assert (not ($shrunk | is-empty)) $"frames under the shrunk chunk: ($frames | get chunk | uniq)"
+    let unsplit = (do $lists $shrunk | where {|l| ($l.pairs | length) >= 2 and $l.chunks < 2 })
+    assert ($unsplit | is-empty) $"every list of two surfaces or more split under the shrunk chunk: ($unsplit | first 3 | select side context listed chunks)"
+    let split = (do $lists $shrunk | where {|l| $l.chunks > 1 })
+    assert (not ($split | is-empty)) "lists split under the shrunk chunk"
+    let whole = (do $lists ($frames | where chunk != $CENSUS_SHRUNK) | where {|l| $l.chunks > 1 })
+    assert ($whole | is-empty) $"no list split under the build's own bound: ($whole | first 3 | select side context listed chunks)"
+
+    # the surfaces: every pair a surface the directory holds, each once in
+    # its list
+    let all = (do $lists $frames)
+    let foreign = ($all | where {|l| $l.pairs | any {|p| $p.surface >= $directory.surfaces } })
+    assert ($foreign | is-empty) $"every listed surface one the directory holds: ($foreign | first 3 | select side context pairs)"
+    let repeated = ($all | where {|l| (not ($l.pairs | is-empty)) and (($l.pairs | get surface | uniq | length) != ($l.pairs | length)) })
+    assert ($repeated | is-empty) $"each surface once in its list: ($repeated | first 3 | select side context pairs)"
+
+    # the windows: the planes' and the walls' with their openings summed,
+    # this frame's the demand, the planes' this frame the demand's planes
+    let sides = ($frames | each {|f| $f.sides | each {|s| $s | insert frame $f.frame | insert lighting $f.lighting } } | flatten)
+    let unsummed = ($sides | where {|s| $s.w1 != ($s.p1 + $s.q1) or $s.w30 != ($s.p30 + $s.q30) or $s.w120 != ($s.p120 + $s.q120) or $s.w1 != $s.demand })
+    assert ($unsummed | is-empty) $"each side's working sets the planes' and the walls' summed, this frame's its demand: ($unsummed | first 3 | select frame side demand w1 p1 q1 w30 p30 q30 w120 p120 q120)"
+    let misclassed = ($sides | where {|s| $s.p1 != $s.planes or $s.q1 < ([$s.walls $s.openings] | math max) or $s.q1 > ($s.walls + $s.openings) })
+    assert ($misclassed | is-empty) $"the planes' window this frame the demand's planes, the walls' between its walls and openings: ($misclassed | first 3 | select frame side planes walls openings p1 q1)"
+    assert (($sides | where {|s| $s.p1 > 0 and $s.q1 > 0 } | length) > 0) "planes and walls both demanded from the spawn view"
+    # the lists by class: a frame's tiles of plane surfaces and of wall
+    # surfaces, classed by the directory's index, over its contexts cover
+    # the windows' this frame, a tile two contexts request counted in each
+    let sum = {|ps: list| if ($ps | is-empty) { 0 } else { $ps | get count | math sum } }
+    let covers = ($frames | each {|f| $f.sides | each {|s|
+        let pairs = (if ($s.contexts | is-empty) { [] } else { $s.contexts | get pairs | flatten })
+        let planes = (do $sum ($pairs | where {|p| $p.surface < $directory.planes_below }))
+        let walls = (do $sum ($pairs | where {|p| $p.surface >= $directory.planes_below }))
+        { frame: $f.frame, side: $s.side, p1: $s.p1, q1: $s.q1, planes: $planes, walls: $walls }
+    } } | flatten)
+    let uncovered = ($covers | where {|c| $c.planes < $c.p1 or $c.walls < $c.q1 })
+    assert ($uncovered | is-empty) $"the listed surfaces' tiles by class cover each window class's this frame: ($uncovered | first 3)"
+
+    # the lighting: the revisions in order, no tile its nodes call uniform
+    # that lumel_sample does not, the ordinary light's uniform tiles
+    # checked, every demanded tile uniform and checked in a full bright
+    # revision's first frame and uniform through it, none under the parity
+    assert equal ($frames | get lighting | uniq) [0 1 2 3] $"the lighting's revisions in order, one an L: ($frames | get lighting | uniq)"
+    let mismatched = ($sides | where mismatches > 0)
+    assert ($mismatched | is-empty) $"no tile uniform by its nodes and not by lumel_sample: ($mismatched | first 3 | select frame side uniform checked mismatches)"
+    let ordinary = ($sides | where lighting == 0)
+    assert (not ($ordinary | is-empty)) "frames under the ordinary light"
+    let ordinary_checked = ($ordinary | get checked | math sum)
+    assert ($ordinary_checked > 0) $"the ordinary light's uniform tiles checked by lumel_sample: ($ordinary_checked)"
+    for revision in [1 3] {
+        let lit = ($frames | where lighting == $revision)
+        assert (not ($lit | is-empty)) $"frames under full bright, revision ($revision)"
+        let first = ($lit | first)
+        let unchecked = ($first.sides | where {|s| $s.demand == 0 or $s.uniform != $s.demand or $s.checked != $s.demand })
+        assert ($unchecked | is-empty) $"under full bright every demanded tile uniform and checked in revision ($revision)'s first frame ($first.frame): ($unchecked | select side demand uniform checked)"
+        let shaded = ($sides | where {|s| $s.lighting == $revision and $s.uniform != $s.demand })
+        assert ($shaded | is-empty) $"every demanded tile uniform through revision ($revision): ($shaded | first 3 | select frame side demand uniform)"
+    }
+    let parity = ($sides | where lighting == 2)
+    assert (not ($parity | is-empty)) "frames under the parity"
+    let even = ($parity | where {|s| $s.uniform > 0 or $s.checked > 0 })
+    assert ($even | is-empty) $"under the parity no tile uniform and none checked: ($even | first 3 | select frame side demand uniform checked)"
+
+    # the reader: the log with one continuation dropped refuses that frame
+    # alone, its list not reassembled
+    let census_lines = ($run.serial | lines)
+    let more_at = ($census_lines | enumerate | where {|e| $e.item | str contains " more:" } | get -o 0.index)
+    assert ($more_at != null) "a continuation in the log to drop"
+    let refused = (census frames ($census_lines | drop nth $more_at | str join (char nl)) | where {|f| $f.ended and not $f.valid })
+    assert equal ($refused | length) 1 $"the frame missing a continuation refused alone: ($refused | select frame reasons)"
+    assert ($refused.0.reasons | any {|r| $r | str contains "does not reassemble" }) $"refused as a list that does not reassemble: ($refused.0.reasons)"
+    print $"fps: the census's ($frames | length) frames, ($shrunk | length) under the shrunk chunk, revisions ($frames | get lighting | uniq | str join ' '), the edge's verdicts ($edge.nodes) and ($edge.sampler)"
+}

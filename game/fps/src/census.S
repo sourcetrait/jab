@@ -3,6 +3,9 @@
 .set CENSUS_SIDE_SHIFT, 5
 .set CENSUS_WINDOW, 120
 .set CENSUS_SHORT, 30
+.set CENSUS_WINDOW_CLASSES, 2
+.set CENSUS_WINDOW_PLANES, 0
+.set CENSUS_WINDOW_WALLS, 1
 .set CENSUS_ENTRIES, (8 * 1024 * 1024)
 .set CENSUS_SAMPLED_SHIFT, 24
 .set CENSUS_CONTEXT_SHIFT, 48
@@ -13,17 +16,28 @@
 .set CENSUS_WALL, 1
 .set CENSUS_OPENING, 2
 .set CENSUS_LINE_BYTES, 16384
+.set CENSUS_ITEM_BYTES, 24
+.set CENSUS_CHUNK, (CENSUS_LINE_BYTES - CENSUS_ITEM_BYTES - 2)
+.set CENSUS_EDGE_SIDE, 3
+.set CENSUS_EDGE_K, 5
+.set CENSUS_EDGE_NODES, (CENSUS_EDGE_SIDE * CENSUS_EDGE_SIDE)
+.set CENSUS_EDGE_LIGHT, 127
+.set CENSUS_EDGE_SHADE, 126
+.set CENSUS_EDGE_SHADED, (2 * CENSUS_EDGE_SIDE + 1)
+.set CENSUS_EDGE_LEVEL, 1
+.set CENSUS_EDGE_TX, 1
 .set CS_LEVELS, 0
 .set CS_K, 1
 .set CS_W, 4
 .set CS_H, 8
 .set CS_LUMELS, 16
-.set CS_GRIDS, 24
+.set CS_WORD, 24
+.set CS_GRIDS, 32
 .set CS_GRID_BASE, 0
 .set CS_GRID_W, 4
 .set CS_GRID_H, 8
 .set CS_GRID_SIZE, 12
-.set CS_SIZE, 384
+.set CS_SIZE, 392
 .set CT_ELIGIBLE, 0
 .set CT_ELIGIBLE_PIXELS, 8
 .set CT_STRADDLING, 16
@@ -33,8 +47,10 @@
 .set CT_CLASSES, 48
 .set CT_SAMPLED, 72
 .set CT_UNIFORM, 80
-.set CT_SURFACES, 88
-.set CT_REQUESTS, 96
+.set CT_CHECKED, 88
+.set CT_MISMATCHES, 96
+.set CT_SURFACES, 104
+.set CT_REQUESTS, 112
 .set CT_DISTINCT, (CT_REQUESTS + CENSUS_CONTEXTS * 8)
 .set CT_LISTED, (CT_DISTINCT + CENSUS_CONTEXTS * 8)
 .set CT_SIZE, (CT_LISTED + CENSUS_CONTEXTS * 8)
@@ -105,6 +121,15 @@ census_init:
     sw s7, CS_H(s3)
     ld t0, LUMAP_BASE(s2)
     sd t0, CS_LUMELS(s3)
+    la t1, lumel_arena
+    sub t0, t0, t1                  # the lumels' offset into the arena
+    slli t1, s6, (3 + LUMEL_ROWBYTES_SHIFT)
+    or t0, t0, t1                   # a row's bytes
+    slli t1, s7, LUMEL_ROWS_SHIFT
+    or t0, t0, t1                   # the rows
+    slli t1, s5, LUMEL_K_SHIFT
+    or t0, t0, t1                   # k
+    sd t0, CS_WORD(s3)              # the read's word, as lumap_bind packs it
     sll s6, s6, s5                  # the map's texels across at level 0
     sll s7, s7, s5                  # and down
     li s8, 0                        # the size
@@ -185,6 +210,14 @@ census_init:
     call append_dec
     la a1, word_census_maps
     call append_str
+    la a1, word_census_planes_below
+    call append_str
+    li a1, LUMAP_PLANES
+    call append_dec
+    la a1, word_census_of
+    call append_str
+    li a1, LUMAP_COUNT
+    call append_dec
     li s0, 0                        # the size
 34:
     li t0, CENSUS_SIZES
@@ -214,6 +247,7 @@ census_init:
     j 34b
 35:
     call census_line_end
+    call census_edge
     ld ra, 88(sp)
     ld s0, 80(sp)
     ld s1, 72(sp)
@@ -225,6 +259,94 @@ census_init:
     ld s7, 24(sp)
     ld s8, 16(sp)
     addi sp, sp, 96
+    ret
+
+census_edge:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s6, 32(sp)
+    sd s9, 24(sp)
+    sd s11, 16(sp)
+    la t0, lumel_arena
+    li t1, (LUMEL_ARENA_BYTES - CENSUS_EDGE_NODES * LUMEL_BYTES)
+    add t1, t1, t0                  # the arena's last nodes
+    la t2, lumel_cursor
+    ld t2, 0(t2)
+    bgtu t2, t1, 8f                 # a map reaches them: no case
+    sd t1, 0(sp)                    # the edge map's lumels
+    li t2, CENSUS_EDGE_LIGHT
+    slli t3, t2, CHANNEL_BITS
+    or t2, t2, t3
+    slli t3, t3, CHANNEL_BITS
+    or t2, t2, t3                   # every lane at the light
+    li t3, 0                        # the node
+1:
+    li t4, CENSUS_EDGE_NODES
+    bgeu t3, t4, 2f
+    slli t4, t3, 3
+    add t4, t4, t1
+    sd t2, 0(t4)
+    addi t3, t3, 1
+    j 1b
+2:
+    li t2, CENSUS_EDGE_SHADE
+    slli t3, t2, CHANNEL_BITS
+    or t2, t2, t3
+    slli t3, t3, CHANNEL_BITS
+    or t2, t2, t3
+    sd t2, (CENSUS_EDGE_SHADED * LUMEL_BYTES)(t1)   # the penultimate column's last node a level under
+    la s9, census_edge_record
+    li t0, CENSUS_EDGE_K
+    sb t0, CS_K(s9)
+    li t0, CENSUS_EDGE_SIDE
+    sw t0, CS_W(s9)
+    sw t0, CS_H(s9)
+    sd t1, CS_LUMELS(s9)
+    la t0, lumel_arena
+    sub t1, t1, t0                  # the lumels' offset into the arena
+    li t0, ((CENSUS_EDGE_SIDE << (3 + LUMEL_ROWBYTES_SHIFT)) | (CENSUS_EDGE_SIDE << LUMEL_ROWS_SHIFT) | (CENSUS_EDGE_K << LUMEL_K_SHIFT))
+    or t1, t1, t0
+    sd t1, CS_WORD(s9)              # the read's word, as lumap_bind packs it
+    li s6, CENSUS_EDGE_LEVEL
+    li s11, 0                       # the smallest side
+    li a2, CENSUS_EDGE_TX
+    li a3, 0
+    call census_uniform
+    sd a0, 8(sp)                    # the nodes' verdict
+    li a2, CENSUS_EDGE_TX
+    li a3, 0
+    call census_verify
+    mv s6, a0                       # the sampler's
+    ld t1, 0(sp)
+    li t3, 0
+3:
+    li t4, CENSUS_EDGE_NODES
+    bgeu t3, t4, 4f
+    slli t4, t3, 3
+    add t4, t4, t1
+    sd zero, 0(t4)                  # the arena's tail as it was
+    addi t3, t3, 1
+    j 3b
+4:
+    la a0, census_line
+    la a1, msg_census_edge
+    call append_str
+    ld a1, 8(sp)
+    call append_dec
+    la a1, word_census_sampler
+    call append_str
+    mv a1, s6
+    call append_dec
+    call census_line_end
+    j 9f
+8:
+    jab.sys.uart.print msg_census_edge_skipped
+9:
+    ld ra, 40(sp)
+    ld s6, 32(sp)
+    ld s9, 24(sp)
+    ld s11, 16(sp)
+    addi sp, sp, 48
     ret
 
 census_context:
@@ -258,6 +380,43 @@ census_frame:
     addi s0, a0, 1                  # its stamp
     li t0, CENSUS_WINDOW
     remu s1, a0, t0                 # its slot in the window
+    la t0, census_stale
+    lbu t1, 0(t0)
+    beqz t1, 12f
+    sb zero, 0(t0)
+    la t0, census_revision
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # the lighting's revision
+    li t1, 0                        # the entries in use
+    li t2, 0                        # the size
+10:
+    li t3, CENSUS_SIZES
+    bgeu t2, t3, 11f
+    la t3, census_used
+    slli t4, t2, 3
+    add t3, t3, t4
+    ld t3, 0(t3)
+    add t1, t1, t3
+    addi t2, t2, 1
+    j 10b
+11:
+    la t0, census_entries
+    slli t1, t1, 3
+    add t1, t1, t0
+    li t2, 1
+    slli t3, t2, CENSUS_KNOWN_BIT
+    slli t2, t2, CENSUS_UNIFORM_BIT
+    or t2, t2, t3
+    not t2, t2
+13:
+    bgeu t0, t1, 12f
+    ld t3, 0(t0)
+    and t3, t3, t2
+    sd t3, 0(t0)                    # its uniformity unknown again
+    addi t0, t0, 8
+    j 13b
+12:
     la t0, census_totals
     li t1, (CENSUS_SIZES * CT_SIZE)
     add t1, t1, t0
@@ -269,9 +428,9 @@ census_frame:
     sd zero, 0(t0)
     sd zero, 8(t0)
     sd zero, 16(t0)
-    li t0, 0                        # the size
+    li t0, 0                        # the size and window class
 2:
-    li t1, CENSUS_SIZES
+    li t1, (CENSUS_SIZES * CENSUS_WINDOW_CLASSES)
     bgeu t0, t1, 3f
     li t1, CENSUS_WINDOW
     mul t1, t0, t1
@@ -551,6 +710,17 @@ census_first_demand:
     sd ra, 24(sp)
     sd a0, 16(sp)                   # the entry
     sd a1, 8(sp)                    # the totals
+    li t4, LUMAP_PLANES
+    sltu t4, s5, t4
+    xori t4, t4, 1                  # its window's class by the surface: a plane, else a wall with its openings
+    li t3, CENSUS_WINDOW_CLASSES
+    mul t3, s11, t3
+    add t4, t4, t3
+    li t3, CENSUS_WINDOW
+    mul t4, t4, t3
+    slli t4, t4, 3
+    la t3, census_ring
+    add t4, t4, t3                  # the size and class's window
     ld t0, 0(a0)
     slli t1, t0, 40
     srli t1, t1, 40                 # the stamp it was last demanded at
@@ -561,22 +731,14 @@ census_first_demand:
     li t3, CENSUS_WINDOW
     bgeu t2, t3, 2f                 # past the window: its slot emptied since
     remu t1, t1, t3
-    li t2, CENSUS_WINDOW
-    mul t2, s11, t2
-    add t2, t2, t1
-    slli t2, t2, 3
-    la t3, census_ring
-    add t2, t2, t3
+    slli t1, t1, 3
+    add t2, t4, t1
     ld t3, 0(t2)
     addi t3, t3, -1
     sd t3, 0(t2)                    # out of its frame's count
 2:
-    li t2, CENSUS_WINDOW
-    mul t2, s11, t2
-    add t2, t2, s1
-    slli t2, t2, 3
-    la t3, census_ring
-    add t2, t2, t3
+    slli t2, s1, 3
+    add t2, t2, t4
     ld t3, 0(t2)
     addi t3, t3, 1
     sd t3, 0(t2)                    # into this frame's
@@ -595,9 +757,24 @@ census_first_demand:
     srli t1, t0, CENSUS_KNOWN_BIT
     andi t1, t1, 1
     bnez t1, 3f
-    call census_uniform             # once a tile
+    call census_uniform             # the nodes' verdict, once a lighting revision
+    beqz a0, 26f
+    call census_verify              # the sampler's at every texel centre, the verdict kept
+    ld a1, 8(sp)
+    ld t1, CT_CHECKED(a1)
+    addi t1, t1, 1
+    sd t1, CT_CHECKED(a1)
+    bnez a0, 26f
+    ld t1, CT_MISMATCHES(a1)
+    addi t1, t1, 1
+    sd t1, CT_MISMATCHES(a1)        # the nodes uniform where the sampler is not
+26:
     ld t2, 16(sp)
     ld t0, 0(t2)
+    li t1, 1
+    slli t1, t1, CENSUS_UNIFORM_BIT
+    not t1, t1
+    and t0, t0, t1                  # the verdict in place of any before it
     li t1, 1
     slli t1, t1, CENSUS_KNOWN_BIT
     or t0, t0, t1
@@ -631,39 +808,56 @@ census_first_demand:
     ret
 
 census_uniform:
-    lbu t0, CS_K(s9)                # k
-    addi t1, s11, CENSUS_SIDE_SHIFT
-    add t1, t1, s6                  # a tile's level 0 texels a side, as a shift
-    sll t2, a2, t1
-    srl t3, t2, t0                  # the first column's cell
-    addi t4, a2, 1
-    sll t4, t4, t1
-    addi t4, t4, -1
-    srl t4, t4, t0
-    addi t4, t4, 1                  # the last column's far node
+    lbu t0, CS_K(s9)
+    addi t0, t0, 16                 # a coordinate's shift to its cell
+    addi t1, s11, CENSUS_SIDE_SHIFT # a tile's texels a side at its level, as a shift
+    addi t2, s6, 15                 # a texel to its centre's level 0 coordinate, less the half
     lwu t5, CS_W(s9)
-    addi t5, t5, -1                 # the greatest column
-    bleu t3, t5, 1f
+    addi t5, t5, -1
+    sll t5, t5, t0
+    addi t5, t5, -1                 # the greatest u, under the last column, as lumel_sample holds it
+    sll t3, a2, t1                  # the tile's first column
+    slli t3, t3, 1
+    addi t3, t3, 1
+    sll t3, t3, t2                  # its centre
+    ble t3, t5, 1f
     mv t3, t5
 1:
-    bleu t4, t5, 2f
+    srl t3, t3, t0                  # the first column's cell
+    addi t4, a2, 1
+    sll t4, t4, t1
+    addi t4, t4, -1                 # the tile's last column
+    slli t4, t4, 1
+    addi t4, t4, 1
+    sll t4, t4, t2                  # its centre
+    ble t4, t5, 2f
     mv t4, t5
 2:
-    sll t2, a3, t1
-    srl a4, t2, t0                  # the first row's cell
+    srl t4, t4, t0
+    addi t4, t4, 1                  # the last column's far node
+    lwu t5, CS_H(s9)
+    addi t5, t5, -1
+    sll t5, t5, t0
+    addi t5, t5, -1                 # the greatest v
+    sll a4, a3, t1                  # the tile's first row
+    slli a4, a4, 1
+    addi a4, a4, 1
+    sll a4, a4, t2
+    ble a4, t5, 3f
+    mv a4, t5
+3:
+    srl a4, a4, t0                  # the first row's cell
     addi a5, a3, 1
     sll a5, a5, t1
-    addi a5, a5, -1
+    addi a5, a5, -1                 # the tile's last row
+    slli a5, a5, 1
+    addi a5, a5, 1
+    sll a5, a5, t2
+    ble a5, t5, 4f
+    mv a5, t5
+4:
     srl a5, a5, t0
     addi a5, a5, 1                  # the last row's far node
-    lwu t2, CS_H(s9)
-    addi t2, t2, -1                 # the greatest row
-    bleu a4, t2, 3f
-    mv a4, t2
-3:
-    bleu a5, t2, 4f
-    mv a5, t2
-4:
     lwu t6, CS_W(s9)
     slli t6, t6, 3                  # a row's bytes
     ld a6, CS_LUMELS(s9)
@@ -694,6 +888,58 @@ census_uniform:
     ret
 9:
     li a0, 0
+    ret
+
+census_verify:
+    ld t0, CS_WORD(s9)
+    la t1, census_sample_command
+    sd t0, POLY_LUMEL(t1)           # the surface's read word
+    la t0, census_sample_context
+    sd t1, CTX_COMMAND(t0)
+    mv a4, tp
+    mv tp, t0                       # lumel_sample reads its command through tp
+    addi t2, s11, CENSUS_SIDE_SHIFT
+    li t0, 1
+    sll t2, t0, t2                  # the tile's texels a side at its level
+    mul a1, a2, t2                  # its first column
+    mul a2, a3, t2                  # its first row
+    addi t6, s6, 15                 # a texel to its centre's level 0 coordinate, less the half
+    slli a5, a1, 1
+    addi a5, a5, 1
+    sll a5, a5, t6
+    slli a6, a2, 1
+    addi a6, a6, 1
+    sll a6, a6, t6
+    lumel_sample
+    mv t5, a5                       # the first texel's brightness, which every texel must read
+    li a3, 1
+    li t1, 0                        # the row
+1:
+    bgeu t1, t2, 9f
+    li t0, 0                        # the column
+2:
+    bgeu t0, t2, 8f
+    add a5, a1, t0
+    slli a5, a5, 1
+    addi a5, a5, 1
+    sll a5, a5, t6                  # the texel's centre
+    add a6, a2, t1
+    slli a6, a6, 1
+    addi a6, a6, 1
+    sll a6, a6, t6
+    lumel_sample
+    bne a5, t5, 7f
+    addi t0, t0, 1
+    j 2b
+7:
+    li a3, 0
+    j 9f
+8:
+    addi t1, t1, 1
+    j 1b
+9:
+    mv tp, a4
+    mv a0, a3
     ret
 
 census_context_surface:
@@ -733,15 +979,20 @@ census_context_surface:
 
 census_working:
     li t0, CENSUS_WINDOW
-    mul t1, a1, t0
+    li t3, 0                        # the tiles
+1:
+    bgeu a3, a4, 9f
+    li t1, CENSUS_WINDOW_CLASSES
+    mul t1, a1, t1
+    add t1, t1, a3
+    mul t1, t1, t0
     slli t1, t1, 3
     la t2, census_ring
-    add t1, t1, t2                  # the size's window
-    li t3, 0                        # the tiles
+    add t1, t1, t2                  # the size and class's window
     li t4, 0                        # the frames back
-1:
-    bgeu t4, a2, 9f
-    bltu a0, t4, 9f                 # before the first frame
+2:
+    bgeu t4, a2, 8f
+    bltu a0, t4, 8f                 # before the first frame
     sub t5, a0, t4
     remu t5, t5, t0
     slli t5, t5, 3
@@ -749,20 +1000,76 @@ census_working:
     ld t5, 0(t5)
     add t3, t3, t5
     addi t4, t4, 1
+    j 2b
+8:
+    addi a3, a3, 1
     j 1b
 9:
     mv a0, t3
     ret
 
+census_spans:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd a2, 32(sp)                   # the first class
+    sd a3, 24(sp)                   # the class past the last
+    sd a0, 16(sp)                   # the cursor
+    mv a0, s0
+    mv a1, s1
+    li a2, 1
+    ld a3, 32(sp)
+    ld a4, 24(sp)
+    call census_working
+    mv a1, a0
+    ld a0, 16(sp)
+    call append_dec
+    la a1, word_census_comma
+    call append_str
+    sd a0, 16(sp)
+    mv a0, s0
+    mv a1, s1
+    li a2, CENSUS_SHORT
+    ld a3, 32(sp)
+    ld a4, 24(sp)
+    call census_working
+    mv a1, a0
+    ld a0, 16(sp)
+    call append_dec
+    la a1, word_census_comma
+    call append_str
+    sd a0, 16(sp)
+    mv a0, s0
+    mv a1, s1
+    li a2, CENSUS_WINDOW
+    ld a3, 32(sp)
+    ld a4, 24(sp)
+    call census_working
+    mv a1, a0
+    ld a0, 16(sp)
+    call append_dec
+    ld ra, 40(sp)
+    addi sp, sp, 48
+    ret
+
 census_print:
-    addi sp, sp, -64
-    sd ra, 56(sp)
-    sd s0, 48(sp)
-    sd s1, 40(sp)
-    sd s2, 32(sp)
-    sd s3, 24(sp)
-    sd s4, 16(sp)
+    addi sp, sp, -80
+    sd ra, 72(sp)
+    sd s0, 64(sp)
+    sd s1, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
     mv s0, a0                       # the frame
+    la t0, census_chunk
+    lwu s6, 0(t0)
+    li t0, CENSUS_CHUNK
+    beqz s6, 10f
+    bleu s6, t0, 11f
+10:
+    mv s6, t0                       # a context's line's chunk, the build's bound at most
+11:
     la a0, census_line
     la a1, msg_census_frame
     call append_str
@@ -782,6 +1089,15 @@ census_print:
     call append_str
     la t0, census_blocks
     ld a1, 16(t0)
+    call append_dec
+    la a1, word_census_lighting
+    call append_str
+    la t0, census_revision
+    ld a1, 0(t0)
+    call append_dec
+    la a1, word_census_chunk
+    call append_str
+    mv a1, s6
     call append_dec
     call census_line_end
     li s1, 0                        # the size
@@ -843,56 +1159,40 @@ census_print:
     call append_str
     ld a1, CT_UNIFORM(s2)
     call append_dec
+    la a1, word_census_checked
+    call append_str
+    ld a1, CT_CHECKED(s2)
+    call append_dec
+    la a1, word_census_mismatches
+    call append_str
+    ld a1, CT_MISMATCHES(s2)
+    call append_dec
     la a1, word_census_surfaces
     call append_str
     ld a1, CT_SURFACES(s2)
     call append_dec
     la a1, word_census_working
     call append_str
-    mv s3, a0
-    mv a0, s0
-    mv a1, s1
-    li a2, 1
-    call census_working
-    mv a1, a0
-    mv a0, s3
-    call append_dec
-    la a1, word_census_comma
+    li a2, 0
+    li a3, CENSUS_WINDOW_CLASSES
+    call census_spans               # every class's, their sum
+    la a1, word_census_planes
     call append_str
-    mv s3, a0
-    mv a0, s0
-    mv a1, s1
-    li a2, CENSUS_SHORT
-    call census_working
-    mv a1, a0
-    mv a0, s3
-    call append_dec
-    la a1, word_census_comma
+    li a2, CENSUS_WINDOW_PLANES
+    li a3, (CENSUS_WINDOW_PLANES + 1)
+    call census_spans
+    la a1, word_census_walls
     call append_str
-    mv s3, a0
-    mv a0, s0
-    mv a1, s1
-    li a2, CENSUS_WINDOW
-    call census_working
-    mv a1, a0
-    mv a0, s3
-    call append_dec
+    li a2, CENSUS_WINDOW_WALLS
+    li a3, (CENSUS_WINDOW_WALLS + 1)
+    call census_spans
     call census_line_end
     li s3, 0                        # the context
 2:
     li t0, CENSUS_CONTEXTS
     bgeu s3, t0, 8f
     la a0, census_line
-    la a1, msg_census
-    call append_str
-    addi t0, s1, CENSUS_SIDE_SHIFT
-    li a1, 1
-    sll a1, a1, t0
-    call append_dec
-    la a1, word_census_context
-    call append_str
-    mv a1, s3
-    call append_dec
+    call census_head
     la a1, word_census_requests
     call append_str
     slli t0, s3, 3
@@ -907,12 +1207,31 @@ census_print:
     call append_dec
     la a1, word_census_listed
     call append_str
+    slli t0, s3, 3
+    add t0, t0, s2
+    ld a1, CT_LISTED(t0)
+    call append_dec
+    la a1, word_census_items
+    call append_str
     li s4, 0                        # the listed surface
+    li s5, 0                        # the items on the line
 3:
     slli t0, s3, 3
     add t0, t0, s2
     ld t1, CT_LISTED(t0)
     bgeu s4, t1, 4f
+    beqz s5, 31f                    # a line takes its first item whatever its chunk
+    la t0, census_line
+    sub t0, a0, t0
+    addi t0, t0, CENSUS_ITEM_BYTES
+    bleu t0, s6, 31f                # room for the longest item
+    call census_line_end
+    la a0, census_line
+    call census_head
+    la a1, word_census_more
+    call append_str
+    li s5, 0
+31:
     li t0, CENSUS_CONTEXTS
     mul t0, s1, t0
     add t0, t0, s3
@@ -923,16 +1242,22 @@ census_print:
     la t2, census_context_lists
     add t1, t1, t2
     lwu t1, 0(t1)                   # the surface
+    sd t1, 0(sp)
     add t0, t0, t1
     slli t0, t0, 3
     la t2, census_context_counts
     add t0, t0, t2
     lwu t2, 4(t0)                   # its distinct tiles
-    sd t2, 0(sp)
+    sd t2, 8(sp)
     la a1, word_census_space
     call append_str
     ld a1, 0(sp)
     call append_dec
+    la a1, word_census_colon
+    call append_str
+    ld a1, 8(sp)
+    call append_dec
+    addi s5, s5, 1
     addi s4, s4, 1
     j 3b
 4:
@@ -943,13 +1268,38 @@ census_print:
     addi s1, s1, 1
     j 1b
 9:
-    ld ra, 56(sp)
-    ld s0, 48(sp)
-    ld s1, 40(sp)
-    ld s2, 32(sp)
-    ld s3, 24(sp)
-    ld s4, 16(sp)
-    addi sp, sp, 64
+    la a0, census_line
+    la a1, msg_census_end
+    call append_str
+    mv a1, s0
+    call append_dec
+    call census_line_end            # the frame's lines whole
+    ld ra, 72(sp)
+    ld s0, 64(sp)
+    ld s1, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 80
+    ret
+
+census_head:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a1, msg_census
+    call append_str
+    addi t0, s1, CENSUS_SIDE_SHIFT
+    li a1, 1
+    sll a1, a1, t0
+    call append_dec
+    la a1, word_census_context
+    call append_str
+    mv a1, s3
+    call append_dec
+    ld ra, 8(sp)
+    addi sp, sp, 16
     ret
 
 census_line_end:
@@ -966,12 +1316,22 @@ msg_census_directory:
     .asciz "fps: census directory: "
 word_census_maps:
     .asciz " maps"
+word_census_planes_below:
+    .asciz ", planes below "
+word_census_of:
+    .asciz " of "
 word_census_semicolon:
     .asciz "; "
 word_census_entries:
     .asciz ": entries "
 word_census_bytes:
     .asciz ", bytes "
+msg_census_edge:
+    .asciz "fps: census edge: nodes "
+word_census_sampler:
+    .asciz ", sampler "
+msg_census_edge_skipped:
+    .asciz "fps: census edge: skipped, a map in the lumel arena's tail\n"
 msg_census_frame:
     .asciz "fps: census frame "
 word_census_blocks:
@@ -980,6 +1340,10 @@ word_census_passing:
     .asciz ", passing "
 word_census_dropped:
     .asciz ", dropped "
+word_census_lighting:
+    .asciz ", lighting "
+word_census_chunk:
+    .asciz ", chunk "
 msg_census:
     .asciz "fps: census "
 word_census_eligible:
@@ -1002,6 +1366,10 @@ word_census_sampled:
     .asciz "; sampled "
 word_census_uniform:
     .asciz ", uniform "
+word_census_checked:
+    .asciz ", checked "
+word_census_mismatches:
+    .asciz ", mismatches "
 word_census_surfaces:
     .asciz ", surfaces "
 word_census_working:
@@ -1015,9 +1383,17 @@ word_census_requests:
 word_census_distinct:
     .asciz ", distinct "
 word_census_listed:
-    .asciz "; surfaces"
+    .asciz ", surfaces "
+word_census_items:
+    .asciz ";"
+word_census_more:
+    .asciz " more:"
 word_census_space:
     .asciz " "
+word_census_colon:
+    .asciz ":"
+msg_census_end:
+    .asciz "fps: census end "
 
 .section .bss
 .balign 8
@@ -1029,16 +1405,28 @@ census_used:
     .skip (CENSUS_SIZES * 8)
 census_maps:
     .skip 8
+census_revision:
+    .skip 8
 census_ring:
-    .skip (CENSUS_SIZES * CENSUS_WINDOW * 8)
+    .skip (CENSUS_SIZES * CENSUS_WINDOW_CLASSES * CENSUS_WINDOW * 8)
 census_surfaces:
     .skip (LUMAP_COUNT * CS_SIZE)
+census_edge_record:
+    .skip CS_SIZE
+census_sample_context:
+    .skip CTX_SIZE
+census_sample_command:
+    .skip POLY_SIZE
 census_surface_seen:
     .skip (CENSUS_SIZES * LUMAP_COUNT * 4)
 census_context_counts:
     .skip (CENSUS_SIZES * CENSUS_CONTEXTS * LUMAP_COUNT * 8)
 census_context_lists:
     .skip (CENSUS_SIZES * CENSUS_CONTEXTS * LUMAP_COUNT * 4)
+census_chunk:
+    .skip 4
+census_stale:
+    .skip 1
 census_line:
     .skip CENSUS_LINE_BYTES
 .balign 64
