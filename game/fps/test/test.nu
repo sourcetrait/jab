@@ -63,6 +63,7 @@ use ../nu/png.nu
 use ./pose.nu
 use ./gauge.nu
 use ./census.nu
+use ./census_holds.nu [census-reader-holds]
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
@@ -3835,19 +3836,15 @@ def fx-pad [b: binary]: nothing -> binary { [$b (fx-zeros ($RECORD - ($b | bytes
 # the still copy of Render Zero's spawn view in one launch: the clamped
 # edge's case at the load, a tile past a map's last node read shaded by
 # its nodes and by lumel_sample, where nodes clamped to the last column
-# alone read it uniform; every frame complete with every context's list
-# reassembled from its chunks, the shrunk chunk splitting every list of
-# two surfaces or more and the build's own bound splitting none, every
-# pair a surface the directory holds, once a list; each side's working
-# sets the planes' and the walls' summed, this frame's its demand, the
-# planes' this frame the demand's planes and the walls' between the
-# demand's larger of walls and openings and their sum; the lighting's
-# revisions in order, no tile uniform by its nodes and not by
-# lumel_sample, the ordinary light's uniform tiles checked, every
-# demanded tile uniform and checked in a full bright revision's first
-# frame and uniform through it, none uniform or checked under the
-# parity; and the log with one continuation dropped refusing that frame
-# alone.
+# alone read it uniform; every frame valid as census.nu reads it, whole
+# and accounting; the shrunk chunk splitting every list of two surfaces or
+# more and the build's own bound splitting none; planes and walls both
+# demanded; the lighting's revisions in order, no tile uniform by its
+# nodes and not by lumel_sample, the ordinary light's uniform tiles
+# checked, every demanded tile uniform and checked in a full bright
+# revision's first frame and uniform through it, none uniform or checked
+# under the parity; and the reader's refusals on the run's own log
+# (census-reader-holds).
 export def census-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
     let dir = ($out | path join "census")
     mkdir $dir
@@ -3884,7 +3881,7 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
     let frames = ($read | where ended)
     assert (($frames | length) > 50) $"census frames through the run: ($frames | length)"
     let invalid = ($frames | where {|f| not $f.valid })
-    assert ($invalid | is-empty) $"every census frame complete, every context's list reassembled: ($invalid | first 3 | select frame reasons)"
+    assert ($invalid | is-empty) $"every census frame whole and accounting: ($invalid | first 3 | select frame reasons)"
     let lists = {|fs: list| $fs | each {|f| $f.sides | each {|s| $s.contexts } | flatten } | flatten }
 
     # the line's bound: the shrunk chunk splits every list of two surfaces
@@ -3898,34 +3895,8 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
     let whole = (do $lists ($frames | where chunk != $CENSUS_SHRUNK) | where {|l| $l.chunks > 1 })
     assert ($whole | is-empty) $"no list split under the build's own bound: ($whole | first 3 | select side context listed chunks)"
 
-    # the surfaces: every pair a surface the directory holds, each once in
-    # its list
-    let all = (do $lists $frames)
-    let foreign = ($all | where {|l| $l.pairs | any {|p| $p.surface >= $directory.surfaces } })
-    assert ($foreign | is-empty) $"every listed surface one the directory holds: ($foreign | first 3 | select side context pairs)"
-    let repeated = ($all | where {|l| (not ($l.pairs | is-empty)) and (($l.pairs | get surface | uniq | length) != ($l.pairs | length)) })
-    assert ($repeated | is-empty) $"each surface once in its list: ($repeated | first 3 | select side context pairs)"
-
-    # the windows: the planes' and the walls' with their openings summed,
-    # this frame's the demand, the planes' this frame the demand's planes
     let sides = ($frames | each {|f| $f.sides | each {|s| $s | insert frame $f.frame | insert lighting $f.lighting } } | flatten)
-    let unsummed = ($sides | where {|s| $s.w1 != ($s.p1 + $s.q1) or $s.w30 != ($s.p30 + $s.q30) or $s.w120 != ($s.p120 + $s.q120) or $s.w1 != $s.demand })
-    assert ($unsummed | is-empty) $"each side's working sets the planes' and the walls' summed, this frame's its demand: ($unsummed | first 3 | select frame side demand w1 p1 q1 w30 p30 q30 w120 p120 q120)"
-    let misclassed = ($sides | where {|s| $s.p1 != $s.planes or $s.q1 < ([$s.walls $s.openings] | math max) or $s.q1 > ($s.walls + $s.openings) })
-    assert ($misclassed | is-empty) $"the planes' window this frame the demand's planes, the walls' between its walls and openings: ($misclassed | first 3 | select frame side planes walls openings p1 q1)"
     assert (($sides | where {|s| $s.p1 > 0 and $s.q1 > 0 } | length) > 0) "planes and walls both demanded from the spawn view"
-    # the lists by class: a frame's tiles of plane surfaces and of wall
-    # surfaces, classed by the directory's index, over its contexts cover
-    # the windows' this frame, a tile two contexts request counted in each
-    let sum = {|ps: list| if ($ps | is-empty) { 0 } else { $ps | get count | math sum } }
-    let covers = ($frames | each {|f| $f.sides | each {|s|
-        let pairs = (if ($s.contexts | is-empty) { [] } else { $s.contexts | get pairs | flatten })
-        let planes = (do $sum ($pairs | where {|p| $p.surface < $directory.planes_below }))
-        let walls = (do $sum ($pairs | where {|p| $p.surface >= $directory.planes_below }))
-        { frame: $f.frame, side: $s.side, p1: $s.p1, q1: $s.q1, planes: $planes, walls: $walls }
-    } } | flatten)
-    let uncovered = ($covers | where {|c| $c.planes < $c.p1 or $c.walls < $c.q1 })
-    assert ($uncovered | is-empty) $"the listed surfaces' tiles by class cover each window class's this frame: ($uncovered | first 3)"
 
     # the lighting: the revisions in order, no tile its nodes call uniform
     # that lumel_sample does not, the ordinary light's uniform tiles
@@ -3952,13 +3923,6 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
     let even = ($parity | where {|s| $s.uniform > 0 or $s.checked > 0 })
     assert ($even | is-empty) $"under the parity no tile uniform and none checked: ($even | first 3 | select frame side demand uniform checked)"
 
-    # the reader: the log with one continuation dropped refuses that frame
-    # alone, its list not reassembled
-    let census_lines = ($run.serial | lines)
-    let more_at = ($census_lines | enumerate | where {|e| $e.item | str contains " more:" } | get -o 0.index)
-    assert ($more_at != null) "a continuation in the log to drop"
-    let refused = (census frames ($census_lines | drop nth $more_at | str join (char nl)) | where {|f| $f.ended and not $f.valid })
-    assert equal ($refused | length) 1 $"the frame missing a continuation refused alone: ($refused | select frame reasons)"
-    assert ($refused.0.reasons | any {|r| $r | str contains "does not reassemble" }) $"refused as a list that does not reassemble: ($refused.0.reasons)"
+    census-reader-holds $run.serial
     print $"fps: the census's ($frames | length) frames, ($shrunk | length) under the shrunk chunk, revisions ($frames | get lighting | uniq | str join ' '), the edge's verdicts ($edge.nodes) and ($edge.sampler)"
 }
