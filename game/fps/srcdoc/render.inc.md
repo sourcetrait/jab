@@ -1216,13 +1216,237 @@ worker's its own of worker_contexts, each reached through tp.
 
 `u64`: the pixels read from tiles.
 
+## .set CTX_TILE_ADMIT
+
+`addr`: the context's admission block in tile_admission, set at load (tiles_init).
+
+## .set CTX_TILE_TOUCHED
+
+`addr`: the context's touched-slot bitmap, within its admission block.
+
 ## .set CTX_COUNT
 
 `COUNT_SIZE u8`: a COUNT build's counts, COUNT_* fields, the context's.
 
+## .set CTX_SHIFT
+
+`u64`: a raster context's bytes as a shift, so a worker's context is its index shifted, where its mailbox, JAB_JOB_BYTES apart, is its index shifted by seven.
+
 ## .set CTX_SIZE
 
-A raster context's bytes.
+A raster context's bytes, the counts span_fill keeps, the tile pool's fields, and a COUNT build's counts.
+
+## .set TILE_SHIFT
+## .set TILE_SIDE
+
+`u64`: a tile's texels a side as a shift, and the side, 32.
+
+The tile pool (tile.S) caches the lit texture a tile at a time: a tile is
+TILE_SIDE texels square at one level of the material's chain, in the surface's
+lumel frame. The census shortlisted 32 and 64 from the tiles each would ask
+and the pixels each would leave straddling, and 32 starts; TileSize chooses
+between the two on release measurements.
+
+## .set TILE_ROW_SHIFT
+
+`u64`: a tile row's bytes as a shift, four bytes a texel.
+
+## .set TILE_BYTES_SHIFT
+## .set TILE_BYTES
+
+`u64`: a tile's bytes as a shift, and the bytes, 4 KiB at 32.
+
+## .set TILE_POOL_BYTES
+
+`u64`: the pool's bytes, every slot a tile.
+
+32 MiB holds the census's 30-frame working set of the walls with their
+openings at its 95th percentile, 5,891 to 6,575 tiles at 32, in 8,192 slots,
+where 16 MiB's 4,096 hold it on no route; the working set's peaks pass 8,192,
+so eviction stays in play. The cap is read again from measured occupancy.
+
+## .set TILE_SLOTS
+
+`u64`: the pool's slots; a directory entry holds a slot plus one in sixteen bits, so they stay under 65,536.
+
+## .set TILE_DIRECTORY_ENTRIES
+
+`u64`: the directory's entries, a u32 each, every mapped surface's grid at every level of its chain; a surface whose grids would pass them stays uncached, counted. Render Zero takes 384,445 at 32.
+
+## .set TILE_GUARANTEE
+
+`u64`: the requests a context admits for one surface in a frame before its open ring takes them.
+
+16 at 32: the census's median requesting surface asked 12 distinct tiles in
+a context's frame, rounded up to a power of two, so the typical surface's
+frame is guaranteed whole. Provisional until AdmissionMeasure reads the
+admission itself.
+
+## .set TILE_RING
+
+`u64`: a context's open ring, the requests past the guaranteed tiers.
+
+4,096 at 32: the census's worst context held 2,170 distinct tiles past the
+guarantee over every frame of both routes and backends, rounded up to a power
+of two. That fill counts distinct tiles, every repeat assumed filtered, so the
+ring is provisional with TILE_GUARANTEE.
+
+## .set TILE_RECENT
+
+`u64`: a context's repeat filter's keys, direct-mapped by their low bits, a power of two.
+
+## .set TILE_CONTEXTS
+
+`u64`: the raster contexts that request tiles, hart 0's and the workers'.
+
+## .set TILE_MERGE
+
+`u64`: the boundary's merged list, a key a slot, since one boundary builds no more tiles than the pool has slots.
+
+## .set SLOT_FREE
+## .set SLOT_BUILDING
+## .set SLOT_READY
+
+`u64`: a slot's states, the low bits of its tag, the slot's generation above them: free, a tile in construction, a tile published whole.
+
+## .set SLOT_KEY
+
+`u32`: the slot's tile, its directory entry's index.
+
+## .set SLOT_SURFACE
+
+`u32`: the tile's surface, the lumel maps' index.
+
+## .set SLOT_TX
+## .set SLOT_TY
+
+`u32`: the tile's column and row in its level's grid.
+
+## .set SLOT_LEVEL
+
+`u8`: the tile's level of the chain.
+
+## .set SLOT_REFERENCE
+
+`u8`: CLOCK's reference bit.
+
+## .set SLOT_ROW
+
+`u16`: the next row to build while the slot is BUILDING.
+
+## .set SLOT_BUILT
+
+`u32`: the boundary that published the tile.
+
+## .set SLOT_SIZE
+
+A slot record's bytes.
+
+## .set TS_LEVELS
+
+`u8`: the levels of the surface's chain its directory holds, 0 for a surface the pool leaves uncached.
+
+A tile surface record, one a surface at the lumel maps' index (tile_surfaces),
+holds what the builder and the span's lookup need beyond the lumel map: the
+chain's levels, k, the texture's masks and row shift as material_bind takes
+them, and a grid a level, its first directory entry and its tiles across and
+down. A tile at level m covers TILE_SIDE << m texels of level 0 a side, over
+the map's W << k by H << k texels, the last cell past the last node included,
+the census's sizing at one side.
+
+## .set TS_K
+
+`u8`: the map's k, a lumel cell's level 0 texels a side as a shift.
+
+## .set TS_WSHIFT
+
+`u8`: the texture's row bytes at level 0 as a shift, POLY_WSHIFT's.
+
+## .set TS_MATERIAL
+
+`u32`: the surface's material.
+
+## .set TS_UMASK
+## .set TS_VMASK
+
+`u32`: the texture's masks at level 0, POLY_UMASK's and POLY_VMASK's.
+
+## .set TS_GRIDS
+
+`MIP_LEVELS*TS_GRID_SIZE u8`: the grids by level.
+
+## .set TS_GRID_BASE
+
+`u32`: the level's first directory entry.
+
+## .set TS_GRID_W
+## .set TS_GRID_H
+
+`u16`: the level's tiles across and down.
+
+## .set TS_GRID_SIZE
+
+A grid's bytes.
+
+## .set TS_SIZE
+
+A tile surface record's bytes.
+
+## .set TT_STAMP
+
+`u32`: a guaranteed tier's frame stamp, the frame's number plus one, 0 never.
+
+A guaranteed tier holds one surface's requests in one context's frame, up to
+TILE_GUARANTEE of them, so no surface's demand takes another's.
+
+## .set TT_COUNT
+
+`u32`: the tier's requests.
+
+## .set TT_KEYS
+
+`TILE_GUARANTEE u32`: their keys.
+
+## .set TT_SIZE
+
+A tier's bytes.
+
+## .set TA_RING_FILL
+
+`u32`: an admission block's open ring's fill.
+
+An admission block is a context's own (tile_admission): the open ring, the
+repeat filter, the frame's requesting surfaces, a guaranteed tier a surface,
+and the touched-slot bitmap, so the render path stores nothing another
+context writes.
+
+## .set TA_LISTED
+
+`u32`: the requesting surfaces listed.
+
+## .set TA_RING
+
+`TILE_RING u64`: the open ring, a key in the low word and its surface in the high.
+
+## .set TA_FILTER
+
+`TILE_RECENT u64`: the repeat filter, a key in the low word and its frame's stamp in the high.
+
+## .set TA_LIST
+
+`LUMAP_COUNT u32`: the frame's requesting surfaces, in their first request's order.
+
+## .set TA_TIERS
+
+`LUMAP_COUNT*TT_SIZE u8`: the guaranteed tiers, one a surface.
+
+## .set TA_TOUCHED
+
+`TILE_SLOTS/8 u8`: the touched-slot bitmap, a bit for each slot the context's blocks read.
+
+## .set TA_SIZE
+
+An admission block's bytes, rounded up to 64.
 
 ## .set CTX_CENSUS_NEXT
 

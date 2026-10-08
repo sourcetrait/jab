@@ -440,6 +440,7 @@ const DEBUG_TEXT = [
     "fps: sounds "
     "fps: alpha "
     "fps: mips "
+    "fps: tile pool: side "
     "fps: workers "
     "fps: worker refused on hart "
     "fps: round lost bands\n"

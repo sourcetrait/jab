@@ -354,8 +354,8 @@ test reads the frame it posed, with the walk's order after it; a release
 build carries neither the report routines nor their text and says nothing
 but an exit, jab's rule for a program, which the test holds by scanning a
 release image it builds for every `fps: ` string. The load line, the bake's,
-the chains', the frames', the sounds', the soundfont's, and the ambient's
-lines are under the same conditional at their sites, with
+the chains', the tile pool's, the frames', the sounds', the soundfont's, and
+the ambient's lines are under the same conditional at their sites, with
 their text beside it, while a load that fails keeps its exit line in every
 build, as a fault line stays on the UART. The line's tail, the spans and the
 pixels they entered, the lit ones among them,
@@ -370,7 +370,8 @@ from tiles follow: the first is the build's share of the frame, zero once
 the view has settled, and the second against the lit pixels is the near
 blocks' share, the far and edge ones staying on the lit loop (tile.S). The
 tile arena is reset after the bake, since a map's maps are the tiles'
-frame. The packet follows: the raster's microseconds among the phases, the
+frame, and the tile pool's directory is sized from them (tiles_init). The
+packet follows: the raster's microseconds among the phases, the
 commands the frame's packets held, the flushes, and the bindings a reset
 invalidated (raster.S). The workers close the line: the frame's workers and
 grain, its rounds, each worker's bands, the rounds' dispatch, barrier,

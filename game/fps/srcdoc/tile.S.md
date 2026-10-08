@@ -82,6 +82,35 @@ quarter of the loss and about what the hit saves, the floor views being
 where the next cuts work; a wall's spans walk along the rows and read
 level to a millisecond better.
 
+## tiles_init
+
+The tile pool's load, once, after the lumel maps are baked and the chains
+built: a directory for every surface with a lumel map and a texture, a grid
+for each level of its material's chain, sized from the map's extent, W << k by
+H << k texels of level 0, a tile at level m covering TILE_SIDE << m of them a
+side, the census's sizing at one side, so the entries equal the census
+directory line's at 32. A surface whose grid passes sixteen bits a side or
+whose grids would pass TILE_DIRECTORY_ENTRIES stays uncached, counted, and
+the next surface is tried. Every slot starts free, slot 0 on top of the free
+stack, the effective slots all of them, no tile in construction; each
+context gets its admission block and its touched-slot bitmap.
+
+TILE_MEMORY is every table of the pool and the pool itself, tile_tables_end
+less tile_pool, read once here; the memory in use counts the tables with the
+directory at this map's entries, and later the slots in use. A debug build
+prints both with the side, the slots, the directory's entries, and the maps
+held and left uncached:
+
+    fps: tile pool: side 32, slots 8192 of 4096 bytes, directory 384445 entries over 228 maps and 0 uncached, memory 5703860 of 41914816 bytes
+
+The material's masks, row shift, and chain come through material_bind, the
+producer's polygon its scratch at load as lumaps_bake's is.
+
+## tile_context
+
+The raster context of index 0 is hart 0's, raster_context, and index n the
+worker n - 1's in worker_contexts, CTX_SHIFT apart.
+
 ## tiles_reset
 
 The arena is a bump allocator with one policy, a reset of the whole when
@@ -374,6 +403,38 @@ room's light changes too little across a texel to tell the two.
 
 `10 u8`.
 
+## msg_tile_pool
+
+`22 u8`.
+
+## word_tile_slots
+
+`9 u8`.
+
+## word_tile_of
+
+`5 u8`.
+
+## word_tile_directory
+
+`19 u8`.
+
+## word_tile_entries_over
+
+`15 u8`.
+
+## word_tile_maps_and
+
+`11 u8`.
+
+## word_tile_uncached
+
+`19 u8`.
+
+## word_tile_bytes
+
+`7 u8`.
+
 ## tile_cursor
 
 `addr`: the arena's next free byte.
@@ -393,6 +454,42 @@ room's light changes too little across a texel to tell the two.
 ## tile_generation
 
 `u64`: the arena's generation, advanced by every reset.
+
+## tile_entries
+
+`u64`: the directory's entries in use, every surface's grids.
+
+## tile_maps
+
+`u64`: the surfaces with a directory.
+
+## tile_uncached
+
+`u64`: the mapped surfaces with a texture whose grids did not fit, left to the lit loop.
+
+## tile_free_count
+
+`u64`: the free stack's slots.
+
+## tile_effective
+
+`u64`: the slots the pool may use, TILE_SLOTS unless a debug cap holds fewer.
+
+## tile_building
+
+`i64`: the slot whose tile is in construction, -1 for none.
+
+## tile_memory
+
+`u64`: TILE_MEMORY, the pool's tables and the pool, in bytes.
+
+## tile_fixed
+
+`u64`: the tables' bytes in use, the directory at this map's entries.
+
+## tile_memory_peak
+
+`u64`: the most the pool's memory has held in use since the load.
 
 ## tile_level_cap
 
@@ -433,6 +530,58 @@ room's light changes too little across a texel to tell the two.
 ## alpha_plane_b
 
 `ALPHA_PLANE_BYTES u8`: the other plane.
+
+## tile_pool
+
+`TILE_POOL_BYTES u8`: the slots' tiles, TILE_BYTES each, page-aligned so a tile is a page at 32.
+
+## tile_tags
+
+`TILE_SLOTS u32`: each slot's tag, its generation in the high sixteen bits and its state, SLOT_*, in the low.
+
+## tile_slots
+
+`TILE_SLOTS*SLOT_SIZE u8`: each slot's record, SLOT_* fields.
+
+## tile_free
+
+`TILE_SLOTS u32`: the free stack, its count tile_free_count.
+
+## tile_surfaces
+
+`LUMAP_COUNT*TS_SIZE u8`: each surface's record at the lumel maps' index, TS_* fields.
+
+## tile_directory
+
+`TILE_DIRECTORY_ENTRIES u32`: the entries, 0 for no tile, else the slot plus one in bits 0 to 15 and the slot's generation at publication in bits 16 to 31.
+
+## tile_merge_bits
+
+`TILE_DIRECTORY_ENTRIES/8 u8`: the boundary's merge bitmap, a bit an entry.
+
+## tile_merged
+
+`TILE_MERGE u64`: the boundary's merged keys.
+
+## tile_merge_heads
+
+`LUMAP_COUNT u64`: each surface's merged keys at the boundary.
+
+## tile_merge_order
+
+`LUMAP_COUNT u32`: the surfaces merged, in the merge's order.
+
+## tile_requesting
+
+`LUMAP_COUNT/8 u8`: the boundary's union of the contexts' requesting surfaces, a bit a surface.
+
+## tile_admission
+
+`TILE_CONTEXTS*TA_SIZE u8`: each raster context's admission block, TA_* fields.
+
+## tile_tables_end
+
+The end of the pool's tables from `tile_pool`, TILE_MEMORY's bound.
 
 ## tile_arena
 

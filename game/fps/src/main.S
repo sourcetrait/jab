@@ -128,6 +128,7 @@ _start:
     la t0, tile_budget_frame
     li t1, TILE_BUDGET
     sd t1, 0(t0)
+    call tiles_init                 # the tile pool's directory, slots, and contexts
     call actors_place
     call player_reset
     call camera_spawn

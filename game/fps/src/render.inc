@@ -242,8 +242,66 @@
 .set CTX_REJECTED, 40
 .set CTX_SAMPLES, 48
 .set CTX_TILED_PIXELS, 56
-.set CTX_COUNT, 64
-.set CTX_SIZE, (CTX_COUNT + COUNT_SIZE)
+.set CTX_TILE_ADMIT, 64
+.set CTX_TILE_TOUCHED, 72
+.set CTX_COUNT, 128
+.set CTX_SHIFT, 8
+.set CTX_SIZE, (1 << CTX_SHIFT)
+.if (CTX_COUNT + COUNT_SIZE) > CTX_SIZE
+.error "a raster context holds its counts and a COUNT build's"
+.endif
+.set TILE_SHIFT, 5
+.set TILE_SIDE, (1 << TILE_SHIFT)
+.set TILE_ROW_SHIFT, (TILE_SHIFT + 2)
+.set TILE_BYTES_SHIFT, (2 * TILE_SHIFT + 2)
+.set TILE_BYTES, (1 << TILE_BYTES_SHIFT)
+.set TILE_POOL_BYTES, (32 * 1024 * 1024)
+.set TILE_SLOTS, (TILE_POOL_BYTES / TILE_BYTES)
+.set TILE_DIRECTORY_ENTRIES, (1 << 20)
+.set TILE_GUARANTEE, 16
+.set TILE_RING, 4096
+.set TILE_RECENT, 4096
+.set TILE_CONTEXTS, (WORKERS_MAX + 1)
+.set TILE_MERGE, TILE_SLOTS
+.if TILE_SLOTS > 65535
+.error "a directory entry holds a slot plus one in sixteen bits"
+.endif
+.set SLOT_FREE, 0
+.set SLOT_BUILDING, 1
+.set SLOT_READY, 2
+.set SLOT_KEY, 0
+.set SLOT_SURFACE, 4
+.set SLOT_TX, 8
+.set SLOT_TY, 12
+.set SLOT_LEVEL, 16
+.set SLOT_REFERENCE, 17
+.set SLOT_ROW, 18
+.set SLOT_BUILT, 20
+.set SLOT_SIZE, 32
+.set TS_LEVELS, 0
+.set TS_K, 1
+.set TS_WSHIFT, 2
+.set TS_MATERIAL, 4
+.set TS_UMASK, 8
+.set TS_VMASK, 12
+.set TS_GRIDS, 16
+.set TS_GRID_BASE, 0
+.set TS_GRID_W, 4
+.set TS_GRID_H, 6
+.set TS_GRID_SIZE, 8
+.set TS_SIZE, (TS_GRIDS + MIP_LEVELS * TS_GRID_SIZE)
+.set TT_STAMP, 0
+.set TT_COUNT, 4
+.set TT_KEYS, 8
+.set TT_SIZE, (TT_KEYS + TILE_GUARANTEE * 4)
+.set TA_RING_FILL, 0
+.set TA_LISTED, 4
+.set TA_RING, 64
+.set TA_FILTER, (TA_RING + TILE_RING * 8)
+.set TA_LIST, (TA_FILTER + TILE_RECENT * 8)
+.set TA_TIERS, (TA_LIST + LUMAP_COUNT * 4)
+.set TA_TOUCHED, (TA_TIERS + LUMAP_COUNT * TT_SIZE)
+.set TA_SIZE, ((TA_TOUCHED + TILE_SLOTS / 8 + 63) & ~63)
 .ifdef CENSUS
 .ifndef DEBUG
 .error "CENSUS is a debug build's instrument"

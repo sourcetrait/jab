@@ -1,5 +1,5 @@
-.if (JAB_JOB_BYTES != 128) || (CTX_SIZE != 128)
-.error "a worker's mailbox and context are found by a shift of 7"
+.if JAB_JOB_BYTES != 128
+.error "a worker's mailbox is found by a shift of 7"
 .endif
 
 .section .text
@@ -244,7 +244,7 @@ round_run:
     li t0, 1
     sd t0, 24(sp)
 74:
-    slli t0, s3, 7
+    slli t0, s3, CTX_SHIFT
     la tp, worker_contexts
     add tp, tp, t0
     call context_counts             # its counts, the frame's
@@ -322,7 +322,7 @@ raster_worker:
     la t0, mailboxes
     sub t0, s0, t0
     srli s2, t0, 7                  # its index, the mailbox's place
-    slli t0, s2, 7
+    slli t0, s2, CTX_SHIFT
     la tp, worker_contexts
     add tp, tp, t0                  # its context
 1:

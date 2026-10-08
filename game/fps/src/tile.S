@@ -1,5 +1,222 @@
 .section .text
 
+tiles_init:
+    addi sp, sp, -80
+    sd ra, 72(sp)
+    sd s2, 64(sp)
+    sd s3, 56(sp)
+    sd s4, 48(sp)
+    sd s5, 40(sp)
+    sd s6, 32(sp)
+    sd s7, 24(sp)
+    sd s8, 16(sp)
+    sd s9, 8(sp)
+    li s2, 0                        # the surface
+    li s3, 0                        # the directory's entries so far
+    li s8, 0                        # the maps with a directory
+    li s9, 0                        # the mapped surfaces past it
+1:
+    li t0, LUMAP_COUNT
+    bgeu s2, t0, 20f
+    li t0, LUMAP_SIZE
+    mul t0, s2, t0
+    la t1, lumaps
+    add s4, t0, t1                  # its lumel map
+    ld t0, LUMAP_BASE(s4)
+    beqz t0, 19f                    # unmapped: no directory
+    li t0, LUMAP_PLANES
+    bgeu s2, t0, 2f
+    srli a0, s2, 1
+    call sector_at
+    andi t0, s2, 1
+    li t1, SURFACE_SIZE
+    mul t0, t0, t1
+    add a0, a0, t0
+    lw a0, (SECTOR_FLOOR_SURFACE + SURFACE_MATERIAL)(a0)
+    j 3f
+2:
+    li t0, LUMAP_PLANES
+    sub a0, s2, t0
+    call wall_at
+    lw a0, (WALL_SURFACE + SURFACE_MATERIAL)(a0)
+3:
+    mv s5, a0                       # its material
+    call material_bind
+    beqz a0, 19f                    # no texture: no directory
+    li t0, TS_SIZE
+    mul t0, s2, t0
+    la t1, tile_surfaces
+    add s6, t0, t1                  # its record
+    la t0, poly
+    ld s7, POLY_MIP_COUNT(t0)       # the chain's levels
+    ld t1, LUMAP_K(s4)
+    ld t2, LUMAP_W(s4)
+    sll t2, t2, t1                  # the map's texels across at level 0
+    ld t3, LUMAP_H(s4)
+    sll t3, t3, t1                  # and down
+    mv t4, s3                       # the entries with this map's
+    li t5, 0                        # the level
+4:
+    bgeu t5, s7, 6f
+    addi t6, t5, TILE_SHIFT         # a tile's level 0 texels a side, as a shift
+    li a1, 1
+    sll a1, a1, t6
+    addi a1, a1, -1
+    add a2, t2, a1
+    srl a2, a2, t6                  # the tiles across
+    add a3, t3, a1
+    srl a3, a3, t6                  # and down
+    li a1, 0xffff
+    bgtu a2, a1, 18f                # a grid past sixteen bits a side
+    bgtu a3, a1, 18f
+    slli a4, t5, 3
+    add a4, a4, s6                  # the level's grid
+    sw t4, (TS_GRIDS + TS_GRID_BASE)(a4)
+    sh a2, (TS_GRIDS + TS_GRID_W)(a4)
+    sh a3, (TS_GRIDS + TS_GRID_H)(a4)
+    mul a2, a2, a3
+    add t4, t4, a2
+    li a1, TILE_DIRECTORY_ENTRIES
+    bgtu t4, a1, 18f                # past the directory
+    addi t5, t5, 1
+    j 4b
+6:
+    mv s3, t4
+    sb s7, TS_LEVELS(s6)            # the levels the directory holds, its last
+    ld t1, LUMAP_K(s4)
+    sb t1, TS_K(s6)
+    sw s5, TS_MATERIAL(s6)
+    la t0, poly
+    ld t1, POLY_WSHIFT(t0)
+    sb t1, TS_WSHIFT(s6)
+    ld t1, POLY_UMASK(t0)
+    sw t1, TS_UMASK(s6)
+    ld t1, POLY_VMASK(t0)
+    sw t1, TS_VMASK(s6)
+    addi s8, s8, 1
+    j 19f
+18:
+    addi s9, s9, 1                  # counted, the lit loop's for good
+19:
+    addi s2, s2, 1
+    j 1b
+20:
+    la t0, tile_entries
+    sd s3, 0(t0)
+    la t0, tile_maps
+    sd s8, 0(t0)
+    la t0, tile_uncached
+    sd s9, 0(t0)
+    la t0, tile_free
+    li t1, TILE_SLOTS
+21:
+    addi t1, t1, -1
+    sw t1, 0(t0)                    # the slots free, slot 0 on top
+    addi t0, t0, 4
+    bnez t1, 21b
+    li t1, TILE_SLOTS
+    la t0, tile_free_count
+    sd t1, 0(t0)
+    la t0, tile_effective
+    sd t1, 0(t0)
+    li t1, -1
+    la t0, tile_building
+    sd t1, 0(t0)                    # no tile in construction
+    li s2, 0                        # the context
+22:
+    li t0, TILE_CONTEXTS
+    bgeu s2, t0, 23f
+    mv a0, s2
+    call tile_context
+    li t0, TA_SIZE
+    mul t0, s2, t0
+    la t1, tile_admission
+    add t0, t0, t1
+    sd t0, CTX_TILE_ADMIT(a0)       # its admission
+    li t1, TA_TOUCHED
+    add t0, t0, t1
+    sd t0, CTX_TILE_TOUCHED(a0)     # and its touched slots
+    addi s2, s2, 1
+    j 22b
+23:
+    la t0, tile_tables_end
+    la t1, tile_pool
+    sub t0, t0, t1
+    la t1, tile_memory
+    sd t0, 0(t1)                    # TILE_MEMORY's bytes, every table and the pool
+    li t1, TILE_POOL_BYTES
+    sub t0, t0, t1
+    li t1, TILE_DIRECTORY_ENTRIES
+    sub t1, t1, s3
+    slli t1, t1, 2
+    sub t0, t0, t1                  # the tables, the directory at this map's entries
+    la t1, tile_fixed
+    sd t0, 0(t1)
+    la t1, tile_memory_peak
+    sd t0, 0(t1)
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_tile_pool
+    call append_str
+    li a1, TILE_SIDE
+    call append_dec
+    la a1, word_tile_slots
+    call append_str
+    li a1, TILE_SLOTS
+    call append_dec
+    la a1, word_tile_of
+    call append_str
+    li a1, TILE_BYTES
+    call append_dec
+    la a1, word_tile_directory
+    call append_str
+    mv a1, s3
+    call append_dec
+    la a1, word_tile_entries_over
+    call append_str
+    mv a1, s8
+    call append_dec
+    la a1, word_tile_maps_and
+    call append_str
+    mv a1, s9
+    call append_dec
+    la a1, word_tile_uncached
+    call append_str
+    la t0, tile_fixed
+    ld a1, 0(t0)
+    call append_dec
+    la a1, word_tile_of
+    call append_str
+    la t0, tile_memory
+    ld a1, 0(t0)
+    call append_dec
+    la a1, word_tile_bytes
+    call append_str
+    call line_end
+.endif
+    ld ra, 72(sp)
+    ld s2, 64(sp)
+    ld s3, 56(sp)
+    ld s4, 48(sp)
+    ld s5, 40(sp)
+    ld s6, 32(sp)
+    ld s7, 24(sp)
+    ld s8, 16(sp)
+    ld s9, 8(sp)
+    addi sp, sp, 80
+    ret
+
+tile_context:
+    beqz a0, 1f
+    addi a0, a0, -1
+    slli a0, a0, CTX_SHIFT
+    la t0, worker_contexts
+    add a0, a0, t0
+    ret
+1:
+    la a0, raster_context
+    ret
+
 tiles_reset:
     la t0, tile_generation
     ld t1, 0(t0)
@@ -958,6 +1175,22 @@ word_of_share:
     .asciz " of 10000, scale "
 word_of_scale:
     .asciz " of 65536"
+msg_tile_pool:
+    .asciz "fps: tile pool: side "
+word_tile_slots:
+    .asciz ", slots "
+word_tile_of:
+    .asciz " of "
+word_tile_directory:
+    .asciz " bytes, directory "
+word_tile_entries_over:
+    .asciz " entries over "
+word_tile_maps_and:
+    .asciz " maps and "
+word_tile_uncached:
+    .asciz " uncached, memory "
+word_tile_bytes:
+    .asciz " bytes"
 .endif
 
 .section .bss
@@ -971,6 +1204,24 @@ tile_budget_frame:
 tile_peak:
     .skip 8
 tile_generation:
+    .skip 8
+tile_entries:
+    .skip 8
+tile_maps:
+    .skip 8
+tile_uncached:
+    .skip 8
+tile_free_count:
+    .skip 8
+tile_effective:
+    .skip 8
+tile_building:
+    .skip 8
+tile_memory:
+    .skip 8
+tile_fixed:
+    .skip 8
+tile_memory_peak:
     .skip 8
 .ifdef DEBUG
 tile_level_cap:
@@ -995,6 +1246,33 @@ alpha_plane_a:
     .skip ALPHA_PLANE_BYTES
 alpha_plane_b:
     .skip ALPHA_PLANE_BYTES
+.balign CODE_PAGE
+tile_pool:
+    .skip TILE_POOL_BYTES
+tile_tags:
+    .skip (TILE_SLOTS * 4)
+tile_slots:
+    .skip (TILE_SLOTS * SLOT_SIZE)
+tile_free:
+    .skip (TILE_SLOTS * 4)
+tile_surfaces:
+    .skip (LUMAP_COUNT * TS_SIZE)
+tile_directory:
+    .skip (TILE_DIRECTORY_ENTRIES * 4)
+tile_merge_bits:
+    .skip (TILE_DIRECTORY_ENTRIES / 8)
+tile_merged:
+    .skip (TILE_MERGE * 8)
+tile_merge_heads:
+    .skip (LUMAP_COUNT * 8)
+tile_merge_order:
+    .skip (LUMAP_COUNT * 4)
+tile_requesting:
+    .skip (LUMAP_COUNT / 8)
+.balign 64
+tile_admission:
+    .skip (TILE_CONTEXTS * TA_SIZE)
+tile_tables_end:
 .balign 64
 tile_arena:
     .skip TILE_ARENA_BYTES
