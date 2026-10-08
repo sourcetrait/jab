@@ -77,11 +77,13 @@ const CRACKS = 32
 # pickup (the rounds), 6 a trace's answer (0 nothing, 1 a plane, 2 a
 # piece, 3 an android, 4 the player; the distance and the point in
 # millimetres); kinds 7, 8, 10, and 12 the frame before's clock, its
-# drawing, its presentation, and its packets, sent at each frame's start,
-# and 9 the end of a measurement, which gauge.nu reads (`gauge measure`)
-# and `records` leaves out
+# drawing, its presentation, and its packets, and 13 and 15 its tile
+# pool's activity and storage, sent at each frame's start, 14 the pool's
+# configuration ahead of the frame it governs, and 9 the end of a
+# measurement, which gauge.nu reads (`gauge measure`) and `records`
+# leaves out
 const RECORD = 64
-const CLOCK_KINDS = [7 8 9 10 12]
+const CLOCK_KINDS = [7 8 9 10 12 13 14 15]
 # A console record carries the command's byte where the state's sector
 # sits; the P frame's
 const CONSOLE_P = 80
@@ -98,6 +100,14 @@ const CLOCK_SCHEMA = 5
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
+# A synthetic capture's tile pool at schema 5: the first boundary's
+# batch, none, all ones; a tile's bytes; the slots; the tables' bytes in
+# use; and TILE_MEMORY's bytes
+const FX_NO_BATCH = 4294967295
+const FX_TILE = 4096
+const FX_SLOTS = 8192
+const FX_TABLES = 5000000
+const FX_MEMORY = 41914816
 # The cadence fixtures (cadence-holds): the cadences, the period at the
 # cap of 60 in microseconds, the S frame's command byte as a console
 # record carries it, and a sustained stage's first frames set aside.
@@ -373,6 +383,7 @@ const WORKER_MODES = [
     { workers: 2, grain: $WORKER_GRAIN }
 ]
 const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
+const WORKER_FREEZE_AT = 2100ms
 # The jobs' behaviours through the console's J frame, a debug build's,
 # on the spawn view with two workers: worker 1 held before each band at a
 # band a worker, the frame waiting for it, and at 16 rows, the other
@@ -409,6 +420,23 @@ const WORKER_MACHINES = [
 # flushes many times, each full packet rendered whole before preparation
 # goes on: the capture the uncapped one's
 const PACKET_CAPS = { commands: 7, spans: 500 }
+# The tile pool's own fixtures (pool-holds) on the still copy's spawn
+# view, each a cold start through the console's O frame with the view
+# placed at POOL_PLACE_AT and the measurement closed at POOL_END_AT:
+# the O frame's modes, the quota, the allowance, and the merge's share
+# lifted, construction frozen, an eviction leaving its entries; the
+# rotation's admission, a tier of one request and an open ring of four
+# under a merge's share of a microsecond, so the ring overflows and the
+# merge stops after a surface, drawn by two workers in bands of 16 rows
+# in packets of PACKET_CAPS; and TILE_CONTEXTS, every context a tier
+# admits in, so a surface merges at most its tier times them in a pass
+const POOL_LIFTED = 1
+const POOL_FROZEN = 2
+const POOL_STALE = 4
+const POOL_PLACE_AT = 1500ms
+const POOL_END_AT = 5000ms
+const POOL_ROTATION = { guarantee: 1, ring: 4, merge_us: 1, workers: 2, grain: 16 }
+const TILE_CONTEXTS = 3
 # The program's lines: what only a debug build says, its reports, and
 # what every build says, the exits and a load that fails, so a release
 # build carries no debug text and prints nothing but an exit
@@ -1052,26 +1080,42 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let capped_rows = (rows-differ (open --raw $capped_run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
     assert ($capped_rows | is-empty) $"the spawn view drawn in packets of ($PACKET_CAPS.commands) commands and ($PACKET_CAPS.spans) spans, ($capped_frame.flushes) flushed, the uncapped one's: rows ($capped_rows | first 5) differ, ($capped_rows | length) in all"
     assert equal $capped_frame.rounds ($capped_frame.flushes + 1) $"every render of the capped frame a round of the workers: ($capped_frame)"
+    # the frozen frame across flushes: frames whose boundary built tiles
+    # drawn in flushed packets, the debug build holding the pool unchanged
+    # at every packet's render through the run
+    let capped_stream = (gauge stream $capped_run.api)
+    let capped_built = ($capped_stream.draws | where {|d| $d.tiles_built > 0 } | get frame)
+    let capped_flushed = ($capped_stream.packets | where {|k| $k.flushes > 0 and $k.frame in $capped_built })
+    assert (($capped_flushed | length) > 0) $"frames whose boundary built tiles drawn in flushed packets, the pool held unchanged at every render: tiles built in ($capped_built | length) frames"
+
+    # the tile pool's own fixtures (pool-holds): the merge's rotation,
+    # first sight settling, and the rings at the warming frame
+    let pool = (pool-holds $kernel $image $out $set ($out | path join "still.romfs"))
+    print $"fps: the tile pool: under a tier of one and a ring of four, ($pool.rotation_surfaces) surfaces requesting each built within ($pool.rotation_wait) frames of its first request; first sight settled under the ordinary budget in ($pool.sight_frames) frames on ($pool.sight_slots) slots; the warming frame merged ($pool.rings_merged) keys past tiers of one"
 
     # the raster's workers: the default, every worker started in bands of
     # GRAIN_DEFAULT rows, drew the views above; the same spawn view drawn
     # again by the serial backend, by one worker, by two a band a worker,
     # and by two in bands of WORKER_GRAIN rows, each the default's picture
     # over the whole screen with the default's counts, every band rendered
-    # in every round and the clear on hart 0 under the serial backend alone
+    # in every round and the clear on hart 0 under the serial backend
+    # alone, each with the pool's contents held: construction frozen once
+    # the view settled (WORKER_FREEZE_AT), the frame read building nothing
+    # on the default's slots
     let default_frame = $spawn_captures.tiled.frame
     let default_bands = (($SCREEN_ROWS + $GRAIN_DEFAULT - 1) // $GRAIN_DEFAULT)
     assert ($default_frame.workers == $WORKERS_STARTED and $default_frame.grain == $GRAIN_DEFAULT) $"the default draws with every worker started in bands of ($GRAIN_DEFAULT) rows: ($default_frame)"
     assert ($default_frame.rounds == 1 and ($default_frame.bands0 + $default_frame.bands1) == $default_bands and $default_frame.clear == 0) $"the default's one round, its ($default_bands) bands each rendered once, the clear theirs: ($default_frame)"
     for m in $WORKER_MODES {
         let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
-        let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
+        let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false) }, { at: $WORKER_FREEZE_AT, bytes: (pool-frame --modes $POOL_FROZEN) }] | append (settled $SPAWN_POSE) | sort-by at)
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_w($m.workers)_g($m.grain)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
         assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert ($frame.workers == $m.workers and $frame.grain == $m.grain) $"($label) drawn as the W frame chose: ($frame)"
+        assert ($frame.tiles_built == 0 and $frame.slots == $default_frame.slots) $"($label) drawn from the pool held as the default's settled view left it, ($default_frame.slots) slots: ($frame)"
         let bands = (if $m.workers == 0 { 0 } else if $m.grain == 0 { $m.workers } else { ($SCREEN_ROWS + $m.grain - 1) // $m.grain })
         assert equal ($frame.bands0 + $frame.bands1) ($frame.rounds * $bands) $"every band of every round rendered once on ($label): ($frame)"
         if $m.workers == 0 {
@@ -1126,6 +1170,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             assert equal $frame.cancelled $frame.rounds $"($label) cancels its every round: ($frame)"
             assert (($frame.bands0 + $frame.bands1) <= ($frame.rounds * $bands)) $"($label) no band rendered twice: ($frame)"
             if $j.delayed > 0 { assert equal $frame.bands1 0 $"($label) worker 1 reads the cancel after its hold, its band hart 0's: ($frame)" }
+            let built = ((gauge stream $run.api).draws | where {|d| $d.tiles_built > 0 } | length)
+            assert ($built > 0) $"($label) built tiles at the boundaries of frames whose every round was cancelled, the pool held unchanged through round_finish: ($built) frames"
         } else {
             assert ($frame.cancelled == 0 and ($frame.bands0 + $frame.bands1) == ($frame.rounds * $bands)) $"($label) every band rendered once by the workers: ($frame)"
             assert ($frame.slowest >= $j.delay_us) $"($label) the slowest worker held ($j.delay_us) us: ($frame)"
@@ -1683,6 +1729,128 @@ def census-frame [chunk: int]: nothing -> binary {
 def packet-frame [commands: int, spans: int]: nothing -> binary {
     let word = {|v: int| $v | into binary | bytes at 0..<4 }
     [("K" | into binary), 0x[00 00 00], (do $word $commands), (do $word $spans), (0..<52 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's O frame, a debug build's knobs on the tile pool, in force
+# from the next boundary: byte 4 the modes, POOL_LIFTED, POOL_FROZEN, and
+# POOL_STALE together, every one replaced; byte 5 every pass's surfaces
+# on the UART while set (`--trace`, pool-trace reads them); byte 6 a cold
+# start at the next boundary, every tile forgotten and the frame before's
+# requests discarded (`--cold`), so a view placed with it is drawn at
+# first sight; then words from byte 8, the slots the pool may use, a
+# tier's requests, an open ring's entries, and the merge's share in
+# microseconds, each 0 for the build's own. A change of the slots forgets
+# the pool too.
+def pool-frame [--modes: int = 0, --trace, --cold, --slots: int = 0, --guarantee: int = 0, --ring: int = 0, --merge-us: int = 0]: nothing -> binary {
+    let word = {|v: int| $v | into binary | bytes at 0..<4 }
+    let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
+    [("O" | into binary), 0x[00 00 00], ($modes | into binary | bytes at 0..<1), (do $flag $trace), (do $flag $cold), 0x[00], (do $word $slots), (do $word $guarantee), (do $word $ring), (do $word $merge_us), (0..<40 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The passes a trace of the pool printed (pool-frame's `--trace`): each
+# frame's boundary with the surfaces whose requests its batch held, the
+# surfaces merged with their keys, and the surfaces whose tiles it built,
+# a list's lines joined.
+def pool-trace [serial: string]: nothing -> table<frame: int, requesting: list<int>, merged: list<record<surface: int, keys: int>>, built: list<int>> {
+    let parsed = ($serial | lines | where {|l| $l starts-with "fps: tile pass " } | parse "fps: tile pass {frame} {kind}:{items}" | update frame {|r| $r.frame | into int })
+    $parsed | group-by frame | items {|frame, rows|
+        let of = {|kind: string| $rows | where kind == $kind | get items | each {|i| $i | str trim | split row " " | where {|w| $w != "" } } | flatten }
+        {
+            frame: ($frame | into int),
+            requesting: (do $of "requesting" | each {|w| $w | into int }),
+            merged: (do $of "merged" | each {|w| let p = ($w | split row ":"); { surface: ($p.0 | into int), keys: ($p.1 | into int) } }),
+            built: (do $of "built" | each {|w| $w | into int }),
+        }
+    } | sort-by frame
+}
+
+# The tile pool's own fixtures on the still copy's spawn view, each
+# launch a cold start with the view placed (pool-frame's `--cold`), read
+# from the frame of the cold start, the configuration's first, through
+# gauge measure, complete and valid at schema 5:
+# - the rotation, under POOL_ROTATION's admission with the pool's trace:
+#   every surface the passes find requesting built within the most
+#   surfaces one pass found requesting of its first request, the merge's
+#   start moving on at every pass while two or more surfaces request, no
+#   surface merging past its tier in every context though its requests
+#   span bands and flushes, the ring overflowing and the merge stopping
+#   short;
+# - first sight under the ordinary budget: the cold start's frame drawing
+#   blocks without their tiles and asking for them, the view settled at a
+#   frame with no block drawn without its tile, no BUILDING tile, and
+#   nothing admitted, dropped, filtered, or built, read from the records,
+#   and every frame after it settled, the tiles built to it the slots it
+#   holds, none evicted;
+# - the rings under the lift with a tier of one request: the frame after
+#   first sight merging and building every request the cold start's frame
+#   made, past what the tiers can hold, and asking for none, the warming
+#   frame valid; the view settled at the frame after it.
+# Returns the most surfaces a rotation pass found requesting and the
+# longest wait, the frames first sight took to settle and the slots it
+# holds, and the keys the warming frame merged.
+def pool-holds [kernel: path, image: path, out: path, set: string, disk: path]: nothing -> record<rotation_surfaces: int, rotation_wait: int, sight_frames: int, sight_slots: int, rings_merged: int> {
+    let launch = {|name: string, sends: list<any>|
+        let all = ($sends | append [{ at: $POOL_PLACE_AT, bytes: (pose pose-frame $SPAWN_POSE) }, { at: $POOL_END_AT, bytes: (pose command-frame "E") }] | sort-by at)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --seconds 7)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the pool's ($name)"
+        let m = (gauge measure $run.api [{ name: "start", places: [], pad: [] }, { name: "sight", places: [$SPAWN_POSE], pad: [] }])
+        assert ($m.complete and $m.valid and $m.schema == 5) $"the pool's ($name) complete and valid at schema 5: ($m.problems | str join '; ') ($m.invalid | str join '; ')"
+        assert ($m.rows | any {|r| $r.leg == "sight" }) $"the pool's ($name) placed its view"
+        let cold = ((gauge stream $run.api).configs | last | get from)
+        assert ($cold > 0) $"the pool's ($name) cold start a configuration of its own: from ($cold)"
+        { run: $run, rows: ($m.rows | where {|r| $r.frame >= $cold }), cold: $cold }
+    }
+    let settled = {|r| $r.missed_blocks == 0 and $r.building == 0 and $r.admitted == 0 and $r.dropped == 0 and $r.filtered == 0 and $r.tiles_built == 0 }
+
+    let rotation = (do $launch "rotation" [
+        { at: 1300ms, bytes: (gauge workers-frame $POOL_ROTATION.workers $POOL_ROTATION.grain) }
+        { at: 1300ms, bytes: (packet-frame $PACKET_CAPS.commands $PACKET_CAPS.spans) }
+        { at: $POOL_PLACE_AT, bytes: (pool-frame --trace --cold --guarantee $POOL_ROTATION.guarantee --ring $POOL_ROTATION.ring --merge-us $POOL_ROTATION.merge_us) }
+    ])
+    let passes = (pool-trace $rotation.run.serial | where {|p| $p.frame > $rotation.cold })
+    assert (($passes | length) > 0) $"the pool's trace printed the rotation's passes: ($rotation.run.serial | lines | last 3)"
+    let most = ($passes | each {|p| $p.requesting | length } | math max)
+    let last_pass = ($passes | last | get frame)
+    let waits = ($passes | get requesting | flatten | uniq | each {|s|
+        let asked = ($passes | where {|p| $s in $p.requesting } | get 0.frame)
+        let built = ($passes | where {|p| $p.frame >= $asked and $s in $p.built } | get -o 0.frame)
+        { surface: $s, asked: $asked, built: $built }
+    } | where {|w| $w.asked + $most < $last_pass })
+    let late = ($waits | where {|w| $w.built == null or ($w.built - $w.asked) > $most })
+    assert ($late | is-empty) $"every surface requesting under the rotation built within ($most) frames of its first request, the most one pass found: ($late | first 5)"
+    let starts = ($passes | where {|p| ($p.merged | length) > 0 })
+    let repeated = ($starts | window 2 | where {|w| ($w.1.requesting | length) >= 2 and $w.0.merged.0.surface == $w.1.merged.0.surface })
+    assert ($repeated | is-empty) $"the merge's start moved on at every pass while two or more surfaces requested: ($repeated | first 2 | each {|w| $w.1.frame })"
+    let over = ($passes | each {|p| $p.merged | where {|m| $m.keys > ($POOL_ROTATION.guarantee * $TILE_CONTEXTS) } | each {|m| { frame: $p.frame, merged: $m } } } | flatten)
+    assert ($over | is-empty) $"no surface merged past its tier of ($POOL_ROTATION.guarantee) in every context across the bands and the flushes: ($over | first 3)"
+    let rotated = ($rotation.rows | where {|r| $r.frame > $rotation.cold })
+    assert ($rotated | any {|r| $r.dropped > 0 }) "the rotation's open ring of four overflowed"
+    assert ($rotated | any {|r| $r.unprocessed > 0 }) "the rotation's merge stopped short at its share"
+
+    let sight = (do $launch "sight" [{ at: $POOL_PLACE_AT, bytes: (pool-frame --cold) }])
+    let first = ($sight.rows | first)
+    assert ($first.missed_blocks > 0 and $first.admitted > 0 and $first.tiles_built == 0 and $first.slots_used == 0) $"first sight drew blocks without their tiles from an empty pool and asked for them: ($first | select frame missed_blocks admitted tiles_built slots_used)"
+    let settled_at = ($sight.rows | where {|r| do $settled $r } | get -o 0.frame)
+    assert ($settled_at != null) $"first sight settled under the ordinary budget: ($sight.rows | last | select frame missed_blocks admitted building tiles_built)"
+    let unsettled = ($sight.rows | where {|r| $r.frame >= $settled_at and not (do $settled $r) })
+    assert ($unsettled | is-empty) $"the view settled from frame ($settled_at) on: ($unsettled | first 3 | select frame missed_blocks admitted tiles_built)"
+    let holds = ($sight.rows | where frame == $settled_at | get 0.slots_used)
+    let built = ($sight.rows | where {|r| $r.frame <= $settled_at } | get tiles_built | math sum)
+    assert ($built == $holds and ($sight.rows | all {|r| $r.evicted == 0 })) $"the ($built) tiles built to settling the ($holds) slots the view holds, none evicted"
+
+    let rings = (do $launch "rings" [{ at: $POOL_PLACE_AT, bytes: (pool-frame --modes $POOL_LIFTED --cold --guarantee 1) }])
+    let cold = ($rings.rows | get 0)
+    let warming = ($rings.rows | get 1)
+    let after = ($rings.rows | get 2)
+    assert ($cold.missed_blocks > 0 and $cold.admitted > 0) $"the rings' cold start asked for the view's tiles: ($cold | select frame missed_blocks admitted)"
+    assert ($warming.batch_admitted == $cold.admitted and $warming.unprocessed == 0 and $warming.tiles_built == $warming.merged and $warming.merged > 0) $"the warming frame merged every request the frame before made and built every key merged: ($warming | select frame batch_admitted merged unprocessed tiles_built)"
+    assert ($warming.merged > ($warming.requesting * $TILE_CONTEXTS)) $"the warming frame merged past what tiers of one request hold, the open rings merged: ($warming.merged) keys for ($warming.requesting) surfaces"
+    assert ($warming.admitted == 0 and $warming.missed_blocks == 0) $"the warming frame drew every block from its tile and asked for none: ($warming | select frame admitted missed_blocks)"
+    assert (do $settled $after) $"the view settled at the frame after the warming frame: ($after | select frame missed_blocks admitted building tiles_built)"
+    {
+        rotation_surfaces: $most, rotation_wait: ($waits | each {|w| $w.built - $w.asked } | math max),
+        sight_frames: ($settled_at - $sight.cold), sight_slots: $holds, rings_merged: $warming.merged,
+    }
 }
 
 # How two captures differ over a rectangle, [x0, y0, x1, y1] with the
@@ -2661,6 +2829,72 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let one_held = (do $measure $one4)
     assert ($one_held.complete and $one_held.valid) $"one worker's busy time equal to its slowest is valid: ($one_held.invalid)"
 
+    # schema 5: every frame's tile pool, its activity and its storage, and
+    # the configuration in force, read at their offsets, the warming frame
+    # (frame 2, merging and building frame 1's requests and admitting none)
+    # valid; a frame without either record, no configuration in force, or
+    # a pool record at another schema leaving the window incomplete, and
+    # the pool's records alone among the states clocked; each of the pool's
+    # rules broken by one copy of a quantity, the other left, invalid for
+    # that alone
+    let good5 = (fx-items 3 --schema 5)
+    let m5 = (do $measure $good5)
+    assert ($m5.complete and $m5.valid and $m5.passes and $m5.schema == 5) $"a well-formed capture at schema 5: ($m5.problems) ($m5.invalid)"
+    let warming5 = ($m5.rows | get 2)
+    assert ($warming5.admitted == 0 and $warming5.merged == 2 and $warming5.tiles_built == 2) $"the warming frame merges and builds the frame before's requests, admitting none, in a valid capture: ($warming5 | select admitted merged tiles_built)"
+    let leg5 = (gauge leg-text 1 $m5.schema ($m5.legs | first))
+    let leg4 = (gauge leg-text 1 $m4.schema ($m4.legs | first))
+    assert (($leg5 | str contains "5 tiles built over 2 frames") and ($leg4 | str contains "6 cells built over 3 frames")) $"a leg's line names whole tiles built at schema 5 and cells below it: ($leg5 | str substring 0..60) / ($leg4 | str substring 0..60)"
+    let distinct5 = (fx-set-config (fx-set (fx-set $good5 "tile" 2 { admitted: 101, dropped: 102, filtered: 103, source: 104, batch: 105, merged: 106, unprocessed: 107, evicted: 108, build: 109, overrun: 110, hits: 111, straddling: 112, missed: 113 }) "storage" 2 { used: 201, effective: 202, building: 203, ring: 204, requesting: 205, merge: 206, memory: 207, peak: 208 }) { merge: 301, from: 302, shift: 303, size: 304, slots: 305, effective: 306, quota: 307, allowance: 308, flags: 309, guarantee: 310, ring: 311, recent: 312, directory: 313, memory: 314 })
+    let s5 = (gauge stream (fx-bytes $distinct5))
+    assert equal ($s5.tiles | get 2 | reject frame schema) { admitted: 101, dropped: 102, filtered: 103, batch_source: 104, batch_admitted: 105, merged: 106, unprocessed: 107, evicted: 108, build_us: 109, overrun_us: 110, hit_blocks: 111, straddling_blocks: 112, missed_blocks: 113 } "frame 2's tile record read at its offsets, every field a distinct value"
+    assert equal ($s5.storages | get 2 | reject frame schema) { slots_used: 201, slots_effective: 202, building: 203, ring_fill: 204, requesting: 205, merge_entries: 206, memory: 207, memory_peak: 208 } "frame 2's storage record read at its offsets, every field a distinct value"
+    assert equal ($s5.configs | get 0 | reject schema) { merge_us: 301, from: 302, tile_shift: 303, tile_size: 304, slots: 305, config_effective: 306, quota: 307, allowance_us: 308, config_flags: 309, guarantee: 310, ring: 311, recent: 312, directory_bytes: 313, tile_memory: 314 } "the configuration record read at its offsets, every field a distinct value"
+    let window5 = [
+        { name: "a frame without its tile record", items: ($good5 | where {|i| not ($i.kind == "tile" and $i.frame == 1) }), says: "2 tile records before the end marker for 3 frames" }
+        { name: "a frame without its storage record", items: ($good5 | where {|i| not ($i.kind == "storage" and $i.frame == 1) }), says: "2 storage records before the end marker for 3 frames" }
+        { name: "no configuration of the tile pool", items: ($good5 | where kind != "config"), says: "frames before any configuration of the tile pool: the first from frame none" }
+        { name: "a configuration from frame 1", items: (fx-set-config $good5 { from: 1 }), says: "frames before any configuration of the tile pool: the first from frame 1" }
+        { name: "a tile record at schema 4", items: (fx-set $good5 "tile" 1 { schema: 4 }), says: "clock records at schemas 4 in a capture at schema 5" }
+    ]
+    for c in $window5 {
+        let mc = (do $measure $c.items)
+        assert ((not $mc.complete) and ($c.says in $mc.problems)) $"($c.name) leaves the window incomplete: ($mc.problems)"
+    }
+    let alone5 = (do $measure ($good5 | where {|i| $i.kind in ["ack" "cack" "state" "tile" "storage" "config"] }))
+    assert ($alone5.clocked and (not $alone5.complete)) $"states with the tile pool's records alone are clocked and incomplete: ($alone5.problems)"
+    let capped5 = (fx-set-all (fx-set-config $good5 { effective: 4 }) "storage" { effective: 4 })
+    let wide5 = (fx-set-all (fx-set-config $good5 { effective: 8193 }) "storage" { effective: 8193 })
+    let memory_says = "1 frames whose memory in use passes TILE_MEMORY or its high-water, or whose high-water passes TILE_MEMORY"
+    let fell_says = "1 frames whose memory's or tiles' high-water fell"
+    let pool_cases = [
+        { name: "slots in use past the effective", items: $capped5, says: ["1 frames whose slots in use or BUILDING slots pass the effective slots"] }
+        { name: "effective slots past the physical", items: $wide5, says: ["3 frames whose effective slots pass the physical"] }
+        { name: "evictions past the effective", items: (fx-set $good5 "tile" 1 { evicted: 8193 }), says: ["1 frames that built or evicted past the effective slots"] }
+        { name: "builds past the effective", items: (fx-set $good5 "draw" 1 { built: 8193 }), says: ["1 frames that built or evicted past the effective slots"] }
+        { name: "more BUILDING slots than in use", items: (fx-set $good5 "storage" 1 { building: 4 }), says: ["1 frames with more BUILDING slots than slots in use"] }
+        { name: "construction past the boundary's time", items: (fx-set $good5 "tile" 1 { build: 101 }), says: ["1 frames whose construction passes their boundary's time"] }
+        { name: "merged past the batch", items: (fx-set $good5 "tile" 2 { merged: 3 }), says: ["1 frames that merged past their batch's admitted requests" "1 frames that merged and left unprocessed past their batch's admitted requests"] }
+        { name: "merged and unprocessed past the batch", items: (fx-set $good5 "tile" 2 { unprocessed: 1 }), says: ["1 frames that merged and left unprocessed past their batch's admitted requests"] }
+        { name: "a batch from another frame", items: (fx-set $good5 "tile" 2 { source: 0, batch: 4 }), says: ["1 frames whose batch is not the frame before's"] }
+        { name: "a first batch from a frame", items: (fx-set $good5 "tile" 0 { source: 5 }), says: ["1 frames whose batch is not the frame before's"] }
+        { name: "a first batch holding requests", items: (fx-set $good5 "tile" 0 { batch: 1 }), says: ["1 first boundaries whose sentinel batch holds requests"] }
+        { name: "the memory in use past its high-water", items: (fx-set $good5 "storage" 1 { memory: (5000000 + 3 * 4096 + 1) }), says: [$memory_says] }
+        { name: "the high-water past TILE_MEMORY", items: (fx-set $good5 "storage" 2 { peak: ($FX_MEMORY + 1) }), says: [$memory_says] }
+        { name: "the memory's high-water falling", items: (fx-set $good5 "storage" 2 { memory: (5000000 + 3 * 4096 - 1), peak: (5000000 + 3 * 4096 - 1) }), says: [$fell_says] }
+        { name: "the tiles' high-water falling", items: (fx-set $good5 "draw" 2 { peak: (3 * 4096 - 1) }), says: [$fell_says] }
+        { name: "a batch other than its frame's admissions", items: (fx-set $good5 "tile" 2 { batch: 3 }), says: ["1 frames whose batch's admitted requests are not its source frame's admissions"] }
+        { name: "effective slots other than the configuration's", items: (fx-set $good5 "storage" 1 { effective: 8000 }), says: ["1 frames whose effective slots are not their configuration's"] }
+        { name: "tile bytes other than the slots in use's", items: (fx-set $good5 "draw" 1 { bytes: (3 * 4096 + 1) }), says: ["1 frames whose tile bytes are not their slots in use's"] }
+        { name: "blocks drawn without their tiles past the requests", items: (fx-set $good5 "tile" 1 { missed: 3 }), says: ["1 frames whose blocks drawn without their tiles are not their requests admitted, dropped, and filtered"] }
+    ]
+    for c in $pool_cases {
+        let mc = (do $measure $c.items)
+        assert ($mc.complete and $mc.invalid == $c.says) $"($c.name) is invalid for that alone: ($mc.problems) ($mc.invalid)"
+    }
+    let full5 = (do $measure (fx-set-all (fx-set-config $good5 { effective: 5 }) "storage" { effective: 5 }))
+    assert ($full5.complete and $full5.valid) $"every effective slot in use is valid: ($full5.invalid)"
+
     # pairing from schema 4: workers asked and unanswered, answered late,
     # or answered and drawn by other workers or at another grain, and below
     # schema 4 an identity asking workers other than 0 each leave a run
@@ -2818,6 +3052,25 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let four_a = (fx-gauge $dir "parts_four_a" "parts_four_a" "parts_four_a" 0 $good4)
     let three_four = (do $compared [$three_a $four_a] "planes_us" false)
     assert ($three_four == "") $"schema 3 against schema 4 compares on planes_us, both preparation alone: ($three_four)"
+    # the tiles moved with the pool at schema 5, built inside the plane and
+    # wall phases below it and at the pool's boundary at it: a comparison on
+    # a tile field refused between schemas 4 and 5, --diagnostic or not,
+    # every other field compared, and two runs at 5 compared on the tiles
+    let five_a = (fx-gauge $dir "parts_five_a" "parts_five_a" "parts_five_a" 0 $good5)
+    let five_b = (fx-gauge $dir "parts_five_b" "parts_five_b" "parts_five_b" 0 $good5)
+    for field in [planes_us walls_us tiles_us tiles_built tile_bytes tile_peak] {
+        let moved = (do $compared [$four_a $five_a] $field false)
+        let moved_says = $"schema 4 against schema 5 refused on ($field), the tiles moved to the pool's boundary: ($moved)"
+        assert (($moved | str contains $"($field) refuses") and ($moved | str contains "built inside the plane and wall phases") and ($moved | str contains "built at the pool's boundary")) $moved_says
+    }
+    let moved_admitted = (do $compared [$four_a $five_a] "tiles_us" true)
+    assert ($moved_admitted | str contains "tiles_us refuses") $"--diagnostic admits no comparison of tiles measuring different things: ($moved_admitted)"
+    for field in [draw_us critical_us sprites_us] {
+        let kept = (do $compared [$four_a $five_a] $field false)
+        assert ($kept == "") $"schema 4 against schema 5 compares on ($field): ($kept)"
+    }
+    let five_five = (do $compared [$five_a $five_b] "tiles_us" false)
+    assert ($five_five == "") $"two runs at schema 5 compare on tiles_us: ($five_five)"
 
     # machines: the specification's four harts, two harts diagnostic, and
     # four harts on another -machine, the PLIC's line before the AIA
@@ -3544,21 +3797,93 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 
 # A synthetic capture's records as the program sends them over `frames`
 # frames: the seed's answer, from schema 2 the cadence's, and with
-# `asked` the W's, frame 0's state, then at each frame's top the frame
-# before's clock, drawing, from schema 2 presentation, and from schema 3
-# packets, drawn at schema 4 by `workers`, the end marker after the final
-# frame's, and the frame's state, two frames' states past the window.
+# `asked` the W's, at schema 5 the tile pool's configuration from frame 0,
+# frame 0's state, then at each frame's top the frame before's clock,
+# drawing, from schema 2 presentation, from schema 3 packets, drawn at
+# schema 4 by `workers`, and at schema 5 its tile pool's activity and
+# storage (fx-pool), the end marker after the final frame's, and the
+# frame's state, two frames' states past the window.
 def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
-        [(fx-frame ($n - 1) $schema) { kind: "draw", frame: ($n - 1), schema: $schema }]
+        [(fx-frame ($n - 1) $schema) (fx-draw ($n - 1) $schema)]
         | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
         | append (if $schema >= 3 { [(fx-packet ($n - 1) $schema $workers)] } else { [] })
+        | append (if $schema >= 5 { [(fx-tile ($n - 1)) (fx-storage ($n - 1))] } else { [] })
         | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
     let answers = (if $schema >= 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
     let worked = (if $asked { $answers | append { kind: "wack" } } else { $answers })
-    $worked | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+    let configured = (if $schema >= 5 { $worked | append (fx-config 0) } else { $worked })
+    $configured | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+}
+
+# A drawing record's fields for a synthetic capture: below schema 5 its
+# parts and tiles' fields the bytes fx-bytes fills, the tiles' 0.1 ms
+# inside the planes' 0.3 and the walls' 0.4; at 5 the boundary a part of
+# its own, the planes 0.25 and the walls 0.35, and the pool's fields, the
+# tiles the boundary built, the pool's bytes in use, and their high-water.
+def fx-draw [frame: int, schema: int = 1]: nothing -> record {
+    if $schema >= 5 {
+        let p = (fx-pool $frame)
+        { kind: "draw", frame: $frame, schema: $schema, planes: 250, walls: 350, built: $p.merged, bytes: ($p.slots * $FX_TILE), peak: ($p.slots * $FX_TILE) }
+    } else {
+        { kind: "draw", frame: $frame, schema: $schema }
+    }
+}
+
+# The tile pool's synthetic frames at schema 5: four requests admitted at
+# frame 0 and one filtered, two at frame 1; each boundary merging the
+# frame before's batch, a duplicate among frame 0's four, and building
+# every key merged, so the pool holds three tiles after frame 1 and five
+# from frame 2 on.
+def fx-pool [frame: int]: nothing -> record<admitted: int, filtered: int, batch: int, merged: int, slots: int> {
+    let merged_at = {|f: int| if $f == 1 { 3 } else if $f == 2 { 2 } else { 0 } }
+    {
+        admitted: (if $frame == 0 { 4 } else if $frame == 1 { 2 } else { 0 }),
+        filtered: (if $frame == 0 { 1 } else { 0 }),
+        batch: (if $frame == 1 { 4 } else if $frame == 2 { 2 } else { 0 }),
+        merged: (do $merged_at $frame),
+        slots: (0..$frame | each {|f| do $merged_at $f } | math sum),
+    }
+}
+
+# A tile record's fields for a synthetic capture (fx-pool): the requests
+# admitted and filtered, none dropped; the batch the frame before's, all
+# ones at frame 0; its merge whole, nothing evicted; the construction 40
+# us of the boundary's 100; the blocks drawn without their tiles the
+# requests.
+def fx-tile [frame: int]: nothing -> record {
+    let p = (fx-pool $frame)
+    {
+        kind: "tile", frame: $frame, admitted: $p.admitted, dropped: 0, filtered: $p.filtered,
+        source: (if $frame == 0 { $FX_NO_BATCH } else { $frame - 1 }), batch: $p.batch, merged: $p.merged,
+        unprocessed: 0, evicted: 0, build: 40, overrun: 0, hits: 10, straddling: 2,
+        missed: ($p.admitted + $p.filtered), schema: 5,
+    }
+}
+
+# A storage record's fields for a synthetic capture (fx-pool): the slots
+# in use, every slot the pool's, none BUILDING, a requesting surface for
+# a batch with requests, the merge's entries the keys merged, and the
+# memory in use the tables' and the slots', its own high-water.
+def fx-storage [frame: int]: nothing -> record {
+    let p = (fx-pool $frame)
+    let memory = ($FX_TABLES + $p.slots * $FX_TILE)
+    {
+        kind: "storage", frame: $frame, used: $p.slots, effective: $FX_SLOTS, building: 0, ring: 0,
+        requesting: (if $p.batch > 0 { 1 } else { 0 }), merge: $p.merged, memory: $memory, peak: $memory, schema: 5,
+    }
+}
+
+# A configuration record's fields for a synthetic capture, in force from
+# `from`: the build's own, TILE_SIDE 32 in 32 MiB.
+def fx-config [from: int]: nothing -> record {
+    {
+        kind: "config", merge: 250, from: $from, shift: 5, size: $FX_TILE, slots: $FX_SLOTS, effective: $FX_SLOTS,
+        quota: 98304, allowance: 1000, flags: 0, guarantee: 16, ring: 4096, recent: 4096, directory: 1537780,
+        memory: $FX_MEMORY, schema: 5,
+    }
 }
 
 # A frame record's fields for a synthetic capture: its phases 1.72 ms of
@@ -3583,15 +3908,16 @@ def fx-present [frame: int, cadence: int, schema: int = 2]: nothing -> record {
 # A packet record's fields for a synthetic capture: the drawing's 1 ms
 # its preparation's 0.96 and its raster's 0.04, the drawing's other parts
 # taking 0.95 of it; three commands, a flush, two bindings invalidated;
-# the bytes three commands' and the draw record's five span records'; the
-# frame's own simulation; and at schema 4 its workers at grain 0, their
-# rounds' slowest worker 30 us, busy 55, its slowest's at one worker,
-# dispatch 2, and barrier 1, every time 0 under the serial backend.
+# the bytes three commands' at the schema's command bytes and the draw
+# record's five span records'; the frame's own simulation; and at schema
+# 4 its workers at grain 0, their rounds' slowest worker 30 us, busy 55,
+# its slowest's at one worker, dispatch 2, and barrier 1, every time 0
+# under the serial backend.
 def fx-packet [frame: int, schema: int = 3, workers: int = 2]: nothing -> record {
     let timed = ($workers > 0)
     {
         kind: "packet", frame: $frame, preparation: 960, raster: 40, commands: 3, flushes: 1, invalidated: 2,
-        bytes: (3 * 312 + 5 * 16), snapshot: $frame, schema: $schema, workers: $workers, grain: 0,
+        bytes: (3 * (if $schema >= 5 { 232 } else { 312 }) + 5 * 16), snapshot: $frame, schema: $schema, workers: $workers, grain: 0,
         slowest: (if $timed { 30 } else { 0 }), busy: (if not $timed { 0 } else if $workers == 1 { 30 } else { 55 }),
         dispatch: (if $timed { 2 } else { 0 }), barrier: (if $timed { 1 } else { 0 }),
     }
@@ -3600,6 +3926,16 @@ def fx-packet [frame: int, schema: int = 3, workers: int = 2]: nothing -> record
 # A synthetic capture with the item of a kind and frame changed.
 def fx-set [items: list<any>, kind: string, frame: int, changes: record]: nothing -> list<any> {
     $items | each {|i| if $i.kind == $kind and ($i.frame? == $frame) { $i | merge $changes } else { $i } }
+}
+
+# A synthetic capture with its tile pool's configuration changed.
+def fx-set-config [items: list<any>, changes: record]: nothing -> list<any> {
+    $items | each {|i| if $i.kind == "config" { $i | merge $changes } else { $i } }
+}
+
+# A synthetic capture with every item of a kind changed.
+def fx-set-all [items: list<any>, kind: string, changes: record]: nothing -> list<any> {
+    $items | each {|i| if $i.kind == $kind { $i | merge $changes } else { $i } }
 }
 
 # A synthetic capture with an item put right after its first state.
@@ -3702,9 +4038,11 @@ def fx-report [home: path, label: string, id: any, runs: list<any>]: nothing -> 
 # drawing and game microseconds at 32 and 36, 1000 and 100 unless given; a
 # frame's clock, the crosshair and the mix 10 us each, the flip 500, the
 # reporting 100, its await, its flip's end 1.7 ms past its start unless
-# given; a drawing whose parts take 0.95 ms, its tiles 0.1, its spans 5;
-# a presentation; a packet record, its workers' words from schema 4; and
-# the end marker's frame and schema.
+# given; a drawing whose parts take 0.95 ms, its tiles 0.1, its spans 5,
+# its tiles built, bytes, and peak 2, 50, and 100 unless given; a
+# presentation; a packet record, its workers' words from schema 4; the
+# tile pool's tile, storage, and configuration records; and the end
+# marker's frame and schema.
 def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
@@ -3719,8 +4057,23 @@ def fx-bytes [items: list<any>]: nothing -> binary {
                 (fx-u32 $i.status) (fx-u32 $i.schema)
             ] | bytes collect),
             "draw" => ([
-                0x[08 00 00 00] (fx-u32 $i.frame) (fx-u32 100) (fx-u32 100) (fx-u32 300) (fx-u32 400) (fx-u32 50) (fx-u32 100)
-                (fx-u32 2) (fx-u32 0) (fx-u32 10) (fx-u32 20) (fx-u32 50) (fx-u32 100) (fx-u32 5) (fx-u32 $i.schema)
+                0x[08 00 00 00] (fx-u32 $i.frame) (fx-u32 100) (fx-u32 100) (fx-u32 ($i.planes? | default 300)) (fx-u32 ($i.walls? | default 400)) (fx-u32 50) (fx-u32 100)
+                (fx-u32 ($i.built? | default 2)) (fx-u32 0) (fx-u32 10) (fx-u32 20) (fx-u32 ($i.bytes? | default 50))
+                (fx-u32 ($i.peak? | default 100)) (fx-u32 5) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "tile" => ([
+                0x[0d 00 00 00] (fx-u32 $i.frame) (fx-u32 $i.admitted) (fx-u32 $i.dropped) (fx-u32 $i.filtered) (fx-u32 $i.source)
+                (fx-u32 $i.batch) (fx-u32 $i.merged) (fx-u32 $i.unprocessed) (fx-u32 $i.evicted) (fx-u32 $i.build)
+                (fx-u32 $i.overrun) (fx-u32 $i.hits) (fx-u32 $i.straddling) (fx-u32 $i.missed) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "storage" => ([
+                0x[0f 00 00 00] (fx-u32 $i.frame) (fx-u32 $i.used) (fx-u32 $i.effective) (fx-u32 $i.building) (fx-u32 $i.ring)
+                (fx-u32 $i.requesting) (fx-u32 $i.merge) (fx-u32 $i.memory) (fx-u32 $i.peak) (fx-zeros 20) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "config" => ([
+                0x[0e 00 00 00] (fx-u32 $i.merge) (fx-u32 $i.from) (fx-u32 $i.shift) (fx-u32 $i.size) (fx-u32 $i.slots)
+                (fx-u32 $i.effective) (fx-u32 $i.quota) (fx-u32 $i.allowance) (fx-u32 $i.flags) (fx-u32 $i.guarantee)
+                (fx-u32 $i.ring) (fx-u32 $i.recent) (fx-u32 $i.directory) (fx-u32 $i.memory) (fx-u32 $i.schema)
             ] | bytes collect),
             "present" => ([
                 0x[0a 00 00 00] (fx-u32 $i.frame) (fx-u64 $i.simulation) (fx-u64 $i.next) (fx-u32 $i.wait) (fx-u32 $i.pacing)

@@ -1008,7 +1008,7 @@ backend drew.
 
 ## .set STAT_TILE_MISSES
 
-`u64`: the blocks eligible for one tile inside the grid whose tile was not READY.
+`u64`: the blocks eligible for one tile inside the grid drawn without it, not READY, each asking for it; a block drawing no pixel is counted nowhere.
 
 ## .set STAT_TILE_BUILD_TICKS
 
@@ -1156,7 +1156,7 @@ worker's its own of worker_contexts, each reached through tp.
 
 ## .set CTX_TILE_MISSES
 
-`u64`: its eligible blocks whose tile was not READY.
+`u64`: its eligible blocks drawn without their tile, each asking for it.
 
 ## .set CTX_COUNT
 
@@ -1254,7 +1254,11 @@ ring is provisional with TILE_GUARANTEE.
 
 ## .set TILE_UNLIMITED
 
-`u64`: a deadline and a quota no boundary reaches, the L's lift.
+`u64`: a deadline and a quota no boundary reaches, the lift's.
+
+## .set TILE_TRACE_ITEMS
+
+`u64`: the items on a line of a debug build's trace of the pool, under the line's 512 bytes.
 
 ## .set TILE_CLASS_PLANES
 ## .set TILE_CLASS_WALLS
@@ -1918,7 +1922,11 @@ unprocessed less its merged.
 
 ## .set TILES_MISSES
 
-`u32`: the eligible blocks whose tile was not READY.
+`u32`: the eligible blocks drawn without their tile, each asking for it, so the requests admitted, dropped, and filtered.
+
+## .set CONFIG_MERGE
+
+`u32`: the merge's share in force in microseconds.
 
 ## .set CONFIG_FRAME
 
@@ -1955,7 +1963,7 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_FLAGS
 
-`u32`: CONFIG_UNLIMITED and CONFIG_FROZEN.
+`u32`: CONFIG_UNLIMITED, CONFIG_FROZEN, and CONFIG_STALE.
 
 ## .set CONFIG_GUARANTEE
 
@@ -1979,11 +1987,15 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_UNLIMITED
 
-`u32`: the flag of a boundary under no quota or allowance, an L's lift.
+`u32`: the flag of a boundary under no quota, allowance, or merge's share, the lift an L or an O sets.
 
 ## .set CONFIG_FROZEN
 
-`u32`: the flag of construction frozen, the L's byte 5.
+`u32`: the flag of construction frozen, the L's byte 5 or an O's.
+
+## .set CONFIG_STALE
+
+`u32`: the flag of a debug build's eviction leaving its entries, an O's.
 
 ## .set STORE_USED
 

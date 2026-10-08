@@ -61,7 +61,9 @@ requests of the frame checked against its own keys, so no surface's
 demand takes another's; then the context's open ring of TILE_RING
 entries, its overflow dropped and counted. A request lives one frame:
 every stamp is the frame's, and the boundary empties the rings and the
-lists after the merge.
+lists after the merge. A block counts as missed as it asks, so a frame's
+missed blocks are its requests admitted, dropped, and filtered; a block
+that draws no pixel asks nothing and is counted nowhere.
 
 ### The boundary
 
@@ -69,16 +71,48 @@ Hart 0 runs it at world_draw's start, after the frame before's last join
 and before any bind (tile_boundary): the console's changes come in force,
 an L's forget is done, then the frame before's batch is counted and
 merged, deduplicated through the merge bitmap, the guaranteed tiers first
-by surface from a rotating cursor, then the open rings from a rotating
-context, stopping at the merge's share of the allowance or the merged
-list's end, counted unprocessed, the cursors resuming there; the touched
-bitmaps folded into CLOCK's reference bits; the tile in construction
-finished first; then construction round-robin over the merged surfaces
-from a cursor kept between boundaries, a tile a surface a pass, until
-TILE_ALLOWANCE or TILE_QUOTA; the requests not served discarded. The
-allowance covers the whole boundary, and the time past it is recorded.
-An L lifts the quota and the allowance, or freezes construction with its
-byte 5.
+by surface, then the open rings by context and entry, stopping at the
+merge's share of the allowance or the merged list's end, the rest counted
+unprocessed, the next boundary resuming at the surface or the entry where
+the merge stopped; the touched bitmaps folded into CLOCK's reference
+bits; the tile in construction finished first; then construction
+round-robin over the merged surfaces from a cursor kept between
+boundaries, a tile a surface a pass, until TILE_ALLOWANCE or TILE_QUOTA;
+the requests not served discarded. The allowance covers the whole
+boundary, and the time past it is recorded. An L lifts the quota, the
+allowance, and the merge's share, or freezes construction with its byte
+5; a debug build's O frame sets the pool's knobs.
+
+### The knobs
+
+A debug build's console O frame, in force from the next boundary as a
+configuration of its own, recorded: the modes (CONFIG_UNLIMITED, the
+lift; CONFIG_FROZEN, no construction; CONFIG_STALE, an eviction leaving
+the entry that names its slot, the stale reference the generation check
+exists for), the effective slots, a change forgetting the pool so its free
+slots are the cap's, the guarantee and the ring within the build's, and
+the merge's share in microseconds, each 0 for the build's own. Its byte 6
+is a cold start: every tile forgotten and the frame before's batch
+discarded whole, unprocessed, so a view placed with it is drawn at first
+sight even where the frames before drew it. Its byte 5 traces the pool.
+
+### The trace
+
+While a debug build's O frame sets it, each boundary notes the batch's
+requesting surfaces and every merged surface with its keys before
+construction takes them (tile_trace_note), and once its time is taken
+prints three lists on the UART (tile_trace_print), TILE_TRACE_ITEMS a
+line, a long list going on in lines of the same head:
+
+    fps: tile pass 50 requesting: 2048 2052 2053
+    fps: tile pass 50 merged: 2048:2
+    fps: tile pass 50 built: 2048 2048
+
+the frame, then the surfaces whose requests the batch held, the surfaces
+merged with their keys in the merge's order, and the surface of every
+tile published in the pass. The printing stays out of the allowance it
+would otherwise spend, which held one surface's merge unbuilt for a cycle
+of the rotation when it did not.
 
 ### Eviction
 
@@ -135,8 +169,8 @@ the next surface is tried. Every slot starts free, slot 0 on top of the free
 stack, the effective slots all of them, no tile in construction; each
 context gets its admission block and its touched-slot bitmap; every
 surface's merged chain is none; the configuration pending is the build's,
-TILE_GUARANTEE and TILE_RING, flagged changed so the first boundary sends
-its record.
+TILE_GUARANTEE, TILE_RING, every slot, and TILE_MERGE_US, flagged changed
+so the first boundary sends its record.
 
 TILE_MEMORY is every table of the pool and the pool itself, tile_tables_end
 less tile_pool, read once here; the memory in use counts the tables with the
@@ -156,21 +190,24 @@ worker n - 1's in worker_contexts, CTX_SHIFT apart.
 
 ## tiles_forget
 
-The console's L, at the boundary: every READY slot's entry cleared where
-it names the slot, every slot's generation advanced and its state FREE,
-the free stack rebuilt over the effective slots, nothing in construction,
-and the resets since the load counted. STAT_TILE_RESETS counts these alone.
+The console's L, an O's cold start, or a new slot cap, at the boundary:
+every READY slot's entry cleared where it names the slot, every slot's
+generation advanced and its state FREE, the free stack rebuilt over the
+effective slots, nothing in construction, and the resets since the load
+counted. STAT_TILE_RESETS counts these alone.
 
 ## tile_boundary
 
 The pool's one change a frame, its order fixed: the configuration, the
 pass's mark, the forget, the deadlines (the allowance's, the merge's
-share's, and the quota, all past reach under an L's lift), the batch and
-its merge, the fold, construction unless frozen, the discard, the frame's
-stamp, the occupancy. Its whole time is STAT_TILE_TICKS, the draw record's
-`tiles_us`, a part of the drawing beside the others; the construction's
-within it is STAT_TILE_BUILD_TICKS, and the time past the allowance
-STAT_TILE_OVERRUN.
+share's, and the quota, all past reach under the lift), the batch and its
+merge, the fold, construction unless frozen, the discard, the frame's
+stamp, the occupancy. A debug build's cold start discards the batch in
+place of its merge and builds nothing. Its whole time is STAT_TILE_TICKS,
+the draw record's `tiles_us`, a part of the drawing beside the others;
+the construction's within it is STAT_TILE_BUILD_TICKS, and the time past
+the allowance STAT_TILE_OVERRUN. The trace prints after the time is
+taken.
 
 ## tile_stall
 
@@ -193,7 +230,8 @@ out ahead of that frame's own records and names it, so a capture carries
 the configuration each frame ran under, a debug cap's or another
 TILE_SIDE's build alike. A changed limit governs the admissions after it,
 while the boundary consumes the frame before's batch by that batch's own
-counts.
+counts. A new slot cap forgets the pool, so no slot past the cap holds a
+tile; the merge's share goes in the record's CONFIG_MERGE.
 
 ## tile_batch
 
@@ -205,16 +243,21 @@ merge scans.
 
 ## tile_merge
 
-The guaranteed tiers first: the union's words from the merge cursor, each
-requesting surface's tier in each context under the batch's stamp, key by
-key; then the open rings, contexts from the context cursor. The merge's
-share is checked after each surface and every sixteenth ring entry; a stop
-at the share or at the merged list's end leaves its cursor where it stood,
-so the next boundary begins there, and a whole merge moves the cursor on
-one, so no surface's or context's place in the order is fixed. What the
-batch admitted and the merge never took is STAT_TILE_UNPROCESSED; the
-duplicates among the rest follow, the admitted less the unprocessed less
-the merged.
+The guaranteed tiers first: the requesting surfaces from the merge
+cursor's surface on, its word's surfaces before it last, each surface's
+tier in each context under the batch's stamp, key by key; then the open
+rings from the context cursor's context at the ring cursor's entry, that
+context's entries before it last. The merge's share is checked after each
+surface and every sixteenth ring entry. A stop at the share resumes the
+next boundary past the surface merged or at the next entry, a stop at the
+merged list's end at the surface or the entry it could not take, and a
+whole merge moves the starts on a surface and a context, so every
+requesting surface and every ring entry comes first in its turn whatever
+its place: a merge that restarted a word or a ring at its start would
+serve the same first surfaces at every boundary its share runs out
+in. What the batch admitted and the merge never took is
+STAT_TILE_UNPROCESSED; the duplicates among the rest follow, the admitted
+less the unprocessed less the merged.
 
 ## tile_merge_key
 
@@ -255,7 +298,9 @@ bit cleared and is passed over, the first unread one is retired.
 
 The entry cleared only where it still names this slot under its
 generation, the generation then advanced and the slot free; the pool's
-slots in use and the evictions counted.
+slots in use and the evictions counted. Under a debug build's stale knob
+the entry is left naming the slot, which the generation check alone then
+keeps from reading the slot's next tile.
 
 ## tile_publish
 
@@ -278,14 +323,25 @@ tables', and its high-water.
 
 ## tile_request
 
-Called at a missed block's end with a pixel past the depth test, on the
-block's raster context; its counts are the context's, summed with the rest
-by context_counts.
+Called at a missed block's end with a pixel past the depth test, the block
+counted missed just before, on the block's raster context; its counts are
+the context's, summed with the rest by context_counts.
 
 ## tile_check
 
 A debug build's frozen frame: the pool's writes since the snapshot taken
 in world_draw after the boundary, none allowed.
+
+## tile_trace_note
+
+The batch's union copied whole and the merged surfaces' keys counted along
+their chains, before tile_discard clears the one and construction takes the
+other.
+
+## tile_trace_print
+
+The pass's three lines from the notes, the built surfaces from the slots
+this pass published, every slot read.
 
 ## tile_build
 
@@ -464,6 +520,22 @@ room's light changes too little across a texel to tell the two.
 
 `34 u8`.
 
+## msg_tile_trace
+
+`16 u8`.
+
+## word_trace_requesting
+
+`13 u8`.
+
+## word_trace_merged
+
+`9 u8`.
+
+## word_trace_built
+
+`8 u8`.
+
 ## tile_peak
 
 `u64`: the pool's tile bytes' high-water since the load, the slots in use's.
@@ -498,11 +570,15 @@ room's light changes too little across a texel to tell the two.
 
 ## tile_merge_cursor
 
-`u64`: the requesting surfaces' word the next merge starts at.
+`u64`: the surface the next merge's tiers start at.
 
 ## tile_context_cursor
 
-`u64`: the context whose ring the next merge's rings start at.
+`u64`: the context whose ring the next merge's rings start in.
+
+## tile_ring_cursor
+
+`u64`: the entry of that ring they start at.
 
 ## tile_build_cursor
 
@@ -538,7 +614,7 @@ room's light changes too little across a texel to tell the two.
 
 ## tile_flags
 
-`u64`: the configuration in force's flags, CONFIG_UNLIMITED and CONFIG_FROZEN.
+`u64`: the configuration in force's flags, CONFIG_UNLIMITED, CONFIG_FROZEN, and a debug build's CONFIG_STALE.
 
 ## tile_guarantee
 
@@ -548,9 +624,15 @@ room's light changes too little across a texel to tell the two.
 
 `u64`: the open ring in force, TILE_RING unless a debug knob holds fewer.
 
+## tile_merge_us
+
+`u64`: the merge's share in force in microseconds, TILE_MERGE_US unless a debug knob sets another.
+
 ## tile_pending_flags
 ## tile_pending_guarantee
 ## tile_pending_ring
+## tile_pending_effective
+## tile_pending_merge
 
 `u64`: the console's values for the next boundary to put in force.
 
@@ -598,13 +680,45 @@ room's light changes too little across a texel to tell the two.
 
 `u64`: on a debug build alone, their count when the boundary ended, held until the next.
 
+## tile_trace_kind
+
+`u64`: on a debug build alone, the address of the trace line's list word, for a line going on.
+
+## tile_trace_at
+
+`u64`: where the trace line in hand goes on.
+
+## tile_trace_items
+
+`u64`: the items on it.
+
+## tile_trace_merged_count
+
+`u64`: the merged surfaces the trace noted.
+
+## tile_trace_requesting
+
+`LUMAP_COUNT/8 u8`: the batch's requesting surfaces as the trace noted them, a bit a surface.
+
+## tile_trace_merged
+
+`LUMAP_COUNT*8 u8`: each merged surface the trace noted in the merge's order, the surface in the low word and its keys in the high.
+
+## tile_trace
+
+`u8`: 1 while the console's O frame traces the pool.
+
+## tile_cold
+
+`u8`: 1 when an O frame asks a cold start at the next boundary.
+
 ## tile_config_record
 
 `REPORT_SIZE u8`: the configuration record, REPORT_CONFIG's, CONFIG_* fields.
 
 ## tile_forget
 
-`u8`: 1 when the console's L asks every tile forgotten at the next boundary.
+`u8`: 1 when the console's L, an O's cold start, or a new slot cap asks every tile forgotten at the next boundary.
 
 ## tile_config_changed
 

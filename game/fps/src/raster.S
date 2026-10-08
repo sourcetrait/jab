@@ -1679,10 +1679,7 @@ span_fill:
     ori a0, a0, SLOT_READY
     beq a0, a4, 80f                 # its generation's, READY: the tile
 4320:
-    sd a1, 240(sp)                  # missed: asked for at the block's end
-    ld a0, CTX_TILE_MISSES(tp)
-    addi a0, a0, 1
-    sd a0, CTX_TILE_MISSES(tp)
+    sd a1, 240(sp)                  # missed: asked for at the block's end if it draws
     j 4300f
 4330:
     ld a0, CTX_TILE_STRADDLING(tp)
@@ -2092,6 +2089,9 @@ span_fill:
     li a1, -1
     sd a1, 240(sp)
     beqz t4, 62f                    # no pixel past the depth test: nothing asked
+    ld a1, CTX_TILE_MISSES(tp)
+    addi a1, a1, 1
+    sd a1, CTX_TILE_MISSES(tp)      # drawn without its tile
     sd t0, 248(sp)
     sd t1, 256(sp)
     ld a1, CTX_COMMAND(tp)

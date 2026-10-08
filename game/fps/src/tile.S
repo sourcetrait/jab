@@ -175,6 +175,12 @@ tiles_init:
     li t1, TILE_RING
     la t0, tile_pending_ring
     sd t1, 0(t0)
+    li t1, TILE_SLOTS
+    la t0, tile_pending_effective
+    sd t1, 0(t0)
+    li t1, TILE_MERGE_US
+    la t0, tile_pending_merge
+    sd t1, 0(t0)
     li t1, 1
     la t0, tile_config_changed
     sb t1, 0(t0)                    # the first boundary's configuration record
@@ -346,7 +352,10 @@ tile_boundary:
     bnez t1, 2f
     li t2, (TILE_ALLOWANCE_US * US_TICKS)
     add t2, t2, s2                  # the allowance's end
-    li t3, (TILE_MERGE_US * US_TICKS)
+    la t3, tile_merge_us
+    ld t3, 0(t3)
+    li t5, US_TICKS
+    mul t3, t3, t5
     add t3, t3, s2                  # the merge's share's
     li t4, TILE_QUOTA
 2:
@@ -357,7 +366,24 @@ tile_boundary:
     la t0, tile_quota_left
     sd t4, 0(t0)
     call tile_batch                 # the frame before's requests counted
+.ifdef DEBUG
+    la t0, tile_cold
+    lbu t1, 0(t0)
+    beqz t1, 21f
+    sb zero, 0(t0)
+    la t0, tile_batch_admitted
+    ld t1, 0(t0)
+    la t0, stats
+    sd t1, STAT_TILE_UNPROCESSED(t0)    # a cold start: the batch discarded whole
+    call tile_trace_note
+    call tile_fold
+    j 3f
+21:
+.endif
     call tile_merge                 # and merged
+.ifdef DEBUG
+    call tile_trace_note
+.endif
     call tile_fold                  # the slots read since, CLOCK's references
     la t0, tile_flags
     ld t1, 0(t0)
@@ -386,6 +412,9 @@ tile_boundary:
     blez t1, 9f
     sd t1, STAT_TILE_OVERRUN(t2)    # past the allowance
 9:
+.ifdef DEBUG
+    call tile_trace_print           # after the boundary's time is taken
+.endif
     ld ra, 24(sp)
     ld s2, 16(sp)
     ld s3, 8(sp)
@@ -422,6 +451,22 @@ tile_configure:
     lbu t1, 0(t0)
     beqz t1, 9f
     sb zero, 0(t0)
+    la t0, tile_pending_effective
+    ld t1, 0(t0)
+    la t0, tile_effective
+    ld t2, 0(t0)
+    beq t1, t2, 1f
+    sd t1, 0(t0)                    # a new slot cap
+    li t1, 1
+    la t0, tile_forget
+    sb t1, 0(t0)                    # every tile forgotten, the free slots the cap's
+1:
+    la t0, tile_pending_merge
+    ld t1, 0(t0)
+    la t0, tile_merge_us
+    sd t1, 0(t0)
+    la t0, tile_config_record
+    sw t1, CONFIG_MERGE(t0)
     la t0, tile_pending_flags
     ld t1, 0(t0)
     la t0, tile_flags
@@ -566,16 +611,29 @@ tile_merge:
     ld s2, 0(t0)                    # the batch's stamp
     beqz s2, 90f                    # the first boundary: no batch
     la t0, tile_merge_cursor
-    ld s3, 0(t0)                    # the word of surfaces
+    ld s3, 0(t0)                    # the surface the tiers start at
     li s4, 0                        # the words visited
 10:
     li t0, (LUMAP_COUNT / 64)
-    bgeu s4, t0, 30f                # every word: the tiers merged
-    slli t0, s3, 3
-    la t1, tile_requesting
-    add t0, t0, t1
-    ld s5, 0(t0)                    # the word's requesting surfaces
-    slli s6, s3, 6                  # its first surface
+    bgtu s4, t0, 30f                # every word, the start's last: the tiers merged
+    srli t1, s3, 6
+    add t1, t1, s4
+    bltu t1, t0, 101f
+    sub t1, t1, t0                  # the visit's word, wrapped
+101:
+    slli t2, t1, 3
+    la t3, tile_requesting
+    add t2, t2, t3
+    ld s5, 0(t2)                    # the word's requesting surfaces
+    slli s6, t1, 6                  # its first surface
+    andi t2, s3, 63
+    li t3, -1
+    sll t3, t3, t2                  # the start's word from the start on
+    beqz s4, 102f
+    bne s4, t0, 11f
+    not t3, t3                      # and last, before it
+102:
+    and s5, s5, t3
 11:
     beqz s5, 20f
     andi t0, s5, 1
@@ -603,7 +661,7 @@ tile_merge:
     lwu a0, TT_KEYS(t0)
     mv a1, s6
     call tile_merge_key
-    bnez a0, 80f                    # the list full: stopped at this word
+    bnez a0, 80f                    # the list full: resumed at this surface
     addi s9, s9, 1
     j 13b
 17:
@@ -613,39 +671,51 @@ tile_merge:
     rdtime t0
     la t1, tile_merge_deadline
     ld t1, 0(t1)
-    bgeu t0, t1, 80f                # the merge's share spent: stopped at this word
+    bltu t0, t1, 19f
+    addi s6, s6, 1                  # the merge's share spent: resumed past this surface
+    j 80f
 19:
     srli s5, s5, 1
     addi s6, s6, 1
     j 11b
 20:
     addi s4, s4, 1
-    addi s3, s3, 1
-    li t0, (LUMAP_COUNT / 64)
-    bltu s3, t0, 10b
-    li s3, 0
     j 10b
 30:
-    addi s3, s3, 1                  # whole: the next boundary starts a word on
-    li t0, (LUMAP_COUNT / 64)
-    bltu s3, t0, 31f
-    li s3, 0
+    addi s6, s3, 1                  # whole: the next boundary starts a surface on
+    li t0, LUMAP_COUNT
+    bltu s6, t0, 31f
+    li s6, 0
 31:
     la t0, tile_merge_cursor
-    sd s3, 0(t0)
+    sd s6, 0(t0)
     la t0, tile_context_cursor
-    ld s3, 0(t0)                    # the context
+    ld s8, 0(t0)                    # the context the rings start at
+    la t0, tile_ring_cursor
+    ld s7, 0(t0)                    # and its entry
     li s4, 0                        # the contexts visited
 40:
     li t0, TILE_CONTEXTS
-    bgeu s4, t0, 50f                # every context: the rings merged
+    bgtu s4, t0, 50f                # every context, the start's last: the rings merged
+    add s3, s8, s4
+    bltu s3, t0, 401f
+    sub s3, s3, t0                  # the visit's context, wrapped
+401:
     mv a0, s3
     call tile_context
     ld s5, CTX_TILE_ADMIT(a0)
+    lwu s9, TA_RING_FILL(s5)        # past its last entry
     li s6, 0                        # the entry
+    beqz s4, 402f
+    li t0, TILE_CONTEXTS
+    bne s4, t0, 41f
+    bgeu s7, s9, 41f
+    mv s9, s7                       # the start's context last, before its entry
+    j 41f
+402:
+    mv s6, s7                       # the start's context first, from its entry on
 41:
-    lwu t0, TA_RING_FILL(s5)
-    bgeu s6, t0, 45f
+    bgeu s6, s9, 45f
     slli t0, s6, 3
     add t0, t0, s5
     li t1, TA_RING
@@ -655,7 +725,7 @@ tile_merge:
     srli a0, a0, 32                 # its key
     srli a1, t1, 32                 # its surface
     call tile_merge_key
-    bnez a0, 85f                    # the list full: stopped in this context
+    bnez a0, 85f                    # the list full: resumed at this entry
     addi s6, s6, 1
     andi t0, s6, 15
     bnez t0, 41b
@@ -663,30 +733,34 @@ tile_merge:
     la t1, tile_merge_deadline
     ld t1, 0(t1)
     bltu t0, t1, 41b
-    j 85f                           # the merge's share spent: stopped in this context
+    j 85f                           # the merge's share spent: resumed at this entry
 45:
     addi s4, s4, 1
-    addi s3, s3, 1
-    li t0, TILE_CONTEXTS
-    bltu s3, t0, 40b
-    li s3, 0
     j 40b
 50:
-    addi s3, s3, 1                  # whole: the next boundary starts a context on
+    addi s3, s8, 1                  # whole: the next boundary starts a context on
     li t0, TILE_CONTEXTS
     bltu s3, t0, 51f
     li s3, 0
 51:
     la t0, tile_context_cursor
     sd s3, 0(t0)
+    la t0, tile_ring_cursor
+    sd zero, 0(t0)                  # at its first entry
     j 90f
 80:
+    li t0, LUMAP_COUNT
+    bltu s6, t0, 81f
+    li s6, 0
+81:
     la t0, tile_merge_cursor
-    sd s3, 0(t0)                    # the next boundary resumes at this word
+    sd s6, 0(t0)                    # the next boundary resumes there
     j 90f
 85:
     la t0, tile_context_cursor
-    sd s3, 0(t0)                    # and in this context
+    sd s3, 0(t0)
+    la t0, tile_ring_cursor
+    sd s6, 0(t0)                    # the next boundary resumes there
 90:
     la t0, tile_merged_count
     ld t1, 0(t0)
@@ -1118,6 +1192,12 @@ tile_retire:
     addi t5, a0, 1
     or t4, t4, t5                   # the entry naming this slot
     bne t3, t4, 1f
+.ifdef DEBUG
+    la t5, tile_flags
+    ld t5, 0(t5)
+    andi t5, t5, CONFIG_STALE
+    bnez t5, 1f                     # the stale knob: the entry left naming the slot
+.endif
     sw zero, 0(t2)                  # cleared before the generation advances
     tile_wrote t5, t6
 1:
@@ -1346,6 +1426,208 @@ tile_check:
 1:
     jab.sys.uart.print msg_tile_flight
     jab.sys.exit 15
+
+tile_trace_note:
+    la t0, tile_trace
+    lbu t0, 0(t0)
+    bnez t0, 1f
+    ret
+1:
+    la t0, tile_requesting
+    la t1, tile_trace_requesting
+    li t2, (LUMAP_COUNT / 64)
+2:
+    ld t3, 0(t0)
+    sd t3, 0(t1)                    # the batch's surfaces, kept past the discard
+    addi t0, t0, 8
+    addi t1, t1, 8
+    addi t2, t2, -1
+    bnez t2, 2b
+    li t0, 0                        # the merge order's entry
+    la t6, tile_trace_merged
+3:
+    la t1, tile_order_count
+    ld t1, 0(t1)
+    bgeu t0, t1, 9f
+    slli t1, t0, 2
+    la t2, tile_merge_order
+    add t1, t1, t2
+    lwu t2, 0(t1)                   # a merged surface
+    slli t1, t2, 3
+    la t3, tile_merge_heads
+    add t1, t1, t3
+    lwu t1, 0(t1)                   # its first key's entry
+    li t3, 0                        # its keys
+    li t4, -1
+    srli t4, t4, 32
+4:
+    beq t1, t4, 5f
+    addi t3, t3, 1
+    slli t1, t1, 3
+    la t5, tile_merged
+    add t1, t1, t5
+    lwu t1, 4(t1)                   # the next
+    j 4b
+5:
+    sw t2, 0(t6)
+    sw t3, 4(t6)                    # kept before construction takes them
+    addi t6, t6, 8
+    addi t0, t0, 1
+    j 3b
+9:
+    la t1, tile_trace_merged_count
+    sd t0, 0(t1)
+    ret
+
+tile_trace_print:
+    la t0, tile_trace
+    lbu t0, 0(t0)
+    bnez t0, 1f
+    ret
+1:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s2, 16(sp)
+    la a1, word_trace_requesting
+    call tile_trace_open
+    li s2, 0                        # the surface
+10:
+    li t0, LUMAP_COUNT
+    bgeu s2, t0, 19f
+    srli t0, s2, 6
+    slli t0, t0, 3
+    la t1, tile_trace_requesting
+    add t0, t0, t1
+    ld t0, 0(t0)
+    srl t0, t0, s2
+    andi t0, t0, 1
+    beqz t0, 18f
+    mv a1, s2
+    li a2, -1
+    call tile_trace_item            # in the batch
+18:
+    addi s2, s2, 1
+    j 10b
+19:
+    call tile_trace_close
+    la a1, word_trace_merged
+    call tile_trace_open
+    li s2, 0                        # the merged surface
+20:
+    la t0, tile_trace_merged_count
+    ld t0, 0(t0)
+    bgeu s2, t0, 29f
+    slli t0, s2, 3
+    la t1, tile_trace_merged
+    add t0, t0, t1
+    lwu a1, 0(t0)
+    lwu a2, 4(t0)                   # with its keys
+    call tile_trace_item
+    addi s2, s2, 1
+    j 20b
+29:
+    call tile_trace_close
+    la a1, word_trace_built
+    call tile_trace_open
+    li s2, 0                        # the slot
+30:
+    li t0, TILE_SLOTS
+    bgeu s2, t0, 39f
+    slli t0, s2, 2
+    la t1, tile_tags
+    add t0, t0, t1
+    lwu t0, 0(t0)
+    andi t0, t0, 0xff
+    li t1, SLOT_READY
+    bne t0, t1, 38f
+    li t0, SLOT_SIZE
+    mul t0, s2, t0
+    la t1, tile_slots
+    add t0, t0, t1
+    lwu t1, SLOT_BUILT(t0)
+    la t2, tile_pass
+    ld t2, 0(t2)
+    bne t1, t2, 38f                 # built before this pass
+    lwu a1, SLOT_SURFACE(t0)
+    li a2, -1
+    call tile_trace_item
+38:
+    addi s2, s2, 1
+    j 30b
+39:
+    call tile_trace_close
+    ld ra, 24(sp)
+    ld s2, 16(sp)
+    addi sp, sp, 32
+    ret
+
+tile_trace_open:
+    la t0, tile_trace_kind
+    sd a1, 0(t0)
+tile_trace_head:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, line
+    la a1, msg_tile_trace
+    call append_str
+    la t0, frame_clock
+    ld a1, CLOCK_SNAPSHOT(t0)
+    call append_dec
+    la t0, tile_trace_kind
+    ld a1, 0(t0)
+    call append_str
+    la t0, tile_trace_at
+    sd a0, 0(t0)
+    la t0, tile_trace_items
+    sd zero, 0(t0)
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
+tile_trace_item:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
+    mv s2, a1
+    mv s3, a2
+    la t0, tile_trace_items
+    ld t0, 0(t0)
+    li t1, TILE_TRACE_ITEMS
+    bltu t0, t1, 1f
+    call tile_trace_close           # the line full: the list goes on in another
+    call tile_trace_head
+1:
+    la t0, tile_trace_at
+    ld a0, 0(t0)
+    li t1, ' '
+    sb t1, 0(a0)
+    addi a0, a0, 1
+    mv a1, s2
+    call append_dec
+    bltz s3, 2f
+    li t1, ':'
+    sb t1, 0(a0)
+    addi a0, a0, 1
+    mv a1, s3
+    call append_dec
+2:
+    la t0, tile_trace_at
+    sd a0, 0(t0)
+    la t0, tile_trace_items
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)
+    ld ra, 24(sp)
+    ld s2, 16(sp)
+    ld s3, 8(sp)
+    addi sp, sp, 32
+    ret
+
+tile_trace_close:
+    la t0, tile_trace_at
+    ld a0, 0(t0)
+    j line_end
 .endif
 
 .balign CODE_PAGE
@@ -2062,6 +2344,14 @@ word_tile_bytes:
     .asciz " bytes"
 msg_tile_flight:
     .asciz "fps: tile pool changed in flight\n"
+msg_tile_trace:
+    .asciz "fps: tile pass "
+word_trace_requesting:
+    .asciz " requesting:"
+word_trace_merged:
+    .asciz " merged:"
+word_trace_built:
+    .asciz " built:"
 .endif
 
 .section .bss
@@ -2086,6 +2376,8 @@ tile_merge_cursor:
     .skip 8
 tile_context_cursor:
     .skip 8
+tile_ring_cursor:
+    .skip 8
 tile_build_cursor:
     .skip 8
 tile_merged_count:
@@ -2108,11 +2400,17 @@ tile_guarantee:
     .skip 8
 tile_ring:
     .skip 8
+tile_merge_us:
+    .skip 8
 tile_pending_flags:
     .skip 8
 tile_pending_guarantee:
     .skip 8
 tile_pending_ring:
+    .skip 8
+tile_pending_effective:
+    .skip 8
+tile_pending_merge:
     .skip 8
 tile_entries:
     .skip 8
@@ -2137,6 +2435,23 @@ tile_writes:
     .skip 8
 tile_writes_frozen:
     .skip 8
+tile_trace_kind:
+    .skip 8
+tile_trace_at:
+    .skip 8
+tile_trace_items:
+    .skip 8
+tile_trace_merged_count:
+    .skip 8
+tile_trace_requesting:
+    .skip (LUMAP_COUNT / 8)
+tile_trace_merged:
+    .skip (LUMAP_COUNT * 8)
+tile_trace:
+    .skip 1
+tile_cold:
+    .skip 1
+.balign 8
 .endif
 tile_config_record:
     .skip REPORT_SIZE

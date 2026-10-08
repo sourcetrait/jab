@@ -5,9 +5,10 @@ kind, P placing the camera, T a trace, F a round, N a noise, L the tiles
 forgotten with the lumels bright or set by parity and construction lifted or
 frozen, R the generator seeded, E the gauge's measurement closed, C the
 cadence chosen, W the raster's workers and grain chosen, S on a debug build the
-cadence fixture's stalls, K on a debug build the packet's bounds, J on a debug
-build the jobs' hold, cancel, and fault, Q on a CENSUS build the census's
-chunk, each reported back as REPORT_CONSOLE.
+cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
+build the tile pool's knobs, J on a debug build the jobs' hold, cancel, and
+fault, Q on a CENSUS build the census's chunk, each reported back as
+REPORT_CONSOLE.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
@@ -52,6 +53,19 @@ the spans, each 0 for the engine's own bound, so a fixture makes a frame
 flush many times (raster.S's command_emit and span_cap). The test's
 `packet-frame` builds it.
 
+O is the tile pool's knob, on a debug build alone, a configuration of its
+own the next boundary puts in force and records (tile.S's The knobs): byte
+4 the modes, every one replaced, CONFIG_UNLIMITED the quota, the
+allowance, and the merge's share lifted, CONFIG_FROZEN construction
+frozen, CONFIG_STALE an eviction leaving its entries; bytes 8 to 11 the
+slots the pool may use, a change forgetting the pool; bytes 12 to 15 a
+tier's requests and 16 to 19 an open ring's entries, each held to the
+build's; bytes 20 to 23 the merge's share in microseconds; each 0 for the
+build's own. Byte 5 set traces the pool's passes on the UART while it
+stands; byte 6 set is a cold start at the next boundary, every tile
+forgotten and the frame before's requests discarded. The test's
+`pool-frame` builds it and `pool-trace` reads the trace.
+
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start
 alike; its answer before the first state record is the proof it came in
@@ -72,9 +86,10 @@ L is the test's hand on the tile pool. Byte 4 set runs `lumels_bright` first,
 so a capture after it reads every texel as the texture holds it, times one,
 and the lit reading over the bright one is the light alone. The forget and
 the configuration come after in every case: every tile is forgotten at the
-next boundary, whose light came from the lumels before, and the quota and
-the allowance are lifted from that boundary on, so a view settles in the
-frame after its first sight. Byte 5 set freezes construction in place of
+next boundary, whose light came from the lumels before, and the quota, the
+allowance, and the merge's share are lifted from that boundary on, so the
+frame after a view's first sight draws it from its tiles; an O's stale mode
+is kept. Byte 5 set freezes construction in place of
 the lift, so no tile is built and every span takes the lit loop: the lit
 loop's picture from the same build, which the fixtures read against the
 tiled one. Byte 6 is unused. Byte 7, on a debug build alone, runs
@@ -105,8 +120,11 @@ L: every lumel set full bright first when the frame's byte 4 is 1, so a
 capture reads the texture sampled as the lit one is, and on a debug build by
 its node's parity when byte 7 is 1; then the pool's forget asked of the next
 boundary and its flags pending, the lift, or construction frozen when byte 5
-is 1, the configuration marked changed; on a CENSUS build either rewrite
-marks the census stale. Q: the census's chunk from
+is 1, beside the stale mode as it stood, the configuration marked changed;
+on a CENSUS build either rewrite marks the census stale. O: every value
+pending, a 0 or one past the build's the build's own, the configuration
+marked changed, the trace set or cleared, and a cold start asked when byte
+6 is set. Q: the census's chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.
 

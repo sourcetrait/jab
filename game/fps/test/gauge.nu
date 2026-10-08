@@ -1199,7 +1199,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
             })
         } else if $kind == $KIND_CONFIG {
             $configs = ($configs | append {
-                from: (u32-at $r 8), tile_shift: (u32-at $r 12), tile_size: (u32-at $r 16), slots: (u32-at $r 20),
+                merge_us: (u32-at $r 4), from: (u32-at $r 8), tile_shift: (u32-at $r 12), tile_size: (u32-at $r 16), slots: (u32-at $r 20),
                 config_effective: (u32-at $r 24), quota: (u32-at $r 28), allowance_us: (u32-at $r 32),
                 config_flags: (u32-at $r 36), guarantee: (u32-at $r 40), ring: (u32-at $r 44), recent: (u32-at $r 48),
                 directory_bytes: (u32-at $r 52), tile_memory: (u32-at $r 56), schema: (u32-at $r 60),
@@ -1474,7 +1474,9 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
 # whose source is not the frame before, or at the first frame not the
 # sentinel with no request admitted, merged, or left; the memory in use
 # past TILE_MEMORY or past its high-water, the high-water past
-# TILE_MEMORY, or either high-water falling. Across the records: a
+# TILE_MEMORY, or either high-water falling; the blocks drawn without
+# their tiles other than the requests admitted, dropped, and filtered,
+# since each such block asks once. Across the records: a
 # batch's admitted count other than the admissions its source frame
 # recorded, where that frame is in the window; the effective slots other
 # than the configuration's in force; and the tile bytes other than the
@@ -1501,6 +1503,7 @@ def pool-invalidity [rows: list<any>]: nothing -> list<any> {
     let unbatched = ($pooled | where {|r| $r.frame > 0 and ($by_frame | get -o ($r.batch_source | into string)) != null and ($by_frame | get ($r.batch_source | into string)) != $r.batch_admitted })
     let unconfigured_slots = ($pooled | where {|r| $r.slots_effective != $r.config_effective })
     let unsized = ($pooled | where {|r| $r.tile_bytes != ($r.slots_used * $r.tile_size) })
+    let unasked = ($pooled | where {|r| $r.missed_blocks != ($r.admitted + $r.dropped + $r.filtered) })
     [
         (if ($untiled | is-empty) { null } else { $"($untiled | length) frames without a tile record" }),
         (if ($unstored | is-empty) { null } else { $"($unstored | length) frames without a storage record" }),
@@ -1519,6 +1522,7 @@ def pool-invalidity [rows: list<any>]: nothing -> list<any> {
         (if ($unbatched | is-empty) { null } else { $"($unbatched | length) frames whose batch's admitted requests are not its source frame's admissions" }),
         (if ($unconfigured_slots | is-empty) { null } else { $"($unconfigured_slots | length) frames whose effective slots are not their configuration's" }),
         (if ($unsized | is-empty) { null } else { $"($unsized | length) frames whose tile bytes are not their slots in use's" }),
+        (if ($unasked | is-empty) { null } else { $"($unasked | length) frames whose blocks drawn without their tiles are not their requests admitted, dropped, and filtered" }),
     ]
 }
 
@@ -1646,7 +1650,7 @@ def storageless []: nothing -> record {
 # The configuration's columns of a row below schema 5 or with none in
 # force, all null.
 def configless []: nothing -> record {
-    [from tile_shift tile_size slots config_effective quota allowance_us config_flags guarantee ring recent directory_bytes tile_memory]
+    [merge_us from tile_shift tile_size slots config_effective quota allowance_us config_flags guarantee ring recent directory_bytes tile_memory]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
@@ -1873,22 +1877,32 @@ export def report-doc [label: string, id: record, runs: list<any>]: nothing -> r
     }
 }
 
+# A leg's line under a run as the report prints it: a capture with no
+# clock its drawing and game spreads; else its frames, those at or over
+# the ceiling and fast, the critical path's spread, the medians of the
+# drawing, its parts, and the frame's phases, the tiles built, named
+# cells below schema 5 and tiles at it, with the frames building them,
+# the pixels tiled and lit by the fallback, the flips early and refused,
+# and the most unattributed.
+export def leg-text [run: int, schema: any, l: record]: nothing -> string {
+    let built = (if ($schema | default 1) >= 5 { "tiles" } else { "cells" })
+    if ($l.critical? | default null) == null {
+        $"gauge:   run ($run) ($l.leg): ($l.frames) frames; draw (spread $l.draw), game (spread $l.game)"
+    } else {
+        $"gauge:   run ($run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) ($built) built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
+    }
+}
+
 # The report: every run's measurement and outcome under the identity
 # (report-doc), written as gauge.nuon in `out`, a previous one there
-# retired, its legs and its outliers printed, the tiles built named
-# cells below schema 5 and tiles at it.
+# retired, its legs (leg-text) and its outliers printed.
 def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
     let file = ($out | path join "gauge.nuon")
     jab retire $file (jab target-root $WORKSPACE)
     report-doc $label $id $runs | to nuon | save --raw $file
     for r in $runs {
-        let built = (if ($r.measured | get -o schema | default 1) >= 5 { "tiles" } else { "cells" })
         for l in $r.measured.legs {
-            if ($l.critical? | default null) == null {
-                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames; draw (spread $l.draw), game (spread $l.game)"
-            } else {
-                print $"gauge:   run ($r.run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) ($built) built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
-            }
+            print (leg-text $r.run ($r.measured | get -o schema) $l)
         }
         let o = $r.measured.outliers
         if not ($o | is-empty) { print $"gauge:   run ($r.run): ($o | length) unexplained phase outliers, the first at frame ($o | first | get frame)" }

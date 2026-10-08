@@ -596,17 +596,21 @@ negative column among them, is not counted; both take the lit loop. One
 tile inside the grid gives the key, its directory entry's index, the
 entry, and the slot's tag, held against the entry's generation with
 SLOT_READY: equal, a hit, counted, its slot's bit set in the context's
-touched bitmap for CLOCK, and the tile loop; else a miss, counted, its key
-kept in slot 240 for the block's end, and the lit loop at the same level.
+touched bitmap for CLOCK, and the tile loop; else a miss, its key kept in
+slot 240 for the block's end, and the lit loop at the same level.
 The judgement is about thirty ops a block, a directory load and a tag
 load among them. The atlas cache's second to sixth cuts judged cells per
 block or per span against bit maps and measured that judgement at 3 to 6
 ms a view, more than the lighting's whole, so the pool's is a cost to
 measure (PoolCore's measurements), never assumed.
 
-At the block's end a kept key whose block passed a pixel is asked for
-(tile.S's tile_request) on the block's context, the key cleared first so
-no block after it asks again; t0 and t1, the pixel's and the depth's
+At the block's end a kept key whose block passed a pixel is counted
+missed and asked for (tile.S's tile_request) on the block's context, the
+key cleared first so no block after it asks again; a missed block that
+drew nothing, hidden behind what the frame drew before it, is neither
+counted nor asked for, so a settled view counts no miss, where counting
+at the judgement left 769 hidden blocks of the settled spawn view missed
+every frame with nothing to ask. t0 and t1, the pixel's and the depth's
 addresses, ride slots 248 and 256 across the call, the frame 272 bytes.
 The request stays out of the packet's render family, whose page holds
 little room past the hit path.

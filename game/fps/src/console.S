@@ -128,6 +128,9 @@ console_frame:
     li t1, CONFIG_FROZEN            # or construction frozen
 7:
     la t0, tile_pending_flags
+    ld t2, 0(t0)
+    andi t2, t2, CONFIG_STALE
+    or t1, t1, t2                   # the stale knob kept
     sd t1, 0(t0)
     j 8f
 9:
@@ -197,13 +200,67 @@ console_frame:
     j 8f
 14:
     li t1, 'K'
-    bne t0, t1, 15f
+    bne t0, t1, 141f
     lwu t1, 4(s2)
     la t2, packet_command_cap
     sw t1, 0(t2)                    # the commands a packet holds, 0 for MAX_COMMANDS
     lwu t1, 8(s2)
     la t2, packet_span_cap
     sw t1, 0(t2)                    # the spans a packet holds, 0 for SPAN_RECORDS
+    j 8f
+141:
+    li t1, 'O'
+    bne t0, t1, 15f
+    lbu t1, 4(s2)
+    andi t1, t1, (CONFIG_UNLIMITED | CONFIG_FROZEN | CONFIG_STALE)
+    la t2, tile_pending_flags
+    sd t1, 0(t2)                    # the modes, every one
+    lwu t1, 8(s2)
+    li t2, TILE_SLOTS
+    beqz t1, 142f
+    bleu t1, t2, 143f
+142:
+    mv t1, t2
+143:
+    la t2, tile_pending_effective
+    sd t1, 0(t2)                    # the slots the pool may use, 0 for all
+    lwu t1, 12(s2)
+    li t2, TILE_GUARANTEE
+    beqz t1, 144f
+    bleu t1, t2, 145f
+144:
+    mv t1, t2
+145:
+    la t2, tile_pending_guarantee
+    sd t1, 0(t2)                    # a tier's requests, 0 for TILE_GUARANTEE
+    lwu t1, 16(s2)
+    li t2, TILE_RING
+    beqz t1, 146f
+    bleu t1, t2, 147f
+146:
+    mv t1, t2
+147:
+    la t2, tile_pending_ring
+    sd t1, 0(t2)                    # an open ring's entries, 0 for TILE_RING
+    lwu t1, 20(s2)
+    bnez t1, 148f
+    li t1, TILE_MERGE_US
+148:
+    la t2, tile_pending_merge
+    sd t1, 0(t2)                    # the merge's share in microseconds, 0 for TILE_MERGE_US
+    li t1, 1
+    la t2, tile_config_changed
+    sb t1, 0(t2)
+    lbu t1, 5(s2)
+    la t2, tile_trace
+    sb t1, 0(t2)                    # every pass's surfaces on the UART while set
+    lbu t1, 6(s2)
+    beqz t1, 8f
+    li t1, 1
+    la t2, tile_forget
+    sb t1, 0(t2)                    # a cold start at the next boundary: every tile forgotten
+    la t2, tile_cold
+    sb t1, 0(t2)                    # and the frame before's requests discarded
     j 8f
 15:
     li t1, 'J'
