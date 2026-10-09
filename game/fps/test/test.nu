@@ -2315,12 +2315,15 @@ def fixture-samples [wall: record, a: record, e: list<float>, levels: record]: n
 # whether its patch shows there.
 def fixture-read [bytes: binary, eye: record, samples: table<kind: string, colours: list<binary>, uniform: bool, point: list<float>, pass: list<bool>>, level: int]: nothing -> table<kind: string, colour: binary, uniform: bool, at: list<int>, pixel: binary, shows: bool> {
     let head = (ppm-head $bytes)
-    $samples | each {|s|
+    # a loop, so a failing assertion is the error raised, not the each's
+    mut read = []
+    for s in $samples {
         let at = (project $eye 0 $s.point)
         assert ($at != null) $"the ($s.kind) patch at ($s.point) is on screen from ($eye)"
         assert (((($at.0 - 960) ** 2) + (($at.1 - 540) ** 2)) > ($FIXTURE_CROSSHAIR * $FIXTURE_CROSSHAIR)) $"the ($s.kind) patch at ($at) lies clear of the crosshair's disc"
-        { kind: $s.kind, colour: ($s.colours | get $level), uniform: $s.uniform, at: $at, pixel: (pixel-at $bytes $head $at), shows: ($s.pass | get $level) }
+        $read = ($read | append { kind: $s.kind, colour: ($s.colours | get $level), uniform: $s.uniform, at: $at, pixel: (pixel-at $bytes $head $at), shows: ($s.pass | get $level) })
     }
+    $read
 }
 
 # The screen rectangle of the fixture wall's opening from an eye facing
@@ -2541,13 +2544,16 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     assert equal $oracle.exit_code 0 $"the builder's oracle read the run's dumps: ($oracle.stderr)"
     let read = (open $read_out)
     assert equal $read.dumps ($BUILDER_LIGHTINGS | length) $"a dump under each light: ($read.dumps) of ($BUILDER_LIGHTINGS | length)"
-    let held = ($read.results | each {|e|
+    # a loop, so a failing assertion is the error raised, not the each's
+    mut dumped = []
+    for e in $read.results {
         let keys = ($e.tiles | each {|t| { level: $t.level, tx: $t.tx, ty: $t.ty } } | sort-by level ty tx)
         assert equal $keys $grid $"every tile of the wall at every level dumped once under the ($e.lighting) lumels: ($keys | length) of ($grid | length)"
         let foreign = ($e.tiles | where {|t| $t.surface != $surface or $t.texel_slots != [$t.slot] or $t.k != $frame.k or $t.w != $frame.w or $t.h != $frame.h })
         assert ($foreign | is-empty) $"every dumped tile the wall's, its texels its own slot's, its map's k, W, and H ($frame.k), ($frame.w), and ($frame.h) as lumap_frame's rule gives them: ($foreign | first 2)"
-        $e.tiles | each {|t| $t | insert lighting $e.lighting }
-    } | flatten)
+        $dumped = ($dumped | append ($e.tiles | each {|t| $t | insert lighting $e.lighting }))
+    }
+    let held = $dumped
     let alpha = ($held | where {|r| $r.alpha > 0 })
     assert ($alpha | is-empty) $"every texel's alpha the chain's: ($alpha | first 3)"
     let bright = ($held | where {|r| $r.lighting == "bright" and $r.unlike > 0 })
@@ -2650,16 +2656,18 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
         assert ($run.screen != "") $"a screen was taken on ($label)"
         { screen: $run.screen, frame: $line }
     }
-    let pairs = ($HANDOFF_LIGHTINGS | each {|lighting|
+    # loops, so a failing assertion is the error raised, not an each's
+    mut runs = []
+    for lighting in $HANDOFF_LIGHTINGS {
         let light = {|held: bool| if $lighting == "gradient" { level-frame false $held --gradient } else { level-frame false $held --parity } }
-        0..<$levels | each {|l|
+        for l in 0..<$levels {
             let label = $"at level ($l) under the ($lighting) lumels"
             let lit = (do $launch $"($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l) }])
             assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
             let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l) }])
             assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
-            let both = [{ name: $"($lighting)_($l)_tiled", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" }]
-            if $l not-in $crossing { $both } else {
+            $runs = ($runs | append { name: $"($lighting)_($l)_tiled", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" })
+            if $l in $crossing {
                 # the O after the placement, never with it: two writes at
                 # one time can land in two console reads, and an O read
                 # first builds its one construction from the view before
@@ -2671,10 +2679,11 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
                 ])
                 let f = $partial.frame
                 assert ($f.tiles_built == 0 and $f.slots == $HANDOFF_PARTIAL_SLOTS and $f.tiled > 0 and $f.tiled < $tiled.frame.tiled) $"the wall drawn under partial residency ($label), ($HANDOFF_PARTIAL_SLOTS) slots built once and some of its blocks read from them, fewer than settled: ($f | select tiles_built slots tiled) against ($tiled.frame.tiled)"
-                $both | append { name: $"($lighting)_($l)_partial", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen }
+                $runs = ($runs | append { name: $"($lighting)_($l)_partial", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen })
             }
-        } | flatten
-    } | flatten)
+        }
+    }
+    let pairs = $runs
     let spec = {
         rect: $rect, crosshair: $FIXTURE_CROSSHAIR, k: $frame.k, w: $frame.w, h: $frame.h,
         u: [(do $u_at 0), ((do $u_at 1) - (do $u_at 0))], v: [(do $v_at 0), ((do $v_at 1) - (do $v_at 0))],
@@ -2684,13 +2693,19 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     $spec | to nuon | save -f $spec_file
     let tiles = ($game | path join "test" "tiles.nu")
     # a pair a nu, the nus side by side, each comparison's per-pixel work
-    # in a nu of its own
-    let read = ($pairs | enumerate | par-each --keep-order {|e|
+    # in a nu of its own; held in a loop after, so a failing assertion is
+    # the error raised
+    let stats = ($pairs | enumerate | par-each --keep-order {|e|
         let file = ($out | path join $"handoff_stats_($e.index).nuon")
-        let stats = (^nu $tiles handoff $spec_file $e.index $file | complete)
-        assert equal $stats.exit_code 0 $"the handoff's statistics read the ($e.item.name) captures: ($stats.stderr)"
-        open $file
+        let r = (^nu $tiles handoff $spec_file $e.index $file | complete)
+        { name: $e.item.name, exit: $r.exit_code, stderr: $r.stderr, file: $file }
     })
+    mut compared = []
+    for s in $stats {
+        assert equal $s.exit 0 $"the handoff's statistics read the ($s.name) captures: ($s.stderr)"
+        $compared = ($compared | append (open $s.file))
+    }
+    let read = $compared
     assert equal ($read | get name) ($pairs | get name) $"every comparison read: ($read | get name)"
     let unmixed = ($read | where {|r| $r.kind == "partial" and $r.mixed_rows == 0 })
     assert ($unmixed | is-empty) $"under partial residency rows of the wall take the tiled picture's pixels and the lit one's both, its spans alternating hits and misses: none at ($unmixed | get name)"
