@@ -143,8 +143,8 @@ nothing, walls gaining and planes losing on the tile data's cache level
 20 to 21 with no binds, its remaining 7 ms the tile data); a floor's spans
 at yaw 0 walk across a tile's rows and read sixteen lines a block where
 four-by-four blocks or Morton order would read four. The pool's block
-lookup is a directory load and a tag compare a block, and TileLayout's
-experiment and TileClasses' planes measure against these.
+lookup is a directory load and a tag compare a block, and its tiles keep
+their texels in rows.
 
 ## .macro tile_wrote
 

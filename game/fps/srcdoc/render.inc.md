@@ -1245,7 +1245,7 @@ request.
 
 ## .set TILE_QUOTA
 
-`u64`: the texels a boundary's construction may build, 96 tiles at 32.
+`u64`: the texels a boundary's construction may build, 96 tiles.
 
 ## .set TILE_ALLOWANCE_US
 
@@ -1270,7 +1270,16 @@ request.
 
 ## .set TILE_CLASSES
 
-`u64`: the classes cached, the walls with their openings, the planes on the lit loop until TileClasses shows they gain: on the bay the atlas cache's planes cost 13.3 ms against 9.0 uncached, while its walls helped the stairwells.
+`u64`: the classes cached, the walls with their openings.
+
+On release batteries at a side of 64, interleaved, the walls alone drew the
+factory route with the fewest frames at or over 15 ms, 618 of 19,914, against
+733 with the planes cached too and 674 with no tile drawn. The planes' tiles
+lowered the raster's time on most legs, but their working set doubled the tiles
+evicted from the same pool and more than doubled the boundary's runs past its
+allowance, and the pressure leg's frames at or over 15 ms rose by half. Without
+tiles the view looking up drew 0.66 ms slower settled and its leg gathered
+nearly twice the frames at or over 15 ms, while the yard drew faster.
 
 ## .set SLOT_FREE
 
