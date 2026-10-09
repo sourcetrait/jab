@@ -566,7 +566,10 @@ gradients, and the row step's change a pixel, four divides a span. Every block t
 its level from its own step along the span and the row step interpolated
 along the span, the step's octave, under two texels level 0, under four 1,
 under eight 2, and so on, held under the chain's last, about twenty-five
-ops a block; a block on a READY tile reads it, and every other block reads
+ops a block; on a debug build the console's M frame's levels in
+level_raise are added before the hold, so a wall posed head-on at level 0
+is drawn at every level of its chain, the handoff's measurement. A block
+on a READY tile reads it, and every other block reads
 the texture's level through mip_bind: the level's
 texels from the table the bind named, the masks and the row shift shifted
 by the level, and the shift from a 16.16 coordinate to its texel at the
@@ -769,6 +772,10 @@ The end of the producer's scratch from `poly`, the poison's bound.
 ## packet_span_cap
 
 `u32`: on a debug build alone, the console's K frame's caps on a packet, the commands and the spans it holds, 0 for MAX_COMMANDS and SPAN_RECORDS.
+
+## level_raise
+
+`u8`: on a debug build alone, the console's M frame's levels every block's level is raised by, the chain's last at most, 0 for the block's own.
 
 ## raster_context
 

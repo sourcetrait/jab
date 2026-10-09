@@ -8,8 +8,9 @@ cadence chosen, W the raster's workers and grain chosen, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
 build the tile pool's knobs, B on a debug build every tile of a surface built
 at the next boundary, D on a debug build a surface's tiles read back over the
-API, J on a debug build the jobs' hold, cancel, and fault, Q on a CENSUS build
-the census's chunk, each reported back as REPORT_CONSOLE.
+API, M on a debug build every block's level raised, J on a debug build the
+jobs' hold, cancel, and fault, Q on a CENSUS build the census's chunk, each
+reported back as REPORT_CONSOLE.
 
 B and D are the builder's assertion's hands, a debug build's alone. B takes
 bytes 4 to 7 as a surface, kept plus one in tile_build_surface, and the next
@@ -19,8 +20,15 @@ wants them whole. D takes bytes 4 to 7 as a surface, all ones for every
 one, and writes every READY tile of it to the API at once, a dump record
 and its texel records (tile.S's tile_dump), the pool standing still
 between boundaries; its answer after the records closes the dump. The
-test's `build-frame` and `dump-frame` build them and `tile-dumps` reads the
-records.
+test's `build-frame` and `dump-frame` build them and tiles.nu's `dumps`
+reads the records.
+
+M is the handoff's hand, a debug build's alone: byte 4 the levels every
+block's level is raised by, the chain's last at most, 0 for the block's
+own, kept in level_raise and standing from the drawing of the frame that
+reads it (raster.S's The chain's level), so a wall posed head-on at level
+0 is drawn at every level of its chain. The test's `raise-frame` builds
+it.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
@@ -69,7 +77,9 @@ O is the tile pool's knob, on a debug build alone, a configuration of its
 own the next boundary puts in force and records (tile.S's The knobs): byte
 4 the modes, every one replaced, CONFIG_UNLIMITED the quota, the
 allowance, and the merge's share lifted, CONFIG_FROZEN construction
-frozen, CONFIG_STALE an eviction leaving its entries; bytes 8 to 11 the
+frozen, CONFIG_STALE an eviction leaving its entries, CONFIG_ONCE
+construction at the first boundary that merged a key and at none after
+while the configuration stands; bytes 8 to 11 the
 slots the pool may use, a change forgetting the pool; bytes 12 to 15 a
 tier's requests and 16 to 19 an open ring's entries, each held to the
 build's; bytes 20 to 23 the merge's share in microseconds; each 0 for the
@@ -141,7 +151,9 @@ on a CENSUS build either rewrite marks the census stale. O: every value
 pending, a 0 or one past the build's the build's own, the configuration
 marked changed, the trace set or cleared, and a cold start asked when byte
 6 is set. B: the surface plus one pending for the next boundary's build. D:
-the dump written before the answer. Q: the census's chunk from
+the dump written before the answer. M: byte 4 into raster.S's level_raise
+at once, the frame's drawing after the read taking it. Q: the census's
+chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.
 

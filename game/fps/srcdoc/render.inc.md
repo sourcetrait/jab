@@ -1983,7 +1983,7 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_FLAGS
 
-`u32`: CONFIG_UNLIMITED, CONFIG_FROZEN, and CONFIG_STALE.
+`u32`: CONFIG_UNLIMITED, CONFIG_FROZEN, CONFIG_STALE, and CONFIG_ONCE.
 
 ## .set CONFIG_GUARANTEE
 
@@ -2016,6 +2016,10 @@ consults no checkout. A changed capacity governs the admissions after it.
 ## .set CONFIG_STALE
 
 `u32`: the flag of a debug build's eviction leaving its entries, an O's.
+
+## .set CONFIG_ONCE
+
+`u32`: the flag of a debug build's construction at the first boundary that merged a key and at none after while the configuration stands, an O's.
 
 ## .set STORE_USED
 

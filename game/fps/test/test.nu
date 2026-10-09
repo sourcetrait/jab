@@ -336,6 +336,30 @@ const BUILDER_TRUNCATIONS = 8
 # render.inc's LUMAP_PLANES, map.inc's MAX_SECTORS twice: a wall's
 # surface is its index past them
 const LUMAP_PLANES = 2048
+# render.inc's TILE_SHIFT: a tile's side, 64 texels of its level
+const TILE_SHIFT = 6
+# The handoff's measurement (handoff-holds), the HANDOFF set running it
+# alone: the north room's long wall, HANDOFF_EDGE of its loop, given an
+# opaque white texture of the test's own, 64 square at half a repeat a
+# metre, 32 texels a metre, so a lumel cell is 16 texels, k 4, its chain
+# of 7 levels holding levels 0 to 3 below k, 4 at it, and 5 and 6 above,
+# and a tile of level 0 two metres of the wall, so its spans cross tiles
+# at the levels whose tiles are narrower than the wall seen, where the
+# grate wall is one tile wide; posed head-on HANDOFF_DISTANCE from it,
+# where every block of the wall reads level 0, each level of the chain
+# drawn by the console's M frame raising every block's level; under the
+# gradient and the parity lumels, the wall settled on its tiles under the
+# lift and drawn with them held off, and at the levels whose spans cross
+# tiles, drawn under partial residency, construction once on
+# HANDOFF_PARTIAL_SLOTS slots on the serial backend, the O frame sent
+# HANDOFF_ONCE_AFTER the first placement, so its spans alternate hits and
+# misses
+const HANDOFF_FIXTURE = { name: "texture/handofffix", size: 64, scale: 0.5 }
+const HANDOFF_EDGE = 6
+const HANDOFF_DISTANCE = 4.5
+const HANDOFF_LIGHTINGS = [gradient parity]
+const HANDOFF_PARTIAL_SLOTS = 1
+const HANDOFF_ONCE_AFTER = 300ms
 # The flow's growth: a map of the test's own (grow-source) where the
 # hall S is reached from the camera's room C first through a narrow
 # high window, two hops, and again through a side room T and its wide
@@ -466,6 +490,7 @@ const PACKET_CAPS = { commands: 7, spans: 500 }
 const POOL_LIFTED = 1
 const POOL_FROZEN = 2
 const POOL_STALE = 4
+const POOL_ONCE = 8
 const POOL_PLACE_AT = 1500ms
 const POOL_END_AT = 4500ms
 const POOL_ROTATION = { guarantee: 1, ring: 4, merge_us: 1, workers: 2, grain: 16 }
@@ -560,6 +585,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert (($assets | path exists)) "the sdk built the assets image"
     if ("CENSUS" in ($set | split row ",")) {
         census-holds $kernel $image $out $set ($env.FILE_PWD | path join ".." | path expand)
+        print "fps: ok"
+        return
+    }
+    if ("HANDOFF" in ($set | split row ",")) {
+        let game = ($env.FILE_PWD | path join ".." | path expand)
+        let read = (handoff-holds $kernel $image $out $set (open ($game | path join "content" "map" "render_1.nuon")) $game)
+        for r in $read {
+            let i = $r.inner
+            let partial = (if $r.kind == "partial" { $", from the nearer of the tiled and the lit ($r.residual.most) at most, ($r.residual.p99) at the 99th, ($r.mixed_rows) rows taking both" } else { "" })
+            print $"fps: the handoff, ($r.kind) against lit at level ($r.level) under the ($r.lighting) lumels: ($i.differing) of ($i.pixels) pixels differ, by ($i.most) at most, ($i.p99) at the 99th, ($i.mean | math round --precision 3) on average; past the last node ($r.clamped.pixels) pixels, by ($r.clamped.most) at most; ($r.left_out) left out($partial)"
+        }
         print "fps: ok"
         return
     }
@@ -1809,6 +1845,13 @@ def dump-frame [surface: int]: nothing -> binary {
     [("D" | into binary), 0x[00 00 00], ($surface | into binary | bytes at 0..<4), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
+# The console's M frame, a debug build's: every block's level raised by
+# byte 4 from the frame's drawing on, the chain's last at most, 0 for
+# the block's own.
+def raise-frame [levels: int]: nothing -> binary {
+    [("M" | into binary), 0x[00 00 00], ($levels | into binary | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
 # A view placed at PLACE_AT and again at SETTLE_AT, so the frame line
 # read, the second placement's, draws it settled on its tiles.
 def settled [placed: record]: nothing -> list<any> {
@@ -1837,8 +1880,10 @@ def packet-frame [commands: int, spans: int]: nothing -> binary {
 }
 
 # The console's O frame, a debug build's knobs on the tile pool, in force
-# from the next boundary: byte 4 the modes, POOL_LIFTED, POOL_FROZEN, and
-# POOL_STALE together, every one replaced; byte 5 every pass's surfaces
+# from the next boundary: byte 4 the modes, POOL_LIFTED, POOL_FROZEN,
+# POOL_STALE, and POOL_ONCE together, every one replaced, POOL_ONCE
+# building tiles at the first boundary that merged a key and at none
+# after; byte 5 every pass's surfaces
 # on the UART while set (`--trace`, pool-trace reads them); byte 6 a cold
 # start at the next boundary, every tile forgotten and the frame before's
 # requests discarded (`--cold`), so a view placed with it is drawn at
@@ -2387,6 +2432,23 @@ def builder-tree [source: record, game: path, out: path]: nothing -> string {
     $tree
 }
 
+# The handoff fixture's tree: the north room's long wall, HANDOFF_EDGE of
+# its loop, given an opaque white texture of HANDOFF_FIXTURE's size at its
+# scale, laid in, its other walls the room's own; the tree's path.
+def handoff-tree [source: record, game: path, out: path]: nothing -> string {
+    let north = ($source.sectors | enumerate | where {|s| $s.item.name == "north" } | get 0.index)
+    let sector = ($source.sectors | get $north)
+    let scale = $HANDOFF_FIXTURE.scale
+    let long = ($sector.wall | select anchor solid masked sky tag | merge { loop: 0, edge: $HANDOFF_EDGE, material: ($HANDOFF_FIXTURE.name | path basename), scale: [$scale, $scale], offset: [0.0, 0.0] })
+    let fixed = ($source | update sectors ($source.sectors | update $north ($sector | update walls ($sector.walls | append $long))))
+    let tree = (variant-tree $fixed $FIXTURE_MAP [android] $out $game)
+    let file = ($tree | path join (map tile-path $HANDOFF_FIXTURE.name | str substring 1..))
+    mkdir ($file | path dirname)
+    let size = $HANDOFF_FIXTURE.size
+    png write-rgba $file $size $size (0..<($size * $size) | each {|i| 0x[ff ff ff ff] } | bytes collect)
+    $tree
+}
+
 # A wall's lumel map as lumap_frame lays it (light.S): k the exponent of
 # the power of two nearest the texels in half a metre along u, a cell 2^k
 # texels; U0 and V0 a texel before the least u and v, aligned down to
@@ -2437,7 +2499,7 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     let levels = (chain-levels $size $size)
     assert ($frame.k > 0 and $frame.k < ($levels - 1)) $"the fixture's k, ($frame.k), leaves levels below, at, and above it in its chain of ($levels)"
     let grid = (0..<$levels | each {|l|
-        let span = (1 bit-shl ($l + 6))
+        let span = (1 bit-shl ($l + $TILE_SHIFT))
         let across = ((($frame.w bit-shl $frame.k) + $span - 1) // $span)
         let down = ((($frame.h bit-shl $frame.k) + $span - 1) // $span)
         0..<$down | each {|ty| 0..<$across | each {|tx| { level: $l, tx: $tx, ty: $ty } } } | flatten
@@ -2490,6 +2552,131 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     let untold = ($by_level | where telling == 0)
     assert ($untold | is-empty) $"texels where a light at the corner reads past twice the rounding at every level: none at levels ($untold | get level)"
     { tiles: ($grid | length), levels: $levels, k: $frame.k, w: $frame.w, h: $frame.h, by_level: $by_level }
+}
+
+# The handoff's measurement on the handoff fixture's tree, the wall posed
+# head-on: under each of HANDOFF_LIGHTINGS and at every level of its
+# chain by the M frame, the wall settled on its tiles under the lift, and
+# with the tiles held off, the lit loop's picture; at the levels whose
+# tiles the wall's spans cross on the screen, under partial residency
+# too, the O frame's ONCE construction on HANDOFF_PARTIAL_SLOTS slots on
+# the serial backend. Each run's frame line, the second placement's, held:
+# the wall drawn from settled tiles, from none held off, and under partial
+# residency from the slots built once, fewer blocks than settled. Each
+# picture held to the lit one over the wall's rows and columns on the
+# screen inset by FIXTURE_INSET, the crosshair's square left out, by
+# tiles.nu's handoff in a nu of its own: each pixel's greatest channel
+# difference, of 255, as its pixels, those differing, the most, the 99th,
+# and the mean, the pixels whose texel's light is clamped at the last node
+# apart; under partial residency each pixel's difference from the nearer
+# of the tiled and the lit pictures, and rows taking pixels nearer each,
+# the spans alternating hits and misses. Returns every comparison.
+export def handoff-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> list<any> {
+    let tree = (handoff-tree $source $game ($out | path join "handoff"))
+    let m = (map read ($tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
+    let material = ($m.materials | enumerate | where {|e| $e.item.name == $HANDOFF_FIXTURE.name } | get 0.index)
+    let found = ($m.walls | where {|w| $w.surface.material == $material })
+    assert equal ($found | length) 1 $"one wall carries the handoff fixture: ($found | length)"
+    let wall = ($found | get 0)
+    let s = $wall.surface
+    let size = $HANDOFF_FIXTURE.size
+    let frame = (wall-lumap $m $wall $size $size)
+    let levels = (chain-levels $size $size)
+    assert ($frame.k > 0 and $frame.k < ($levels - 2)) $"the fixture's k, ($frame.k), leaves levels below it, at it, and two above it in its chain of ($levels)"
+    let a = ($m.vertices | get $wall.a)
+    let b = ($m.vertices | get $wall.b)
+    let len = ((($b.x - $a.x) ** 2 + ($b.y - $a.y) ** 2) | math sqrt)
+    let e = [(($b.x - $a.x) / $len), (($b.y - $a.y) / $len)]
+    assert ((($e.0 + 1.0) | math abs) < 0.000001 and ($e.1 | math abs) < 0.000001) $"the fixture's wall runs along -x with the room on its -y side, so yaw 90 faces it: ($e)"
+    let d = $HANDOFF_DISTANCE
+    let eye = { x: (($a.x + $b.x) / 2), y: ($a.y - $d), z: $EYE_HEIGHT }
+    let step = ($size * $s.u_scale * $d / 960)
+    assert ($step < 2) $"the handoff pose reads level 0 by the block's rule at ($step) texels a pixel"
+    let sector = ($m.sectors | get $wall.sector)
+    let top = ([(map plane-z $sector.ceiling $a.x $a.y), (map plane-z $sector.ceiling $b.x $b.y)] | math max)
+    let bottom = ([(map plane-z $sector.floor $a.x $a.y), (map plane-z $sector.floor $b.x $b.y)] | math min)
+    # head-on at yaw 90 a pixel's column is a world x on the wall's line
+    # and its row a height, each a texel coordinate from the map's first
+    # node linear in the pixel
+    let u_at = {|x: number|
+        let along = ((($eye.x + (((($x + 0.5) - 960) / 960) * $d)) - $a.x) * $e.0)
+        ((($along * $s.u_scale) + $s.u_offset) * $size) - $frame.u0
+    }
+    let v_at = {|y: number|
+        let z = ($eye.z - (((($y + 0.5) - 540) / 960) * $d))
+        (((($wall.anchor - $z) * $s.v_scale) + $s.v_offset) * $size) - $frame.v0
+    }
+    let ends = ([$a.x, $b.x] | each {|x| 960 + ((($x - $eye.x) / $d) * 960) })
+    let rect = [
+        ([((($ends | math min) | math ceil | into int) + $FIXTURE_INSET), $FIXTURE_INSET] | math max)
+        ([(((540 - ((($top - $eye.z) / $d) * 960)) | math ceil | into int) + $FIXTURE_INSET), $FIXTURE_INSET] | math max)
+        ([((($ends | math max) | math floor | into int) - $FIXTURE_INSET), (1920 - $FIXTURE_INSET)] | math min)
+        ([(((540 + ((($eye.z - $bottom) / $d) * 960)) | math floor | into int) - $FIXTURE_INSET), (1080 - $FIXTURE_INSET)] | math min)
+    ]
+    let seen = [(do $u_at $rect.0), (do $u_at ($rect.2 - 1))]
+    let crossing = (0..<$levels | each {|l|
+        let side = (1 bit-shl ($l + $TILE_SHIFT))
+        if ((($seen | math min) / $side) | math floor) != ((($seen | math max) / $side) | math floor) { $l } else { null }
+    } | compact)
+    assert (0 in $crossing) $"the wall's spans cross tiles of level 0 on the screen: ($seen) texels from the map's first node"
+    let place = { name: "handoff", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 90, pitch: 0 }
+    let disk = (romfs $tree ($out | path join "handoff.romfs"))
+    let launch = {|name: string, sends: list<any>|
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send ($sends | append (settled $place) | sort-by at) --capture 3500ms --seconds 5)
+        let label = $"the handoff's ($name)"
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+        let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
+        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
+        let line = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+        assert ($line.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($line)"
+        assert ($run.screen != "") $"a screen was taken on ($label)"
+        { screen: $run.screen, frame: $line }
+    }
+    let pairs = ($HANDOFF_LIGHTINGS | each {|lighting|
+        let light = {|held: bool| if $lighting == "gradient" { level-frame false $held --gradient } else { level-frame false $held --parity } }
+        0..<$levels | each {|l|
+            let label = $"at level ($l) under the ($lighting) lumels"
+            let lit = (do $launch $"($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l) }])
+            assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
+            let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l) }])
+            assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
+            let both = [{ name: $"($lighting)_($l)_tiled", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" }]
+            if $l not-in $crossing { $both } else {
+                # the O after the placement, never with it: two writes at
+                # one time can land in two console reads, and an O read
+                # first builds its one construction from the view before
+                let partial = (do $launch $"($lighting)_($l)_partial" [
+                    { at: 1300ms, bytes: (gauge workers-frame 0 0) }
+                    { at: 1400ms, bytes: (do $light false) }
+                    { at: 1400ms, bytes: (raise-frame $l) }
+                    { at: ($PLACE_AT + $HANDOFF_ONCE_AFTER), bytes: (pool-frame --modes ($POOL_LIFTED + $POOL_ONCE) --cold --slots $HANDOFF_PARTIAL_SLOTS) }
+                ])
+                let f = $partial.frame
+                assert ($f.tiles_built == 0 and $f.slots == $HANDOFF_PARTIAL_SLOTS and $f.tiled > 0 and $f.tiled < $tiled.frame.tiled) $"the wall drawn under partial residency ($label), ($HANDOFF_PARTIAL_SLOTS) slots built once and some of its blocks read from them, fewer than settled: ($f | select tiles_built slots tiled) against ($tiled.frame.tiled)"
+                $both | append { name: $"($lighting)_($l)_partial", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen }
+            }
+        } | flatten
+    } | flatten)
+    let spec = {
+        rect: $rect, crosshair: $FIXTURE_CROSSHAIR, k: $frame.k, w: $frame.w, h: $frame.h,
+        u: [(do $u_at 0), ((do $u_at 1) - (do $u_at 0))], v: [(do $v_at 0), ((do $v_at 1) - (do $v_at 0))],
+        pairs: $pairs,
+    }
+    let spec_file = ($out | path join "handoff_spec.nuon")
+    $spec | to nuon | save -f $spec_file
+    let tiles = ($game | path join "test" "tiles.nu")
+    # a pair a nu, the nus side by side, each comparison's per-pixel work
+    # in a nu of its own
+    let read = ($pairs | enumerate | par-each --keep-order {|e|
+        let file = ($out | path join $"handoff_stats_($e.index).nuon")
+        let stats = (^nu $tiles handoff $spec_file $e.index $file | complete)
+        assert equal $stats.exit_code 0 $"the handoff's statistics read the ($e.item.name) captures: ($stats.stderr)"
+        open $file
+    })
+    assert equal ($read | get name) ($pairs | get name) $"every comparison read: ($read | get name)"
+    let unmixed = ($read | where {|r| $r.kind == "partial" and $r.mixed_rows == 0 })
+    assert ($unmixed | is-empty) $"under partial residency rows of the wall take the tiled picture's pixels and the lit one's both, its spans alternating hits and misses: none at ($unmixed | get name)"
+    $read
 }
 
 # The level of a run's recording between two seconds: the peak and the

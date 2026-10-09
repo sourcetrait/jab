@@ -389,6 +389,21 @@ tile_boundary:
     ld t1, 0(t0)
     andi t1, t1, CONFIG_FROZEN
     bnez t1, 3f
+.ifdef DEBUG
+    la t0, tile_flags
+    ld t1, 0(t0)
+    andi t1, t1, CONFIG_ONCE
+    beqz t1, 23f
+    la t0, tile_once_done
+    lbu t1, 0(t0)
+    bnez t1, 3f                     # the ONCE mode's one construction done: none after
+    la t1, tile_merged_count
+    ld t1, 0(t1)
+    beqz t1, 23f                    # nothing merged: not yet
+    li t1, 1
+    sb t1, 0(t0)                    # this boundary's construction its one
+23:
+.endif
     rdtime s3
 .ifdef DEBUG
     call tile_build_all             # a B frame's surface, every tile of it
@@ -454,6 +469,10 @@ tile_configure:
     lbu t1, 0(t0)
     beqz t1, 9f
     sb zero, 0(t0)
+.ifdef DEBUG
+    la t0, tile_once_done
+    sb zero, 0(t0)                  # a new configuration's ONCE builds once again
+.endif
     la t0, tile_pending_effective
     ld t1, 0(t0)
     la t0, tile_effective
@@ -2668,6 +2687,8 @@ tile_trace_merged:
 tile_trace:
     .skip 1
 tile_cold:
+    .skip 1
+tile_once_done:
     .skip 1
 .balign 8
 tile_build_surface:

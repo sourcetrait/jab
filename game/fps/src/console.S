@@ -221,7 +221,7 @@ console_frame:
     li t1, 'O'
     bne t0, t1, 149f
     lbu t1, 4(s2)
-    andi t1, t1, (CONFIG_UNLIMITED | CONFIG_FROZEN | CONFIG_STALE)
+    andi t1, t1, (CONFIG_UNLIMITED | CONFIG_FROZEN | CONFIG_STALE | CONFIG_ONCE)
     la t2, tile_pending_flags
     sd t1, 0(t2)                    # the modes, every one
     lwu t1, 8(s2)
@@ -281,9 +281,16 @@ console_frame:
     j 8f
 150:
     li t1, 'D'
-    bne t0, t1, 15f
+    bne t0, t1, 151f
     lwu a0, 4(s2)
     call tile_dump                  # the surface's tiles, or every one's, on the API now
+    j 8f
+151:
+    li t1, 'M'
+    bne t0, t1, 15f
+    lbu t1, 4(s2)
+    la t2, level_raise
+    sb t1, 0(t2)                    # every block's level raised by it from this frame's drawing
     j 8f
 15:
     li t1, 'J'

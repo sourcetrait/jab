@@ -1625,6 +1625,14 @@ span_fill:
     srli a7, a7, 1
     j 434b
 435:
+.ifdef DEBUG
+    la a7, level_raise
+    lbu a7, 0(a7)
+    add a6, a6, a7                  # an M frame's raise
+    bleu a6, a0, 436f
+    mv a6, a0                       # the chain's last at most
+436:
+.endif
     sd a6, 192(sp)                  # the block's level
     li t4, 0                        # the pixels past the depth test this block
 .ifdef CENSUS
@@ -2238,6 +2246,9 @@ packet_command_cap:
     .skip 4
 packet_span_cap:
     .skip 4
+level_raise:
+    .skip 1
+.balign 4
 .endif
 .balign 64
 raster_context:

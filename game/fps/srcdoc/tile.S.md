@@ -89,7 +89,10 @@ A debug build's console O frame, in force from the next boundary as a
 configuration of its own, recorded: the modes (CONFIG_UNLIMITED, the
 lift; CONFIG_FROZEN, no construction; CONFIG_STALE, an eviction leaving
 the entry that names its slot, the stale reference the generation check
-exists for), the effective slots, a change forgetting the pool so its free
+exists for; CONFIG_ONCE, construction at the first boundary that merged a
+key and at none after while the configuration stands, so a cap under a
+view's demand leaves its residency fixed and partial, the handoff's
+measurement), the effective slots, a change forgetting the pool so its free
 slots are the cap's, the guarantee and the ring within the build's, and
 the merge's share in microseconds, each 0 for the build's own. Its byte 6
 is a cold start: every tile forgotten and the frame before's batch
@@ -204,7 +207,9 @@ share's, and the quota, all past reach under the lift), the batch and its
 merge, the fold, construction unless frozen, a debug build's B frame's
 surface built whole ahead of it, the discard, the frame's stamp, the
 occupancy. A debug build's cold start discards the batch in
-place of its merge and builds nothing. Its whole time is STAT_TILE_TICKS,
+place of its merge and builds nothing, and under CONFIG_ONCE the first
+boundary with keys merged marks tile_once_done and constructs, and every
+boundary after skips construction as a frozen one does. Its whole time is STAT_TILE_TICKS,
 the draw record's `tiles_us`, a part of the drawing beside the others;
 the construction's within it is STAT_TILE_BUILD_TICKS, and the time past
 the allowance STAT_TILE_OVERRUN. The trace prints after the time is
@@ -232,7 +237,9 @@ the configuration each frame ran under, a debug cap's or another
 TILE_SIDE's build alike. A changed limit governs the admissions after it,
 while the boundary consumes the frame before's batch by that batch's own
 counts. A new slot cap forgets the pool, so no slot past the cap holds a
-tile; the merge's share goes in the record's CONFIG_MERGE.
+tile; the merge's share goes in the record's CONFIG_MERGE. On a debug
+build a new configuration clears tile_once_done, so its CONFIG_ONCE builds
+once again.
 
 ## tile_batch
 
@@ -648,7 +655,7 @@ record's past the tile zero), the schema in each. The test's
 
 ## tile_flags
 
-`u64`: the configuration in force's flags, CONFIG_UNLIMITED, CONFIG_FROZEN, and a debug build's CONFIG_STALE.
+`u64`: the configuration in force's flags, CONFIG_UNLIMITED, CONFIG_FROZEN, and a debug build's CONFIG_STALE and CONFIG_ONCE.
 
 ## tile_guarantee
 
@@ -745,6 +752,10 @@ record's past the tile zero), the schema in each. The test's
 ## tile_cold
 
 `u8`: 1 when an O frame asks a cold start at the next boundary.
+
+## tile_once_done
+
+`u8`: on a debug build alone, 1 once a CONFIG_ONCE configuration's one construction is done, cleared by the next configuration.
 
 ## tile_build_surface
 
