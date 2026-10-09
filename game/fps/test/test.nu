@@ -2928,17 +2928,35 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let s5 = (gauge stream (fx-bytes $distinct5))
     assert equal ($s5.tiles | get 2 | reject frame schema) { admitted: 101, dropped: 102, filtered: 103, batch_source: 104, batch_admitted: 105, merged: 106, unprocessed: 107, evicted: 108, build_us: 109, overrun_us: 110, hit_blocks: 111, straddling_blocks: 112, missed_blocks: 113 } "frame 2's tile record read at its offsets, every field a distinct value"
     assert equal ($s5.storages | get 2 | reject frame schema) { slots_used: 201, slots_effective: 202, building: 203, ring_fill: 204, requesting: 205, merge_entries: 206, memory: 207, memory_peak: 208 } "frame 2's storage record read at its offsets, every field a distinct value"
-    assert equal ($s5.configs | get 0 | reject schema) { merge_us: 301, from: 302, tile_shift: 303, tile_size: 304, slots: 305, config_effective: 306, quota: 307, allowance_us: 308, config_flags: 309, guarantee: 310, ring: 311, recent: 312, directory_bytes: 313, tile_memory: 314 } "the configuration record read at its offsets, every field a distinct value"
+    assert equal ($s5.configs | get 0 | reject schema) { merge_us: 301, from: 302, tile_shift: 303, tile_size: 304, slots: 305, config_effective: 306, quota: 307, allowance_us: 308, config_flags: 309, guarantee: 310, ring: 311, recent: 312, directory_bytes: 313, tile_memory: 314, arrival_states: 0, arrival_frames: 0 } "the configuration record read at its offsets, every field a distinct value, with its arrival"
+    # a configuration arriving other than after exactly `from` state
+    # records and `from` frame records, the boundary of the first frame it
+    # governs: late behind three complete frames, after its frame's state
+    # record and before that frame's clock records, and two frames early,
+    # each refused for that alone, ahead of the window's cases, which
+    # assert the arrival in passing
+    let unconfigured5 = ($good5 | where kind != "config")
+    let ended5 = ($unconfigured5 | enumerate | where {|e| $e.item.kind == "end" } | get 0.index)
+    let arrival_says = "1 configurations of the tile pool arriving other than at the first frame they govern"
+    let arrival5 = [
+        { name: "a configuration three frames late", items: ($unconfigured5 | insert $ended5 (fx-config 0)), says: $"($arrival_says): from 0 after 3 state and 3 frame records" }
+        { name: "a configuration after its frame's state", items: (fx-late $unconfigured5 (fx-config 0)), says: $"($arrival_says): from 0 after 1 state and 0 frame records" }
+        { name: "a configuration two frames early", items: (fx-early $good5 (fx-config 2)), says: $"($arrival_says): from 2 after 0 state and 0 frame records" }
+    ]
+    for c in $arrival5 {
+        let mc = (do $measure $c.items)
+        assert ((not $mc.complete) and $mc.problems == [$c.says]) $"($c.name) is refused for that alone: ($mc.problems)"
+    }
     let window5 = [
-        { name: "a frame without its tile record", items: ($good5 | where {|i| not ($i.kind == "tile" and $i.frame == 1) }), says: "2 tile records before the end marker for 3 frames" }
-        { name: "a frame without its storage record", items: ($good5 | where {|i| not ($i.kind == "storage" and $i.frame == 1) }), says: "2 storage records before the end marker for 3 frames" }
-        { name: "no configuration of the tile pool", items: ($good5 | where kind != "config"), says: "frames before any configuration of the tile pool: the first from frame none" }
-        { name: "a configuration from frame 1", items: (fx-set-config $good5 { from: 1 }), says: "frames before any configuration of the tile pool: the first from frame 1" }
-        { name: "a tile record at schema 4", items: (fx-set $good5 "tile" 1 { schema: 4 }), says: "clock records at schemas 4 in a capture at schema 5" }
+        { name: "a frame without its tile record", items: ($good5 | where {|i| not ($i.kind == "tile" and $i.frame == 1) }), says: ["2 tile records before the end marker for 3 frames"] }
+        { name: "a frame without its storage record", items: ($good5 | where {|i| not ($i.kind == "storage" and $i.frame == 1) }), says: ["2 storage records before the end marker for 3 frames"] }
+        { name: "no configuration of the tile pool", items: ($good5 | where kind != "config"), says: ["frames before any configuration of the tile pool: the first from frame none"] }
+        { name: "a configuration from frame 1", items: (fx-set-config $good5 { from: 1 }), says: ["frames before any configuration of the tile pool: the first from frame 1" "1 configurations of the tile pool arriving other than at the first frame they govern: from 1 after 0 state and 0 frame records"] }
+        { name: "a tile record at schema 4", items: (fx-set $good5 "tile" 1 { schema: 4 }), says: ["clock records at schemas 4 in a capture at schema 5"] }
     ]
     for c in $window5 {
         let mc = (do $measure $c.items)
-        assert ((not $mc.complete) and ($c.says in $mc.problems)) $"($c.name) leaves the window incomplete: ($mc.problems)"
+        assert ((not $mc.complete) and ($c.says | all {|x| $x in $mc.problems })) $"($c.name) leaves the window incomplete: ($mc.problems)"
     }
     let alone5 = (do $measure ($good5 | where {|i| $i.kind in ["ack" "cack" "state" "tile" "storage" "config"] }))
     assert ($alone5.clocked and $alone5.schema == 5 and (not $alone5.complete)) $"states with the tile pool's records alone are clocked at schema 5 and incomplete: ($alone5.schema) ($alone5.problems)"

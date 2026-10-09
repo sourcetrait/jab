@@ -1100,7 +1100,8 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # microseconds or a count, a packet record's workers, grain, and round
 # times from its schema 4 and null below it, the tile, storage, and
 # configuration records, kinds 13, 15, and 14, a configuration's frame
-# the first it governs, and the marker, kind 9, with
+# the first it governs and its arrival, the state records and the frame
+# records that came before it, and the marker, kind 9, with
 # its frame and schema, null when none came. What follows the marker is
 # outside the measurement: its state records are counted as `past` and
 # nothing else in it is read.
@@ -1203,6 +1204,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 config_effective: (u32-at $r 24), quota: (u32-at $r 28), allowance_us: (u32-at $r 32),
                 config_flags: (u32-at $r 36), guarantee: (u32-at $r 40), ring: (u32-at $r 44), recent: (u32-at $r 48),
                 directory_bytes: (u32-at $r 52), tile_memory: (u32-at $r 56), schema: (u32-at $r 60),
+                arrival_states: ($states | length), arrival_frames: ($frames | length),
             })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
@@ -1338,7 +1340,12 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 # one too many, the presentation records counted from schema 2, the
 # packet records from schema 3, and the tile and storage records at
 # schema 5, where a frame with no configuration in force, none from it
-# or before, leaves the window incomplete too.
+# or before, leaves the window incomplete too, as does a configuration
+# arriving other than after exactly `from` state records and `from` frame
+# records: the program writes one at the boundary of the first frame it
+# governs, after the frame before's records and before that frame's state
+# record, so a later one governed frames it followed and an earlier one
+# names a frame not begun.
 def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<string> {
     mut problems = []
     if $s.end == null {
@@ -1363,6 +1370,11 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
         let froms = ($s.configs | each {|c| $c.from })
         let first = (if ($froms | is-empty) { null } else { $froms | math min })
         if $first == null or $first > 0 { $problems = ($problems | append $"frames before any configuration of the tile pool: the first from frame ($first | default 'none')") }
+        let arriving = ($s.configs | where {|c| $c.arrival_states != $c.from or $c.arrival_frames != $c.from })
+        if ($arriving | is-not-empty) {
+            let named = ($arriving | each {|c| $"from ($c.from) after ($c.arrival_states) state and ($c.arrival_frames) frame records" } | str join "; ")
+            $problems = ($problems | append $"($arriving | length) configurations of the tile pool arriving other than at the first frame they govern: ($named)")
+        }
     }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
     let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
@@ -1565,7 +1577,7 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let governing = (if $at >= 5 { $s.configs | where {|x| $x.from <= $st.frame } } else { [] })
         let pool = ((if $t == null { tileless } else { $t | reject frame schema })
             | merge (if $o == null { storageless } else { $o | reject frame schema })
-            | merge (if ($governing | is-empty) { configless } else { $governing | last | reject schema }))
+            | merge (if ($governing | is-empty) { configless } else { $governing | last | reject schema arrival_states arrival_frames }))
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
