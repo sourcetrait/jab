@@ -1884,9 +1884,16 @@ def pool-holds [kernel: path, image: path, out: path, set: string, disk: path, l
     } | where {|w| $w.asked + $most < $last_pass })
     let late = ($waits | where {|w| $w.built == null or ($w.built - $w.asked) > $most })
     assert ($late | is-empty) $"every surface requesting under the rotation built within ($most) frames of its first request, the most one pass found: ($late | first 5)"
+    # a surface leads two passes running only after a pass that merged
+    # every requesting surface: a pass whose share runs out on the last
+    # surface of a wrapped scan resumes past it, and its first may lead
+    # again, every surface merged
     let starts = ($passes | where {|p| ($p.merged | length) > 0 })
-    let repeated = ($starts | window 2 | where {|w| ($w.1.requesting | length) >= 2 and $w.0.merged.0.surface == $w.1.merged.0.surface })
-    assert ($repeated | is-empty) $"the merge's start moved on at every pass while two or more surfaces requested: ($repeated | first 2 | each {|w| $w.1.frame })"
+    let repeated = ($starts | window 2 | where {|w|
+        let left = ($w.0.requesting | where {|s| $s not-in ($w.0.merged | get surface) })
+        ($w.1.requesting | length) >= 2 and $w.0.merged.0.surface == $w.1.merged.0.surface and ($left | is-not-empty)
+    })
+    assert ($repeated | is-empty) $"the merge's start moved on at every pass after one that left a requesting surface unmerged: ($repeated | first 2 | each {|w| $w.1.frame })"
     let over = ($passes | each {|p| $p.merged | where {|m| $m.keys > ($POOL_ROTATION.guarantee * $TILE_CONTEXTS) } | each {|m| { frame: $p.frame, merged: $m } } } | flatten)
     assert ($over | is-empty) $"no surface merged past its tier of ($POOL_ROTATION.guarantee) in every context across the bands and the flushes: ($over | first 3)"
     let rotated = ($rotation.rows | where {|r| $r.frame > $rotation.cold })
