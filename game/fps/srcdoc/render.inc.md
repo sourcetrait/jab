@@ -1174,13 +1174,16 @@ A raster context's bytes, the counts span_fill keeps, the tile pool's fields, an
 
 ## .set TILE_SIDE
 
-`u64`: a tile's texels a side as a shift, and the side, 32.
+`u64`: a tile's texels a side as a shift, and the side, 64.
 
 The tile pool (tile.S) caches the lit texture a tile at a time: a tile is
 TILE_SIDE texels square at one level of the material's chain, in the surface's
 lumel frame. The census shortlisted 32 and 64 from the tiles each would ask
-and the pixels each would leave straddling, and 32 starts; TileSize chooses
-between the two on release measurements.
+and the pixels each would leave straddling. On release batteries interleaved
+between the two, 64 drew every settled view and every played leg of the
+factory route faster, by 0.14 to 0.86 ms at the median, its boundary half
+32's on a steady frame, its cold under an L's lift up to 3 ms longer on five
+views of seven.
 
 ## .set TILE_ROW_SHIFT
 
@@ -1190,16 +1193,16 @@ between the two on release measurements.
 
 ## .set TILE_BYTES
 
-`u64`: a tile's bytes as a shift, and the bytes, 4 KiB at 32.
+`u64`: a tile's bytes as a shift, and the bytes, 16 KiB at 64.
 
 ## .set TILE_POOL_BYTES
 
 `u64`: the pool's bytes, every slot a tile.
 
 32 MiB holds the census's 30-frame working set of the walls with their
-openings at its 95th percentile, 5,891 to 6,575 tiles at 32, in 8,192 slots,
-where 16 MiB's 4,096 hold it on no route; the working set's peaks pass 8,192,
-so eviction stays in play. The cap is read again from measured occupancy.
+openings at its 95th percentile, 1,750 tiles at 64 at two workers, in 2,048
+slots; the working set's peaks, 2,650, pass them, so eviction stays in play,
+and in play the pool fills. The cap is read again from measured occupancy.
 
 ## .set TILE_SLOTS
 
@@ -1207,25 +1210,25 @@ so eviction stays in play. The cap is read again from measured occupancy.
 
 ## .set TILE_DIRECTORY_ENTRIES
 
-`u64`: the directory's entries, a u32 each, every mapped surface's grid at every level of its chain; a surface whose grids would pass them stays uncached, counted. Render Zero takes 384,445 at 32.
+`u64`: the directory's entries, a u32 each, every mapped surface's grid at every level of its chain; a surface whose grids would pass them stays uncached, counted. Render Zero takes 98,445 at 64.
 
 ## .set TILE_GUARANTEE
 
 `u64`: the requests a context admits for one surface in a frame before its open ring takes them.
 
-16 at 32: the census's median requesting surface asked 12 distinct tiles in
-a context's frame, rounded up to a power of two, so the typical surface's
-frame is guaranteed whole. Provisional until AdmissionMeasure reads the
-admission itself.
+8 at 64: the census's median requesting surface asked 6 distinct tiles in a
+context's frame, rounded up to a power of two, so the typical surface's frame
+is guaranteed whole. The admission measured on the census's routes at two
+workers and none dropped no request.
 
 ## .set TILE_RING
 
 `u64`: a context's open ring, the requests past the guaranteed tiers.
 
-4,096 at 32: the census's worst context held 2,170 distinct tiles past the
-guarantee over every frame of both routes and backends, rounded up to a power
-of two. That fill counts distinct tiles, every repeat assumed filtered, so the
-ring is provisional with TILE_GUARANTEE.
+1,024 at 64, the census's size for 64 from its distinct tiles past the
+guarantee, rounded up to a power of two. The admission measured on the
+census's routes, repeats and all, filled it to 403 at most and dropped no
+request.
 
 ## .set TILE_RECENT_SHIFT
 ## .set TILE_RECENT

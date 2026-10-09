@@ -447,7 +447,7 @@ const POOL_PLACE_AT = 1500ms
 const POOL_END_AT = 4500ms
 const POOL_ROTATION = { guarantee: 1, ring: 4, merge_us: 1, workers: 2, grain: 16 }
 const TILE_CONTEXTS = 3
-# the stale entries' cap, under the 669 tiles the spawn view asks, so
+# the stale entries' cap, under the 272 tiles the spawn view asks, so
 # every pass evicts and builds, and the capture's time, past the E since
 # a capture ends its run
 const POOL_STALE_SLOTS = 64
@@ -1323,7 +1323,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert (($level_pairs | where {|p| $p.0.shows != $p.1.shows } | length) > 0) "a uniform patch's pass differs at level 1 from level 0, so the scale is exercised"
     # past the old four: the texture at FIXTURE_DEEP's scale on a second
     # tree, levels 3 to 6 by the block's rule, a level-6 tile holding its
-    # 4 by 4 texels eight times over as the chain's masks wrap them; tiled
+    # 4 by 4 texels sixteen times over as the chain's masks wrap them; tiled
     # and held off under the bright frame, identical over the opening
     let deep_tree = (alpha-tree $render_1_source $game ($out | path join "alpha_deep") --scale $FIXTURE_DEEP.scale)
     let deep_read = (map read ($deep_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
@@ -3974,7 +3974,9 @@ def fx-storage [frame: int]: nothing -> record {
 }
 
 # A configuration record's fields for a synthetic capture, in force from
-# `from`: the build's own, TILE_SIDE 32 in 32 MiB.
+# `from`: a pool of 32-texel tiles in 32 MiB, the synthetic captures' own
+# whatever the build's side, since the rules read a capture's records
+# against each other.
 def fx-config [from: int]: nothing -> record {
     {
         kind: "config", merge: 250, from: $from, shift: 5, size: $FX_TILE, slots: $FX_SLOTS, effective: $FX_SLOTS,
