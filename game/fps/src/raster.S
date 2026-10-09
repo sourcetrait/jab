@@ -1777,7 +1777,7 @@ span_fill:
 446:
     lumel_sample
     ld t3, 160(sp)                  # the brightness at the interval's start
-    sd a5, 160(sp)                  # its end sample, the next interval's start
+    sd a5, 264(sp)                  # its end sample, the next interval's start once it ends
     ld a0, 176(sp)
     addi a0, a0, 1
     sd a0, 176(sp)
@@ -1942,8 +1942,12 @@ span_fill:
     bnez t2, 55b
 61:
     ld t5, 152(sp)
-    beqz t5, 60f
-    sd t3, 160(sp)
+    beqz t5, 611f
+    sd t3, 160(sp)                  # carried into the next block of its interval
+    j 60f
+611:
+    ld t5, 264(sp)
+    sd t5, 160(sp)                  # the interval over: its exact end sample
     j 60f
 80:
     ld a0, CTX_TILE_HITS(tp)

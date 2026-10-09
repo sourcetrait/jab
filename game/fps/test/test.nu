@@ -314,6 +314,12 @@ const CENTRE_LIGHTS = [0.25, 1.0]
 const CENTRE_DISTANCE = 2.0
 const CENTRE_SLACK = 2
 const CENTRE_FOOTPRINT = 3
+# The lit loop held continuous on the same held-off run: along every row
+# of the opening, the crosshair's square out, each pixel within
+# CENTRE_STEP of the one beside it, the parity's light changing under one
+# of 255 a pixel here; a lit interval starting from the light a block
+# before its own steps by about 16
+const CENTRE_STEP = 4
 # The builder's assertion (builder-holds): the fixture's wall given an
 # opaque texture of the test's own, 64 square at a quarter repeat a
 # metre, 16 texels a metre, so a lumel cell is 8 texels, k 3, and its
@@ -1471,7 +1477,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the lit loop, lighting each pixel at its own coordinate, does not:
     # the held-off run's same pixels vary, proving the tiled reading came
     # from the tiles; the samples' own arithmetic putting a texel lit at
-    # its corner past the slack beside dark and bright nodes alike
+    # its corner past the slack beside dark and bright nodes alike; and
+    # the held-off run continuous along its rows, each lit interval
+    # starting from the exact end sample of the one before
     let centre_tree = (centre-tree $render_1_source $game ($out | path join "centre"))
     let centre_read = (map read ($centre_tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
     let centre_material = ($centre_read.materials | enumerate | where {|m| $m.item.name == $CENTRE_FIXTURE.name } | get 0.index)
@@ -1488,6 +1496,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let centre_disk = (romfs $centre_tree ($out | path join "centre.romfs"))
     let centre_placed = { name: "centre", x: $centre_eye.x, y: $centre_eye.y, z: $centre_eye.z, yaw: 0, pitch: 0 }
     mut centre_runs = {}
+    mut centre_screens = {}
     for mode in [tiled held] {
         let sends = ([{ at: 1400ms, bytes: (level-frame false ($mode == "held") --parity) }] | append (settled $centre_placed))
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"centre_($mode)") --set $set --sound --api --disk $centre_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
@@ -1504,6 +1513,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         }
         assert ($run.screen != "") $"a screen was taken on ($label)"
         $centre_runs = ($centre_runs | insert $mode (open --raw $run.screen | into binary))
+        $centre_screens = ($centre_screens | insert $mode $run.screen)
     }
     let centre_tiled = (centre-read $centre_runs.tiled $centre_samples)
     for r in $centre_tiled {
@@ -1513,7 +1523,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let centre_held = (centre-read $centre_runs.held $centre_samples)
     let varied = ($centre_held | where {|r| not $r.uniform } | length)
     assert ($varied > (($centre_held | length) // 2)) $"the lit loop's picture varies over most sampled texels' pixels, so one colour there tells a tile: ($varied) of ($centre_held | length)"
-    print $"fps: the texel-centre rule, ($centre_tiled | length) texels beside ($centre_samples | get node | uniq | length) nodes read from their tiles within ($centre_tiled | get off | math max | math round --precision 2) of their centres' light, ($telling | length) where the corner's lies past twice the slack; the lit loop's pixels varied over ($varied)"
+    # the lit loop continuous along the opening's rows, the held-off run's
+    # every pixel beside its neighbour within CENTRE_STEP (tiles.nu's
+    # lit-steps, in a nu of its own)
+    let steps_out = ($out | path join "centre_steps.nuon")
+    let steps = (^nu ($game | path join "test" "tiles.nu") lit-steps $centre_screens.held ($centre_opening | to nuon) $FIXTURE_CROSSHAIR $steps_out | complete)
+    assert equal $steps.exit_code 0 $"the lit loop's steps read from the held-off capture: ($steps.stderr)"
+    let centre_steps = (open $steps_out)
+    assert ($centre_steps.most <= $CENTRE_STEP) $"the lit loop's picture continuous along the opening's rows, every pixel within ($CENTRE_STEP) of the one beside it: ($centre_steps.most) at ($centre_steps.x), ($centre_steps.y)"
+    print $"fps: the texel-centre rule, ($centre_tiled | length) texels beside ($centre_samples | get node | uniq | length) nodes read from their tiles within ($centre_tiled | get off | math max | math round --precision 2) of their centres' light, ($telling | length) where the corner's lies past twice the slack; the lit loop's pixels varied over ($varied), stepping by ($centre_steps.most) at most along ($centre_steps.rows) rows"
 
     # the builder's assertion (builder-holds): every tile of the builder
     # fixture's wall at every level of its chain, built by the B frame and

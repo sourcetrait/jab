@@ -16,6 +16,10 @@
 # whose texel's light is clamped at the last node apart, and under partial
 # residency each pixel's difference from the nearer of the tiled and the
 # lit pictures.
+#
+# The lit loop's continuity (`nu tiles.nu lit-steps <capture> <rect>
+# <crosshair> <out>`): the most a held-off picture of a white wall steps
+# between two pixels side by side along its rows.
 
 const RECORD = 64
 const DUMP_KIND = 16
@@ -254,8 +258,11 @@ def row-of [c: record<bytes: binary, head: int>, y: int, x0: int, x1: int]: noth
 # arithmetic in one closure, a command called a pixel costing several
 # times its work.
 def apart [pa: binary, pb: binary]: nothing -> list<int> {
-    let ia = ($pa | chunks 3 | into int --endian little)
-    let ib = ($pb | chunks 3 | into int --endian little)
+    apart-ints ($pa | chunks 3 | into int --endian little) ($pb | chunks 3 | into int --endian little)
+}
+
+# apart over two lists of pixels as integers, red in the low byte.
+def apart-ints [ia: list<int>, ib: list<int>]: nothing -> list<int> {
     $ia | zip $ib | each {|c|
         let u = $c.0
         let v = $c.1
@@ -448,6 +455,34 @@ def "main handoff" [spec: path, index: int, out: path] {
     } | to nuon | save -f $out
 }
 
+# The lit loop's picture held continuous along its rows: over every row
+# of `rect`, [x0, y0, x1, y1] with the pixel past the last, the
+# crosshair's square of half side `crosshair` left out, the most any
+# channel of two pixels side by side differs, with its row and the left
+# pixel's column, and the rows read, saved to out as NUON. A lit span
+# steps its brightness a pixel at a time and starts each interval from
+# the one before's exact end sample, so on a white wall its steps are the
+# light's change over a pixel and the rounding, where an interval
+# starting from the light a block before steps by the light's change over
+# a block.
+def "main lit-steps" [capture: path, rect: string, crosshair: int, out: path] {
+    let r = ($rect | from nuon)
+    let c = (capture $capture)
+    let ch = $crosshair
+    let found = ($r.1..<$r.3 | each {|y|
+        let whole = { from: $r.0, to: $r.2, value: 0 }
+        let runs = (if (($y - 540) | math abs) <= $ch { cut-run $whole (960 - $ch) (961 + $ch) } else { [$whole] })
+        $runs | where {|run| ($run.to - $run.from) >= 2 } | each {|run|
+            let ints = (row-of $c $y $run.from $run.to | chunks 3 | into int --endian little)
+            let steps = (apart-ints ($ints | drop 1) ($ints | skip 1))
+            let most = ($steps | math max)
+            { y: $y, x: ($run.from + ($steps | enumerate | where item == $most | get 0.index)), most: $most }
+        }
+    } | flatten)
+    let worst = ($found | sort-by most | last)
+    { most: $worst.most, x: $worst.x, y: $worst.y, rows: ($found | get y | uniq | length) } | to nuon | save -f $out
+}
+
 def main [] {
-    print "nu tiles.nu builder <api> <spec> <out>; nu tiles.nu handoff <spec> <index> <out>"
+    print "nu tiles.nu builder <api> <spec> <out>; nu tiles.nu handoff <spec> <index> <out>; nu tiles.nu lit-steps <capture> <rect> <crosshair> <out>"
 }

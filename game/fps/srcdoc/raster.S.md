@@ -501,7 +501,7 @@ Textured and lit: the depth first, then the texel, each channel scaled by
 its brightness, the texel's bytes blue, green, red from the low end. Masked
 and lit: the depth, the texel, its alpha at or above the pass. A lit block's
 brightness is carried into the next block of its interval; where the
-interval ended, the exact end sample is there. A block on its tile: the
+interval ends, its exact end sample takes the carry's place. A block on its tile: the
 depth first, then the texel read from the tile by the coordinates' low bits
 at the level; no multiply, no sample, no brightness. Masked, on its tile:
 the tile's texel, whose alpha under the pass leaves the pixel. The tiled
@@ -546,16 +546,20 @@ pixels, the three quotients packed again, which also fixes the short last
 block: the read before stepped every block by a sixteenth whatever its
 length, so an eight-pixel block got half its gradient.
 
-The span's state across the pixel loops lives in two stack slots, the
-interval's pixels left and the brightness, and the interval's length rides
+The span's state across the pixel loops lives in stack slots, the
+interval's pixels left, the brightness, and the interval's end sample, and the interval's length rides
 the loop's count register until the loop needs it, since every register is
 taken in the pixel loops: a first form kept the interval's length and shift
 and a masked flag in slots too, and the no-read probe priced the read at
 1.8 to 2.9 ms a view, nearly all of it that traffic rather than the
 samples, since a build sampling every block cost the same as the cadence
 within the gauge's noise. A lit block ends by carrying its brightness into
-the slot only while its interval continues; where the interval ended the
-slot already holds the exact end sample.
+the brightness slot while its interval continues, and the interval's last
+block puts its exact end sample there, kept in a slot of its own (264) from
+the interval's start: in the one slot, the first block's carry stood as the
+next interval's start, a lag of a block's change in the light that the
+handoff's measurement read at some 50 of 255 under the parity lumels,
+every interval's start the light a block before its own.
 
 ### The chain's level
 
