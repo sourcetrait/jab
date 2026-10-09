@@ -59,6 +59,7 @@ use ./pose.nu
 use ./gauge.nu
 use ./census.nu
 use ./census_holds.nu [census-reader-holds]
+use ./tiles.nu [builder-texel]
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
@@ -313,6 +314,28 @@ const CENTRE_LIGHTS = [0.25, 1.0]
 const CENTRE_DISTANCE = 2.0
 const CENTRE_SLACK = 2
 const CENTRE_FOOTPRINT = 3
+# The builder's assertion (builder-holds): the fixture's wall given an
+# opaque texture of the test's own, 64 square at a quarter repeat a
+# metre, 16 texels a metre, so a lumel cell is 8 texels, k 3, and its
+# chain of 7 levels holds levels 0 to 2 below k, 3 at it, and 4 to 6
+# above, every channel varied over both axes; every tile of the wall at
+# every level built by the console's B frame and read back by its D
+# frame under the bright, the gradient, and the parity lumels in turn,
+# each step BUILDER_STEP after the one before, from BUILDER_AT. A
+# texel's channel c, lit by the light L of its centre, reads c L / 256
+# within one for the multiply's floor and c over 256 times one lane and
+# the build's truncations, a centre's rounding and a step a texel along a
+# cell's segment, under BUILDER_TRUNCATIONS of a lane's 256ths at this k.
+# The oracle runs in a nu of its own over tiles.nu, which loads nothing
+# else, its per-texel loop slowed some fifteenfold inside this module
+const BUILDER_FIXTURE = { name: "texture/builderfix", size: 64, scale: 0.25 }
+const BUILDER_AT = 1400ms
+const BUILDER_STEP = 300ms
+const BUILDER_LIGHTINGS = [bright gradient parity]
+const BUILDER_TRUNCATIONS = 8
+# render.inc's LUMAP_PLANES, map.inc's MAX_SECTORS twice: a wall's
+# surface is its index past them
+const LUMAP_PLANES = 2048
 # The flow's growth: a map of the test's own (grow-source) where the
 # hall S is reached from the camera's room C first through a narrow
 # high window, two hops, and again through a side room T and its wide
@@ -1456,6 +1479,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($varied > (($centre_held | length) // 2)) $"the lit loop's picture varies over most sampled texels' pixels, so one colour there tells a tile: ($varied) of ($centre_held | length)"
     print $"fps: the texel-centre rule, ($centre_tiled | length) texels beside ($centre_samples | get node | uniq | length) nodes read from their tiles within ($centre_tiled | get off | math max | math round --precision 2) of their centres' light, ($telling | length) where the corner's lies past twice the slack; the lit loop's pixels varied over ($varied)"
 
+    # the builder's assertion (builder-holds): every tile of the builder
+    # fixture's wall at every level of its chain, built by the B frame and
+    # read back by the D frame under the bright, the gradient, and the
+    # parity lumels, held texel by texel to the host's oracle of the light
+    # of each texel's centre
+    let builder = (builder-holds $kernel $image $out $set $render_1_source $game)
+    print $"fps: the builder: ($builder.tiles) tiles of the fixture's wall at levels 0 to ($builder.levels - 1) about k ($builder.k), its map ($builder.w) by ($builder.h) nodes, every texel the chain's under the bright and within the build's rounding of its centre's light under the gradient and the parity, by level the most a channel lies from it ($builder.by_level | each {|l| $'($l.level): ($l.gradient | math round --precision 2) and ($l.parity | math round --precision 2)' } | str join ', ')"
+
     # the flow's growth on the growth map: the far room is reached only
     # once the hall's rectangle has grown through the side room's path
     # after the hall was flowed off the window's, and its far wall reads
@@ -1759,10 +1790,23 @@ def chain-levels [w: int, h: int]: nothing -> int {
 # every lumel set full bright first when `bright`, construction frozen
 # when `held` so every span takes the lit loop, else the quota and the
 # allowance lifted, and on a debug build every lumel set by its node's
-# parity after the bright with `--parity`.
-def level-frame [bright: bool, held: bool, --parity]: nothing -> binary {
+# parity after the bright with `--parity`, and by linear functions of
+# its column and row after those with `--gradient` (byte 6).
+def level-frame [bright: bool, held: bool, --parity, --gradient]: nothing -> binary {
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
-    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), 0x[00], (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+    [("L" | into binary), 0x[00 00 00], (do $flag $bright), (do $flag $held), (do $flag $gradient), (do $flag $parity), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's B frame, a debug build's: every tile of the surface in
+# bytes 4 to 7 built at the next boundary, at every level of its chain.
+def build-frame [surface: int]: nothing -> binary {
+    [("B" | into binary), 0x[00 00 00], ($surface | into binary | bytes at 0..<4), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's D frame, a debug build's: every READY tile of the surface
+# in bytes 4 to 7, all ones for every surface, written to the API at once.
+def dump-frame [surface: int]: nothing -> binary {
+    [("D" | into binary), 0x[00 00 00], ($surface | into binary | bytes at 0..<4), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # A view placed at PLACE_AT and again at SETTLE_AT, so the frame line
@@ -2329,6 +2373,123 @@ def centre-read [bytes: binary, samples: table<node: list<int>, parity: int, tex
         } | all {|same| $same })
         { node: $s.node, light: ($CENTRE_LIGHTS | get $s.parity), texel: $s.texel, at: $s.at, expected: $s.expected, corner: $s.corner, pixel: $pixel, off: $off, uniform: $uniform }
     }
+}
+
+# The builder fixture's tree: the grate wall given its texture at its
+# scale, laid in; the tree's path.
+def builder-tree [source: record, game: path, out: path]: nothing -> string {
+    let tree = (fixture-tree $source $game $out $BUILDER_FIXTURE.name $BUILDER_FIXTURE.scale)
+    let file = ($tree | path join (map tile-path $BUILDER_FIXTURE.name | str substring 1..))
+    mkdir ($file | path dirname)
+    let size = $BUILDER_FIXTURE.size
+    let pixels = (0..<$size | each {|y| 0..<$size | each {|x| builder-texel $x $y | each {|v| $v | into binary | bytes at 0..<1 } | bytes collect } | bytes collect } | bytes collect)
+    png write-rgba $file $size $size $pixels
+    $tree
+}
+
+# A wall's lumel map as lumap_frame lays it (light.S): k the exponent of
+# the power of two nearest the texels in half a metre along u, a cell 2^k
+# texels; U0 and V0 a texel before the least u and v, aligned down to
+# the texture's size; W and H the columns and rows, two past the cells
+# from them to the greatest u and v.
+export def wall-lumap [m: record, wall: record, w: int, h: int]: nothing -> record<k: int, u0: int, v0: int, w: int, h: int> {
+    let s = $wall.surface
+    let a = ($m.vertices | get $wall.a)
+    let b = ($m.vertices | get $wall.b)
+    let len = ((($b.x - $a.x) ** 2 + ($b.y - $a.y) ** 2) | math sqrt)
+    let sector = ($m.sectors | get $wall.sector)
+    let top = ([(map plane-z $sector.ceiling $a.x $a.y), (map plane-z $sector.ceiling $b.x $b.y)] | math max)
+    let bottom = ([(map plane-z $sector.floor $a.x $a.y), (map plane-z $sector.floor $b.x $b.y)] | math min)
+    let us = [($s.u_offset * $w), ((($s.u_scale * $len) + $s.u_offset) * $w)]
+    let vs = [(((($wall.anchor - $top) * $s.v_scale) + $s.v_offset) * $h), (((($wall.anchor - $bottom) * $s.v_scale) + $s.v_offset) * $h)]
+    let half = ((($w * $s.u_scale) | math abs) * 0.5)
+    let k = ([([((($half | math log 2) + 0.5) | math floor | into int), 0] | math max), 15] | math min)
+    let u0 = (((($us | math min | math floor | into int) - 1) // $w) * $w)
+    let v0 = (((($vs | math min | math floor | into int) - 1) // $h) * $h)
+    {
+        k: $k, u0: $u0, v0: $v0,
+        w: (((($us | math max | math ceil | into int) - $u0) bit-shr $k) + 2),
+        h: (((($vs | math max | math ceil | into int) - $v0) bit-shr $k) + 2),
+    }
+}
+
+# The builder's assertion on the builder fixture's tree: one run, under
+# the bright, the gradient, and the parity lumels in turn, every tile of
+# the wall at every level of its chain built by the B frame and read back
+# by the D frame; the host's oracle (tiles.nu's builder-tile, in a nu of
+# its own) holding every texel of every tile, the bright's the chain's
+# exactly, the others within the
+# build's rounding, the alpha the chain's; every key of the wall's grids
+# dumped once under each, with the map's k, W, and H as lumap_frame's rule
+# gives them; levels below, at, and above k in the chain; at every level
+# texels past the last node, and texels where a light at the corner
+# reads past twice the rounding under the gradient or the parity.
+export def builder-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> record<tiles: int, levels: int, k: int, w: int, h: int, by_level: list<any>> {
+    let tree = (builder-tree $source $game ($out | path join "builder"))
+    let m = (map read ($tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
+    let material = ($m.materials | enumerate | where {|e| $e.item.name == $BUILDER_FIXTURE.name } | get 0.index)
+    let found = ($m.walls | enumerate | where {|e| $e.item.surface.material == $material })
+    assert equal ($found | length) 1 $"one wall carries the builder fixture: ($found | length)"
+    let wall = ($found | get 0.item)
+    let surface = ($LUMAP_PLANES + ($found | get 0.index))
+    let size = $BUILDER_FIXTURE.size
+    let frame = (wall-lumap $m $wall $size $size)
+    let levels = (chain-levels $size $size)
+    assert ($frame.k > 0 and $frame.k < ($levels - 1)) $"the fixture's k, ($frame.k), leaves levels below, at, and above it in its chain of ($levels)"
+    let grid = (0..<$levels | each {|l|
+        let span = (1 bit-shl ($l + 6))
+        let across = ((($frame.w bit-shl $frame.k) + $span - 1) // $span)
+        let down = ((($frame.h bit-shl $frame.k) + $span - 1) // $span)
+        0..<$down | each {|ty| 0..<$across | each {|tx| { level: $l, tx: $tx, ty: $ty } } } | flatten
+    } | flatten | sort-by level ty tx)
+    let sends = ($BUILDER_LIGHTINGS | enumerate | each {|e|
+        let at = ($BUILDER_AT + ($BUILDER_STEP * (3 * $e.index)))
+        let light = (match $e.item {
+            "bright" => (level-frame true false),
+            "gradient" => (level-frame false false --gradient),
+            _ => (level-frame false false --parity),
+        })
+        [{ at: $at, bytes: $light }, { at: ($at + $BUILDER_STEP), bytes: (build-frame $surface) }, { at: ($at + (2 * $BUILDER_STEP)), bytes: (dump-frame $surface) }]
+    } | flatten)
+    let end = ($BUILDER_AT + ($BUILDER_STEP * (3 * ($BUILDER_LIGHTINGS | length) + 1)))
+    let run_out = ($out | path join "builder_run")
+    let run = (jab launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --disk (romfs $tree ($out | path join "builder.romfs")) --serial "fps" --send $sends --capture $end --seconds 9)
+    assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the builder's run"
+    let spec = ({ size: $size, lightings: $BUILDER_LIGHTINGS, k: $frame.k, w: $frame.w, h: $frame.h, truncations: $BUILDER_TRUNCATIONS } | to nuon)
+    let read_out = ($out | path join "builder.nuon")
+    let oracle = (^nu ($game | path join "test" "tiles.nu") builder ($run_out | path join "api.out") $spec $read_out | complete)
+    assert equal $oracle.exit_code 0 $"the builder's oracle read the run's dumps: ($oracle.stderr)"
+    let read = (open $read_out)
+    assert equal $read.dumps ($BUILDER_LIGHTINGS | length) $"a dump under each light: ($read.dumps) of ($BUILDER_LIGHTINGS | length)"
+    let held = ($read.results | each {|e|
+        let keys = ($e.tiles | each {|t| { level: $t.level, tx: $t.tx, ty: $t.ty } } | sort-by level ty tx)
+        assert equal $keys $grid $"every tile of the wall at every level dumped once under the ($e.lighting) lumels: ($keys | length) of ($grid | length)"
+        let foreign = ($e.tiles | where {|t| $t.surface != $surface or $t.texel_slots != [$t.slot] or $t.k != $frame.k or $t.w != $frame.w or $t.h != $frame.h })
+        assert ($foreign | is-empty) $"every dumped tile the wall's, its texels its own slot's, its map's k, W, and H ($frame.k), ($frame.w), and ($frame.h) as lumap_frame's rule gives them: ($foreign | first 2)"
+        $e.tiles | each {|t| $t | insert lighting $e.lighting }
+    } | flatten)
+    let alpha = ($held | where {|r| $r.alpha > 0 })
+    assert ($alpha | is-empty) $"every texel's alpha the chain's: ($alpha | first 3)"
+    let bright = ($held | where {|r| $r.lighting == "bright" and $r.unlike > 0 })
+    assert ($bright | is-empty) $"under the bright lumels every texel the chain's at its level: ($bright | first 3)"
+    let past = ($held | where {|r| $r.past > 0 })
+    assert ($past | is-empty) $"every texel within the build's rounding of its centre's light: ($past | first 3)"
+    let by_level = (0..<$levels | each {|l|
+        let these = ($held | where level == $l)
+        let lit = ($these | where {|r| $r.lighting != "bright" })
+        {
+            level: $l, tiles: ($these | where lighting == "bright" | length),
+            clamped: ($these | where lighting == "bright" | get clamped | math sum),
+            telling: ($lit | get telling | math sum),
+            gradient: ($these | where lighting == "gradient" | get most | math max),
+            parity: ($these | where lighting == "parity" | get most | math max),
+        }
+    })
+    let unclamped = ($by_level | where clamped == 0)
+    assert ($unclamped | is-empty) $"texels past the last node at every level: none at levels ($unclamped | get level)"
+    let untold = ($by_level | where telling == 0)
+    assert ($untold | is-empty) $"texels where a light at the corner reads past twice the rounding at every level: none at levels ($untold | get level)"
+    { tiles: ($grid | length), levels: $levels, k: $frame.k, w: $frame.w, h: $frame.h, by_level: $by_level }
 }
 
 # The level of a run's recording between two seconds: the peak and the

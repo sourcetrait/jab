@@ -116,6 +116,15 @@ console_frame:
     sb t1, 0(t0)
 .endif
 62:
+    lbu t1, 6(s2)
+    beqz t1, 63f
+    call lumels_gradient            # every lumel by its node's column and row
+.ifdef CENSUS
+    la t0, census_stale
+    li t1, 1
+    sb t1, 0(t0)
+.endif
+63:
 .endif
     li t1, 1
     la t0, tile_forget
@@ -210,7 +219,7 @@ console_frame:
     j 8f
 141:
     li t1, 'O'
-    bne t0, t1, 15f
+    bne t0, t1, 149f
     lbu t1, 4(s2)
     andi t1, t1, (CONFIG_UNLIMITED | CONFIG_FROZEN | CONFIG_STALE)
     la t2, tile_pending_flags
@@ -261,6 +270,20 @@ console_frame:
     sb t1, 0(t2)                    # a cold start at the next boundary: every tile forgotten
     la t2, tile_cold
     sb t1, 0(t2)                    # and the frame before's requests discarded
+    j 8f
+149:
+    li t1, 'B'
+    bne t0, t1, 150f
+    lwu t1, 4(s2)
+    addi t1, t1, 1
+    la t2, tile_build_surface
+    sd t1, 0(t2)                    # the surface plus one, every tile of it built at the next boundary
+    j 8f
+150:
+    li t1, 'D'
+    bne t0, t1, 15f
+    lwu a0, 4(s2)
+    call tile_dump                  # the surface's tiles, or every one's, on the API now
     j 8f
 15:
     li t1, 'J'

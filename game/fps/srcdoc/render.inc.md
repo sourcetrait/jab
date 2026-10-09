@@ -1679,6 +1679,14 @@ A record's bytes, zero to the end.
 
 `u32`: the frame before's tile pool at its boundary's end, STORE_* fields, beside its clock.
 
+## .set REPORT_TILE_DUMP
+
+`u32`: on a debug build, a tile the console's D frame reads back, DUMP_* fields, its texels after it.
+
+## .set REPORT_TILE_TEXELS
+
+`u32`: on a debug build, DUMP_TEXELS texels of the tile the dump record before it names, TEXELS_* fields; the clock's readers pass both kinds over.
+
 ## .set REPORT_FRAME_RECORDS
 
 `u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, and storage records.
@@ -2040,6 +2048,64 @@ consults no checkout. A changed capacity governs the admissions after it.
 ## .set STORE_PEAK
 
 `u32`: its high-water since the load.
+
+## .set DUMP_SLOT
+
+`u32`: the dumped tile's slot.
+
+## .set DUMP_KEY
+
+`u32`: its key, the tile's directory entry.
+
+## .set DUMP_SURFACE
+
+`u32`: its surface.
+
+## .set DUMP_LEVEL
+
+`u32`: its level of the material's chain.
+
+## .set DUMP_TX
+## .set DUMP_TY
+
+`u32`: its column and row in the level's grid.
+
+## .set DUMP_K
+
+`u32`: its map's k, a lumel cell's texels of level 0 as a shift.
+
+## .set DUMP_W
+## .set DUMP_H
+
+`u32`: its map's columns and rows of nodes.
+
+## .set DUMP_FRAME
+
+`u32`: the frame whose console read the D.
+
+## .set DUMP_GENERATION
+
+`u32`: the slot's generation.
+
+## .set TEXELS_SLOT
+
+`u32`: the slot whose texels a texel record carries, the dump record's before it.
+
+## .set TEXELS_FIRST
+
+`u32`: the tile's texel the record's first is, in rows of TILE_SIDE.
+
+## .set TEXELS_AT
+
+`DUMP_TEXELS u32`: the texels, each as the tile holds it, those past the tile's last zero.
+
+## .set DUMP_TEXELS
+
+`u64`: the texels a texel record carries, from TEXELS_AT to the schema.
+
+## .set DUMP_RECORDS
+
+`u64`: the texel records a tile takes.
 
 ## .set CADENCE_AFTER_FLIP
 

@@ -6,9 +6,21 @@ forgotten with the lumels bright or set by parity and construction lifted or
 frozen, R the generator seeded, E the gauge's measurement closed, C the
 cadence chosen, W the raster's workers and grain chosen, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
-build the tile pool's knobs, J on a debug build the jobs' hold, cancel, and
-fault, Q on a CENSUS build the census's chunk, each reported back as
-REPORT_CONSOLE.
+build the tile pool's knobs, B on a debug build every tile of a surface built
+at the next boundary, D on a debug build a surface's tiles read back over the
+API, J on a debug build the jobs' hold, cancel, and fault, Q on a CENSUS build
+the census's chunk, each reported back as REPORT_CONSOLE.
+
+B and D are the builder's assertion's hands, a debug build's alone. B takes
+bytes 4 to 7 as a surface, kept plus one in tile_build_surface, and the next
+boundary builds every tile of it at every level of its chain before its
+construction (tile.S's tile_build_all), under the L's lift where the test
+wants them whole. D takes bytes 4 to 7 as a surface, all ones for every
+one, and writes every READY tile of it to the API at once, a dump record
+and its texel records (tile.S's tile_dump), the pool standing still
+between boundaries; its answer after the records closes the dump. The
+test's `build-frame` and `dump-frame` build them and `tile-dumps` reads the
+records.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
@@ -92,12 +104,15 @@ frame after a view's first sight draws it from its tiles; an O's stale mode
 is kept. Byte 5 set freezes construction in place of
 the lift, so no tile is built and every span takes the lit loop: the lit
 loop's picture from the same build, which the fixtures read against the
-tiled one. Byte 6 is unused. Byte 7, on a debug build alone, runs
+tiled one. Byte 7, on a debug build alone, runs
 `lumels_parity` after the bright, every lumel a quarter or one by its node's
 parity, so the light across a cell is a gradient the texel-centre fixture
-computes for itself. The configuration's change goes out as a
+computes for itself. Byte 6, on a debug build alone, runs `lumels_gradient`
+after those, every node by linear functions of its column and row, a lane
+each, so the builder's assertion holds the light along u, along v, and
+along both apart. The configuration's change goes out as a
 configuration record from that boundary (tile.S's tile_configure). On a
-CENSUS build an L that rewrites the lumels, by byte 4 or byte 7, marks the
+CENSUS build an L that rewrites the lumels, by byte 4, 6, or 7, marks the
 census's uniformity stale (census.S's census_stale), so its next frame
 judges every tile again. The bytes exist for the test; play never sends the
 frame.
@@ -118,13 +133,15 @@ The partial frame is moved to the front of the buffer.
 
 L: every lumel set full bright first when the frame's byte 4 is 1, so a
 capture reads the texture sampled as the lit one is, and on a debug build by
-its node's parity when byte 7 is 1; then the pool's forget asked of the next
+its node's parity when byte 7 is 1 and by its column and row when byte 6 is
+1, in that order; then the pool's forget asked of the next
 boundary and its flags pending, the lift, or construction frozen when byte 5
 is 1, beside the stale mode as it stood, the configuration marked changed;
 on a CENSUS build either rewrite marks the census stale. O: every value
 pending, a 0 or one past the build's the build's own, the configuration
 marked changed, the trace set or cleared, and a cold start asked when byte
-6 is set. Q: the census's chunk from
+6 is set. B: the surface plus one pending for the next boundary's build. D:
+the dump written before the answer. Q: the census's chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.
 

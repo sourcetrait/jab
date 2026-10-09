@@ -32,7 +32,7 @@ the test holds.
 
 ### The directory and the slots
 
-The pool holds TILE_SLOTS tiles of TILE_BYTES, a page each at 32. A slot's
+The pool holds TILE_SLOTS tiles of TILE_BYTES, four pages each at 64. A slot's
 tag holds its generation and its state, FREE, BUILDING, or READY; PINNED is
 the frame-wide rule that nothing changes between the boundary's end and the
 frame's last join, so a READY tag read in the frame stays READY through it,
@@ -201,8 +201,9 @@ counted. STAT_TILE_RESETS counts these alone.
 The pool's one change a frame, its order fixed: the configuration, the
 pass's mark, the forget, the deadlines (the allowance's, the merge's
 share's, and the quota, all past reach under the lift), the batch and its
-merge, the fold, construction unless frozen, the discard, the frame's
-stamp, the occupancy. A debug build's cold start discards the batch in
+merge, the fold, construction unless frozen, a debug build's B frame's
+surface built whole ahead of it, the discard, the frame's stamp, the
+occupancy. A debug build's cold start discards the batch in
 place of its merge and builds nothing. Its whole time is STAT_TILE_TICKS,
 the draw record's `tiles_us`, a part of the drawing beside the others;
 the construction's within it is STAT_TILE_BUILD_TICKS, and the time past
@@ -464,6 +465,39 @@ a tile's texel beside a node lit at the texel's centre reads apart from
 one lit at its corner by more than the build's rounding, where the
 room's light changes too little across a texel to tell the two.
 
+## lumels_gradient
+
+The console's L frame with its byte 6 set, on a debug build alone,
+rewrites every node of every map by linear functions of its column c and
+row r, a lane each: red 256 c / (W - 1), green 256 r / (H - 1), and blue
+256 (c + r) / (W + H - 2), each floored, so every lane spans the light's
+whole range over its map, red changing along u alone, green along v
+alone, and blue along both. W and H are two at least (lumap_frame), so
+no divisor is zero. The builder's assertion holds every tile's texels
+against the host's light of their centres under it, u and v apart.
+
+## tile_build_all
+
+A debug build's B frame, at the boundary before construction: every tile
+of the asked surface at every level of its chain made (tile_make), the
+asking taken once. A tile in construction is finished first by
+tile_construct, so the build waits a boundary while one is; a budget
+spent or no slot to take stops it, the rest unbuilt. Under the L's lift
+the whole surface is built in the one boundary, so the D frame after it
+reads every key of its grids.
+
+## tile_dump
+
+A debug build's D frame, from console_frame, the pool standing still
+between boundaries: every READY slot of the asked surface, or of every
+surface for all ones, written to the API as one write a tile, a dump
+record (REPORT_TILE_DUMP: the slot, the key, the surface, the level, the
+column and row, the map's k, W, and H, the frame, the generation) and
+DUMP_RECORDS texel records (REPORT_TILE_TEXELS: the slot, the first
+texel's index, DUMP_TEXELS texels as the tile holds them, the last
+record's past the tile zero), the schema in each. The test's
+`tile-dumps` reads them back to the host's oracle.
+
 ## msg_alpha
 
 `12 u8`.
@@ -712,6 +746,14 @@ room's light changes too little across a texel to tell the two.
 
 `u8`: 1 when an O frame asks a cold start at the next boundary.
 
+## tile_build_surface
+
+`u64`: on a debug build alone, the surface a B frame asked built whole, plus one, 0 for none.
+
+## tile_dump_records
+
+`(1+DUMP_RECORDS)*REPORT_SIZE u8`: on a debug build alone, a tile's dump record and its texel records, written at once.
+
 ## tile_config_record
 
 `REPORT_SIZE u8`: the configuration record, REPORT_CONFIG's, CONFIG_* fields.
@@ -750,7 +792,7 @@ room's light changes too little across a texel to tell the two.
 
 ## tile_pool
 
-`TILE_POOL_BYTES u8`: the slots' tiles, TILE_BYTES each, page-aligned so a tile is a page at 32.
+`TILE_POOL_BYTES u8`: the slots' tiles, TILE_BYTES each, page-aligned, a tile four pages at 64.
 
 ## tile_tags
 

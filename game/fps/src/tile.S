@@ -390,6 +390,9 @@ tile_boundary:
     andi t1, t1, CONFIG_FROZEN
     bnez t1, 3f
     rdtime s3
+.ifdef DEBUG
+    call tile_build_all             # a B frame's surface, every tile of it
+.endif
     call tile_construct
     rdtime t0
     sub t0, t0, s3
@@ -2312,6 +2315,221 @@ lumels_parity:
     j 1b
 9:
     ret
+
+lumels_gradient:
+    la t0, lumaps
+    li t1, (LUMAP_COUNT * LUMAP_SIZE)
+    add t1, t1, t0
+1:
+    bgeu t0, t1, 9f
+    ld t3, LUMAP_BASE(t0)
+    beqz t3, 2f
+    ld t4, LUMAP_W(t0)
+    ld t5, LUMAP_H(t0)
+    addi t6, t4, -1                 # red's divisor, W - 1, 1 at least
+    addi a4, t5, -1                 # green's, H - 1
+    add a5, t6, a4                  # blue's, W + H - 2
+    li a0, 0                        # the row
+3:
+    bgeu a0, t5, 2f
+    slli a6, a0, 8
+    divu a6, a6, a4                 # green, 256 r / (H - 1)
+    slli a6, a6, CHANNEL_BITS
+    li a1, 0                        # the column
+4:
+    bgeu a1, t4, 5f
+    slli a2, a1, 8
+    divu a2, a2, t6                 # red, 256 c / (W - 1)
+    add a3, a1, a0
+    slli a3, a3, 8
+    divu a3, a3, a5                 # blue, 256 (c + r) / (W + H - 2)
+    slli a3, a3, (2 * CHANNEL_BITS)
+    or a2, a2, a6
+    or a2, a2, a3
+    sd a2, 0(t3)
+    addi t3, t3, 8
+    addi a1, a1, 1
+    j 4b
+5:
+    addi a0, a0, 1
+    j 3b
+2:
+    addi t0, t0, LUMAP_SIZE
+    j 1b
+9:
+    ret
+
+tile_build_all:
+    la t0, tile_build_surface
+    ld t1, 0(t0)
+    beqz t1, 99f                    # none asked
+    la t2, tile_building
+    ld t2, 0(t2)
+    bgez t2, 99f                    # a tile in construction: the build waits a boundary
+    sd zero, 0(t0)                  # taken
+    addi t1, t1, -1                 # the surface
+    li t2, LUMAP_COUNT
+    bgeu t1, t2, 99f                # no surface of the map: nothing built
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
+    mv s2, t1
+    li t0, TS_SIZE
+    mul t0, s2, t0
+    la t1, tile_surfaces
+    add s3, t0, t1                  # its record
+    li s4, 0                        # the level
+1:
+    lbu t0, TS_LEVELS(s3)
+    bgeu s4, t0, 90f                # every level built
+    slli t0, s4, 3
+    add t0, t0, s3
+    lwu s5, (TS_GRIDS + TS_GRID_BASE)(t0)   # the level's first key
+    lhu t1, (TS_GRIDS + TS_GRID_W)(t0)
+    lhu t2, (TS_GRIDS + TS_GRID_H)(t0)
+    mul t1, t1, t2
+    add s6, s5, t1                  # past its last
+2:
+    bgeu s5, s6, 3f
+    mv a0, s5
+    mv a1, s2
+    call tile_make
+    bnez a0, 90f                    # the budget spent or no slot to take: the build stops
+    addi s5, s5, 1
+    j 2b
+3:
+    addi s4, s4, 1
+    j 1b
+90:
+    ld ra, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 64
+99:
+    ret
+
+tile_dump:
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
+    slli s2, a0, 32
+    srli s2, s2, 32                 # the surface asked, all ones for every one
+    li s3, 0                        # the slot
+1:
+    li t0, TILE_SLOTS
+    bgeu s3, t0, 90f
+    slli t0, s3, 2
+    la t1, tile_tags
+    add t0, t0, t1
+    lwu s4, 0(t0)                   # its tag
+    andi t0, s4, 0xff
+    li t1, SLOT_READY
+    bne t0, t1, 8f                  # no tile to read
+    li t0, SLOT_SIZE
+    mul t0, s3, t0
+    la t1, tile_slots
+    add s5, t0, t1                  # its record
+    lwu t2, SLOT_SURFACE(s5)
+    li t0, -1
+    srli t0, t0, 32
+    beq s2, t0, 2f                  # every surface
+    bne t2, s2, 8f                  # another surface's
+2:
+    la s6, tile_dump_records
+    li t0, REPORT_TILE_DUMP
+    sw t0, REPORT_KIND(s6)
+    sw s3, DUMP_SLOT(s6)
+    lwu t0, SLOT_KEY(s5)
+    sw t0, DUMP_KEY(s6)
+    sw t2, DUMP_SURFACE(s6)
+    lbu t0, SLOT_LEVEL(s5)
+    sw t0, DUMP_LEVEL(s6)
+    lwu t0, SLOT_TX(s5)
+    sw t0, DUMP_TX(s6)
+    lwu t0, SLOT_TY(s5)
+    sw t0, DUMP_TY(s6)
+    li t0, TS_SIZE
+    mul t0, t2, t0
+    la t1, tile_surfaces
+    add t0, t0, t1
+    lbu t0, TS_K(t0)
+    sw t0, DUMP_K(s6)
+    li t0, LUMAP_SIZE
+    mul t0, t2, t0
+    la t1, lumaps
+    add t0, t0, t1
+    ld t1, LUMAP_W(t0)
+    sw t1, DUMP_W(s6)
+    ld t1, LUMAP_H(t0)
+    sw t1, DUMP_H(s6)
+    la t0, frame_clock
+    ld t0, CLOCK_SNAPSHOT(t0)
+    sw t0, DUMP_FRAME(s6)
+    srli t0, s4, 16
+    sw t0, DUMP_GENERATION(s6)
+    sw zero, (DUMP_GENERATION + 4)(s6)
+    sw zero, (DUMP_GENERATION + 8)(s6)
+    sw zero, (DUMP_GENERATION + 12)(s6)
+    li t0, REPORT_SCHEMA_VERSION
+    sw t0, REPORT_SCHEMA(s6)
+    slli t3, s3, TILE_BYTES_SHIFT
+    la t0, tile_pool
+    add t3, t3, t0                  # the tile
+    li t4, 0                        # the texel
+    addi t5, s6, REPORT_SIZE        # its record
+3:
+    li t0, (TILE_SIDE * TILE_SIDE)
+    bgeu t4, t0, 7f                 # every texel taken
+    li t0, REPORT_TILE_TEXELS
+    sw t0, REPORT_KIND(t5)
+    sw s3, TEXELS_SLOT(t5)
+    sw t4, TEXELS_FIRST(t5)
+    li t0, REPORT_SCHEMA_VERSION
+    sw t0, REPORT_SCHEMA(t5)
+    addi a2, t5, TEXELS_AT          # the record's next texel
+    addi a3, a2, (DUMP_TEXELS * 4)  # past its last
+4:
+    bgeu a2, a3, 6f
+    li t0, (TILE_SIDE * TILE_SIDE)
+    li a1, 0                        # past the tile's last: zero
+    bgeu t4, t0, 5f
+    slli t1, t4, 2
+    add t1, t1, t3
+    lwu a1, 0(t1)
+5:
+    sw a1, 0(a2)
+    addi a2, a2, 4
+    addi t4, t4, 1
+    j 4b
+6:
+    addi t5, t5, REPORT_SIZE
+    j 3b
+7:
+    sub t1, t5, s6                  # the dump's bytes, the header and the texels
+    jab.sys.api.write s6, t1
+8:
+    addi s3, s3, 1
+    j 1b
+90:
+    ld ra, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 64
+    ret
 .endif
 
 .section .rodata
@@ -2452,6 +2670,10 @@ tile_trace:
 tile_cold:
     .skip 1
 .balign 8
+tile_build_surface:
+    .skip 8
+tile_dump_records:
+    .skip ((1 + DUMP_RECORDS) * REPORT_SIZE)
 .endif
 tile_config_record:
     .skip REPORT_SIZE
