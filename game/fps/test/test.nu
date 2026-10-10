@@ -339,6 +339,8 @@ const BUILDER_AT = 1400ms
 const BUILDER_STEP = 300ms
 const BUILDER_LIGHTINGS = [bright gradient parity]
 const BUILDER_TRUNCATIONS = 8
+# render.inc's DUMP_RECORDS at 64: a tile's texel records in its dump
+const DUMP_RECORDS = 342
 # render.inc's LUMAP_PLANES, map.inc's MAX_SECTORS twice: a wall's
 # surface is its index past them
 const LUMAP_PLANES = 2048
@@ -2496,17 +2498,61 @@ export def wall-lumap [m: record, wall: record, w: int, h: int]: nothing -> reco
     }
 }
 
+# The builder's capture altered for the dump reader's refusals, each
+# alteration alone with the reason it must raise: the first dump's first
+# header's schema changed; in its tile a texel record dropped, repeated,
+# and swapped with the next,
+# its slot, its schema, and its first texel changed, a padding texel set,
+# and its last record dropped, the order unbroken; a texel record before
+# the first dump and after the first dump's
+# answer; the capture cut inside a record, and at a record's end inside a
+# dump; and the capture untouched, refused by nothing. A record is
+# RECORD bytes, its kind's word first; a texel record's slot at 4, its
+# first texel at 8, its texels from 12, and its schema at 60.
+def dump-alterations [api: binary]: nothing -> list<record<name: string, expect: string, bytes: binary>> {
+    let rec = {|i: int| $api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD) }
+    let splice = {|i: int, n: int, put: binary| [($api | bytes at 0..<($i * $RECORD)), $put, ($api | bytes at (($i + $n) * $RECORD)..)] | bytes collect }
+    let word = {|r: binary, at: int, v: int| [($r | bytes at 0..<$at), ($v | into binary | bytes at 0..<4), ($r | bytes at ($at + 4)..)] | bytes collect }
+    let aligned = {|kind: int| $api | bytes index-of --all ($kind | into binary | bytes at 0..<4) | where {|o| ($o mod $RECORD) == 0 } | each {|o| $o // $RECORD } }
+    let header = (do $aligned 16 | first)
+    let answer = (do $aligned 11 | where {|i| ((do $rec $i) | bytes at 4..<5) == ("D" | into binary) } | first)
+    let t = ($header + 6)
+    let r = (do $rec $t)
+    let first = ($r | bytes at 8..<12 | into int --endian little)
+    let slot = ($r | bytes at 4..<8 | into int --endian little)
+    let last = ($header + $DUMP_RECORDS)
+    [
+        { name: "untouched", expect: "", bytes: $api }
+        { name: "header_schema", expect: "header schema", bytes: (do $splice $header 1 (do $word (do $rec $header) 60 4)) }
+        { name: "dropped", expect: "missing", bytes: (do $splice $t 1 0x[]) }
+        { name: "repeated", expect: "repeated", bytes: (do $splice $t 1 ([$r, $r] | bytes collect)) }
+        { name: "swapped", expect: "order", bytes: (do $splice $t 2 ([(do $rec ($t + 1)), $r] | bytes collect)) }
+        { name: "slot", expect: "slot", bytes: (do $splice $t 1 (do $word $r 4 ($slot + 1))) }
+        { name: "schema", expect: "schema", bytes: (do $splice $t 1 (do $word $r 60 4)) }
+        { name: "first", expect: "first texel", bytes: (do $splice $t 1 (do $word $r 8 ($first + 1))) }
+        { name: "padding", expect: "padding", bytes: (do $splice $last 1 (do $word (do $rec $last) 28 1)) }
+        { name: "tail_dropped", expect: "count", bytes: (do $splice $last 1 0x[]) }
+        { name: "orphan_before", expect: "orphan", bytes: (do $splice 0 0 $r) }
+        { name: "orphan_after", expect: "orphan", bytes: (do $splice ($answer + 1) 0 $r) }
+        { name: "truncated", expect: "truncated", bytes: ($api | bytes at 0..<((($header + 100) * $RECORD) + 30)) }
+        { name: "unfinished", expect: "unfinished", bytes: ($api | bytes at 0..<(($header + 100) * $RECORD)) }
+    ]
+}
+
 # The builder's assertion on the builder fixture's tree: one run, under
 # the bright, the gradient, and the parity lumels in turn, every tile of
 # the wall at every level of its chain built by the B frame and read back
-# by the D frame; the host's oracle (tiles.nu's builder-tile, in a nu of
-# its own) holding every texel of every tile, the bright's the chain's
-# exactly, the others within the
-# build's rounding, the alpha the chain's; every key of the wall's grids
-# dumped once under each, with the map's k, W, and H as lumap_frame's rule
-# gives them; levels below, at, and above k in the chain; at every level
-# texels past the last node, and texels where a light at the corner
-# reads past twice the rounding under the gradient or the parity.
+# by the D frame; every dump whole, its records each in its place
+# (tiles.nu's dumps), and the host's oracle (tiles.nu's builder-tile, in a
+# nu of its own) holding every texel of every tile, the bright's the
+# chain's exactly, the others within the build's rounding, the alpha the
+# chain's; every key of the wall's grids dumped once under each, with the
+# map's k, W, and H as lumap_frame's rule gives them; levels below, at,
+# and above k in the chain; at every level texels past the last node, and
+# texels where a light at the corner reads past twice the rounding under
+# the gradient or the parity. Then the reader refuses the run's own
+# capture altered every way dump-alterations alters it, each by its own
+# reason, and reads the untouched capture whole.
 export def builder-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> record<tiles: int, levels: int, k: int, w: int, h: int, by_level: list<any>> {
     let tree = (builder-tree $source $game ($out | path join "builder"))
     let m = (map read ($tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
@@ -2543,15 +2589,36 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     let oracle = (^nu ($game | path join "test" "tiles.nu") builder ($run_out | path join "api.out") $spec $read_out | complete)
     assert equal $oracle.exit_code 0 $"the builder's oracle read the run's dumps: ($oracle.stderr)"
     let read = (open $read_out)
+    assert ($read.problems | is-empty) $"every dump whole, every record in its place: ($read.problems | first 3)"
     assert equal $read.dumps ($BUILDER_LIGHTINGS | length) $"a dump under each light: ($read.dumps) of ($BUILDER_LIGHTINGS | length)"
     # a loop, so a failing assertion is the error raised, not the each's
     mut dumped = []
     for e in $read.results {
         let keys = ($e.tiles | each {|t| { level: $t.level, tx: $t.tx, ty: $t.ty } } | sort-by level ty tx)
         assert equal $keys $grid $"every tile of the wall at every level dumped once under the ($e.lighting) lumels: ($keys | length) of ($grid | length)"
-        let foreign = ($e.tiles | where {|t| $t.surface != $surface or $t.texel_slots != [$t.slot] or $t.k != $frame.k or $t.w != $frame.w or $t.h != $frame.h })
-        assert ($foreign | is-empty) $"every dumped tile the wall's, its texels its own slot's, its map's k, W, and H ($frame.k), ($frame.w), and ($frame.h) as lumap_frame's rule gives them: ($foreign | first 2)"
+        let foreign = ($e.tiles | where {|t| $t.surface != $surface or $t.k != $frame.k or $t.w != $frame.w or $t.h != $frame.h })
+        assert ($foreign | is-empty) $"every dumped tile the wall's, its map's k, W, and H ($frame.k), ($frame.w), and ($frame.h) as lumap_frame's rule gives them: ($foreign | first 2)"
         $dumped = ($dumped | append ($e.tiles | each {|t| $t | insert lighting $e.lighting }))
+    }
+    # the reader's refusals: the run's own capture altered, each alteration
+    # alone, read by tiles.nu's dumps in a nu of its own and refused by its
+    # own reason, the untouched capture the passing control
+    let alterations = (dump-alterations (open --raw ($run_out | path join "api.out") | into binary))
+    let refused = ($alterations | par-each --keep-order {|a|
+        let file = ($out | path join $"builder_altered_($a.name).api")
+        $a.bytes | save --raw -f $file
+        let o = ($out | path join $"builder_altered_($a.name).nuon")
+        let r = (^nu ($game | path join "test" "tiles.nu") dumps $file $o | complete)
+        { name: $a.name, expect: $a.expect, exit: $r.exit_code, stderr: $r.stderr, out: $o }
+    })
+    for r in $refused {
+        assert equal $r.exit 0 $"the reader read the ($r.name) capture: ($r.stderr)"
+        let reasons = (open $r.out | get problems | each {|p| $p.reason } | uniq)
+        if $r.expect == "" {
+            assert ($reasons | is-empty) $"the untouched capture read whole: ($reasons)"
+        } else {
+            assert ($r.expect in $reasons) $"the reader refuses the capture ($r.name) by its ($r.expect): ($reasons)"
+        }
     }
     let held = $dumped
     let alpha = ($held | where {|r| $r.alpha > 0 })

@@ -5,10 +5,11 @@
 # and keeps its heavy modules out of the per-texel loops.
 #
 # The builder's assertion: the tile dumps a capture holds, each closed by
-# the console's answer to its D frame, held texel by texel to the host's
-# oracle, each texel the chain's at its tile's level lit by the light of
-# its centre, bilinear over the lighting's nodes with the coordinate
-# clamped to the last node, within the build's rounding.
+# the console's answer to its D frame and held whole, every record in its
+# place (`nu tiles.nu dumps <api> <out>` reads them alone), held texel by
+# texel to the host's oracle, each texel the chain's at its tile's level
+# lit by the light of its centre, bilinear over the lighting's nodes with
+# the coordinate clamped to the last node, within the build's rounding.
 #
 # The handoff's statistics (`nu tiles.nu handoff <spec> <index> <out>`): captures
 # of a wall seen head-on compared pixel by pixel over its rows and columns
@@ -27,43 +28,118 @@ const TEXELS_KIND = 17
 const CONSOLE_KIND = 11
 const CONSOLE_D = 68
 const SIDE = 64
+# render.inc's DUMP_TEXELS and DUMP_RECORDS at 64: a tile's 4,096
+# texels twelve a record, the last record's eight past them zero
+const DUMP_TEXELS = 12
+const DUMP_RECORDS = 342
+# render.inc's REPORT_SCHEMA_VERSION and REPORT_SCHEMA, its offset
+const SCHEMA = 5
+const SCHEMA_AT = 60
+
+# A tile's records closed: the problems its count and its padding raise,
+# and the tile with its texels in rows when it is whole.
+def close-tile [tile: record, payloads: list<binary>, at: int, dump: int, bad: bool]: nothing -> record<tile: any, problems: list<any>> {
+    let count = ($payloads | length)
+    let words = (if $count == 0 { [] } else { $payloads | bytes collect | chunks 4 | into int --endian little })
+    let past = ($words | skip ($SIDE * $SIDE) | where {|w| $w != 0 })
+    let problems = ([
+        (if $count != $DUMP_RECORDS { { reason: "count", record: $at, dump: $dump, found: $"($count) texel records of ($DUMP_RECORDS)" } })
+        (if $count == $DUMP_RECORDS and ($past | is-not-empty) { { reason: "padding", record: $at, dump: $dump, found: $"($past | length) texels past the tile's last not zero" } })
+    ] | compact)
+    { tile: (if (not $bad) and ($problems | is-empty) { $tile | insert texels ($words | first ($SIDE * $SIDE) | chunks $SIDE) } else { null }), problems: $problems }
+}
 
 # The tile dumps an API capture holds, each closed by the console's answer
-# to its D frame: each tile's slot, key, surface, level, column, and row,
-# its map's k, W, and H as the program holds them, the slots its texel
-# records named, and its texels in rows, each a texel's word as the
-# program holds it, blue in its low byte, then green, red, and alpha.
-export def dumps [api: binary]: nothing -> list<any> {
+# to its D frame, and every problem that breaks them. A dump is its tiles,
+# each a header (kind 16) and then exactly DUMP_RECORDS texel records
+# (kind 17), each record its tile's slot, its first texel twelve on from
+# the record before's, and the schema, the texels past the tile's last
+# zero, and every record 64 bytes. Each tile read whole: its slot, key,
+# surface, level, column, and row, its map's k, W, and H as the program
+# holds them, and its texels in rows, each a texel's word as the program
+# holds it, blue in its low byte, then green, red, and alpha. Each problem:
+# its reason (header schema, slot, schema, first texel, missing, repeated,
+# order, count, padding, orphan, truncated, or unfinished), the record's
+# index in the capture, the dump's, and what was found; a tile with a
+# problem is left out, and the problems stand whether or not any tile
+# comes back.
+export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: list<any>> {
     mut dumps = []
+    mut problems = []
     mut tiles = []
-    mut texels = []
-    mut named = []
-    let close = {|ts: list<binary>, slots: list<int>, tile: record|
-        let words = ($ts | bytes collect | chunks 4 | first ($SIDE * $SIDE) | each {|t| $t | into int --endian little })
-        $tile | insert texel_slots ($slots | uniq) | insert texels ($words | chunks $SIDE)
-    }
-    for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
+    mut open = false
+    mut tile: any = null
+    mut header_at = 0
+    mut payloads = []
+    mut next = 0
+    mut bad = false
+    for e in ($api | chunks $RECORD | enumerate) {
+        let r = $e.item
+        let at = $e.index
+        let dump = ($dumps | length)
+        if ($r | bytes length) != $RECORD {
+            $problems = ($problems | append { reason: "truncated", record: $at, dump: $dump, found: $"($r | bytes length) bytes of ($RECORD)" })
+            break
+        }
+        let word = {|o: int| $r | bytes at $o..<($o + 4) | into int --endian little }
         let kind = ($r | bytes at 0..<1 | into int)
-        let ending = ($kind == $DUMP_KIND) or ($kind == $CONSOLE_KIND and ($r | bytes at 4..<5 | into int) == $CONSOLE_D)
-        if $ending and ($tiles | is-not-empty) and ($texels | is-not-empty) {
-            let ts = $texels
-            let ns = $named
-            $tiles = ($tiles | update (($tiles | length) - 1) {|t| do $close $ts $ns $t })
-            $texels = []
-            $named = []
+        let answer = ($kind == $CONSOLE_KIND and ($r | bytes at 4..<5 | into int) == $CONSOLE_D)
+        if ($kind == $DUMP_KIND or $answer) and $tile != null {
+            let c = (close-tile $tile $payloads $header_at $dump $bad)
+            $problems = ($problems | append $c.problems)
+            if $c.tile != null { $tiles = ($tiles | append $c.tile) }
+            $tile = null
         }
         if $kind == $DUMP_KIND {
-            let word = {|at: int| $r | bytes at $at..<($at + 4) | into int --endian little }
-            $tiles = ($tiles | append { slot: (do $word 4), key: (do $word 8), surface: (do $word 12), level: (do $word 16), tx: (do $word 20), ty: (do $word 24), k: (do $word 28), w: (do $word 32), h: (do $word 36) })
+            $tile = { slot: (do $word 4), key: (do $word 8), surface: (do $word 12), level: (do $word 16), tx: (do $word 20), ty: (do $word 24), k: (do $word 28), w: (do $word 32), h: (do $word 36) }
+            $header_at = $at
+            $payloads = []
+            $next = 0
+            $open = true
+            $bad = ((do $word $SCHEMA_AT) != $SCHEMA)
+            if $bad { $problems = ($problems | append { reason: "header schema", record: $at, dump: $dump, found: $"schema (do $word $SCHEMA_AT)" }) }
         } else if $kind == $TEXELS_KIND {
-            $texels = ($texels | append ($r | bytes at 12..<60))
-            $named = ($named | append ($r | bytes at 4..<8 | into int --endian little))
-        } else if $ending {
+            if $tile == null {
+                $problems = ($problems | append { reason: "orphan", record: $at, dump: $dump, found: "a texel record outside any tile" })
+            } else {
+                let slot = (do $word 4)
+                let first = (do $word 8)
+                let schema = (do $word $SCHEMA_AT)
+                let order = (if ($first mod $DUMP_TEXELS) != 0 { "first texel" } else if $first == ($next - $DUMP_TEXELS) { "repeated" } else if $first > $next { "missing" } else if $first < $next { "order" } else { "" })
+                let found = ([
+                    (if $slot != $tile.slot { { reason: "slot", record: $at, dump: $dump, found: $"slot ($slot) in tile ($tile.slot)'s records" } })
+                    (if $schema != $SCHEMA { { reason: "schema", record: $at, dump: $dump, found: $"schema ($schema)" } })
+                    (if $order != "" { { reason: $order, record: $at, dump: $dump, found: $"first texel ($first) where ($next) was due" } })
+                ] | compact)
+                if ($found | is-not-empty) {
+                    $problems = ($problems | append $found)
+                    $bad = true
+                }
+                $payloads = ($payloads | append ($r | bytes at 12..<60))
+                $next = (if ($first mod $DUMP_TEXELS) == 0 { $first + $DUMP_TEXELS } else { $next + $DUMP_TEXELS })
+            }
+        } else if $answer {
             $dumps = ($dumps | append [$tiles])
             $tiles = []
+            $open = false
         }
     }
-    $dumps
+    let ending = ($api | bytes length) // $RECORD
+    if $tile != null {
+        let c = (close-tile $tile $payloads $header_at ($dumps | length) $bad)
+        $problems = ($problems | append $c.problems)
+    }
+    if $open {
+        $problems = ($problems | append { reason: "unfinished", record: $ending, dump: ($dumps | length), found: "a dump the capture ends inside, its D unanswered" })
+    }
+    { dumps: $dumps, problems: $problems }
+}
+
+# A capture's dumps and their problems, saved to out as NUON: the tiles
+# read whole a dump, and every problem (dumps).
+def "main dumps" [api: path, out: path] {
+    let read = (dumps (open --raw $api | into binary))
+    { tiles: ($read.dumps | each {|d| $d | length }), problems: $read.problems } | to nuon | save -f $out
 }
 
 # A texel of the builder fixture's texture, [red, green, blue, alpha]:
@@ -223,21 +299,23 @@ export def builder-tile [tile: record, lighting: string, nodes: list<any>, chain
 # The builder's oracle over a capture: the spec a NUON record of the
 # texture's size, the lightings in the order the dumps came, the map's k,
 # W, and H as the host lays them out, and the build's truncations; the
-# result, saved to out as NUON, each lighting's tiles with their headers
-# and builder-tile's counts.
+# result, saved to out as NUON, the dumps' count, every problem `dumps`
+# found, and each lighting's whole tiles with their headers and
+# builder-tile's counts.
 def "main builder" [api: path, spec: string, out: path] {
     let s = ($spec | from nuon)
-    let found = (dumps (open --raw $api | into binary))
+    let read = (dumps (open --raw $api | into binary))
+    let found = $read.dumps
     let chain = (builder-chain $s.size)
     let results = ($s.lightings | enumerate | each {|e|
         let tiles = ($found | get -o $e.index | default [])
         let nodes = (builder-nodes $e.item $s.w $s.h)
         {
             lighting: $e.item,
-            tiles: ($tiles | each {|t| builder-tile $t $e.item $nodes $chain $s | merge { slot: $t.slot, surface: $t.surface, tx: $t.tx, ty: $t.ty, k: $t.k, w: $t.w, h: $t.h, texel_slots: $t.texel_slots } }),
+            tiles: ($tiles | each {|t| builder-tile $t $e.item $nodes $chain $s | merge { slot: $t.slot, surface: $t.surface, tx: $t.tx, ty: $t.ty, k: $t.k, w: $t.w, h: $t.h } }),
         }
     })
-    { dumps: ($found | length), results: $results } | to nuon | save -f $out
+    { dumps: ($found | length), problems: $read.problems, results: $results } | to nuon | save -f $out
 }
 
 # A capture's bytes and where its pixels start, past the header's three
@@ -484,5 +562,5 @@ def "main lit-steps" [capture: path, rect: string, crosshair: int, out: path] {
 }
 
 def main [] {
-    print "nu tiles.nu builder <api> <spec> <out>; nu tiles.nu handoff <spec> <index> <out>; nu tiles.nu lit-steps <capture> <rect> <crosshair> <out>"
+    print "nu tiles.nu builder <api> <spec> <out>; nu tiles.nu dumps <api> <out>; nu tiles.nu handoff <spec> <index> <out>; nu tiles.nu lit-steps <capture> <rect> <crosshair> <out>"
 }
