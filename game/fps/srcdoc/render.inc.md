@@ -1997,7 +1997,7 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_QUOTA
 
-`u32`: the quota in texels, TILE_QUOTA unless a debug build's O frame sets one, which stands under the lift as well and is then named by CONFIG_QUOTA_KEPT.
+`u32`: the quota in texels, TILE_QUOTA unless a debug build's O frame sets one, which stands under the lift as well and is then named by CONFIG_QUOTA_KEPT; under a lift with no O quota it keeps TILE_QUOTA, CONFIG_UNLIMITED without CONFIG_QUOTA_KEPT saying no quota is in force.
 
 ## .set CONFIG_ALLOWANCE
 

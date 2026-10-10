@@ -215,8 +215,12 @@ worker n - 1's in worker_contexts, CTX_SHIFT apart.
 The console's L, an O's cold start, or a new slot cap, at the boundary:
 every READY slot's entry cleared where it names the slot, every slot's
 generation advanced and its state FREE, the free stack rebuilt over the
-effective slots, every reference bit clear, nothing in construction, and
-the resets since the load counted. STAT_TILE_RESETS counts these alone.
+effective slots, the reference bitmap cleared, nothing in construction,
+and the resets since the load counted. STAT_TILE_RESETS counts these
+alone. The same boundary's fold then writes the frame before's touches
+into the bitmap, so bits can stand on FREE slots; harmless, since
+tile_evict weighs READY slots alone and tile_publish clears its slot's
+bit.
 
 ## tile_boundary
 
@@ -263,7 +267,9 @@ tile; the merge's share goes in the record's CONFIG_MERGE. On a debug
 build a new configuration clears tile_once_done, so its CONFIG_ONCE builds
 once again, and the O frame's quota goes in force with the rest, in the
 record's CONFIG_QUOTA in place of TILE_QUOTA, the flags in force gaining
-CONFIG_QUOTA_KEPT when it stands under the lift.
+CONFIG_QUOTA_KEPT when it stands under the lift. Under a lift with no O
+quota the record's CONFIG_QUOTA keeps TILE_QUOTA, CONFIG_UNLIMITED
+without CONFIG_QUOTA_KEPT saying no quota is in force.
 
 ## tile_batch
 

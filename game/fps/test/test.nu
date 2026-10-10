@@ -400,14 +400,14 @@ const HANDOFF_OBLIQUE_LEVELS = 3
 const COUNT_LINE = "fps: count {divides} divides, {avoided} avoided; blocks {shifted} shifted, {short} short; negative steps off sixteen {nu} in u, {nv} in v; flat spans {flat}; mismatches {mismatches}; re-entries {two} in two blocks, {four} in four, {cut} cut short"
 # hud.S's stamp: STAMP_BITS cells of STAMP_CELL pixels square along the
 # screen's top-left, the n-th from the left the frame number's n-th bit
-const STAMP_BITS = 16
-const STAMP_CELL = 4
-const STAMP_ONE = 0x[ff ff ff]
-const STAMP_ZERO = 0x[00 00 00]
+export const STAMP_BITS = 16
+export const STAMP_CELL = 4
+export const STAMP_ONE = 0x[ff ff ff]
+export const STAMP_ZERO = 0x[00 00 00]
 # render.inc's REPORT_STORAGE and STORE_BUILDING: the storage record's
 # kind and its word of BUILDING slots
-const STORAGE_KIND = 15
-const STORAGE_BUILDING = 16
+export const STORAGE_KIND = 15
+export const STORAGE_BUILDING = 16
 # The flow's growth: a map of the test's own (grow-source) where the
 # hall S is reached from the camera's room C first through a narrow
 # high window, two hops, and again through a side room T and its wide
@@ -1920,7 +1920,7 @@ def dump-frame [surface: int, --building]: nothing -> binary {
 # byte 4 from the frame's drawing on, the chain's last at most, 0 for
 # the block's own; byte 5 set (`--stamp`) the HUD stamping each frame's
 # number from then on (stamp-of).
-def raise-frame [levels: int, --stamp]: nothing -> binary {
+export def raise-frame [levels: int, --stamp]: nothing -> binary {
     [("M" | into binary), 0x[00 00 00], ($levels | into binary | bytes at 0..<1), (if $stamp { 0x[01] } else { 0x[00] }), (0..<58 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
@@ -1929,7 +1929,7 @@ def raise-frame [levels: int, --stamp]: nothing -> binary {
 # STAMP_CELL pixels square a bit along the top-left, the n-th from the
 # left the n-th bit, STAMP_ONE for a one and STAMP_ZERO for a zero; null
 # when a cell is not wholly one or the other.
-def stamp-of [bytes: binary]: nothing -> oneof<int, nothing> {
+export def stamp-of [bytes: binary]: nothing -> oneof<int, nothing> {
     let head = (ppm-head $bytes)
     mut value = 0
     for bit in 0..<$STAMP_BITS {
@@ -1946,7 +1946,7 @@ def stamp-of [bytes: binary]: nothing -> oneof<int, nothing> {
 # A capture with one word of a record changed: the first record of
 # `kind` whose frame, its word at byte 4, is `frame`, its word at `at`
 # set to `value`.
-def record-altered [api: binary, kind: int, frame: int, at: int, value: int]: nothing -> binary {
+export def record-altered [api: binary, kind: int, frame: int, at: int, value: int]: nothing -> binary {
     let word = {|v: int| $v | into binary | bytes at 0..<4 }
     let starts = ($api | bytes index-of --all (do $word $kind) | where {|o| ($o mod $RECORD) == 0 and ($api | bytes at ($o + 4)..<($o + 8)) == (do $word $frame) })
     assert (($starts | length) > 0) $"a record of kind ($kind) for frame ($frame) to alter"
@@ -2464,7 +2464,7 @@ def fixture-opening [m: record, wall: record, eye: record]: nothing -> list<int>
 
 # The rows of a rectangle over which two captures differ, each row's
 # bytes within the rectangle compared whole.
-def rows-differ [p: binary, q: binary, rect: list<int>]: nothing -> list<int> {
+export def rows-differ [p: binary, q: binary, rect: list<int>]: nothing -> list<int> {
     let hp = (ppm-head $p)
     let hq = (ppm-head $q)
     let y0 = $rect.1
@@ -3105,7 +3105,7 @@ def pixel [ppm: path, at: list<int>]: nothing -> binary {
 }
 
 # The bytes of a capture's header, the three lines before its pixels.
-def ppm-head [bytes: binary]: nothing -> int {
+export def ppm-head [bytes: binary]: nothing -> int {
     let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
     $newlines.2 + 1
 }

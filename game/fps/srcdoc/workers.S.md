@@ -114,9 +114,11 @@ the fixture's case unexercised; then every mailbox of the last round's
 workers must hold its completion equal to its generation, else `fps:
 tile boundary before the round joined` and exit 15, the boundary run
 before the round joined. The kernel's exit halts the workers, a second
-at most, and flushes the sound, three seconds at most, before the
-machine ends, about 3 to 4 s after the line in the join probes, so a run
-its screen ends sooner carries the line with status 0.
+at most, then flushes the sound: its wait for the ring and the voices is
+three seconds at most, and its return wait and drain end normally when
+their work completes, or on a no-progress timeout, so the exit has no
+fixed bound. The machine ended about 3 to 4 s after the line in the join
+probes, and a run its screen ends sooner carries the line with status 0.
 
 ## msg_workers
 
