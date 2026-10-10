@@ -1989,7 +1989,7 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_QUOTA
 
-`u32`: TILE_QUOTA in texels.
+`u32`: the quota in texels, TILE_QUOTA unless a debug build's O frame sets one, which stands under the lift as well and is then named by CONFIG_QUOTA_KEPT.
 
 ## .set CONFIG_ALLOWANCE
 
@@ -1997,7 +1997,7 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 ## .set CONFIG_FLAGS
 
-`u32`: CONFIG_UNLIMITED, CONFIG_FROZEN, CONFIG_STALE, and CONFIG_ONCE.
+`u32`: CONFIG_UNLIMITED, CONFIG_FROZEN, CONFIG_STALE, CONFIG_ONCE, and CONFIG_QUOTA_KEPT.
 
 ## .set CONFIG_GUARANTEE
 
@@ -2034,6 +2034,10 @@ consults no checkout. A changed capacity governs the admissions after it.
 ## .set CONFIG_ONCE
 
 `u32`: the flag of a debug build's construction at the first boundary that merged a key and at none after while the configuration stands, an O's.
+
+## .set CONFIG_QUOTA_KEPT
+
+`u32`: the flag of a debug build's O frame's quota standing under the lift, so a lifted boundary's work is CONFIG_QUOTA exactly; set by the configuration, never asked.
 
 ## .set STORE_USED
 

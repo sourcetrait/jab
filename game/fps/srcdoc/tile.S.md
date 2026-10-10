@@ -77,11 +77,12 @@ unprocessed, the next boundary resuming at the surface or the entry where
 the merge stopped; the touched bitmaps folded into CLOCK's reference
 bits; the tile in construction finished first; then construction
 round-robin over the merged surfaces from a cursor kept between
-boundaries, a tile a surface a pass, until TILE_ALLOWANCE or TILE_QUOTA;
+boundaries, a tile a surface a pass, until TILE_ALLOWANCE or the quota;
 the requests not served discarded. The allowance covers the whole
 boundary, and the time past it is recorded. An L lifts the quota, the
 allowance, and the merge's share, or freezes construction with its byte
-5; a debug build's O frame sets the pool's knobs.
+5; a debug build's O frame sets the pool's knobs, its quota standing
+under the lift.
 
 ### The knobs
 
@@ -93,8 +94,17 @@ exists for; CONFIG_ONCE, construction at the first boundary that merged a
 key and at none after while the configuration stands, so a cap under a
 view's demand leaves its residency fixed and partial, the handoff's
 measurement), the effective slots, a change forgetting the pool so its free
-slots are the cap's, the guarantee and the ring within the build's, and
-the merge's share in microseconds, each 0 for the build's own. Its byte 6
+slots are the cap's, the guarantee and the ring within the build's, the
+merge's share in microseconds, and the quota, each 0 for the build's own.
+The quota is a boundary's work in texels under every mode, so under the
+lift the work is exact: charged a row's TILE_SIDE texels at a time, a row
+begun finished, it stops at the row that spends it. From a boundary with
+no tile in construction, while merged keys and slots last, a quota of k
+tiles' texels and r rows' publishes k whole tiles and leaves one BUILDING
+at row r, and one of k tiles alone leaves none; a boundary that starts
+with a tile in construction finishes
+it first out of the same quota, so a whole-tile quota after a partial
+ends partial again. Its byte 6
 is a cold start: every tile forgotten and the frame before's batch
 discarded whole, unprocessed, so a view placed with it is drawn at first
 sight even where the frames before drew it. Its byte 5 traces the pool.
@@ -203,7 +213,8 @@ counted. STAT_TILE_RESETS counts these alone.
 
 The pool's one change a frame, its order fixed: the configuration, the
 pass's mark, the forget, the deadlines (the allowance's, the merge's
-share's, and the quota, all past reach under the lift), the batch and its
+share's, and the quota, all past reach under the lift, but a debug
+build's O frame's quota in force under every mode), the batch and its
 merge, the fold, construction unless frozen, a debug build's B frame's
 surface built whole ahead of it, the discard, the frame's stamp, the
 occupancy. A debug build's cold start discards the batch in
@@ -239,7 +250,9 @@ while the boundary consumes the frame before's batch by that batch's own
 counts. A new slot cap forgets the pool, so no slot past the cap holds a
 tile; the merge's share goes in the record's CONFIG_MERGE. On a debug
 build a new configuration clears tile_once_done, so its CONFIG_ONCE builds
-once again.
+once again, and the O frame's quota goes in force with the rest, in the
+record's CONFIG_QUOTA in place of TILE_QUOTA, the flags in force gaining
+CONFIG_QUOTA_KEPT when it stands under the lift.
 
 ## tile_batch
 
@@ -660,7 +673,7 @@ host's oracle.
 
 ## tile_flags
 
-`u64`: the configuration in force's flags, CONFIG_UNLIMITED, CONFIG_FROZEN, and a debug build's CONFIG_STALE and CONFIG_ONCE.
+`u64`: the configuration in force's flags, CONFIG_UNLIMITED, CONFIG_FROZEN, and a debug build's CONFIG_STALE, CONFIG_ONCE, and CONFIG_QUOTA_KEPT.
 
 ## tile_guarantee
 
@@ -765,6 +778,14 @@ host's oracle.
 ## tile_build_surface
 
 `u64`: on a debug build alone, the surface a B frame asked built whole, plus one, 0 for none.
+
+## tile_quota
+
+`u64`: on a debug build alone, the quota in force in texels, the O frame's, 0 for the build's own.
+
+## tile_pending_quota
+
+`u64`: on a debug build alone, the O frame's quota for the next boundary to put in force.
 
 ## tile_dump_records
 

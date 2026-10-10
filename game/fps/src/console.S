@@ -257,6 +257,9 @@ console_frame:
 148:
     la t2, tile_pending_merge
     sd t1, 0(t2)                    # the merge's share in microseconds, 0 for TILE_MERGE_US
+    lwu t1, 24(s2)
+    la t2, tile_pending_quota
+    sd t1, 0(t2)                    # a boundary's work in texels under every mode, 0 for the build's own
     li t1, 1
     la t2, tile_config_changed
     sb t1, 0(t2)

@@ -85,11 +85,13 @@ construction at the first boundary that merged a key and at none after
 while the configuration stands; bytes 8 to 11 the
 slots the pool may use, a change forgetting the pool; bytes 12 to 15 a
 tier's requests and 16 to 19 an open ring's entries, each held to the
-build's; bytes 20 to 23 the merge's share in microseconds; each 0 for the
-build's own. Byte 5 set traces the pool's passes on the UART while it
-stands; byte 6 set is a cold start at the next boundary, every tile
-forgotten and the frame before's requests discarded. The test's
-`pool-frame` builds it and `pool-trace` reads the trace.
+build's; bytes 20 to 23 the merge's share in microseconds; bytes 24 to 27
+a boundary's work in texels, in force under every mode, the lift's among
+them; each 0 for the build's own. Byte 5 set traces the pool's passes on
+the UART while it stands; byte 6 set is a cold start at the next
+boundary, every tile forgotten and the frame before's requests
+discarded. The test's `pool-frame` builds it and `pool-trace` reads the
+trace.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the
 androids draw from, so runs sent one seed before their first frame start

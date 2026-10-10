@@ -2016,13 +2016,14 @@ def packet-frame [commands: int, spans: int]: nothing -> binary {
 # start at the next boundary, every tile forgotten and the frame before's
 # requests discarded (`--cold`), so a view placed with it is drawn at
 # first sight; then words from byte 8, the slots the pool may use, a
-# tier's requests, an open ring's entries, and the merge's share in
-# microseconds, each 0 for the build's own. A change of the slots forgets
-# the pool too.
-def pool-frame [--modes: int = 0, --trace, --cold, --slots: int = 0, --guarantee: int = 0, --ring: int = 0, --merge-us: int = 0]: nothing -> binary {
+# tier's requests, an open ring's entries, the merge's share in
+# microseconds, and a boundary's work in texels under every mode, the
+# lift's among them (`--quota`), each 0 for the build's own. A change of
+# the slots forgets the pool too.
+def pool-frame [--modes: int = 0, --trace, --cold, --slots: int = 0, --guarantee: int = 0, --ring: int = 0, --merge-us: int = 0, --quota: int = 0]: nothing -> binary {
     let word = {|v: int| $v | into binary | bytes at 0..<4 }
     let flag = {|on: bool| if $on { 0x[01] } else { 0x[00] } }
-    [("O" | into binary), 0x[00 00 00], ($modes | into binary | bytes at 0..<1), (do $flag $trace), (do $flag $cold), 0x[00], (do $word $slots), (do $word $guarantee), (do $word $ring), (do $word $merge_us), (0..<40 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+    [("O" | into binary), 0x[00 00 00], ($modes | into binary | bytes at 0..<1), (do $flag $trace), (do $flag $cold), 0x[00], (do $word $slots), (do $word $guarantee), (do $word $ring), (do $word $merge_us), (do $word $quota), (0..<36 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # The passes a trace of the pool printed (pool-frame's `--trace`): each

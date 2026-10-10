@@ -359,6 +359,13 @@ tile_boundary:
     add t3, t3, s2                  # the merge's share's
     li t4, TILE_QUOTA
 2:
+.ifdef DEBUG
+    la t0, tile_quota
+    ld t0, 0(t0)
+    beqz t0, 22f
+    mv t4, t0                       # the O frame's quota, in force under every mode
+22:
+.endif
     la t0, tile_deadline
     sd t2, 0(t0)
     la t0, tile_merge_deadline
@@ -491,6 +498,17 @@ tile_configure:
     sw t1, CONFIG_MERGE(t0)
     la t0, tile_pending_flags
     ld t1, 0(t0)
+.ifdef DEBUG
+    la t0, tile_pending_quota
+    ld t5, 0(t0)
+    la t0, tile_quota
+    sd t5, 0(t0)                    # the O frame's quota, 0 for the build's own
+    beqz t5, 2f
+    andi t6, t1, CONFIG_UNLIMITED
+    beqz t6, 2f
+    ori t1, t1, CONFIG_QUOTA_KEPT   # kept under the lift, so the record names it
+2:
+.endif
     la t0, tile_flags
     sd t1, 0(t0)
     la t0, tile_pending_guarantee
@@ -517,6 +535,13 @@ tile_configure:
     ld t5, 0(t5)
     sw t5, CONFIG_EFFECTIVE(t4)
     li t5, TILE_QUOTA
+.ifdef DEBUG
+    la t6, tile_quota
+    ld t6, 0(t6)
+    beqz t6, 3f
+    mv t5, t6                       # the O frame's, the quota in force
+3:
+.endif
     sw t5, CONFIG_QUOTA(t4)
     li t5, TILE_ALLOWANCE_US
     sw t5, CONFIG_ALLOWANCE(t4)
@@ -2700,6 +2725,10 @@ tile_once_done:
     .skip 1
 .balign 8
 tile_build_surface:
+    .skip 8
+tile_quota:
+    .skip 8
+tile_pending_quota:
     .skip 8
 tile_dump_records:
     .skip ((1 + DUMP_RECORDS) * REPORT_SIZE)
