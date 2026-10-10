@@ -283,7 +283,6 @@
 .set SLOT_TX, 8
 .set SLOT_TY, 12
 .set SLOT_LEVEL, 16
-.set SLOT_REFERENCE, 17
 .set SLOT_ROW, 18
 .set SLOT_BUILT, 20
 .set SLOT_SIZE, 32

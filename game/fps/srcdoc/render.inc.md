@@ -1333,10 +1333,6 @@ nearly twice the frames at or over 15 ms, while the yard drew faster.
 
 `u8`: the tile's level of the chain.
 
-## .set SLOT_REFERENCE
-
-`u8`: CLOCK's reference bit.
-
 ## .set SLOT_ROW
 
 `u16`: the next row to build while the slot is BUILDING.

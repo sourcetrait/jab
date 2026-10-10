@@ -75,8 +75,8 @@ merged, deduplicated through the merge bitmap, the guaranteed tiers first
 by surface, then the open rings by context and entry, stopping at the
 merge's share of the allowance or the merged list's end, the rest counted
 unprocessed, the next boundary resuming at the surface or the entry where
-the merge stopped; the touched bitmaps folded into CLOCK's reference
-bits; the tile in construction finished first; then construction
+the merge stopped; the touched bitmaps folded into CLOCK's reference,
+which they replace; the tile in construction finished first; then construction
 round-robin over the merged surfaces from a cursor kept between
 boundaries, a tile a surface a pass, until TILE_ALLOWANCE or the quota;
 the requests not served discarded. The allowance covers the whole
@@ -130,12 +130,20 @@ of the rotation when it did not.
 
 ### Eviction
 
-CLOCK over the effective slots: a READY slot read since its last sweep
-has its reference bit cleared and is passed over once; one unread is
-retired; a slot published in this pass is never evicted in it, so a slot
-changes at most once a pass, and a new slot's bit starts clear, so a tile
-unread through the frame after its publication is evictable at the next
-boundary. Two sweeps find a victim if one exists.
+CLOCK over the effective slots, its reference the frame just drawn: each
+boundary's fold replaces every slot's bit in tile_reference with whether
+that frame read it, so a tile the last frame did not read is a victim
+before one it read, and no older read keeps a tile. A READY slot whose
+bit is set has it cleared and is passed over once, the second chance
+among the tiles the last frame read; one clear is retired; a slot
+published in this pass is never evicted in it, so a slot changes at most
+once a pass, and a new slot's bit starts clear, so a tile unread through
+the frame after its publication is evictable at the next boundary. Two
+sweeps find a victim if one exists. A reference only sweeps cleared would
+hold every slot a view ever read, so at a view's return the whole pool
+would read as referenced and CLOCK would fall to its hand's order,
+evicting tiles the view is drawing; the replacement keeps the returning
+view's tiles and evicts the other view's.
 
 ### The frozen frame
 
@@ -207,8 +215,8 @@ worker n - 1's in worker_contexts, CTX_SHIFT apart.
 The console's L, an O's cold start, or a new slot cap, at the boundary:
 every READY slot's entry cleared where it names the slot, every slot's
 generation advanced and its state FREE, the free stack rebuilt over the
-effective slots, nothing in construction, and the resets since the load
-counted. STAT_TILE_RESETS counts these alone.
+effective slots, every reference bit clear, nothing in construction, and
+the resets since the load counted. STAT_TILE_RESETS counts these alone.
 
 ## tile_boundary
 
@@ -292,8 +300,13 @@ unprocessed.
 
 ## tile_fold
 
-Each context's touched-slot bitmap folded into the slots' reference bits
-and cleared, a word at a time, skipping empty words.
+Every word of tile_reference written whole as the contexts' touched-slot
+words joined, each touched word cleared as it is taken: the reference is
+the frame just drawn's reads alone. The contexts' touched bitmaps are
+found by tiles_init's layout, context c's at tile_admission plus c times
+TA_SIZE plus TA_TOUCHED, so the fold calls nothing; every word is
+written, the zero ones too, since a word no context touched clears the
+reads before it.
 
 ## tile_construct
 
@@ -315,8 +328,9 @@ boundary.
 ## tile_evict
 
 CLOCK's sweep over the effective slots from its hand, two turns at most: a
-slot not READY or published this pass is passed over, a read one has its
-bit cleared and is passed over, the first unread one is retired.
+slot not READY or published this pass is passed over, one the last frame
+read has its bit in tile_reference cleared and is passed over, the first
+whose bit is clear is retired.
 
 ## tile_retire
 
@@ -329,7 +343,7 @@ keeps from reading the slot's next tile.
 ## tile_publish
 
 The tag READY before the entry names it, both under the slot's generation;
-the slot marked with this pass and its reference bit clear.
+the slot marked with this pass and its bit in tile_reference clear.
 
 ## tile_discard
 
@@ -881,6 +895,10 @@ host's oracle.
 ## tile_admission
 
 `TILE_CONTEXTS*TA_SIZE u8`: each raster context's admission block, TA_* fields.
+
+## tile_reference
+
+`TILE_SLOTS/8 u8`: CLOCK's reference, a bit a slot, set by the fold for each slot the frame just drawn read, cleared by the sweep that passes it, a publish, and a forget; in the tables, so TILE_MEMORY counts it.
 
 ## tile_tables_end
 

@@ -315,6 +315,13 @@ tiles_forget:
     addi t0, t0, 4
     j 4b
 5:
+    la t0, tile_reference
+    li t1, (TILE_SLOTS / 64)
+6:
+    sd zero, 0(t0)                  # no slot read, every one free
+    addi t0, t0, 8
+    addi t1, t1, -1
+    bnez t1, 6b
     la t0, tile_used
     sd zero, 0(t0)
     li t1, -1
@@ -896,50 +903,28 @@ tile_merge_key:
     ret
 
 tile_fold:
-    addi sp, sp, -16
-    sd ra, 8(sp)
-    sd s2, 0(sp)
-    li s2, 0                        # the context
+    la t0, tile_admission
+    li t1, TA_TOUCHED
+    add t0, t0, t1                  # context 0's touched slots, each next context's TA_SIZE on
+    la t1, tile_reference
+    li t2, (TILE_SLOTS / 64)        # the words
+    li a1, TA_SIZE
 1:
-    li t0, TILE_CONTEXTS
-    bgeu s2, t0, 9f
-    mv a0, s2
-    call tile_context
-    ld t0, CTX_TILE_TOUCHED(a0)     # its touched slots
-    li t1, 0                        # the word
+    mv t3, t0
+    li t4, 0                        # the word's slots the frame read, every context's
+    li t5, TILE_CONTEXTS
 2:
-    li t2, (TILE_SLOTS / 64)
-    bgeu t1, t2, 8f
-    slli t2, t1, 3
-    add t2, t2, t0
-    ld t3, 0(t2)
-    beqz t3, 7f
-    sd zero, 0(t2)
-    slli t4, t1, 6                  # its first slot
-    li t6, SLOT_SIZE
-    mul t6, t4, t6
-    la t5, tile_slots
-    add t5, t5, t6                  # its record
-    li a1, 1
-3:
-    beqz t3, 7f
-    andi t6, t3, 1
-    beqz t6, 4f
-    sb a1, SLOT_REFERENCE(t5)       # read since its last sweep
-4:
-    srli t3, t3, 1
-    addi t5, t5, SLOT_SIZE
-    j 3b
-7:
-    addi t1, t1, 1
-    j 2b
-8:
-    addi s2, s2, 1
-    j 1b
-9:
-    ld ra, 8(sp)
-    ld s2, 0(sp)
-    addi sp, sp, 16
+    ld t6, 0(t3)
+    or t4, t4, t6
+    sd zero, 0(t3)
+    add t3, t3, a1
+    addi t5, t5, -1
+    bnez t5, 2b
+    sd t4, 0(t1)                    # the reference: read by the frame just drawn, no older read kept
+    addi t0, t0, 8
+    addi t1, t1, 8
+    addi t2, t2, -1
+    bnez t2, 1b
     ret
 
 tile_construct:
@@ -1123,7 +1108,6 @@ tile_make:
     sw a2, SLOT_TX(t0)
     sw a3, SLOT_TY(t0)
     sb t2, SLOT_LEVEL(t0)
-    sb zero, SLOT_REFERENCE(t0)
     sh zero, SLOT_ROW(t0)
     slli t1, s4, 2
     la t2, tile_tags
@@ -1203,9 +1187,18 @@ tile_evict:
     add t5, t5, t6
     lwu t6, SLOT_BUILT(t5)
     beq t6, t4, 1b                  # built this pass
-    lbu t6, SLOT_REFERENCE(t5)
-    beqz t6, 3f
-    sb zero, SLOT_REFERENCE(t5)     # read: spared one sweep
+    srli t5, a0, 6
+    slli t5, t5, 3
+    la t6, tile_reference
+    add t5, t5, t6                  # its reference word
+    ld t6, 0(t5)
+    srl a1, t6, a0
+    andi a1, a1, 1
+    beqz a1, 3f
+    li a1, 1
+    sll a1, a1, a0
+    xor t6, t6, a1
+    sd t6, 0(t5)                    # read by the last frame: its bit cleared, spared one sweep
     j 1b
 3:
     la t0, tile_hand
@@ -1284,7 +1277,16 @@ tile_publish:
     la t3, tile_pass
     ld t3, 0(t3)
     sw t3, SLOT_BUILT(t2)
-    sb zero, SLOT_REFERENCE(t2)     # unread until a frame reads it
+    srli t3, a0, 6
+    slli t3, t3, 3
+    la t4, tile_reference
+    add t3, t3, t4                  # its reference word
+    ld t4, 0(t3)
+    li t5, 1
+    sll t5, t5, a0
+    not t5, t5
+    and t4, t4, t5
+    sd t4, 0(t3)                    # unread until a frame reads it
     lwu t3, SLOT_KEY(t2)
     slli t3, t3, 2
     la t4, tile_directory
@@ -2783,4 +2785,6 @@ tile_requesting:
 .balign 64
 tile_admission:
     .skip (TILE_CONTEXTS * TA_SIZE)
+tile_reference:
+    .skip (TILE_SLOTS / 8)
 tile_tables_end:
