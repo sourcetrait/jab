@@ -215,6 +215,9 @@ frame:
     sd s10, CLOCK_DRAW(t1)          # and its ticks, the raster's taken from them once
     rdtime s9
 .ifndef OWNER
+.ifdef DEBUG
+    mv a0, s8                       # the frame's number, for the stamp
+.endif
     call hud_draw
 .endif
     rdtime t0

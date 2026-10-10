@@ -291,6 +291,9 @@ console_frame:
     lbu t1, 4(s2)
     la t2, level_raise
     sb t1, 0(t2)                    # every block's level raised by it from this frame's drawing
+    lbu t1, 5(s2)
+    la t2, hud_stamp
+    sb t1, 0(t2)                    # the frame's number stamped by the HUD while set
     j 8f
 15:
     li t1, 'J'

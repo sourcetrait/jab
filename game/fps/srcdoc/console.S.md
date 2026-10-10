@@ -27,8 +27,10 @@ M is the handoff's hand, a debug build's alone: byte 4 the levels every
 block's level is raised by, the chain's last at most, 0 for the block's
 own, kept in level_raise and standing from the drawing of the frame that
 reads it (raster.S's The chain's level), so a wall posed head-on at level
-0 is drawn at every level of its chain. The test's `raise-frame` builds
-it.
+0 is drawn at every level of its chain; byte 5 set, the HUD stamping each
+frame's number from the frame that reads it on (hud.S's hud_stamp), so a
+screen names the frame it shows. The test's `raise-frame` builds it, its
+`--stamp` setting byte 5.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
@@ -152,7 +154,8 @@ pending, a 0 or one past the build's the build's own, the configuration
 marked changed, the trace set or cleared, and a cold start asked when byte
 6 is set. B: the surface plus one pending for the next boundary's build. D:
 the dump written before the answer. M: byte 4 into raster.S's level_raise
-at once, the frame's drawing after the read taking it. Q: the census's
+and byte 5 into hud.S's hud_stamp at once, the frame's drawing after the
+read taking them. Q: the census's
 chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.

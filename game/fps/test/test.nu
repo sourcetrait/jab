@@ -361,13 +361,31 @@ const TILE_SHIFT = 6
 # tiles, drawn under partial residency, construction once on
 # HANDOFF_PARTIAL_SLOTS slots on the serial backend, the O frame sent
 # HANDOFF_ONCE_AFTER the first placement, so its spans alternate hits and
-# misses
+# misses. Each run places the view at PLACE_AT and again at SETTLE_AT,
+# takes its screen at HANDOFF_SCREEN_AT while it goes on, and sends the
+# console's E at HANDOFF_END_AT, the bound HANDOFF_SECONDS; the HUD
+# stamps each frame's number (raise-frame's `--stamp`, stamp-of)
 const HANDOFF_FIXTURE = { name: "texture/handofffix", size: 64, scale: 0.5 }
 const HANDOFF_EDGE = 6
 const HANDOFF_DISTANCE = 4.5
 const HANDOFF_LIGHTINGS = [gradient parity]
 const HANDOFF_PARTIAL_SLOTS = 1
 const HANDOFF_ONCE_AFTER = 300ms
+const HANDOFF_SCREEN_AT = 3500ms
+const HANDOFF_END_AT = 3800ms
+const HANDOFF_SECONDS = 5
+# The live fixture's placement due just before the screen
+const HANDOFF_EARLY = 50ms
+# hud.S's stamp: STAMP_BITS cells of STAMP_CELL pixels square along the
+# screen's top-left, the n-th from the left the frame number's n-th bit
+const STAMP_BITS = 16
+const STAMP_CELL = 4
+const STAMP_ONE = 0x[ff ff ff]
+const STAMP_ZERO = 0x[00 00 00]
+# render.inc's REPORT_STORAGE and STORE_BUILDING: the storage record's
+# kind and its word of BUILDING slots
+const STORAGE_KIND = 15
+const STORAGE_BUILDING = 16
 # The flow's growth: a map of the test's own (grow-source) where the
 # hall S is reached from the camera's room C first through a narrow
 # high window, two hops, and again through a side room T and its wide
@@ -598,12 +616,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     }
     if ("HANDOFF" in ($set | split row ",")) {
         let game = ($env.FILE_PWD | path join ".." | path expand)
-        let read = (handoff-holds $kernel $image $out $set (open ($game | path join "content" "map" "render_1.nuon")) $game)
-        for r in $read {
+        let held = (handoff-holds $kernel $image $out $set (open ($game | path join "content" "map" "render_1.nuon")) $game)
+        for r in $held.comparisons {
             let i = $r.inner
             let partial = (if $r.kind == "partial" { $", from the nearer of the tiled and the lit ($r.residual.most) at most, ($r.residual.p99) at the 99th, ($r.mixed_rows) rows taking both" } else { "" })
             print $"fps: the handoff, ($r.kind) against lit at level ($r.level) under the ($r.lighting) lumels: ($i.differing) of ($i.pixels) pixels differ, by ($i.most) at most, ($i.p99) at the 99th, ($i.mean | math round --precision 3) on average; past the last node ($r.clamped.pixels) pixels, by ($r.clamped.most) at most; ($r.left_out) left out($partial)"
         }
+        let past = ($held.windows | each {|w| $w.stamp - $w.from })
+        let e = $held.early
+        let lead = ((($e.started - $e.placed) * 1000) | math round --precision 1)
+        print $"fps: the handoff's screens: each of ($held.windows | length) runs shows a frame of its settled window, ($past | math min) to ($past | math max) frames past its second placement's, its E after it; the tied fixture refused by its stamp; the placement due ($HANDOFF_EARLY) before the screen written ($lead) ms before it was asked, its screen (if $e.accepted { 'accepted' } else { 'refused' }) by its stamp, frame ($e.stamp) against the window from ($e.from) to ($e.final)"
         print "fps: ok"
         return
     }
@@ -1867,9 +1889,68 @@ def dump-frame [surface: int]: nothing -> binary {
 
 # The console's M frame, a debug build's: every block's level raised by
 # byte 4 from the frame's drawing on, the chain's last at most, 0 for
-# the block's own.
-def raise-frame [levels: int]: nothing -> binary {
-    [("M" | into binary), 0x[00 00 00], ($levels | into binary | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+# the block's own; byte 5 set (`--stamp`) the HUD stamping each frame's
+# number from then on (stamp-of).
+def raise-frame [levels: int, --stamp]: nothing -> binary {
+    [("M" | into binary), 0x[00 00 00], ($levels | into binary | bytes at 0..<1), (if $stamp { 0x[01] } else { 0x[00] }), (0..<58 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The frame number a debug build's HUD stamped on a capture held whole
+# (raise-frame's `--stamp`): the low STAMP_BITS bits, a cell of
+# STAMP_CELL pixels square a bit along the top-left, the n-th from the
+# left the n-th bit, STAMP_ONE for a one and STAMP_ZERO for a zero; null
+# when a cell is not wholly one or the other.
+def stamp-of [bytes: binary]: nothing -> oneof<int, nothing> {
+    let head = (ppm-head $bytes)
+    mut value = 0
+    for bit in 0..<$STAMP_BITS {
+        let cell = (0..<$STAMP_CELL | each {|y| 0..<$STAMP_CELL | each {|x| pixel-at $bytes $head [(($bit * $STAMP_CELL) + $x), $y] } } | flatten | uniq)
+        if $cell == [$STAMP_ONE] {
+            $value = ($value bit-or (1 bit-shl $bit))
+        } else if $cell != [$STAMP_ZERO] {
+            return null
+        }
+    }
+    $value
+}
+
+# A capture with one word of a record changed: the first record of
+# `kind` whose frame, its word at byte 4, is `frame`, its word at `at`
+# set to `value`.
+def record-altered [api: binary, kind: int, frame: int, at: int, value: int]: nothing -> binary {
+    let word = {|v: int| $v | into binary | bytes at 0..<4 }
+    let starts = ($api | bytes index-of --all (do $word $kind) | where {|o| ($o mod $RECORD) == 0 and ($api | bytes at ($o + 4)..<($o + 8)) == (do $word $frame) })
+    assert (($starts | length) > 0) $"a record of kind ($kind) for frame ($frame) to alter"
+    let o = ($starts | first)
+    [($api | bytes at 0..<($o + $at)), (do $word $value), ($api | bytes at ($o + $at + 4)..)] | bytes collect
+}
+
+# What keeps a handoff run's window as its kind requires, each problem
+# naming its frame: `rows`, the frames from the second placement's
+# through the marker's, `kind` tiled (the full settling predicate: no
+# block drawn without its tile, no BUILDING tile, nothing admitted,
+# dropped, filtered, or built), held (nothing read from a tile, nothing
+# built, no BUILDING tile), or partial (nothing built, no BUILDING tile,
+# `slots` slots in use, nothing evicted, the tiled pixels one count
+# throughout, and requests admitted and filtered every frame).
+def handoff-unsettled [rows: list<any>, kind: string, slots: int]: nothing -> list<string> {
+    let tiled = ($rows | get -o 0.tiled_pixels)
+    $rows | each {|r|
+        let broken = (match $kind {
+            "tiled" => ([missed_blocks building admitted dropped filtered tiles_built] | where {|f| ($r | get $f) != 0 })
+            "held" => ([tiled_pixels tiles_built building] | where {|f| ($r | get $f) != 0 })
+            _ => ([
+                (if $r.tiles_built != 0 { "tiles_built" })
+                (if $r.building != 0 { "building" })
+                (if $r.slots_used != $slots { "slots_used" })
+                (if $r.evicted != 0 { "evicted" })
+                (if $r.tiled_pixels != $tiled { "tiled_pixels" })
+                (if $r.admitted == 0 { "admitted" })
+                (if $r.filtered == 0 { "filtered" })
+            ] | compact)
+        })
+        if ($broken | is-empty) { null } else { $"frame ($r.frame): ($broken | each {|f| $'($f) ($r | get $f)' } | str join ', ')" }
+    }
 }
 
 # A view placed at PLACE_AT and again at SETTLE_AT, so the frame line
@@ -2654,15 +2735,38 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
 # the serial backend. Each run's frame line, the second placement's, held:
 # the wall drawn from settled tiles, from none held off, and under partial
 # residency from the slots built once, fewer blocks than settled. Each
-# picture held to the lit one over the wall's rows and columns on the
-# screen inset by FIXTURE_INSET, the crosshair's square left out, by
-# tiles.nu's handoff in a nu of its own: each pixel's greatest channel
-# difference, of 255, as its pixels, those differing, the most, the 99th,
-# and the mean, the pixels whose texel's light is clamped at the last node
-# apart; under partial residency each pixel's difference from the nearer
-# of the tiled and the lit pictures, and rows taking pixels nearer each,
-# the spans alternating hits and misses. Returns every comparison.
-export def handoff-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> list<any> {
+# run read by gauge measure, complete and valid at schema 5, its window
+# from the second placement's frame through the marker's held to its
+# kind (handoff-unsettled); its screen, taken while the run goes on,
+# whole, its stamp a frame of that window before the marker's; and its E
+# written after the screen completed. The dispatch held on synthetic
+# late wakes (jab due-order); the window's predicate refusing a tiled
+# run's records with a BUILDING tile at the window's last frame, past
+# the screen; and three live fixtures: the second placement, the screen,
+# and the E due at one time, written screen, placement, E, refused by
+# the stamp; the placement due HANDOFF_EARLY before the screen, written
+# before it was asked, its screen judged by its stamp alone; and the
+# screen and the E due together, the E after the screen. Each picture
+# held to the lit one over the wall's rows and columns on the screen
+# inset by FIXTURE_INSET, the crosshair's square and the stamp's cells
+# left out, by tiles.nu's handoff in a nu of its own: each pixel's
+# greatest channel difference, of 255, as its pixels, those differing,
+# the most, the 99th, and the mean, the pixels whose texel's light is
+# clamped at the last node apart; under partial residency each pixel's
+# difference from the nearer of the tiled and the lit pictures, and rows
+# taking pixels nearer each, the spans alternating hits and misses.
+# Returns every comparison, every run's window, its first and last
+# frames and its stamp, and the early fixture's reading.
+export def handoff-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> record<comparisons: list<any>, windows: list<any>, early: record> {
+    # the dispatch on late wakes (jab due-order): a poll past the overdue
+    # second placement, the screen, and the E takes the placement, the
+    # screen, then the E, which waits on the screen; the three due at one
+    # time take the screen first
+    let names = {|order: list<any>| $order | each {|a| if $a.kind == "screen" { "screen" } else { [P E] | get $a.index } } }
+    let late = (do $names (jab due-order [{ kind: "send", index: 0, at: $SETTLE_AT }, { kind: "send", index: 1, at: $HANDOFF_END_AT }] $HANDOFF_SCREEN_AT ($HANDOFF_END_AT + 100ms)))
+    assert equal $late [P screen E] $"a late poll takes the overdue placement, the screen, then the E: ($late)"
+    let tied = (do $names (jab due-order [{ kind: "send", index: 0, at: $HANDOFF_SCREEN_AT }, { kind: "send", index: 1, at: $HANDOFF_SCREEN_AT }] $HANDOFF_SCREEN_AT $HANDOFF_SCREEN_AT))
+    assert equal $tied [screen P E] $"a placement, the screen, and the E due at one time take the screen first: ($tied)"
     let tree = (handoff-tree $source $game ($out | path join "handoff"))
     let m = (map read ($tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
     let material = ($m.materials | enumerate | where {|e| $e.item.name == $HANDOFF_FIXTURE.name } | get 0.index)
@@ -2712,27 +2816,60 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     assert (0 in $crossing) $"the wall's spans cross tiles of level 0 on the screen: ($seen) texels from the map's first node"
     let place = { name: "handoff", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 90, pitch: 0 }
     let disk = (romfs $tree ($out | path join "handoff.romfs"))
-    let launch = {|name: string, sends: list<any>|
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send ($sends | append (settled $place) | sort-by at) --capture 3500ms --seconds 5)
+    let placed = (pose pose-frame $place)
+    let ended = (pose command-frame "E")
+    let legs = [{ name: "start", places: [], pad: [] }, { name: "first", places: [$place], pad: [] }, { name: "second", places: [$place], pad: [] }]
+    let timing = { second: $SETTLE_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_END_AT }
+    # a run: the view placed at PLACE_AT and again at the `second` of
+    # `times`, the screen taken at its `screen` while the run goes on, and
+    # the E sent at its `end`; read whole, its window the second leg's
+    # rows, the frames from the second placement's through the marker's
+    let launch = {|name: string, sends: list<any>, times: record|
+        let all = ($sends | append [{ at: $PLACE_AT, bytes: $placed }, { at: $times.second, bytes: $placed }, { at: $times.end, bytes: $ended }] | sort-by at)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --screen $times.screen --seconds $HANDOFF_SECONDS)
         let label = $"the handoff's ($name)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
         assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
         let line = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
         assert ($line.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($line)"
-        assert ($run.screen != "") $"a screen was taken on ($label)"
-        { screen: $run.screen, frame: $line }
+        assert ($run.screen != "") $"a screen taken whole on ($label), asked at ($run.screen_started) s"
+        let m = (gauge measure $run.api $legs)
+        assert ($m.complete and $m.valid and $m.schema == 5) $"($label) complete and valid at schema 5: ($m.problems | str join '; ') ($m.invalid | str join '; ')"
+        let window = ($m.rows | where leg == "second")
+        let stamp = (stamp-of (open --raw $run.screen | into binary))
+        let written = {|at: duration, bytes: binary| $run.send_seconds | get ($all | enumerate | where {|x| $x.item.at == $at and $x.item.bytes == $bytes } | get 0.index) }
+        {
+            name: $name, label: $label, screen: $run.screen, frame: $line, api: $run.api, final: $m.final, window: $window,
+            stamp: $stamp, shown: ($stamp != null and ($window | any {|r| ($r.frame mod (1 bit-shl $STAMP_BITS)) == $stamp and $r.frame < $m.final })),
+            started: $run.screen_started, completed: $run.screen_completed,
+            placed: (do $written $times.second $placed), ended: (do $written $times.end $ended),
+        }
+    }
+    # a run's window held to its kind, its screen a frame of the window
+    # before the marker's, and its E written after the screen completed
+    let holds = {|r: record, kind: string|
+        let unsettled = (handoff-unsettled $r.window $kind $HANDOFF_PARTIAL_SLOTS)
+        assert ($unsettled | is-empty) $"($r.label) held as a ($kind) run from its second placement's frame through the marker's: ($unsettled | first 3 | str join '; ')"
+        assert $r.shown $"the screen of ($r.label) shows a frame of its window before the marker's: the stamp ($r.stamp), the window frames ($r.window | get -o 0.frame) to ($r.final)"
+        assert ($r.ended != null and $r.ended > $r.completed) $"the E of ($r.label) written after its screen completed: at ($r.ended) s, the screen at ($r.completed) s"
+        { name: $r.name, from: ($r.window | get 0.frame), stamp: $r.stamp, final: $r.final }
     }
     # loops, so a failing assertion is the error raised, not an each's
     mut runs = []
+    mut windows = []
+    mut kept: any = null
     for lighting in $HANDOFF_LIGHTINGS {
         let light = {|held: bool| if $lighting == "gradient" { level-frame false $held --gradient } else { level-frame false $held --parity } }
         for l in 0..<$levels {
             let label = $"at level ($l) under the ($lighting) lumels"
-            let lit = (do $launch $"($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l) }])
+            let lit = (do $launch $"($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $timing)
             assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
-            let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l) }])
+            $windows = ($windows | append (do $holds $lit "held"))
+            let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $timing)
             assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
+            $windows = ($windows | append (do $holds $tiled "tiled"))
+            if $kept == null { $kept = $tiled }
             $runs = ($runs | append { name: $"($lighting)_($l)_tiled", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" })
             if $l in $crossing {
                 # the O after the placement, never with it: two writes at
@@ -2741,18 +2878,42 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
                 let partial = (do $launch $"($lighting)_($l)_partial" [
                     { at: 1300ms, bytes: (gauge workers-frame 0 0) }
                     { at: 1400ms, bytes: (do $light false) }
-                    { at: 1400ms, bytes: (raise-frame $l) }
+                    { at: 1400ms, bytes: (raise-frame $l --stamp) }
                     { at: ($PLACE_AT + $HANDOFF_ONCE_AFTER), bytes: (pool-frame --modes ($POOL_LIFTED + $POOL_ONCE) --cold --slots $HANDOFF_PARTIAL_SLOTS) }
-                ])
+                ] $timing)
                 let f = $partial.frame
                 assert ($f.tiles_built == 0 and $f.slots == $HANDOFF_PARTIAL_SLOTS and $f.tiled > 0 and $f.tiled < $tiled.frame.tiled) $"the wall drawn under partial residency ($label), ($HANDOFF_PARTIAL_SLOTS) slots built once and some of its blocks read from them, fewer than settled: ($f | select tiles_built slots tiled) against ($tiled.frame.tiled)"
+                $windows = ($windows | append (do $holds $partial "partial"))
                 $runs = ($runs | append { name: $"($lighting)_($l)_partial", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen })
             }
         }
     }
+    # the window's predicate reaches the marker, past the screen: the first
+    # tiled run's records with a BUILDING tile at its window's last frame,
+    # the gauge's rules still holding, refused naming that frame
+    let altered = (gauge measure (record-altered $kept.api $STORAGE_KIND $kept.final $STORAGE_BUILDING 1) $legs)
+    assert ($altered.complete and $altered.valid) $"the altered records of ($kept.label) complete and valid: ($altered.problems | str join '; ') ($altered.invalid | str join '; ')"
+    let refused = (handoff-unsettled ($altered.rows | where leg == "second") "tiled" $HANDOFF_PARTIAL_SLOTS)
+    assert equal $refused [$"frame ($kept.final): building 1"] $"the window's predicate refuses ($kept.label)'s records with a BUILDING tile at the marker's frame ($kept.final), past its screen's frame ($kept.stamp)"
+    # the live fixtures, settled on the gradient's tiles at level 0
+    let fixture = [{ at: 1400ms, bytes: (level-frame false false --gradient) }, { at: 1400ms, bytes: (raise-frame 0 --stamp) }]
+    # the second placement, the screen, and the E due at one time, written
+    # screen, placement, E: the screen precedes the placement's frame and
+    # its stamp refuses it every time
+    let tied_run = (do $launch "tied" $fixture { second: $HANDOFF_SCREEN_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_SCREEN_AT })
+    assert ($tied_run.placed != null and $tied_run.placed > $tied_run.completed and $tied_run.ended > $tied_run.placed) $"the tied fixture written screen, placement, E: the screen complete at ($tied_run.completed) s, the placement at ($tied_run.placed) s, the E at ($tied_run.ended) s"
+    assert ($tied_run.stamp != null and not $tied_run.shown) $"the tied fixture's screen refused by its stamp, a frame before the second placement's: the stamp ($tied_run.stamp), the window from ($tied_run.window | get -o 0.frame)"
+    # the placement due just before the screen, written before the screen
+    # was asked; its screen accepted or refused by its stamp alone
+    let early = (do $launch "early" $fixture { second: ($HANDOFF_SCREEN_AT - $HANDOFF_EARLY), screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_END_AT })
+    assert ($early.placed != null and $early.placed < $early.started) $"the early fixture's placement written before its screen was asked: the placement at ($early.placed) s, the screen asked at ($early.started) s"
+    assert ($early.stamp != null) $"the early fixture's stamp read from its screen"
+    # the screen and the E due together, the E after the screen
+    let together = (do $launch "together" $fixture { second: $SETTLE_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_SCREEN_AT })
+    $windows = ($windows | append (do $holds $together "tiled"))
     let pairs = $runs
     let spec = {
-        rect: $rect, crosshair: $FIXTURE_CROSSHAIR, k: $frame.k, w: $frame.w, h: $frame.h,
+        rect: $rect, crosshair: $FIXTURE_CROSSHAIR, stamp: [0, 0, ($STAMP_BITS * $STAMP_CELL), $STAMP_CELL], k: $frame.k, w: $frame.w, h: $frame.h,
         u: [(do $u_at 0), ((do $u_at 1) - (do $u_at 0))], v: [(do $v_at 0), ((do $v_at 1) - (do $v_at 0))],
         pairs: $pairs,
     }
@@ -2776,7 +2937,10 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     assert equal ($read | get name) ($pairs | get name) $"every comparison read: ($read | get name)"
     let unmixed = ($read | where {|r| $r.kind == "partial" and $r.mixed_rows == 0 })
     assert ($unmixed | is-empty) $"under partial residency rows of the wall take the tiled picture's pixels and the lit one's both, its spans alternating hits and misses: none at ($unmixed | get name)"
-    $read
+    {
+        comparisons: $read, windows: $windows,
+        early: { stamp: $early.stamp, from: ($early.window | get -o 0.frame), final: $early.final, accepted: $early.shown, placed: $early.placed, started: $early.started },
+    }
 }
 
 # The level of a run's recording between two seconds: the peak and the

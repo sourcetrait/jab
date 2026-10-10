@@ -54,6 +54,9 @@ const memory = ["-m" "4G"]
 const transport_limit = 8
 # The QEMU every machine runs on, by its binary's name.
 const qemu_name = "qemu-system-riscv64"
+# The display's size, jab.inc's JAB_DISPLAY_WIDTH by JAB_DISPLAY_HEIGHT:
+# every screen a launch takes is this many pixels.
+const display_size = { width: 1920, height: 1080 }
 # RVA23 is the profile Jab pins, so everything it mandates is on whether
 # or not Jab itself uses it; the supervisor profile is the one carrying
 # an MMU mode and the supervisor timer the frame clock needs. RVA23 says
@@ -362,8 +365,10 @@ def image-manifest [image: path]: nothing -> record {
 # serial.log in `out`, for at most `seconds`. The status is what jab.sys.exit
 # gave, 1 on a program fault, 124 when the bound ended the run. With
 # `capture`, the screen is taken into screen.ppm that long after the
-# start and the run is then ended (status 0); with `keys`, each key is
-# pressed through the monitor that long after the start. `set` names the
+# start and the run is then ended (status 0); with `screen`, it is taken
+# that long after the start while the run goes on to its bound or its
+# exit; with `keys`, each key is pressed through the monitor that long
+# after the start. `set` names the
 # symbols the kernel was built with: DEBUG puts the kernel's debug
 # channel on the machine, whose text comes back as `debug`. With `api`,
 # or with anything to `send`, the API's port is on the machine: each
@@ -374,11 +379,19 @@ def image-manifest [image: path]: nothing -> record {
 # reaches a test; cpu_seconds is the QEMU process's CPU time over the
 # run, on a host with /proc, and wall_seconds the run's length. The
 # timed actions, the pad header, the keys, the API bytes, the pad
-# events, and the capture, go in while QEMU's process is alive, which
+# events, and the screen, go in while QEMU's process is alive, which
 # is asked of the process table rather than of /proc, so they happen
-# on every host. The workspace, whose generic disk rides along and
-# whose shim plays a pad, is the one above the kernel ELF, else the
-# one above `out`. `--window`, `--live-sound`, and `--host-pad` put the
+# on every host. Each poll takes the keys, the API bytes, and the pad
+# events in due-order's order: every one due in the order of its time,
+# and the screen after those due before its time and ahead of those
+# due at or after it, which wait until its file is whole
+# (screen-whole); a screen that fails or never comes whole leaves the
+# result no screen and every action after it unwritten.
+# `screen_started` and `screen_completed` are the screen's asking and
+# its file's completion, and `send_seconds` each entry of `send`'s
+# write, all seconds from the start, null for what never happened. The
+# workspace, whose generic disk rides along and whose shim plays a pad,
+# is the one above the kernel ELF, else the one above `out`. `--window`, `--live-sound`, and `--host-pad` put the
 # machine on the host as a run puts it, the window, the host's audio,
 # and the host's own gamepad (plan), with the bridge run beside QEMU
 # where the pad needs one and ended after; the screen and the timed
@@ -413,6 +426,7 @@ export def launch [
     --out: path                # where serial.log and the rest go
     --seconds: int = 10        # the bound
     --capture: duration = 0sec # when to take the screen and end the run; 0 never
+    --screen: duration = 0sec  # when to take the screen while the run goes on; 0 never
     --keys: table<at: duration, key: string, hold: int> = [] # keys to press that long after the start, QEMU's names, held for hold ms
     --api                      # put the API's port on the machine
     --send: table<at: duration, bytes: binary> = [] # bytes to write into the API that long after the start; puts the port on the machine
@@ -433,14 +447,15 @@ export def launch [
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
     --threads-at: list<duration> = [] # each time to read every QEMU thread's CPU, kept whole in the result's `thread_readings`; none unless given
     --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
+    if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
     let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
     let out = $machine.out
     let log = $machine.serial_log
     let qemu_log = $machine.qemu_log
-    let screen = $machine.screen
+    let screen_file = $machine.screen
     let pidfile = $machine.pidfile
     let monitor = $machine.monitor
     let ports = { debug_log: $machine.debug_log }
@@ -459,14 +474,24 @@ export def launch [
         let pipe = $pad_in
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
+    # the timed actions in the order a poll takes them (due-order): by
+    # time, and at one time the keys, then the API's bytes, then the pad's
+    # groups, each in its table's order
+    let events = ([
+        ($keys | enumerate | each {|e| { kind: "key", index: $e.index, at: $e.item.at } })
+        ($send | enumerate | each {|e| { kind: "send", index: $e.index, at: $e.item.at } })
+        ($gamepad.groups | enumerate | each {|e| { kind: "pad", index: $e.index, at: $e.item.at } })
+    ] | flatten | enumerate | each {|e| $e.item | insert order $e.index } | sort-by at order | reject -o order)
     let started = (date now)
     job spawn { with-env $gamepad.env { ^timeout ...$disked | complete } | job send 0 }
     mut result: any = null
     mut cpu = 0.0
-    mut captured = ($capture == 0sec)
-    mut sent = 0
-    mut sent_data = 0
-    mut sent_pad = 0
+    mut events_taken = 0
+    mut screen_due = (if $capture != 0sec { $capture } else if $screen != 0sec { $screen } else { null })
+    mut screen_started: any = null
+    mut screen_completed: any = null
+    mut held = false
+    mut send_seconds = ($send | each --keep-empty {|_| null })
     mut header_sent = (not $gamepad.port)
     mut threads_first: any = null
     mut threads_held: any = null
@@ -490,28 +515,40 @@ export def launch [
             fifo-write $pad_in $gamepad.header | ignore
             $header_sent = true
         }
-        while $sent < ($keys | length) and ($keys | get $sent | get at) <= $elapsed {
-            let k = ($keys | get $sent)
-            if $alive { monitor-send $monitor $"sendkey ($k.key) ($k.hold)" | ignore }
-            $sent += 1
-        }
-        while $sent_data < ($send | length) and ($send | get $sent_data | get at) <= $elapsed {
-            let d = ($send | get $sent_data)
-            if $alive and $api_in != "" { fifo-write $api_in $d.bytes | ignore }
-            $sent_data += 1
-        }
-        while $sent_pad < ($gamepad.groups | length) and ($gamepad.groups | get $sent_pad | get at) <= $elapsed {
-            let g = ($gamepad.groups | get $sent_pad)
-            if $alive {
-                if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) | ignore } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) | ignore }
-            }
-            $sent_pad += 1
-        }
-        if (not $captured) and ($elapsed >= $capture) {
-            $captured = true
-            if $alive and (monitor-send $monitor $"screendump (hmp-quoted $screen)") {
-                wait-for-file $screen
-                if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
+        # every due action in due-order's order: a screen that fails holds
+        # every action after it for the rest of the run, as the capture's
+        # quit does
+        if not $held {
+            for action in (due-order ($events | skip $events_taken) $screen_due $elapsed) {
+                if $action.kind == "screen" {
+                    $screen_started = (((date now) - $started) / 1sec)
+                    let asked = (if $alive { monitor-send $monitor $"screendump (hmp-quoted $screen_file)" } else { false })
+                    if not ($asked and (screen-whole $screen_file)) {
+                        $held = true
+                        break
+                    }
+                    $screen_completed = (((date now) - $started) / 1sec)
+                    $screen_due = null
+                    if $capture != 0sec {
+                        if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
+                        $held = true
+                        break
+                    }
+                } else {
+                    let written = (if not $alive { false } else if $action.kind == "key" {
+                        let k = ($keys | get $action.index)
+                        monitor-send $monitor $"sendkey ($k.key) ($k.hold)"
+                    } else if $action.kind == "send" {
+                        if $api_in == "" { false } else { fifo-write $api_in ($send | get $action.index | get bytes) }
+                    } else {
+                        let g = ($gamepad.groups | get $action.index)
+                        if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) } else { false }
+                    })
+                    if $written and $action.kind == "send" {
+                        $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
+                    }
+                    $events_taken += 1
+                }
             }
         }
         # each thread's CPU over the held span: a reading at `threads`,
@@ -542,7 +579,7 @@ export def launch [
         serial: (if ($log | path exists) { open --raw $log | decode } else { "" }),
         debug: (if $ports.debug_log != "" and ($ports.debug_log | path exists) { open --raw $ports.debug_log | decode } else { "" }),
         api: (if $api_out != "" and ($api_out | path exists) { open --raw $api_out | into binary } else { 0x[] }),
-        screen: (if ($screen | path exists) { $screen } else { "" }),
+        screen: (if $screen_completed != null { $screen_file } else { "" }),
         qemu_log: $qemu_log,
         stderr: $result.stderr,
         cpu_seconds: $cpu,
@@ -557,7 +594,25 @@ export def launch [
         threads: (if $threads_held == null { [] } else { $threads_held.threads }),
         threads_span: (if $threads_held == null { null } else { $threads_held.span }),
         thread_readings: ($readings | append $unread),
+        screen_started: $screen_started,
+        screen_completed: $screen_completed,
+        send_seconds: $send_seconds,
     }
+}
+
+# The order a launch's poll takes its timed actions in, `elapsed` after
+# the start: every event due by then, its `at` at or before it, in the
+# order of their times and at one time in the order given; and the
+# screen, due at `screen` while it is still to take (null when none
+# is), once due after every event due before its time and ahead of
+# every event due at or after it, which wait on it, the poll writing
+# them only once the screen is whole. The events come back as given,
+# the screen as a row of kind `screen`, its `index` 0 and its `at` its
+# time.
+export def due-order [events: table<kind: string, index: int, at: duration>, screen: oneof<duration, nothing>, elapsed: duration]: nothing -> table<kind: string, index: int, at: duration> {
+    let due = ($events | enumerate | each {|e| $e.item | insert order $e.index } | where {|e| $e.at <= $elapsed } | sort-by at order | reject -o order)
+    if $screen == null or $screen > $elapsed { return $due }
+    ($due | where {|e| $e.at < $screen }) ++ [{ kind: "screen", index: 0, at: $screen }] ++ ($due | where {|e| $e.at >= $screen })
 }
 
 # The device tree QEMU builds for a launch's machine of that many harts,
@@ -1081,17 +1136,21 @@ def hmp-quoted [text: string]: nothing -> string {
     $"\"($escaped)\""
 }
 
-# Wait for a file QEMU writes whole to appear and stop growing.
-def wait-for-file [path: path]: nothing -> nothing {
-    mut last = -1
+# Whether a screen QEMU writes comes whole: its file the PPM header
+# naming the display's size (display_size) and every pixel's three bytes
+# after it, looked at every 50 ms for at most five seconds.
+def screen-whole [path: path]: nothing -> bool {
+    let header = ($"P6\n($display_size.width) ($display_size.height)\n255\n" | into binary)
+    let whole = (($header | bytes length) + $display_size.width * $display_size.height * 3)
     for _ in 0..100 {
-        sleep 50ms
         if ($path | path exists) {
-            let size = (ls -D $path | get 0.size | into int)
-            if $size > 0 and $size == $last { return }
-            $last = $size
+            if (ls -D $path | get 0.size | into int) == $whole {
+                return ((open --raw $path | into binary | bytes at 0..<($header | bytes length)) == $header)
+            }
         }
+        sleep 50ms
     }
+    false
 }
 
 # The Jab QEMU processes on this host, by their command line, which

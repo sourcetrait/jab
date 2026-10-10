@@ -488,7 +488,8 @@ def segment [a: record, b: record, t: any, y: int, run: record<from: int, to: in
 # The handoff's differences, the spec a NUON file: the `rect` compared,
 # [x0, y0, x1, y1] with the pixel past the last, the wall's own rows and
 # columns on the screen; the `crosshair`'s half side, its square left
-# out; the map's `k`, `w`, and `h`; the texel coordinate of level 0 from
+# out; the `stamp`'s cells, [x0, y0, x1, y1] as `rect`, left out; the
+# map's `k`, `w`, and `h`; the texel coordinate of level 0 from
 # the map's first node at the centre of pixel column x, `u.0 + u.1 x`,
 # and of row y, `v.0 + v.1 y`, the wall head-on; and `pairs`, each a
 # `name`, `lighting`, `kind`, and `level`, a capture `a` held to a
@@ -498,7 +499,8 @@ def segment [a: record, b: record, t: any, y: int, run: record<from: int, to: in
 # (spread-of) over the pixels whose texel lies wholly before the last
 # node, `inner`, and over those whose texel is centred past it,
 # `clamped`; the pixels left out, within a texel of level 0 of the
-# boundary between those two or under the crosshair; and with `t`, the
+# boundary between those two, under the crosshair, or under the stamp;
+# and with `t`, the
 # statistics of each pixel's difference from the nearer of `t` and `b`,
 # `residual`, and the rows taking pixels nearer each, `mixed_rows`. A pair
 # a nu, the caller running them side by side: par-each within one nu
@@ -508,6 +510,7 @@ def "main handoff" [spec: path, index: int, out: path] {
     let s = (open $spec)
     let rect = $s.rect
     let ch = $s.crosshair
+    let stamp = $s.stamp
     let p = ($s.pairs | get $index)
     let cols = (runs-of (lines-of $rect.0 $rect.2 $s.u $p.level $s.k ($s.w - 1)) $rect.0 | where value != 2)
     let rows = (lines-of $rect.1 $rect.3 $s.v $p.level $s.k ($s.h - 1))
@@ -518,7 +521,8 @@ def "main handoff" [spec: path, index: int, out: path] {
         let y = ($rect.1 + $r.index)
         if $r.item == 2 { [] } else {
             let runs = ($cols | each {|c| if $r.item == 1 { $c | update value 1 } else { $c } })
-            let kept = (if (($y - 540) | math abs) <= $ch { $runs | each {|c| cut-run $c (960 - $ch) (961 + $ch) } | flatten } else { $runs })
+            let crossed = (if (($y - 540) | math abs) <= $ch { $runs | each {|c| cut-run $c (960 - $ch) (961 + $ch) } | flatten } else { $runs })
+            let kept = (if $y >= $stamp.1 and $y < $stamp.3 { $crossed | each {|c| cut-run $c $stamp.0 $stamp.2 } | flatten } else { $crossed })
             $kept | each {|c| segment $a $b $t $y $c }
         }
     } | flatten)

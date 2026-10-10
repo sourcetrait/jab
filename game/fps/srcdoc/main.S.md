@@ -37,7 +37,8 @@ instructions, is the pacing, a phase.
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
 the ownership alone; the build is debug with owner beside it, `just do
-pose <map> <poses> <out> --set debug,owner`.
+pose <map> <poses> <out> --set debug,owner`. A debug build hands hud_draw
+the frame's number, s8, in a0, for its stamp (hud.S).
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,

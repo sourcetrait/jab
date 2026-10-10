@@ -174,6 +174,19 @@ the build output: `api.in`, a named pipe the host writes into, and
 through `jab launch --api --send`. `example/wasd` speaks a small binary
 API over it, its records at the top of its `main.S`.
 
+A test takes the screen with `jab launch --capture <at>`, which ends the
+run once the screen is whole, or with `--screen <at>`, which takes it
+while the run goes on to its bound. Each turn of the launch's loop takes
+the timed inputs, the keys, the API's bytes, and the pad's events, in
+the order of their times, and the screen after those due before its time
+and ahead of those due at or after it, which wait until its file is
+whole: the PPM's header and every pixel of the display. `jab due-order`
+is that order as a function of the inputs and the time, so a test can
+hold it on a late turn of the loop without a run. A screen that fails
+leaves the result no screen and every input after it unwritten. The
+result carries when the screen was asked and completed and when each of
+the API's writes went in, seconds from the launch's start.
+
 A run prints nothing of its own; what the kernel says in a debug build
 is in `debug.log` beside the program's build output, and what a program
 sends over the API is in `api.out` there. `just watch`, from any shell
