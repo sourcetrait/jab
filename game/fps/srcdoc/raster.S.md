@@ -346,6 +346,14 @@ slot with its surface, level, pixels, the passes in t4, and the masked flag;
 a flat lit block, a sprite, keeps none. t3, t5, a0, and a5 are free there,
 the rejected count already taken.
 
+## .macro interval_pixels
+
+An interval's pixels from the block's steps: the larger of |du| and |dv|
+shifted down by k plus 15 less INTERVAL_SHIFT_MAX reads 0 for four
+blocks, 1 for two, more for one, the interval cut short by the span's
+pixels left. A lit block's decision and a tile block's alike, so the
+knots stand wherever the tiles are (The cadence).
+
 ## packet_render
 
 The serial backend, and the reference a worker's backend scales against:
@@ -484,8 +492,9 @@ slot 224. One level a block, chosen before the tile or the chain: lit, a
 block of a span with tiles reads its tile at that level when the tile is
 READY, and any other block takes the lit loop through the chain at that
 same level, so a block never reads a sharper level than it asks; a block
-read from a tile pays no sample, no interval, and no brightness carry. The
-texel step a pixel, the larger of |du| and |dv|, against the
+read from a tile pays no sample and no brightness carry, deciding an
+interval where none runs and counting its pixels off the one that does
+(The cadence). The texel step a pixel, the larger of |du| and |dv|, against the
 lumel's 2^k texels: four blocks when they stay within half a lumel over 64
 pixels, two when within it over 32, else one, so a lumel spans at least two
 samples wherever one block allows it. The end's u and v: the block's own
@@ -505,9 +514,10 @@ interval ends, its exact end sample takes the carry's place. A block on its tile
 depth first, then the texel read from the tile by the coordinates' low bits
 at the level; no multiply, no sample, no brightness. Masked, on its tile:
 the tile's texel, whose alpha under the pass leaves the pixel. The tiled
-block's end: the pixels counted as read from tiles, the interval over and
-the brightness entering the next block marked stale, so a lit block after
-samples its own start. Textured: the depth test, then the texel and the
+block's end: the pixels counted as read from tiles and off the interval,
+the brightness entering the next block marked stale, and slot 296 set
+while the interval runs on, so a lit block after it re-enters the
+interval or, past its end, samples its own start. Textured: the depth test, then the texel and the
 stores. Masked: the depth test, then the texel, whose alpha under the pass
 leaves the pixel. The block's end is the next block's start; its rejected
 pixels, the block's less those past the depth test, are kept, and a missed
@@ -547,7 +557,9 @@ block: the read before stepped every block by a sixteenth whatever its
 length, so an eight-pixel block got half its gradient.
 
 The span's state across the pixel loops lives in stack slots, the
-interval's pixels left, the brightness, and the interval's end sample, and the interval's length rides
+interval's pixels left (152), the brightness (160), the interval's end
+sample (264), its knot's u and v (272, 280) and its whole length (288),
+and the re-entry a tile block leaves pending (296), and the interval's length rides
 the loop's count register until the loop needs it, since every register is
 taken in the pixel loops: a first form kept the interval's length and shift
 and a masked flag in slots too, and the no-read probe priced the read at
@@ -560,6 +572,34 @@ the interval's start: in the one slot, the first block's carry stood as the
 next interval's start, a lag of a block's change in the light that the
 handoff's measurement read at some 50 of 255 under the parity lumels,
 every interval's start the light a block before its own.
+
+The cadence holds whatever the residency, so every lit pixel reads as
+the all-lit span reads it. An interval's start and length are decided at
+the same blocks in every picture, tile or lit: at a block where none
+runs (slot 152 zero), interval_pixels from that block's steps, its knot's
+coordinates, the block's u and v at its start, kept in slots 272 and 280
+and its whole length in 288, a tile block deciding without a sample. A
+tile block counts its pixels off the interval rather than ending it and
+sets slot 296 while the interval runs on; one ending inside it leaves the
+next block a fresh knot, sampled at its start. A lit block entering
+mid-interval after a tile block re-enters it as the all-lit span stood
+there: it samples the knot, takes the interval's end from its pixels
+left past this block's start, from one divide or the block's own end,
+samples it, steps over the whole length as the decision did, and starts
+from the knot's sample plus the step times the pixels from the knot to
+this block, one multiply, since the packed lanes' sum is linear modulo
+2^64 and the product is the carried word exactly. The equality is exact
+in the integers: u/z, v/z, and 1/z at a block are the span's start values
+plus whole steps, so the end's coordinates, both samples, and the step
+are the all-lit span's. A re-entry costs the knot's sample, the end's
+divide and sample, and the multiply; a tile block the decision where none
+runs and a subtraction. On a COUNT build the re-entries on spans whose 1/z
+changes count by the interval's case: a whole one of two blocks, of
+four, and one cut short by the span's end, whose step is the per-lane
+division. Before, a tile block ended the interval and the lit block after
+started its own, residency moving the knots: on the parity lumels a
+partial picture differed from both the tiled and the lit by up to 25 of
+255 head-on.
 
 ### The chain's level
 
@@ -618,14 +658,16 @@ drew nothing, hidden behind what the frame drew before it, is neither
 counted nor asked for, so a settled view counts no miss, where counting
 at the judgement left 769 hidden blocks of the settled spawn view missed
 every frame with nothing to ask. t0 and t1, the pixel's and the depth's
-addresses, ride slots 248 and 256 across the call, the frame 272 bytes.
+addresses, ride slots 248 and 256 across the call, the frame 304 bytes.
 The request stays out of the packet's render family, whose page holds
 little room past the hit path.
 
-A hit pays nothing of the lighting: no sample, no interval, no brightness
-carry. The tile loop ends by marking the interval over and the brightness
-entering the next block stale, a -1 in its slot, and a lit block that
-finds the slot stale samples its own start before its interval; the span
+A hit pays no sample and no brightness carry; it decides an interval
+where none runs, as a lit block would, and counts its pixels off the one
+that does. The tile loop ends by marking the brightness entering the
+next block stale, a -1 in its slot, with slot 296 set while the interval
+runs on: a lit block after it re-enters the interval (The cadence), and
+one starting a fresh interval samples its own start; the span
 start no longer samples at all, so a span whose first block is tiled pays
 no sample, and one whose first block is lit samples there instead. The
 atlas cache's second cut decided after the lighting setup and carried

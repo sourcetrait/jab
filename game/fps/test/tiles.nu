@@ -493,7 +493,9 @@ def segment [a: record, b: record, t: any, y: int, run: record<from: int, to: in
 # the map's first node at the centre of pixel column x, `u.0 + u.1 x`,
 # and of row y, `v.0 + v.1 y`, the wall head-on; and `pairs`, each a
 # `name`, `lighting`, `kind`, and `level`, a capture `a` held to a
-# capture `b`, and for partial residency a third, `t`, else empty. The
+# capture `b`, and for partial residency a third, `t`, else empty; a pair
+# with `whole` set reads its own `rect` with no texel map, every pixel
+# of it inner, for a pose the wall's lines do not describe. The
 # pair at `index`, its statistics saved to out as NUON with its own
 # fields: the statistics of each pixel's greatest channel difference
 # (spread-of) over the pixels whose texel lies wholly before the last
@@ -508,12 +510,13 @@ def segment [a: record, b: record, t: any, y: int, run: record<from: int, to: in
 # all its threads busy.
 def "main handoff" [spec: path, index: int, out: path] {
     let s = (open $spec)
-    let rect = $s.rect
     let ch = $s.crosshair
     let stamp = $s.stamp
     let p = ($s.pairs | get $index)
-    let cols = (runs-of (lines-of $rect.0 $rect.2 $s.u $p.level $s.k ($s.w - 1)) $rect.0 | where value != 2)
-    let rows = (lines-of $rect.1 $rect.3 $s.v $p.level $s.k ($s.h - 1))
+    let whole = ($p | get -o whole | default false)
+    let rect = (if $whole { $p.rect } else { $s.rect })
+    let cols = (if $whole { [{ from: $rect.0, to: $rect.2, value: 0 }] } else { runs-of (lines-of $rect.0 $rect.2 $s.u $p.level $s.k ($s.w - 1)) $rect.0 | where value != 2 })
+    let rows = (if $whole { $rect.1..<$rect.3 | each {|y| 0 } } else { lines-of $rect.1 $rect.3 $s.v $p.level $s.k ($s.h - 1) })
     let a = (capture $p.a)
     let b = (capture $p.b)
     let t = (if $p.t == "" { null } else { capture $p.t })
@@ -528,7 +531,7 @@ def "main handoff" [spec: path, index: int, out: path] {
     } | flatten)
     let counted = (total ($segments | each {|g| total ($g.hist | each {|h| $h.count }) }))
     {
-        name: $p.name, lighting: $p.lighting, kind: $p.kind, level: $p.level,
+        name: $p.name, pose: ($p | get -o pose | default ""), lighting: $p.lighting, kind: $p.kind, level: $p.level,
         inner: (spread-of (merged ($segments | where value == 0 | each {|g| $g.hist }))),
         clamped: (spread-of (merged ($segments | where value == 1 | each {|g| $g.hist }))),
         left_out: ((($rect.2 - $rect.0) * ($rect.3 - $rect.1)) - $counted),

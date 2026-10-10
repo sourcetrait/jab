@@ -393,10 +393,14 @@ rounds cancelled (workers.S), the two band counts WORKERS_MAX's.
 A COUNT build's line after each reported frame's: `fps: count {divides}
 divides, {avoided} avoided; blocks {shifted} shifted, {short} short;
 negative steps off sixteen {u} in u, {v} in v; flat spans {flat};
-mismatches {mismatches}`, from count_stats (raster.S). The divides
-span_fill made before a change are the made plus the avoided; every
-avoided one was recomputed from its original operands and compared, a
-difference counted a mismatch.
+mismatches {mismatches}; re-entries {two} in two blocks, {four} in four,
+{cut} cut short`, from count_stats (raster.S), every count the frame's
+own, world_draw zeroing them. The divides span_fill made before a change
+are the made plus the avoided; every avoided one was recomputed from its
+original operands and compared, a difference counted a mismatch. The
+re-entries are lit blocks entering an interval mid-way after a tile
+block on spans whose 1/z changes, by the interval's case (raster.S's The
+cadence).
 
 ## clear_screen
 

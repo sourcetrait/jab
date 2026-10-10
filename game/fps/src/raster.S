@@ -1071,6 +1071,33 @@ poly_rect:
 .endm
 .endif
 
+.macro interval_pixels
+    srai a5, t5, 63
+    xor a0, t5, a5
+    sub a0, a0, a5                  # |du|
+    srai a5, t6, 63
+    xor a6, t6, a5
+    sub a6, a6, a5                  # |dv|
+    bge a0, a6, .Linterval_most\@
+    mv a0, a6
+.Linterval_most\@:
+    ld a5, CTX_COMMAND(tp)
+    ld a5, POLY_LUMEL(a5)
+    srli a5, a5, LUMEL_K_SHIFT      # k
+    addi a7, a5, (15 - INTERVAL_SHIFT_MAX)
+    srl a0, a0, a7                  # the step in half lumels over four blocks
+    li t2, (BLOCK << 2)             # the interval's pixels: four blocks
+    beqz a0, .Linterval_cut\@
+    li t2, (BLOCK << 1)             # two
+    li a6, 1
+    beq a0, a6, .Linterval_cut\@
+    li t2, BLOCK                    # one
+.Linterval_cut\@:
+    ble t2, s10, .Linterval_done\@
+    mv t2, s10                      # cut short by the span's end
+.Linterval_done\@:
+.endm
+
 .balign CODE_PAGE
 packet_render:
     addi sp, sp, -48
@@ -1247,7 +1274,7 @@ band_render:
     ret
 
 span_fill:
-    addi sp, sp, -272
+    addi sp, sp, -304
     sd ra, 136(sp)
     sd s2, 128(sp)
     sd s3, 120(sp)
@@ -1263,6 +1290,7 @@ span_fill:
     sd a2, 24(sp)                   # the row
     sd zero, 144(sp)                # the pixels the depth test rejected, as entered less passed
     sd zero, 176(sp)                # the lumel samples
+    sd zero, 296(sp)                # no interval waiting on a re-entry
 .ifdef OWNER
     ld t0, CTX_COMMAND(tp)
     ld t0, POLY_SURFACE(t0)
@@ -1696,7 +1724,20 @@ span_fill:
 4300:
     ld t3, 160(sp)
     ld a5, 152(sp)
-    bnez a5, 49f
+    beqz a5, 4310f                  # no interval runs: one starts at this block
+    ld a0, 296(sp)
+    beqz a0, 49f                    # its brightness carried from the lit block before
+    sd zero, 296(sp)                # re-entered after a tile block
+    ld a5, 272(sp)
+    ld a6, 280(sp)
+    lumel_sample                    # the knot's, the interval's start
+    sd a5, 160(sp)
+    ld a0, 176(sp)
+    addi a0, a0, 1
+    sd a0, 176(sp)
+    ld t2, 152(sp)                  # its end its pixels left on from this block's start
+    j 443f
+4310:
     bgez t3, 431f
     mv a5, s8
     mv a6, s9
@@ -1706,29 +1747,10 @@ span_fill:
     addi a0, a0, 1
     sd a0, 176(sp)
 431:
-    srai a5, t5, 63
-    xor a0, t5, a5
-    sub a0, a0, a5                  # |du|
-    srai a5, t6, 63
-    xor a6, t6, a5
-    sub a6, a6, a5                  # |dv|
-    bge a0, a6, 441f
-    mv a0, a6
-441:
-    ld a5, CTX_COMMAND(tp)
-    ld a5, POLY_LUMEL(a5)
-    srli a5, a5, LUMEL_K_SHIFT      # k
-    addi a7, a5, (15 - INTERVAL_SHIFT_MAX)
-    srl a0, a0, a7                  # the step in half lumels over four blocks
-    li t2, (BLOCK << 2)             # the interval's pixels: four blocks
-    beqz a0, 442f
-    li t2, (BLOCK << 1)             # two
-    li a6, 1
-    beq a0, a6, 442f
-    li t2, BLOCK                    # one
-442:
-    ble t2, s10, 443f
-    mv t2, s10                      # cut short by the span's end
+    interval_pixels
+    sd s8, 272(sp)
+    sd s9, 280(sp)                  # its knot, this block's start
+    sd t2, 288(sp)                  # its whole length
 443:
     beq t2, s11, 445f
     beqz s3, 4440f
@@ -1775,12 +1797,14 @@ span_fill:
     ld a5, 0(sp)
     ld a6, 8(sp)
 446:
+    mv a4, t2                       # the interval's pixels from this block's start on
     lumel_sample
     ld t3, 160(sp)                  # the brightness at the interval's start
     sd a5, 264(sp)                  # its end sample, the next interval's start once it ends
     ld a0, 176(sp)
     addi a0, a0, 1
     sd a0, 176(sp)
+    ld t2, 288(sp)                  # its whole length, the step's
     li a7, (INTERVAL_SHIFT_MAX - 2)
     li t4, BLOCK
     beq t2, t4, 447f
@@ -1829,7 +1853,26 @@ span_fill:
     slli a6, a6, (2 * CHANNEL_BITS)
     add s0, s0, a6
 449:
-    mv a5, t2                       # the interval's pixels
+    sub a0, t2, a4                  # its pixels before this block's start
+    beqz a0, 4492f
+    mul a0, a0, s0
+    add t3, t3, a0                  # the brightness entering this block, the interval's steps taken
+.ifdef COUNT
+    beqz s3, 4492f                  # 1/z flat along the span
+    li a5, (BLOCK << 1)
+    bne t2, a5, 4493f
+    count_add COUNT_REENTRY_TWO, a5, a6
+    j 4492f
+4493:
+    li a5, (BLOCK << 2)
+    bne t2, a5, 4494f
+    count_add COUNT_REENTRY_FOUR, a5, a6
+    j 4492f
+4494:
+    count_add COUNT_REENTRY_CUT, a5, a6
+.endif
+4492:
+    mv a5, a4                       # the interval's pixels from this block on
     mv t2, s11                      # the block's, for the loop
 49:
     sub a5, a5, s11
@@ -1950,6 +1993,14 @@ span_fill:
     sd t5, 160(sp)                  # the interval over: its exact end sample
     j 60f
 80:
+    ld a0, 152(sp)
+    bnez a0, 8001f                  # inside an interval: its pixels counted off at the block's end
+    interval_pixels                 # an interval from this block's knot, as a lit block starts one
+    sd s8, 272(sp)
+    sd s9, 280(sp)
+    sd t2, 288(sp)
+    sd t2, 152(sp)
+8001:
     ld a0, CTX_TILE_HITS(tp)
     addi a0, a0, 1
     sd a0, CTX_TILE_HITS(tp)
@@ -2028,9 +2079,13 @@ span_fill:
     ld a6, CTX_TILED_PIXELS(tp)
     add a6, a6, s11
     sd a6, CTX_TILED_PIXELS(tp)
-    sd zero, 152(sp)
+    ld a5, 152(sp)
+    sub a5, a5, s11
+    sd a5, 152(sp)                  # the interval's pixels left after this block
+    snez a6, a5
+    sd a6, 296(sp)                  # one left running re-entered by a lit block after
     li a5, -1
-    sd a5, 160(sp)
+    sd a5, 160(sp)                  # no brightness carried
     j 60f
 400:
     mip_bind
@@ -2194,7 +2249,7 @@ span_fill:
     ld s10, 64(sp)
     ld s11, 56(sp)
     ld s0, 48(sp)
-    addi sp, sp, 272
+    addi sp, sp, 304
     ret
 
 .section .bss

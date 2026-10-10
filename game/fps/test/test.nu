@@ -376,6 +376,20 @@ const HANDOFF_END_AT = 3800ms
 const HANDOFF_SECONDS = 5
 # The live fixture's placement due just before the screen
 const HANDOFF_EARLY = 50ms
+# The oblique pose (IntervalPhase): the eye `off` the long wall into the
+# room and `along` it from its east end, turned `turn` degrees from
+# head-on toward its west end, so every span's 1/z changes and each row
+# runs from one-block intervals at the far end to four-block ones at the
+# near end, the screen's right edge, where a level-0 tile's boundary
+# (x = 11) falls in a span's last block, its straddle ending a span's
+# intervals cut short; ONCE construction on HANDOFF_OBLIQUE_SLOTS slots
+# builds the near tiles first, leaving resident tiles beside missing
+# ones in the four-block part; levels 0 to HANDOFF_OBLIQUE_LEVELS - 1
+const HANDOFF_OBLIQUE = { along: 1.98, off: 2.5, turn: 45 }
+const HANDOFF_OBLIQUE_SLOTS = 3
+const HANDOFF_OBLIQUE_LEVELS = 3
+# a COUNT build's count line, every count the reported frame's own
+const COUNT_LINE = "fps: count {divides} divides, {avoided} avoided; blocks {shifted} shifted, {short} short; negative steps off sixteen {nu} in u, {nv} in v; flat spans {flat}; mismatches {mismatches}; re-entries {two} in two blocks, {four} in four, {cut} cut short"
 # hud.S's stamp: STAMP_BITS cells of STAMP_CELL pixels square along the
 # screen's top-left, the n-th from the left the frame number's n-th bit
 const STAMP_BITS = 16
@@ -620,7 +634,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         for r in $held.comparisons {
             let i = $r.inner
             let partial = (if $r.kind == "partial" { $", from the nearer of the tiled and the lit ($r.residual.most) at most, ($r.residual.p99) at the 99th, ($r.mixed_rows) rows taking both" } else { "" })
-            print $"fps: the handoff, ($r.kind) against lit at level ($r.level) under the ($r.lighting) lumels: ($i.differing) of ($i.pixels) pixels differ, by ($i.most) at most, ($i.p99) at the 99th, ($i.mean | math round --precision 3) on average; past the last node ($r.clamped.pixels) pixels, by ($r.clamped.most) at most; ($r.left_out) left out($partial)"
+            print $"fps: the handoff ($r.pose), ($r.kind) against lit at level ($r.level) under the ($r.lighting) lumels: ($i.differing) of ($i.pixels) pixels differ, by ($i.most) at most, ($i.p99) at the 99th, ($i.mean | math round --precision 3) on average; past the last node ($r.clamped.pixels) pixels, by ($r.clamped.most) at most; ($r.left_out) left out($partial)"
+        }
+        for lighting in ($held.reentries | get lighting | uniq) {
+            let counted = ($held.reentries | where lighting == $lighting | each {|c| $"level ($c.level) ($c.two) in two blocks, ($c.four) in four, ($c.cut) cut short" } | str join "; ")
+            print $"fps: the handoff oblique under the ($lighting) lumels, re-entries on the reported frame: ($counted)"
         }
         let past = ($held.windows | each {|w| $w.stamp - $w.from })
         let e = $held.early
@@ -2732,7 +2750,11 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
 # with the tiles held off, the lit loop's picture; at the levels whose
 # tiles the wall's spans cross on the screen, under partial residency
 # too, the O frame's ONCE construction on HANDOFF_PARTIAL_SLOTS slots on
-# the serial backend. Each run's frame line, the second placement's, held:
+# the serial backend; and posed obliquely (HANDOFF_OBLIQUE), every span's
+# 1/z changing, held off, settled, and under partial residency on
+# HANDOFF_OBLIQUE_SLOTS slots at levels 0 to HANDOFF_OBLIQUE_LEVELS - 1,
+# compared over the whole screen. The set runs on a handoff,count build.
+# Each run's frame line, the second placement's, held:
 # the wall drawn from settled tiles, from none held off, and under partial
 # residency from the slots built once, fewer blocks than settled. Each
 # run read by gauge measure, complete and valid at schema 5, its window
@@ -2753,11 +2775,16 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
 # greatest channel difference, of 255, as its pixels, those differing,
 # the most, the 99th, and the mean, the pixels whose texel's light is
 # clamped at the last node apart; under partial residency each pixel's
-# difference from the nearer of the tiled and the lit pictures, and rows
-# taking pixels nearer each, the spans alternating hits and misses.
-# Returns every comparison, every run's window, its first and last
-# frames and its stamp, and the early fixture's reading.
-export def handoff-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> record<comparisons: list<any>, windows: list<any>, early: record> {
+# difference from the nearer of the tiled and the lit pictures, 0 at
+# every pixel, the lit intervals keeping the all-lit span's knots, and
+# rows taking pixels nearer each, the spans alternating hits and misses.
+# Every case of a lit block re-entering an interval on a span whose 1/z
+# changes, two blocks, four, and cut short, counted on some oblique
+# partial run's reported frame under each light. Returns every
+# comparison, every run's window, its first and last frames and its
+# stamp, the early fixture's reading, and the oblique runs' re-entries.
+export def handoff-holds [kernel: path, image: path, out: path, set: string, source: record, game: path]: nothing -> record<comparisons: list<any>, windows: list<any>, early: record, reentries: list<any>> {
+    assert ("COUNT" in ($set | split row ",")) $"the handoff runs on a handoff,count build, its re-entries counted: ($set)"
     # the dispatch on late wakes (jab due-order): a poll past the overdue
     # second placement, the screen, and the E takes the placement, the
     # screen, then the E, which waits on the screen; the three due at one
@@ -2819,13 +2846,15 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     let placed = (pose pose-frame $place)
     let ended = (pose command-frame "E")
     let legs = [{ name: "start", places: [], pad: [] }, { name: "first", places: [$place], pad: [] }, { name: "second", places: [$place], pad: [] }]
-    let timing = { second: $SETTLE_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_END_AT }
-    # a run: the view placed at PLACE_AT and again at the `second` of
-    # `times`, the screen taken at its `screen` while the run goes on, and
-    # the E sent at its `end`; read whole, its window the second leg's
-    # rows, the frames from the second placement's through the marker's
+    let timing = { placed: $placed, second: $SETTLE_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_END_AT }
+    # a run: the view of `times`'s `placed` placed at PLACE_AT and again at
+    # its `second`, the screen taken at its `screen` while the run goes
+    # on, and the E sent at its `end`; read whole, its window the second
+    # leg's rows, the frames from the second placement's through the
+    # marker's, and its re-entries from its last count line, the second
+    # placement's frame's
     let launch = {|name: string, sends: list<any>, times: record|
-        let all = ($sends | append [{ at: $PLACE_AT, bytes: $placed }, { at: $times.second, bytes: $placed }, { at: $times.end, bytes: $ended }] | sort-by at)
+        let all = ($sends | append [{ at: $PLACE_AT, bytes: $times.placed }, { at: $times.second, bytes: $times.placed }, { at: $times.end, bytes: $ended }] | sort-by at)
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --screen $times.screen --seconds $HANDOFF_SECONDS)
         let label = $"the handoff's ($name)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
@@ -2839,17 +2868,21 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
         let window = ($m.rows | where leg == "second")
         let stamp = (stamp-of (open --raw $run.screen | into binary))
         let written = {|at: duration, bytes: binary| $run.send_seconds | get ($all | enumerate | where {|x| $x.item.at == $at and $x.item.bytes == $bytes } | get 0.index) }
+        let counted = ($run.serial | lines | where {|l| $l starts-with "fps: count " })
+        assert (($counted | length) > 0) $"a count line on ($label), a COUNT build's"
         {
             name: $name, label: $label, screen: $run.screen, frame: $line, api: $run.api, final: $m.final, window: $window,
             stamp: $stamp, shown: ($stamp != null and ($window | any {|r| ($r.frame mod (1 bit-shl $STAMP_BITS)) == $stamp and $r.frame < $m.final })),
             started: $run.screen_started, completed: $run.screen_completed,
-            placed: (do $written $times.second $placed), ended: (do $written $times.end $ended),
+            placed: (do $written $times.second $times.placed), ended: (do $written $times.end $ended),
+            counts: ($counted | last | parse $COUNT_LINE | get 0 | update cells {|c| $c | into int }),
         }
     }
-    # a run's window held to its kind, its screen a frame of the window
-    # before the marker's, and its E written after the screen completed
-    let holds = {|r: record, kind: string|
-        let unsettled = (handoff-unsettled $r.window $kind $HANDOFF_PARTIAL_SLOTS)
+    # a run's window held to its kind on `slots` slots, its screen a frame
+    # of the window before the marker's, and its E written after the screen
+    # completed
+    let holds = {|r: record, kind: string, slots: int|
+        let unsettled = (handoff-unsettled $r.window $kind $slots)
         assert ($unsettled | is-empty) $"($r.label) held as a ($kind) run from its second placement's frame through the marker's: ($unsettled | first 3 | str join '; ')"
         assert $r.shown $"the screen of ($r.label) shows a frame of its window before the marker's: the stamp ($r.stamp), the window frames ($r.window | get -o 0.frame) to ($r.final)"
         assert ($r.ended != null and $r.ended > $r.completed) $"the E of ($r.label) written after its screen completed: at ($r.ended) s, the screen at ($r.completed) s"
@@ -2865,12 +2898,12 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
             let label = $"at level ($l) under the ($lighting) lumels"
             let lit = (do $launch $"($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $timing)
             assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
-            $windows = ($windows | append (do $holds $lit "held"))
+            $windows = ($windows | append (do $holds $lit "held" $HANDOFF_PARTIAL_SLOTS))
             let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $timing)
             assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
-            $windows = ($windows | append (do $holds $tiled "tiled"))
+            $windows = ($windows | append (do $holds $tiled "tiled" $HANDOFF_PARTIAL_SLOTS))
             if $kept == null { $kept = $tiled }
-            $runs = ($runs | append { name: $"($lighting)_($l)_tiled", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" })
+            $runs = ($runs | append { name: $"($lighting)_($l)_tiled", pose: "head-on", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" })
             if $l in $crossing {
                 # the O after the placement, never with it: two writes at
                 # one time can land in two console reads, and an O read
@@ -2883,9 +2916,45 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
                 ] $timing)
                 let f = $partial.frame
                 assert ($f.tiles_built == 0 and $f.slots == $HANDOFF_PARTIAL_SLOTS and $f.tiled > 0 and $f.tiled < $tiled.frame.tiled) $"the wall drawn under partial residency ($label), ($HANDOFF_PARTIAL_SLOTS) slots built once and some of its blocks read from them, fewer than settled: ($f | select tiles_built slots tiled) against ($tiled.frame.tiled)"
-                $windows = ($windows | append (do $holds $partial "partial"))
-                $runs = ($runs | append { name: $"($lighting)_($l)_partial", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen })
+                $windows = ($windows | append (do $holds $partial "partial" $HANDOFF_PARTIAL_SLOTS))
+                $runs = ($runs | append { name: $"($lighting)_($l)_partial", pose: "head-on", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen })
             }
+        }
+    }
+    # the oblique pose (HANDOFF_OBLIQUE): every span's 1/z changing, held
+    # off, settled, and under partial residency on HANDOFF_OBLIQUE_SLOTS
+    # slots at the first levels of the chain, each compared over the whole
+    # screen, the pose needing no texel map; the re-entries counted on each
+    # partial run's reported frame, the second placement's, whose drawing
+    # its window holds through the screen
+    let oblique = { name: "oblique", x: ($a.x + ($e.0 * $HANDOFF_OBLIQUE.along)), y: ($a.y - $HANDOFF_OBLIQUE.off), z: $EYE_HEIGHT, yaw: (90 + $HANDOFF_OBLIQUE.turn), pitch: 0 }
+    let oblique_timing = ($timing | merge { placed: (pose pose-frame $oblique) })
+    let whole = [0, 0, 1920, 1080]
+    mut reentries = []
+    for lighting in $HANDOFF_LIGHTINGS {
+        let light = {|held: bool| if $lighting == "gradient" { level-frame false $held --gradient } else { level-frame false $held --parity } }
+        for l in 0..<$HANDOFF_OBLIQUE_LEVELS {
+            let label = $"at level ($l) under the ($lighting) lumels, the wall oblique"
+            let lit = (do $launch $"oblique_($lighting)_($l)_held" [{ at: 1400ms, bytes: (do $light true) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $oblique_timing)
+            assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
+            $windows = ($windows | append (do $holds $lit "held" $HANDOFF_OBLIQUE_SLOTS))
+            let tiled = (do $launch $"oblique_($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $oblique_timing)
+            assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
+            $windows = ($windows | append (do $holds $tiled "tiled" $HANDOFF_OBLIQUE_SLOTS))
+            let partial = (do $launch $"oblique_($lighting)_($l)_partial" [
+                { at: 1300ms, bytes: (gauge workers-frame 0 0) }
+                { at: 1400ms, bytes: (do $light false) }
+                { at: 1400ms, bytes: (raise-frame $l --stamp) }
+                { at: ($PLACE_AT + $HANDOFF_ONCE_AFTER), bytes: (pool-frame --modes ($POOL_LIFTED + $POOL_ONCE) --cold --slots $HANDOFF_OBLIQUE_SLOTS) }
+            ] $oblique_timing)
+            let f = $partial.frame
+            assert ($f.tiles_built == 0 and $f.slots == $HANDOFF_OBLIQUE_SLOTS and $f.tiled > 0 and $f.tiled < $tiled.frame.tiled) $"the wall drawn under partial residency ($label), ($HANDOFF_OBLIQUE_SLOTS) slots built once and some of its blocks read from them, fewer than settled: ($f | select tiles_built slots tiled) against ($tiled.frame.tiled)"
+            $windows = ($windows | append (do $holds $partial "partial" $HANDOFF_OBLIQUE_SLOTS))
+            $reentries = ($reentries | append { lighting: $lighting, level: $l, two: $partial.counts.two, four: $partial.counts.four, cut: $partial.counts.cut })
+            $runs = ($runs | append [
+                { name: $"oblique_($lighting)_($l)_tiled", pose: "oblique", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "", whole: true, rect: $whole }
+                { name: $"oblique_($lighting)_($l)_partial", pose: "oblique", lighting: $lighting, kind: "partial", level: $l, a: $partial.screen, b: $lit.screen, t: $tiled.screen, whole: true, rect: $whole }
+            ])
         }
     }
     # the window's predicate reaches the marker, past the screen: the first
@@ -2900,17 +2969,17 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     # the second placement, the screen, and the E due at one time, written
     # screen, placement, E: the screen precedes the placement's frame and
     # its stamp refuses it every time
-    let tied_run = (do $launch "tied" $fixture { second: $HANDOFF_SCREEN_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_SCREEN_AT })
+    let tied_run = (do $launch "tied" $fixture ($timing | merge { second: $HANDOFF_SCREEN_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_SCREEN_AT }))
     assert ($tied_run.placed != null and $tied_run.placed > $tied_run.completed and $tied_run.ended > $tied_run.placed) $"the tied fixture written screen, placement, E: the screen complete at ($tied_run.completed) s, the placement at ($tied_run.placed) s, the E at ($tied_run.ended) s"
     assert ($tied_run.stamp != null and not $tied_run.shown) $"the tied fixture's screen refused by its stamp, a frame before the second placement's: the stamp ($tied_run.stamp), the window from ($tied_run.window | get -o 0.frame)"
     # the placement due just before the screen, written before the screen
     # was asked; its screen accepted or refused by its stamp alone
-    let early = (do $launch "early" $fixture { second: ($HANDOFF_SCREEN_AT - $HANDOFF_EARLY), screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_END_AT })
+    let early = (do $launch "early" $fixture ($timing | merge { second: ($HANDOFF_SCREEN_AT - $HANDOFF_EARLY) }))
     assert ($early.placed != null and $early.placed < $early.started) $"the early fixture's placement written before its screen was asked: the placement at ($early.placed) s, the screen asked at ($early.started) s"
     assert ($early.stamp != null) $"the early fixture's stamp read from its screen"
     # the screen and the E due together, the E after the screen
-    let together = (do $launch "together" $fixture { second: $SETTLE_AT, screen: $HANDOFF_SCREEN_AT, end: $HANDOFF_SCREEN_AT })
-    $windows = ($windows | append (do $holds $together "tiled"))
+    let together = (do $launch "together" $fixture ($timing | merge { end: $HANDOFF_SCREEN_AT }))
+    $windows = ($windows | append (do $holds $together "tiled" $HANDOFF_PARTIAL_SLOTS))
     let pairs = $runs
     let spec = {
         rect: $rect, crosshair: $FIXTURE_CROSSHAIR, stamp: [0, 0, ($STAMP_BITS * $STAMP_CELL), $STAMP_CELL], k: $frame.k, w: $frame.w, h: $frame.h,
@@ -2937,9 +3006,26 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     assert equal ($read | get name) ($pairs | get name) $"every comparison read: ($read | get name)"
     let unmixed = ($read | where {|r| $r.kind == "partial" and $r.mixed_rows == 0 })
     assert ($unmixed | is-empty) $"under partial residency rows of the wall take the tiled picture's pixels and the lit one's both, its spans alternating hits and misses: none at ($unmixed | get name)"
+    # every lit pixel under partial residency the all-lit span's, its
+    # intervals' knots kept whatever the tiles beside them: each pixel the
+    # tiled picture's or the lit one's exactly
+    let residual = ($read | where {|r| $r.kind == "partial" and $r.residual.most != 0 })
+    assert ($residual | is-empty) $"under partial residency every pixel the tiled picture's or the lit one's: ($residual | each {|r| $'($r.name) by ($r.residual.most) at most, ($r.residual.differing) pixels' } | str join '; ')"
+    # and the re-entries those pictures hold: every case of a lit block
+    # entering an interval mid-way on a span whose 1/z changes, on some
+    # oblique run's reported frame under each light, a whole interval of
+    # two blocks, of four, and one cut short by the span's end, whose step
+    # is the per-lane division's
+    for lighting in $HANDOFF_LIGHTINGS {
+        let counted = ($reentries | where lighting == $lighting)
+        for case in [two four cut] {
+            assert (($counted | get $case | math max) > 0) $"a re-entry into an interval ($case) on the oblique pose's reported frame under the ($lighting) lumels: ($counted | each {|r| $'level ($r.level) ($r.two), ($r.four), ($r.cut)' } | str join '; ')"
+        }
+    }
     {
         comparisons: $read, windows: $windows,
         early: { stamp: $early.stamp, from: ($early.window | get -o 0.frame), final: $early.final, accepted: $early.shown, placed: $early.placed, started: $early.started },
+        reentries: $reentries,
     }
 }
 

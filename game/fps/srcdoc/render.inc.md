@@ -1075,6 +1075,20 @@ divides span_fill made before a change are the made plus the avoided.
 
 `u64`: the results that differed from their references, which must stay 0.
 
+## .set COUNT_REENTRY_TWO
+
+`u64`: the lit blocks that re-entered a whole interval of two blocks after
+a tile block, on spans whose 1/z changes (raster.S's The cadence).
+
+## .set COUNT_REENTRY_FOUR
+
+`u64`: the same for a whole interval of four blocks.
+
+## .set COUNT_REENTRY_CUT
+
+`u64`: the same for an interval the span's end cut short, its step the
+per-lane division's.
+
 ## .set COUNT_SIZE
 
 The count record's bytes.

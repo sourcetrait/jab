@@ -1203,6 +1203,23 @@ count_report:
     la t0, count_stats
     ld a1, COUNT_MISMATCHES(t0)
     call append_dec
+    la a1, word_count_reentry_two
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_REENTRY_TWO(t0)
+    call append_dec
+    la a1, word_count_reentry_four
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_REENTRY_FOUR(t0)
+    call append_dec
+    la a1, word_count_reentry_cut
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_REENTRY_CUT(t0)
+    call append_dec
+    la a1, word_count_reentry_end
+    call append_str
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1661,6 +1678,14 @@ word_count_flat:
     .asciz " in v; flat spans "
 word_count_mismatches:
     .asciz "; mismatches "
+word_count_reentry_two:
+    .asciz "; re-entries "
+word_count_reentry_four:
+    .asciz " in two blocks, "
+word_count_reentry_cut:
+    .asciz " in four, "
+word_count_reentry_end:
+    .asciz " cut short"
 .endif
 .endif
 
