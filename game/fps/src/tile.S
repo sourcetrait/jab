@@ -2454,7 +2454,13 @@ tile_dump:
     lwu s4, 0(t0)                   # its tag
     andi t0, s4, 0xff
     li t1, SLOT_READY
-    bne t0, t1, 8f                  # no tile to read
+    beq t0, t1, 11f                 # a whole tile
+    li t1, SLOT_BUILDING
+    bne t0, t1, 8f                  # free: no tile to read
+    la t1, tile_dump_building
+    lbu t1, 0(t1)
+    beqz t1, 8f                     # in construction: read only when asked
+11:
     li t0, SLOT_SIZE
     mul t0, s3, t0
     la t1, tile_slots
@@ -2497,9 +2503,11 @@ tile_dump:
     sw t0, DUMP_FRAME(s6)
     srli t0, s4, 16
     sw t0, DUMP_GENERATION(s6)
-    sw zero, (DUMP_GENERATION + 4)(s6)
-    sw zero, (DUMP_GENERATION + 8)(s6)
-    sw zero, (DUMP_GENERATION + 12)(s6)
+    andi t0, s4, 0xff
+    sw t0, DUMP_STATE(s6)           # READY, or BUILDING when asked
+    lhu t0, SLOT_ROW(s5)
+    sw t0, DUMP_ROW(s6)             # the next row to build, TILE_SIDE once whole
+    sw zero, (DUMP_ROW + 4)(s6)
     li t0, REPORT_SCHEMA_VERSION
     sw t0, REPORT_SCHEMA(s6)
     slli t3, s3, TILE_BYTES_SHIFT
@@ -2695,6 +2703,8 @@ tile_build_surface:
     .skip 8
 tile_dump_records:
     .skip ((1 + DUMP_RECORDS) * REPORT_SIZE)
+tile_dump_building:
+    .skip 1
 .endif
 tile_config_record:
     .skip REPORT_SIZE

@@ -282,6 +282,9 @@ console_frame:
 150:
     li t1, 'D'
     bne t0, t1, 151f
+    lbu t1, 8(s2)
+    la t2, tile_dump_building
+    sb t1, 0(t2)                    # the tile in construction too while set
     lwu a0, 4(s2)
     call tile_dump                  # the surface's tiles, or every one's, on the API now
     j 8f

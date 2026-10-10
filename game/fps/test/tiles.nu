@@ -21,6 +21,11 @@
 # The lit loop's continuity (`nu tiles.nu lit-steps <capture> <rect>
 # <crosshair> <out>`): the most a held-off picture of a white wall steps
 # between two pixels side by side along its rows.
+#
+# The keys (`nu tiles.nu keys <api> <out>`): every dump's tiles by their
+# headers, frame, generation, state, and next row among them, each with
+# the SHA-256 of its texels in place of the texels, which are never
+# decoded, and the dumps' problems as `dumps` finds them.
 
 const RECORD = 64
 const DUMP_KIND = 16
@@ -37,16 +42,21 @@ const SCHEMA = 5
 const SCHEMA_AT = 60
 
 # A tile's records closed: the problems its count and its padding raise,
-# and the tile with its texels in rows when it is whole.
-def close-tile [tile: record, payloads: list<binary>, at: int, dump: int, bad: bool]: nothing -> record<tile: any, problems: list<any>> {
+# and the tile with its texels in rows when it is whole, or with `--hash`
+# the SHA-256 of its texels' bytes, never decoded. The padding is the last
+# record's texels past the tile's last.
+def close-tile [tile: record, payloads: list<binary>, at: int, dump: int, bad: bool, --hash]: nothing -> record<tile: any, problems: list<any>> {
     let count = ($payloads | length)
-    let words = (if $count == 0 { [] } else { $payloads | bytes collect | chunks 4 | into int --endian little })
-    let past = ($words | skip ($SIDE * $SIDE) | where {|w| $w != 0 })
+    let tail = ($DUMP_RECORDS * $DUMP_TEXELS - $SIDE * $SIDE)
+    let past = (if $count == 0 { [] } else { $payloads | last | bytes at (($DUMP_TEXELS - $tail) * 4)..<($DUMP_TEXELS * 4) | chunks 4 | into int --endian little | where {|w| $w != 0 } })
     let problems = ([
         (if $count != $DUMP_RECORDS { { reason: "count", record: $at, dump: $dump, found: $"($count) texel records of ($DUMP_RECORDS)" } })
         (if $count == $DUMP_RECORDS and ($past | is-not-empty) { { reason: "padding", record: $at, dump: $dump, found: $"($past | length) texels past the tile's last not zero" } })
     ] | compact)
-    { tile: (if (not $bad) and ($problems | is-empty) { $tile | insert texels ($words | first ($SIDE * $SIDE) | chunks $SIDE) } else { null }), problems: $problems }
+    let whole = ((not $bad) and ($problems | is-empty))
+    let bytes = (if $whole { $payloads | bytes collect | bytes at 0..<($SIDE * $SIDE * 4) } else { 0x[] })
+    let read = (if not $whole { null } else if $hash { $tile | insert texels_sha256 ($bytes | hash sha256) } else { $tile | insert texels ($bytes | chunks 4 | into int --endian little | chunks $SIDE) })
+    { tile: $read, problems: $problems }
 }
 
 # The tile dumps an API capture holds, each closed by the console's answer
@@ -63,14 +73,18 @@ def close-tile [tile: record, payloads: list<binary>, at: int, dump: int, bad: b
 # no tile, and outside a dump every record but a texel record is the
 # game's own. Each tile read whole: its slot, key,
 # surface, level, column, and row, its map's k, W, and H as the program
-# holds them, and its texels in rows, each a texel's word as the program
-# holds it, blue in its low byte, then green, red, and alpha. Each problem:
+# holds them, the frame the dump was written in, its slot's generation,
+# its state (2 READY, 1 BUILDING when the D asked for it), and the next
+# row its construction builds (64 once whole), and its texels in rows,
+# each a texel's word as the program holds it, blue in its low byte, then
+# green, red, and alpha, or with `--hash` the SHA-256 of their bytes in
+# place of the rows, the texels never decoded. Each problem:
 # its reason (header schema, slot, schema, first texel, missing, repeated,
 # order, count, padding, foreign, orphan, truncated, or unfinished), the
 # record's index in the capture, the dump's, and what was found; a tile
 # with a problem is left out, and the problems stand whether or not any
 # tile comes back.
-export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: list<any>> {
+export def dumps [api: binary, --hash]: nothing -> record<dumps: list<any>, problems: list<any>> {
     mut dumps = []
     mut problems = []
     mut tiles = []
@@ -93,13 +107,13 @@ export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: li
         let command = (do $word 4)
         let answer = ($kind == $CONSOLE_KIND and $command == $CONSOLE_D)
         if ($kind == $DUMP_KIND or $answer) and $tile != null {
-            let c = (close-tile $tile $payloads $header_at $dump $bad)
+            let c = (close-tile $tile $payloads $header_at $dump $bad --hash=$hash)
             $problems = ($problems | append $c.problems)
             if $c.tile != null { $tiles = ($tiles | append $c.tile) }
             $tile = null
         }
         if $kind == $DUMP_KIND {
-            $tile = { slot: (do $word 4), key: (do $word 8), surface: (do $word 12), level: (do $word 16), tx: (do $word 20), ty: (do $word 24), k: (do $word 28), w: (do $word 32), h: (do $word 36) }
+            $tile = { slot: (do $word 4), key: (do $word 8), surface: (do $word 12), level: (do $word 16), tx: (do $word 20), ty: (do $word 24), k: (do $word 28), w: (do $word 32), h: (do $word 36), frame: (do $word 40), generation: (do $word 44), state: (do $word 48), row: (do $word 52) }
             $header_at = $at
             $payloads = []
             $next = 0
@@ -138,7 +152,7 @@ export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: li
     }
     let ending = ($api | bytes length) // $RECORD
     if $tile != null {
-        let c = (close-tile $tile $payloads $header_at ($dumps | length) $bad)
+        let c = (close-tile $tile $payloads $header_at ($dumps | length) $bad --hash=$hash)
         $problems = ($problems | append $c.problems)
     }
     if $open {
@@ -152,6 +166,13 @@ export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: li
 def "main dumps" [api: path, out: path] {
     let read = (dumps (open --raw $api | into binary))
     { tiles: ($read.dumps | each {|d| $d | length }), problems: $read.problems } | to nuon | save -f $out
+}
+
+# A capture's dumps keyed, saved to out as NUON: every dump's tiles, each
+# its header and its texels' SHA-256, and every problem (dumps --hash).
+def "main keys" [api: path, out: path] {
+    let read = (dumps (open --raw $api | into binary) --hash)
+    { dumps: $read.dumps, problems: $read.problems } | to nuon | save -f $out
 }
 
 # A texel of the builder fixture's texture, [red, green, blue, alpha]:

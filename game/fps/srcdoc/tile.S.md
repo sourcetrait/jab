@@ -497,13 +497,18 @@ reads every key of its grids.
 
 A debug build's D frame, from console_frame, the pool standing still
 between boundaries: every READY slot of the asked surface, or of every
-surface for all ones, written to the API as one write a tile, a dump
+surface for all ones, and the BUILDING one beside them while
+tile_dump_building is set, written to the API as one write a tile, a dump
 record (REPORT_TILE_DUMP: the slot, the key, the surface, the level, the
-column and row, the map's k, W, and H, the frame, the generation) and
+column and row, the map's k, W, and H, the frame, the generation, the
+slot's state, and its next row to build, TILE_SIDE once whole) and
 DUMP_RECORDS texel records (REPORT_TILE_TEXELS: the slot, the first
 texel's index, DUMP_TEXELS texels as the tile holds them, the last
-record's past the tile zero), the schema in each. The test's
-`tile-dumps` reads them back to the host's oracle.
+record's past the tile zero), the schema in each. A BUILDING slot's
+texels are whatever it holds: its built rows, and below them the rows as
+the slot held them before, its last tile's or zero. The test's tiles.nu
+reads them back (`dumps`), the builder's assertion holding them to the
+host's oracle.
 
 ## msg_alpha
 
@@ -764,6 +769,10 @@ record's past the tile zero), the schema in each. The test's
 ## tile_dump_records
 
 `(1+DUMP_RECORDS)*REPORT_SIZE u8`: on a debug build alone, a tile's dump record and its texel records, written at once.
+
+## tile_dump_building
+
+`u8`: on a debug build alone, the D frame's byte 8, nonzero for the dump to take the BUILDING slot beside the READY ones.
 
 ## tile_config_record
 

@@ -19,7 +19,8 @@ construction (tile.S's tile_build_all), under the L's lift where the test
 wants them whole. D takes bytes 4 to 7 as a surface, all ones for every
 one, and writes every READY tile of it to the API at once, a dump record
 and its texel records (tile.S's tile_dump), the pool standing still
-between boundaries; its answer after the records closes the dump. The
+between boundaries, and with byte 8 set the BUILDING tile beside them,
+held unfinished; its answer after the records closes the dump. The
 test's `build-frame` and `dump-frame` build them and tiles.nu's `dumps`
 reads the records.
 

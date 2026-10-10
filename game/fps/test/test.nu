@@ -1908,9 +1908,10 @@ def build-frame [surface: int]: nothing -> binary {
 }
 
 # The console's D frame, a debug build's: every READY tile of the surface
-# in bytes 4 to 7, all ones for every surface, written to the API at once.
-def dump-frame [surface: int]: nothing -> binary {
-    [("D" | into binary), 0x[00 00 00], ($surface | into binary | bytes at 0..<4), (0..<56 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+# in bytes 4 to 7, all ones for every surface, written to the API at once,
+# and with `--building` (byte 8) the BUILDING tile beside them.
+def dump-frame [surface: int, --building]: nothing -> binary {
+    [("D" | into binary), 0x[00 00 00], ($surface | into binary | bytes at 0..<4), (if $building { 0x[01] } else { 0x[00] }), (0..<55 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # The console's M frame, a debug build's: every block's level raised by

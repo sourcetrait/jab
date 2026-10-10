@@ -2105,6 +2105,14 @@ consults no checkout. A changed capacity governs the admissions after it.
 
 `u32`: the slot's generation.
 
+## .set DUMP_STATE
+
+`u32`: the slot's state, SLOT_READY, or SLOT_BUILDING when the D frame asks for the tile in construction.
+
+## .set DUMP_ROW
+
+`u32`: the slot's next row to build, TILE_SIDE once the tile is whole.
+
 ## .set TEXELS_SLOT
 
 `u32`: the slot whose texels a texel record carries, the dump record's before it.
