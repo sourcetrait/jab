@@ -1676,6 +1676,10 @@ span_fill:
     ld a5, 200(sp)
     beqz a5, 4300f                  # no tiles for the span: the lit loop
     ld a6, 192(sp)
+    ld a7, CTX_COMMAND(tp)
+    ld a7, POLY_LUMEL(a7)
+    srli a7, a7, LUMEL_K_SHIFT      # the map's k
+    bgtu a6, a7, 4300f              # a level past k: the lit loop, no tile asked
     slli a7, a6, 3
     add a7, a7, a5                  # the level's grid
     addi a6, a6, (16 + TILE_SHIFT)  # a coordinate to its tile at the level

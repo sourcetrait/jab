@@ -634,8 +634,15 @@ under a texel a pixel.
 
 A span is judged once in the prologue for its tiles: lit, mapped, of a
 class TILE_CLASSES caches, its surface with a directory (tile.S's
-tiles_init); its tile record then rides slot 200, else 0. Every block of
-such a span is judged at its start: its level's grid, the tiles of its
+tiles_init); its tile record then rides slot 200, else 0. A block whose
+level, the M frame's raise in it, passes the map's k, the command's lumel
+k, takes the lit loop before anything of its tile is judged, asking for
+none and counted neither straddling nor missed: through k a texel
+aligned to its tile lies within one bilinear light cell, whose centre is
+its mean light, and above k a texel spans the cell's interior nodes,
+whose light a centre sample loses (191 of 255 under the parity lumels at
+levels 5 and 6 on the handoff's wall), so the tiles stop at k. Every
+other block of such a span is judged at its start: its level's grid, the tiles of its
 first sampled pixel and its last, the start plus the step times the
 pixels less one, both at the level by a shift of 16 + m + TILE_SHIFT; a
 block in two tiles is counted straddling and a block past the grid, a

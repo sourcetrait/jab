@@ -369,6 +369,11 @@ const TILE_SHIFT = 6
 # console's E at HANDOFF_END_AT, the bound HANDOFF_SECONDS; the HUD
 # stamps each frame's number (raise-frame's `--stamp`, stamp-of)
 const HANDOFF_FIXTURE = { name: "texture/handofffix", size: 64, scale: 0.5 }
+# The head-on wall's tiled picture against its lit one at levels 0 to k,
+# the most a channel differs as measured plus one, under each light: this
+# fixture's regression limits, the ramp's and the checkerboard's; above k
+# a block takes the lit loop and the two pictures are one
+const HANDOFF_BOUNDS = { gradient: [2, 3, 4, 7, 13], parity: [28, 29, 43, 73, 97] }
 const HANDOFF_EDGE = 6
 const HANDOFF_DISTANCE = 4.5
 const HANDOFF_LIGHTINGS = [gradient parity]
@@ -2790,6 +2795,9 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
 # difference from the nearer of the tiled and the lit pictures, 0 at
 # every pixel, the lit intervals keeping the all-lit span's knots, and
 # rows taking pixels nearer each, the spans alternating hits and misses.
+# Head-on, through k the tiled picture lies within HANDOFF_BOUNDS of the
+# lit one under each light; above k a block takes the lit loop, the
+# tiled run reading no tile and its picture the lit one.
 # Every case of a lit block re-entering an interval on a span whose 1/z
 # changes, two blocks, four, and cut short, counted on some oblique
 # partial run's reported frame under each light. Returns every
@@ -2817,6 +2825,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     let frame = (wall-lumap $m $wall $size $size)
     let levels = (chain-levels $size $size)
     assert ($frame.k > 0 and $frame.k < ($levels - 2)) $"the fixture's k, ($frame.k), leaves levels below it, at it, and two above it in its chain of ($levels)"
+    assert ($HANDOFF_BOUNDS | values | all {|b| ($b | length) == ($frame.k + 1) }) $"the fixture's bounds a level each from 0 to k, ($frame.k): ($HANDOFF_BOUNDS)"
     let a = ($m.vertices | get $wall.a)
     let b = ($m.vertices | get $wall.b)
     let len = ((($b.x - $a.x) ** 2 + ($b.y - $a.y) ** 2) | math sqrt)
@@ -2912,7 +2921,11 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
             assert ($lit.frame.tiles_built == 0 and $lit.frame.tiled == 0) $"no tile built or read with the tiles held off ($label): ($lit.frame)"
             $windows = ($windows | append (do $holds $lit "held" $HANDOFF_PARTIAL_SLOTS))
             let tiled = (do $launch $"($lighting)_($l)_tiled" [{ at: 1400ms, bytes: (do $light false) }, { at: 1400ms, bytes: (raise-frame $l --stamp) }] $timing)
-            assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
+            if $l <= $frame.k {
+                assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled > 0) $"the wall settled on its tiles ($label): ($tiled.frame)"
+            } else {
+                assert ($tiled.frame.tiles_built == 0 and $tiled.frame.tiled == 0) $"the wall above k, ($frame.k), drawn by the lit loop, no tile read ($label): ($tiled.frame)"
+            }
             $windows = ($windows | append (do $holds $tiled "tiled" $HANDOFF_PARTIAL_SLOTS))
             if $kept == null { $kept = $tiled }
             $runs = ($runs | append { name: $"($lighting)_($l)_tiled", pose: "head-on", lighting: $lighting, kind: "tiled", level: $l, a: $tiled.screen, b: $lit.screen, t: "" })
@@ -3023,6 +3036,16 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     # tiled picture's or the lit one's exactly
     let residual = ($read | where {|r| $r.kind == "partial" and $r.residual.most != 0 })
     assert ($residual | is-empty) $"under partial residency every pixel the tiled picture's or the lit one's: ($residual | each {|r| $'($r.name) by ($r.residual.most) at most, ($r.residual.differing) pixels' } | str join '; ')"
+    # the handoff head-on: through k the tiled picture within this
+    # fixture's bounds of the lit one, above k the lit one itself
+    for r in ($read | where {|r| $r.pose == "head-on" and $r.kind == "tiled" }) {
+        if $r.level <= $frame.k {
+            let bound = ($HANDOFF_BOUNDS | get $r.lighting | get $r.level)
+            assert ($r.inner.most <= $bound and $r.clamped.most <= $bound) $"the handoff at level ($r.level) under the ($r.lighting) lumels within ($bound) of 255: ($r.inner.most), past the last node ($r.clamped.most)"
+        } else {
+            assert ($r.inner.differing == 0 and $r.clamped.differing == 0) $"above k, ($frame.k), the tiled picture the lit one at level ($r.level) under the ($r.lighting) lumels: ($r.inner.differing) and ($r.clamped.differing) pixels differ"
+        }
+    }
     # and the re-entries those pictures hold: every case of a lit block
     # entering an interval mid-way on a span whose 1/z changes, on some
     # oblique run's reported frame under each light, a whole interval of
