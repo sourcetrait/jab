@@ -40,13 +40,15 @@ so a fixture splits every context's list. The test's `census-frame` builds
 it.
 
 J is the jobs' knob, on a debug build alone, read by the rounds after it
-(workers.S): byte 4 the worker to hold, its index plus one, 0 for none,
-and bytes 8 to 11 its hold before each band in microseconds, standing;
+(workers.S): byte 4 the worker to delay, its index plus one, 0 for none,
+and bytes 8 to 11 its delay before each band in microseconds, standing;
 byte 12 set cancels every round after its publish while it stands, the
 bands its jobs left finished on hart 0; byte 13 the worker to fault, its
 index plus one, which on the next round alone loads SCRATCH_POISON's
-address and ends the run through the kernel. The test's `jobs-frame`
-builds it.
+address and ends the run through the kernel; byte 14 set holds the
+delayed worker, in fixed bands, until the round's join reaches its
+index, JOB_HOLD_US at most (workers.S's job_hold_wait). The test's
+`jobs-frame` builds it, its `--hold` setting byte 14.
 
 W takes byte 4 as the frame's workers, 0 for the serial backend, held to the
 workers started (workers.S), and bytes 8 to 11 as the rows a band, 0 for a

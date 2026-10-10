@@ -67,8 +67,9 @@ that draws no pixel asks nothing and is counted nowhere.
 
 ### The boundary
 
-Hart 0 runs it at world_draw's start, after the frame before's last join
-and before any bind (tile_boundary): the console's changes come in force,
+Hart 0 runs it at world_draw's start, after the frame before's last join,
+which a debug build checks first, and before any bind (tile_boundary):
+the console's changes come in force,
 an L's forget is done, then the frame before's batch is counted and
 merged, deduplicated through the merge bitmap, the guaranteed tiers first
 by surface, then the open rings by context and entry, stopping at the
@@ -211,7 +212,9 @@ counted. STAT_TILE_RESETS counts these alone.
 
 ## tile_boundary
 
-The pool's one change a frame, its order fixed: the configuration, the
+The pool's one change a frame, its order fixed: on a debug build first
+the check that the last round joined (workers.S's round_joined, exit 15,
+or 16 for a held job never released), then the configuration, the
 pass's mark, the forget, the deadlines (the allowance's, the merge's
 share's, and the quota, all past reach under the lift, but a debug
 build's O frame's quota in force under every mode), the batch and its

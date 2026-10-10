@@ -783,6 +783,10 @@ a worker and bands of 16, 64, and 128 rows. A band a worker left the
 slowest worker up to a millisecond and a quarter a frame past the
 workers' mean; at 32 rows it stayed within a tenth of one.
 
+## .set JOB_HOLD_US
+
+`u32`: on a debug build, the J frame's hold's watchdog in microseconds, two seconds, past which an unreleased hold marks job_hold_expired and renders.
+
 ## .set ROUND_COMMANDS
 
 `u32`: the round's packet's commands.
@@ -813,15 +817,23 @@ clear. A worker reads it after its await and nothing else hart 0 keeps.
 
 ## .set ROUND_DELAY_WORKER
 
-`u32`: on a debug build, the J frame's held worker's index plus one, 0 for none.
+`u32`: on a debug build, the J frame's delayed worker's index plus one, 0 for none.
 
 ## .set ROUND_DELAY_US
 
-`u32`: its hold before each band in microseconds.
+`u32`: its delay before each band in microseconds.
 
 ## .set ROUND_FAULT_WORKER
 
 `u32`: on a debug build, the J frame's faulting worker's index plus one for this round alone, 0 for none.
+
+## .set ROUND_HOLD
+
+`u32`: on a debug build, the J frame's hold, the delayed worker in fixed bands held until the join reaches its index.
+
+## .set ROUND_RELEASE
+
+`u32`: on a debug build, the join's progress, 0 at the publish and each index plus one as the join loop reaches it, the one word of the record hart 0 writes while the round runs.
 
 ## .set ROUND_SIZE
 

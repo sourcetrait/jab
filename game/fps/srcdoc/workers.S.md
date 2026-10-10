@@ -15,7 +15,8 @@ calls only the jobs' wait and wake, and the exit on a stop.
 
 A round is one render of a packet (raster.S's packet_render) at the
 frame's workers above 0. Hart 0 writes the round record, publishes one job a
-worker, wakes them in one call, joins every mailbox in index order, then
+worker, wakes them in one call, joins every mailbox in index order, on a
+debug build setting ROUND_RELEASE to each index plus one as it reaches it, then
 sums each worker's counts into the frame's stats and its times into
 STAT_DISPATCH, STAT_BARRIER, STAT_SLOWEST, and STAT_BUSY, the definitions
 the kernel's jobs bench measures (FourHarts' JobCosts). The join's acquire
@@ -66,12 +67,23 @@ cancels nothing; a debug build's J frame cancels every round while it
 stands, so the path is the jobs library's cancellation exercised, and a
 frame is whole, never a prefix.
 
+The J frame's hold, a debug build's, makes an unjoined round observable:
+the delayed worker, in fixed bands, holds its band until the join loop
+reaches its index, so with W 2 worker 2, mailbox index 1, the last the
+loop reaches, renders the round's last band only once index 0 is joined
+and completes before its own join returns. A round whose join is gone
+leaves that job incomplete at the next boundary, whose entry check
+(round_joined) exits 15; a hold no release reaches in JOB_HOLD_US marks
+job_hold_expired and goes on, since a worker can print and end nothing,
+and the next boundary's entry exits 16 on it.
+
 ## raster_worker
 
 The fixed band is the worker's index of the round's workers; a claimed
 band's rows end at the screen's last. On a debug build the J frame's
-fault loads SCRATCH_POISON's address before the band, and its hold spins
-on rdtime before each band and claim (job_delay).
+fault loads SCRATCH_POISON's address before the band, its delay spins on
+rdtime before each band and claim (job_delay), and in fixed bands its
+hold waits for the join's release before the band (job_hold_wait).
 
 ## round_finish
 
@@ -83,8 +95,28 @@ round's renders held to the boundary's pool as the round's own are.
 
 ## job_delay
 
-A debug build's: the hold spins on rdtime, calling nothing, a worker's
+A debug build's: the delay spins on rdtime, calling nothing, a worker's
 calls being the jobs' alone.
+
+## job_hold_wait
+
+A debug build's: the delayed worker under the J frame's hold spins on
+the record's ROUND_RELEASE until it reaches its index plus one, the
+join's progress, or JOB_HOLD_US pass, the watchdog marking
+job_hold_expired for hart 0's next boundary to report; either way the
+band follows, so a coordinator waiting in the join returns.
+
+## round_joined
+
+A debug build's, hart 0's, first in tile.S's tile_boundary before any
+write: an expired hold exits 16 with `fps: held job never released`,
+the fixture's case unexercised; then every mailbox of the last round's
+workers must hold its completion equal to its generation, else `fps:
+tile boundary before the round joined` and exit 15, the boundary run
+before the round joined. The kernel's exit halts the workers, a second
+at most, and flushes the sound, three seconds at most, before the
+machine ends, about 3 to 4 s after the line in the join probes, so a run
+its screen ends sooner carries the line with status 0.
 
 ## msg_workers
 
@@ -106,8 +138,16 @@ calls being the jobs' alone.
 
 `21 u8`.
 
-The debug lines' text, msg_workers to msg_unjoined, is in a debug build
-alone.
+## msg_boundary_unjoined
+
+`44 u8`.
+
+## msg_hold_expired
+
+`30 u8`.
+
+The debug lines' text, msg_workers to msg_hold_expired, is in a debug
+build alone.
 
 ## mailboxes
 
@@ -155,7 +195,7 @@ alone.
 
 ## job_delay_worker
 
-`u8`: on a debug build, the J frame's held worker, its index plus one, 0 for none; the knobs after it are a debug build's too.
+`u8`: on a debug build, the J frame's delayed worker, its index plus one, 0 for none; the knobs after it are a debug build's too.
 
 ## job_cancel
 
@@ -165,9 +205,17 @@ alone.
 
 `u8`: the worker to fault on the next round, its index plus one, cleared by that round.
 
+## job_hold
+
+`u8`: the J frame's byte 14, 1 while the delayed worker holds its fixed band until the join releases it.
+
+## job_hold_expired
+
+`u8`: 1 once a hold's watchdog passed unreleased, read by the next boundary's entry; never cleared, the run ending there.
+
 ## job_delay_us
 
-`u32`: the hold before each band in microseconds.
+`u32`: the delay before each band in microseconds.
 
 ## worker_stacks
 

@@ -150,6 +150,10 @@ round_run:
     lbu t1, 0(t0)
     sb zero, 0(t0)                  # the fault once
     sw t1, ROUND_FAULT_WORKER(s0)
+    la t0, job_hold
+    lbu t1, 0(t0)
+    sw t1, ROUND_HOLD(s0)           # the delayed worker held until the join releases it
+    sw zero, ROUND_RELEASE(s0)      # released by none yet
 .endif
     la t0, frame_clock
     ld s5, CLOCK_SNAPSHOT(t0)       # the frame, each job's
@@ -195,6 +199,10 @@ round_run:
     slli s6, s3, 7
     la t0, mailboxes
     add s6, s6, t0
+.ifdef DEBUG
+    addi t0, s3, 1
+    sw t0, ROUND_RELEASE(s0)        # the join reached this index: its held worker released
+.endif
     jab.job.join s6
     addi s3, s3, 1
     j 5b
@@ -347,6 +355,8 @@ raster_worker:
 .ifdef DEBUG
     mv a0, s2
     call job_delay
+    mv a0, s2
+    call job_hold_wait
 .endif
     jab.job.cancelled s0, s3, t2    # fixed bands: its own, the worker's index
     bnez t2, 7f
@@ -482,6 +492,51 @@ job_delay:
     bltu t2, t1, 1b
 9:
     ret
+
+job_hold_wait:
+    la t0, round
+    lwu t1, ROUND_HOLD(t0)
+    beqz t1, 9f
+    lwu t1, ROUND_DELAY_WORKER(t0)
+    addi t2, a0, 1
+    bne t1, t2, 9f                  # another worker: no hold
+    rdtime t3
+    li t4, (JOB_HOLD_US * US_TICKS)
+    add t3, t3, t4                  # the watchdog's end
+1:
+    lwu t1, ROUND_RELEASE(t0)
+    bgeu t1, t2, 9f                 # the join reached its index: released
+    rdtime t4
+    bltu t4, t3, 1b
+    li t1, 1
+    la t2, job_hold_expired
+    sb t1, 0(t2)                    # never released: the next boundary says so
+9:
+    ret
+
+round_joined:
+    la t0, job_hold_expired
+    lbu t1, 0(t0)
+    beqz t1, 1f
+    jab.sys.uart.print msg_hold_expired
+    jab.sys.exit 16
+1:
+    la t0, round
+    lwu t1, ROUND_WORKERS(t0)       # the last round's workers
+    li t2, 0
+2:
+    bgeu t2, t1, 9f
+    slli t3, t2, 7
+    la t4, mailboxes
+    add t3, t3, t4
+    lw t5, JAB_JOB_DONE(t3)
+    lw t6, JAB_JOB_GEN(t3)
+    addi t2, t2, 1
+    beq t5, t6, 2b                  # its job joined
+    jab.sys.uart.print msg_boundary_unjoined
+    jab.sys.exit 15
+9:
+    ret
 .endif
 
 .section .rodata
@@ -496,6 +551,10 @@ msg_lost_bands:
     .asciz "fps: round lost bands\n"
 msg_unjoined:
     .asciz "fps: round unjoined\n"
+msg_boundary_unjoined:
+    .asciz "fps: tile boundary before the round joined\n"
+msg_hold_expired:
+    .asciz "fps: held job never released\n"
 .endif
 
 .section .bss
@@ -529,6 +588,10 @@ job_delay_worker:
 job_cancel:
     .skip 1
 job_fault_worker:
+    .skip 1
+job_hold:
+    .skip 1
+job_hold_expired:
     .skip 1
 .balign 4
 job_delay_us:

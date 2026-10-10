@@ -331,6 +331,9 @@ tile_boundary:
     sd ra, 24(sp)
     sd s2, 16(sp)
     sd s3, 8(sp)
+.ifdef DEBUG
+    call round_joined               # before any write: the last round joined, its hold released
+.endif
     rdtime s2                       # the boundary's start
     call tile_configure
     la t0, tile_pass

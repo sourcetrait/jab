@@ -320,6 +320,9 @@ console_frame:
     lbu t1, 13(s2)
     la t2, job_fault_worker
     sb t1, 0(t2)                    # the faulting worker's index plus one, its next round
+    lbu t1, 14(s2)
+    la t2, job_hold
+    sb t1, 0(t2)                    # the delayed worker held until the round's join releases it
 .ifdef CENSUS
     j 8f
 16:

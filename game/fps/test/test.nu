@@ -571,6 +571,8 @@ const DEBUG_TEXT = [
     "fps: round lost bands\n"
     "fps: round unjoined\n"
     "fps: tile pool changed in flight\n"
+    "fps: tile boundary before the round joined\n"
+    "fps: held job never released\n"
 ]
 const EXIT_TEXT = [
     "fps: "
@@ -1989,9 +1991,11 @@ def settled [placed: record]: nothing -> list<any> {
 # The console's J frame, a debug build's: the delayed worker's index plus
 # one in byte 4, 0 for none, and its delay before each band in
 # microseconds from byte 8; byte 12 set cancels every round after its
-# publish; byte 13 the faulting worker's index plus one, its next round.
-def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int]: nothing -> binary {
-    [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (0..<50 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+# publish; byte 13 the faulting worker's index plus one, its next round;
+# byte 14 set (`--hold`) holds the delayed worker in fixed bands until
+# the round's join reaches its index, JOB_HOLD_US at most.
+def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int, --hold]: nothing -> binary {
+    [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (if $hold { 0x[01] } else { 0x[00] }), (0..<49 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
 # The console's Q frame, a CENSUS build's: a census context line's chunk
