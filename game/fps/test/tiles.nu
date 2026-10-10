@@ -50,19 +50,26 @@ def close-tile [tile: record, payloads: list<binary>, at: int, dump: int, bad: b
 }
 
 # The tile dumps an API capture holds, each closed by the console's answer
-# to its D frame, and every problem that breaks them. A dump is its tiles,
-# each a header (kind 16) and then exactly DUMP_RECORDS texel records
-# (kind 17), each record its tile's slot, its first texel twelve on from
-# the record before's, and the schema, the texels past the tile's last
-# zero, and every record 64 bytes. Each tile read whole: its slot, key,
+# to its D frame, and every problem that breaks them. A record's kind and
+# a console answer's command are the u32 words the program writes,
+# little-endian. A dump is its tiles, each a header (kind 16) and then
+# exactly DUMP_RECORDS texel records (kind 17), each record its tile's
+# slot, its first texel twelve on from the record before's, and the
+# schema, the texels past the tile's last zero, and every record 64
+# bytes; after a tile's records, another header or the closing answer
+# (kind 11, command 68), and nothing else. A header or the answer before
+# a tile's records are whole leaves the tile short; any other record
+# between a dump's first header and its answer is foreign, counting toward
+# no tile, and outside a dump every record but a texel record is the
+# game's own. Each tile read whole: its slot, key,
 # surface, level, column, and row, its map's k, W, and H as the program
 # holds them, and its texels in rows, each a texel's word as the program
 # holds it, blue in its low byte, then green, red, and alpha. Each problem:
 # its reason (header schema, slot, schema, first texel, missing, repeated,
-# order, count, padding, orphan, truncated, or unfinished), the record's
-# index in the capture, the dump's, and what was found; a tile with a
-# problem is left out, and the problems stand whether or not any tile
-# comes back.
+# order, count, padding, foreign, orphan, truncated, or unfinished), the
+# record's index in the capture, the dump's, and what was found; a tile
+# with a problem is left out, and the problems stand whether or not any
+# tile comes back.
 export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: list<any>> {
     mut dumps = []
     mut problems = []
@@ -82,8 +89,9 @@ export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: li
             break
         }
         let word = {|o: int| $r | bytes at $o..<($o + 4) | into int --endian little }
-        let kind = ($r | bytes at 0..<1 | into int)
-        let answer = ($kind == $CONSOLE_KIND and ($r | bytes at 4..<5 | into int) == $CONSOLE_D)
+        let kind = (do $word 0)
+        let command = (do $word 4)
+        let answer = ($kind == $CONSOLE_KIND and $command == $CONSOLE_D)
         if ($kind == $DUMP_KIND or $answer) and $tile != null {
             let c = (close-tile $tile $payloads $header_at $dump $bad)
             $problems = ($problems | append $c.problems)
@@ -122,6 +130,10 @@ export def dumps [api: binary]: nothing -> record<dumps: list<any>, problems: li
             $dumps = ($dumps | append [$tiles])
             $tiles = []
             $open = false
+        } else if $open {
+            let what = (if $kind == $CONSOLE_KIND { $"kind ($kind), command ($command)" } else { $"kind ($kind)" })
+            $problems = ($problems | append { reason: "foreign", record: $at, dump: $dump, found: $"a record of ($what) inside the dump" })
+            if $tile != null { $bad = true }
         }
     }
     let ending = ($api | bytes length) // $RECORD

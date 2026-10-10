@@ -85,9 +85,12 @@ const CRACKS = 32
 # leaves out
 const RECORD = 64
 const CLOCK_KINDS = [7 8 9 10 12 13 14 15]
-# A console record carries the command's byte where the state's sector
-# sits; the P frame's
+# A console record carries the command's byte, a u32 word, where the
+# state's sector sits; the P frame's, and the D frame's
 const CONSOLE_P = 80
+const CONSOLE_D = 68
+# render.inc's REPORT_CONSOLE: a console answer's kind
+const CONSOLE_KIND = 11
 # The clock over Render Zero's walk: the seed and the cadence sent before
 # the first frame, the E closing the measurement half a second before
 # the capture, and the records' schema; a frame's next start less its
@@ -1746,7 +1749,7 @@ def release-strings [image: path]: nothing -> nothing {
 def records [api: binary]: nothing -> table<kind: int, sector: int, x: float, y: float, z: float, yaw: float, pitch: float, roll: float, frame_us: int, game_us: int, fields: list<int>> {
     0..<(($api | bytes length) // $RECORD) | each {|i|
         let r = ($api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD))
-        let kind = ($r | bytes at 0..<1 | into int)
+        let kind = ($r | bytes at 0..<4 | into int --endian little)
         if $kind in $CLOCK_KINDS { null } else {
             {
                 kind: $kind,
@@ -2605,16 +2608,22 @@ export def wall-lumap [m: record, wall: record, w: int, h: int]: nothing -> reco
 # and its last record dropped, the order unbroken; a texel record before
 # the first dump and after the first dump's
 # answer; the capture cut inside a record, and at a record's end inside a
-# dump; and the capture untouched, refused by nothing. A record is
-# RECORD bytes, its kind's word first; a texel record's slot at 4, its
-# first texel at 8, its texels from 12, and its schema at 60.
+# dump; a texel record's kind word 17 made 273, its low byte unchanged,
+# and a record of kind 18 put inside the tile's records, each foreign; the
+# last dump's answer's command word 68 made 324, its low byte unchanged,
+# so no answer closes that dump; and the capture untouched, refused by
+# nothing. A record is RECORD bytes, its kind's word first; a texel
+# record's slot at 4, its first texel at 8, its texels from 12, and its
+# schema at 60; a console answer's command at 4.
 def dump-alterations [api: binary]: nothing -> list<record<name: string, expect: string, bytes: binary>> {
     let rec = {|i: int| $api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD) }
     let splice = {|i: int, n: int, put: binary| [($api | bytes at 0..<($i * $RECORD)), $put, ($api | bytes at (($i + $n) * $RECORD)..)] | bytes collect }
     let word = {|r: binary, at: int, v: int| [($r | bytes at 0..<$at), ($v | into binary | bytes at 0..<4), ($r | bytes at ($at + 4)..)] | bytes collect }
     let aligned = {|kind: int| $api | bytes index-of --all ($kind | into binary | bytes at 0..<4) | where {|o| ($o mod $RECORD) == 0 } | each {|o| $o // $RECORD } }
     let header = (do $aligned 16 | first)
-    let answer = (do $aligned 11 | where {|i| ((do $rec $i) | bytes at 4..<5) == ("D" | into binary) } | first)
+    let answers = (do $aligned $CONSOLE_KIND | where {|i| ((do $rec $i) | bytes at 4..<8 | into int --endian little) == $CONSOLE_D })
+    let answer = ($answers | first)
+    let closing = ($answers | last)
     let t = ($header + 6)
     let r = (do $rec $t)
     let first = ($r | bytes at 8..<12 | into int --endian little)
@@ -2635,6 +2644,9 @@ def dump-alterations [api: binary]: nothing -> list<record<name: string, expect:
         { name: "orphan_after", expect: "orphan", bytes: (do $splice ($answer + 1) 0 $r) }
         { name: "truncated", expect: "truncated", bytes: ($api | bytes at 0..<((($header + 100) * $RECORD) + 30)) }
         { name: "unfinished", expect: "unfinished", bytes: ($api | bytes at 0..<(($header + 100) * $RECORD)) }
+        { name: "kind_high", expect: "foreign", bytes: (do $splice $t 1 (do $word $r 0 273)) }
+        { name: "foreign_inserted", expect: "foreign", bytes: (do $splice ($t + 1) 0 (do $word $r 0 18)) }
+        { name: "answer_command", expect: "unfinished", bytes: (do $splice $closing 1 (do $word (do $rec $closing) 4 324)) }
     ]
 }
 
@@ -3220,6 +3232,14 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert ($mt.complete and $mt.valid and $mt.final == 2) $"a second marker past the window changes nothing: ($mt.problems)"
     let schema = ($good | each {|i| if $i.kind == "end" { $i | update schema 2 } else { $i } })
     assert (not (do $measure $schema).complete) "a marker at another schema refuses the window"
+    # a record's kind is the u32 word the program writes: frame 1's frame
+    # record with its kind 7 made 263, its low byte unchanged, is no frame
+    # record, and frame 1 is short of one
+    let raw = (fx-bytes $good)
+    let frame_one = ($raw | bytes index-of --all ([7 1] | each {|v| $v | into binary | bytes at 0..<4 } | bytes collect) | where {|o| ($o mod $RECORD) == 0 } | first)
+    let high = ([($raw | bytes at 0..<$frame_one), (263 | into binary | bytes at 0..<4), ($raw | bytes at ($frame_one + 4)..)] | bytes collect)
+    let mh = (gauge measure $high $legs)
+    assert (not $mh.complete) $"a frame record whose kind word carries a high byte is no frame record, frame 1 short of one: ($mh.problems)"
 
     for s in [[0 true] [1 true] [2 false] [3 false] [7 false]] {
         let flipped = ($good | each {|i| if $i.kind == "frame" and $i.frame == 1 { $i | update status $s.0 } else { $i } })
@@ -4571,9 +4591,9 @@ def answered-frames [api: binary, command: int]: nothing -> list<int> {
     mut states = 0
     mut frames = []
     for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
-        let kind = ($r | bytes at 0..<1 | into int)
+        let kind = ($r | bytes at 0..<4 | into int --endian little)
         if $kind == 1 { $states += 1 }
-        if $kind == 11 and ($r | bytes at 4..<5 | into int) == $command { $frames = ($frames | append $states) }
+        if $kind == $CONSOLE_KIND and ($r | bytes at 4..<8 | into int --endian little) == $command { $frames = ($frames | append $states) }
     }
     $frames
 }

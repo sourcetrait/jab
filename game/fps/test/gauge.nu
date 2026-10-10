@@ -1125,11 +1125,11 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
     mut end: any = null
     mut past = 0
     for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
-        let kind = ($r | bytes at 0..<1 | into int)
+        let kind = (u32-at $r 0)
         if $end != null {
             if $kind == $KIND_STATE { $past += 1 }
         } else if $kind == $KIND_CONSOLE {
-            let command = ($r | bytes at 4..<5 | into int)
+            let command = (u32-at $r 4)
             if $command == $CONSOLE_P { $placed += 1 }
             if $command == $CONSOLE_R {
                 if ($states | is-empty) { $seeded = true } else { $late_seed = true }

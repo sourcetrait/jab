@@ -54,7 +54,7 @@ def main [map: string, poses: path, out: path, --kernel: path, --image: path, --
         let records = (0..<(($run.api | bytes length) // $RECORD) | each {|i|
             let r = ($run.api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD))
             {
-                kind: ($r | bytes at 0..<1 | into int),
+                kind: ($r | bytes at 0..<4 | into int --endian little),
                 sector: ($r | bytes at 4..<8 | into int --endian little --signed),
                 fields: (0..<5 | each {|f| $r | bytes at (40 + $f * 4)..<(44 + $f * 4) | into int --endian little --signed }),
             }

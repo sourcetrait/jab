@@ -122,7 +122,7 @@ export def play-table [seed: int, seconds: int]: nothing -> table<at: duration, 
 def states [api: binary]: nothing -> table<sector: int, x: float, y: float, z: float> {
     0..<(($api | bytes length) // $RECORD) | each {|i|
         let r = ($api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD))
-        if ($r | bytes at 0..<1 | into int) != 1 { null } else {
+        if ($r | bytes at 0..<4 | into int --endian little) != 1 { null } else {
             {
                 sector: ($r | bytes at 4..<8 | into int --endian little --signed),
                 x: (float-at $r 8), y: (float-at $r 12), z: (float-at $r 16),
