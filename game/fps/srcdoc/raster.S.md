@@ -447,7 +447,7 @@ the divide's to the byte.
 
 Where the polygon's 1/z holds along the row, POLY_IZA zero, z is one value
 along the span: s2 steps by s3 a pixel and never moves. The prologue's z at
-the first pixel, kept in slot 232 (the frame 272 bytes), then serves the
+the first pixel, kept in slot 232 (the frame 304 bytes), then serves the
 span's end, every block's end, and every lit interval's end, each a divide
 whose input would be the same clamp of s2. The span's end keeps its
 clamped 1/z in t3 all the same, since the row below the end reads it, and

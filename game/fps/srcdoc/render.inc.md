@@ -865,9 +865,9 @@ The stats record grew its span, pixel, and light-tick fields for the light's
 instrument, then the rejected-pixel count, then the lumel samples; a field is
 added by extending the record, zeroed in world_draw, and printed by
 frame_report, with the test's frame template extended to match, since the
-template names every field. STAT_TILE_TICKS is the tiles' time inside the
-planes' and the walls' phases, a reservation with any reset it makes and
-each cell built or shrunk, and is never added to them.
+template names every field. STAT_TILE_TICKS is the tile pool's boundary,
+timed whole once a frame before any bind, a part of the drawing apart
+from every phase.
 
 ## .set STAT_WALLS
 

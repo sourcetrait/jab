@@ -185,14 +185,15 @@ built: a directory for every surface with a lumel map and a texture, a grid
 for each level of its material's chain, sized from the map's extent, W << k by
 H << k texels of level 0, a tile at level m covering TILE_SIDE << m of them a
 side, the census's sizing at one side, so the entries equal the census
-directory line's at 32. A surface whose grid passes sixteen bits a side or
-whose grids would pass TILE_DIRECTORY_ENTRIES stays uncached, counted, and
-the next surface is tried. Every slot starts free, slot 0 on top of the free
-stack, the effective slots all of them, no tile in construction; each
-context gets its admission block and its touched-slot bitmap; every
-surface's merged chain is none; the configuration pending is the build's,
-TILE_GUARANTEE, TILE_RING, every slot, and TILE_MERGE_US, flagged changed
-so the first boundary sends its record.
+directory line's at 64, TILE_SIDE. A surface whose grid passes sixteen
+bits a side or whose grids would pass TILE_DIRECTORY_ENTRIES stays
+uncached, counted, and the next surface is tried. Every slot starts free,
+slot 0 on top of the free stack, the effective slots all of them, no tile
+in construction; each context gets its admission block and its
+touched-slot bitmap; every surface's merged chain is none; the
+configuration pending is the build's, TILE_GUARANTEE, TILE_RING, every
+slot, and TILE_MERGE_US, flagged changed so the first boundary sends its
+record.
 
 TILE_MEMORY is every table of the pool and the pool itself, tile_tables_end
 less tile_pool, read once here; the memory in use counts the tables with the
@@ -200,7 +201,7 @@ directory at this map's entries, and the slots in use. A debug build
 prints both with the side, the slots, the directory's entries, and the maps
 held and left uncached:
 
-    fps: tile pool: side 32, slots 8192 of 4096 bytes, directory 384445 entries over 228 maps and 0 uncached, memory 5703860 of 41914816 bytes
+    fps: tile pool: side 64, slots 2048 of 16384 bytes, directory 98445 entries over 228 maps and 0 uncached, memory 3206132 of 40561088 bytes
 
 The material's masks, row shift, and chain come through material_bind, the
 producer's polygon its scratch at load as lumaps_bake's is.
