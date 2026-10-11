@@ -15,7 +15,7 @@ Nomenclature: `{res}{req}{ver}`
 ## 1KA1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 4
+- Cores: 3
 - Clock: 2Ghz
 - RAM: 4GB
 - GPU: None
@@ -25,7 +25,7 @@ Nomenclature: `{res}{req}{ver}`
 ## 1KB1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 8
+- Cores: 7
 - Clock: 2Ghz
 - RAM: 8GB
 - GPU: None
@@ -35,7 +35,7 @@ Nomenclature: `{res}{req}{ver}`
 ### 2KA1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 8
+- Cores: 7
 - Clock: 2Ghz
 - RAM: 8GB
 - GPU: None
@@ -45,7 +45,7 @@ Nomenclature: `{res}{req}{ver}`
 ### 2KB1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 16
+- Cores: 15
 - Clock: 2Ghz
 - RAM: 16GB
 - GPU: None
@@ -55,7 +55,7 @@ Nomenclature: `{res}{req}{ver}`
 ### 4KA1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 16
+- Cores: 15
 - Clock: 2Ghz
 - RAM: 16GB
 - GPU: None
@@ -65,7 +65,7 @@ Nomenclature: `{res}{req}{ver}`
 ### 4KB1
 - ISA: RISC-V
 - ISA Profile: RVA23
-- Cores: 32
+- Cores: 31
 - Clock: 2Ghz
 - RAM: 32GB
 - GPU: None
