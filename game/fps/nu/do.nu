@@ -1,4 +1,4 @@
-# adv.nu: the game's commands for development, the manifest's `adv`,
+# do.nu: the game's commands for development, the manifest's `do`,
 # which the repository's `just do <command>` runs and `just do` lists:
 # the content rendered and compiled, a capture of placed poses, the smoke
 # test, robojab's play, and the gauge. A command that runs the program
@@ -8,7 +8,7 @@ use ../../../sdk/nu/jab.nu
 const here = (path self | path dirname)
 
 def main [] {
-    print "nu adv.nu <command> [args]; `just do` at the repository's root lists the commands"
+    print "nu do.nu <command> [args]; `just do` at the repository's root lists the commands"
 }
 
 # The game's directory, the workspace's, and the SDK's tool.

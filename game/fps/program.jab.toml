@@ -5,5 +5,5 @@ includes = ['../../sdk/src']
 link = '../../sdk/src/program.ld'
 target_assets = 'render_0'
 prepare = 'nu/prepare.nu'
-adv = 'nu/adv.nu'
+do = 'nu/do.nu'
 specs = [ '1ka1', '1kb1', '2ka1' ]

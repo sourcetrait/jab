@@ -40,7 +40,7 @@ against the jab workspace three directories up, named by the
 same symbols, the generic disk rides along, and the output lands in the
 jab target at the program's path. Building the game compiles our maps
 first (`nu/prepare.nu`); the game's commands for development are
-`nu/adv.nu`'s. From the jab root:
+`nu/do.nu`'s. From the jab root:
 
     just build game/fps          # the game and the probe
     just test game/fps           # the game's test and the probe's

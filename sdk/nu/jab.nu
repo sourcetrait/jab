@@ -28,7 +28,7 @@
 # programs alike. DEBUG picks the target's debug tree, and every other
 # build lands in its release tree, so the two coexist. A program's
 # manifest may name a `prepare` script, run before it is built, tested,
-# or run, and an `adv` script, whose commands `just do` lists. `test`
+# or run, and a `do` script, whose commands `just do` lists. `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -37,7 +37,7 @@
 # way. A build is skipped when its output is newer than every input and
 # the flags, symbols included, match the last build.
 
-# This tool's own file, which `adv` runs again for the SDK's commands.
+# This tool's own file, which `do` runs again for the SDK's commands.
 const self = (path self)
 # The riscv64 binutils prefixes: the official toolchain's triple first,
 # then the names distributions package the tools under.
@@ -2239,34 +2239,34 @@ def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> 
 
 # The development commands, `just do`: with no command the list, the
 # SDK's own, probe and clean, then the kernel's and every program's, the
-# `main <command>` definitions of the nushell script its manifest's `adv`
+# `main <command>` definitions of the nushell script its manifest's `do`
 # names; with one, the SDK's or the script's that defines it, run with
 # the rest of the words as they came, from the directory the command was
 # given in, so a relative path among them is the caller's.
-def --wrapped "main adv" [dir: path, ...words: string] {
+def --wrapped "main do" [dir: path, ...words: string] {
     let ws = ($dir | path expand)
     if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
-    let commands = (adv-commands $ws)
-    if ($words | is-empty) { print (adv-list $commands); return }
+    let commands = (do-commands $ws)
+    if ($words | is-empty) { print (do-list $commands); return }
     let name = ($words | first)
     let rest = ($words | skip 1)
     if $name == "probe" { ^nu $self probe $ws ...$rest; return }
-    if $name == "clean" { adv-clean $ws $rest; return }
+    if $name == "clean" { do-clean $ws $rest; return }
     let hit = ($commands | where command == $name)
     if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just do` lists them"} }
     ^nu ($hit | first | get script) $name ...$rest
 }
 
 # Every development command the kernel and the programs declare: the
-# `main <command>` definitions of the script a manifest's `adv` names,
+# `main <command>` definitions of the script a manifest's `do` names,
 # relative to it, each with the comment above it, the script, and its
 # owner's path and directory.
-def adv-commands [ws: path]: nothing -> table<command: string, usage: string, owner: string, home: string, script: string, summary: string> {
+def do-commands [ws: path]: nothing -> table<command: string, usage: string, owner: string, home: string, script: string, summary: string> {
     let m = (open ($ws | path join "workspace.jab.toml"))
     let owners = ([{ path: $m.kernel, manifest: "kernel.jab.toml" }] ++ (programs-of $ws | each {|p| { path: $p, manifest: "program.jab.toml" } }))
     $owners | each {|o|
         let home = ($ws | path join $o.path)
-        let declared = (open ($home | path join $o.manifest) | get -o adv | default "")
+        let declared = (open ($home | path join $o.manifest) | get -o "do" | default "")
         if $declared == "" { [] } else {
             let script = ($home | path join $declared)
             let lines = (open --raw $script | decode | lines)
@@ -2274,7 +2274,7 @@ def adv-commands [ws: path]: nothing -> table<command: string, usage: string, ow
                 let hit = ($l.item | parse --regex '^def (?:--wrapped )?"main (?P<command>[^"]+)"\s*\[(?P<params>.*)\][^\]]*$' | get -o 0)
                 if $hit == null { null } else {
                     let above = ($lines | first $l.index | reverse | take while {|x| $x | str starts-with "#" } | reverse | each {|x| $x | str replace --regex '^#\s?' '' } | str join " ")
-                    { command: $hit.command, usage: (adv-usage $hit.params), owner: $o.path, home: $home, script: $script, summary: $above }
+                    { command: $hit.command, usage: (do-usage $hit.params), owner: $o.path, home: $home, script: $script, summary: $above }
                 }
             } | compact
         }
@@ -2284,7 +2284,7 @@ def adv-commands [ws: path]: nothing -> table<command: string, usage: string, ow
 # A command's arguments as `just do` shows them, from its definition's
 # parameters: a required one `<name>`, one with a default `[name]`, a
 # flag `[--flag value]` or `[--flag]`, the rest `[args...]`.
-def adv-usage [params: string]: nothing -> string {
+def do-usage [params: string]: nothing -> string {
     $params | split row "," | each {|p| $p | str trim } | where {|p| $p != "" } | each {|p|
         let name = ($p | split row ":" | first | split row "=" | first | str trim)
         let default = (if ($p | str contains "=") { $p | split row "=" | skip 1 | str join "=" | str trim | str trim --char '"' } else { "" })
@@ -2296,7 +2296,7 @@ def adv-usage [params: string]: nothing -> string {
 
 # The list `just do` prints: each command with its arguments and its
 # owner, and its description up to its first example or full stop.
-def adv-list [commands: table]: nothing -> string {
+def do-list [commands: table]: nothing -> string {
     let sdk = [
         { command: "probe", usage: "<kind> <program> [--seconds 12] [--set names]", owner: "sdk", summary: "Probe one program under a window and print one NUON record on how its flips reached it, `sdl` the one kind, Linux only" }
         { command: "clean", usage: "[path] [--tree release|debug]", owner: "sdk", summary: "Retire the build outputs of the programs at or under a path, or the kernel's with `kernel`, in both trees or the one --tree names; with no path the whole target, as `just clean` does" }
@@ -2331,7 +2331,7 @@ def clean-target [ws: path]: nothing -> nothing {
 # under it, or the kernel's with `kernel`, in both trees or the one
 # `--tree` names, each retired (retire) under one stamp. A program's
 # output holds the outputs of the programs under it, which go with it.
-def adv-clean [ws: path, words: list<string>]: nothing -> nothing {
+def do-clean [ws: path, words: list<string>]: nothing -> nothing {
     let at = ($words | enumerate | where item == "--tree" | get -o 0.index)
     let trees = (if $at == null { ["release" "debug"] } else { [($words | get -o ($at + 1) | default "")] })
     for t in $trees { if $t not-in ["release" "debug"] { error make {msg: $"--tree is release or debug, not ($t)"} } }
@@ -2796,5 +2796,5 @@ def "main retire" [ws: path] {
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1|2|4]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu adv <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1|2|4]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }

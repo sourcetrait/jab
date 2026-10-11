@@ -13,5 +13,5 @@ reads, and `nu map.nu show <map>` prints a compiled map's counts.
 render` with the SVGs. `png.nu` writes a PNG without a compressor, RGB
 or RGBA. `shot.nu` turns a run's screen capture into a PNG to look at,
 behind `just do shot`. `prepare.nu` compiles the maps before the game
-is built, tested, or run, and `adv.nu` holds the game's commands for
+is built, tested, or run, and `do.nu` holds the game's commands for
 development, which `just do` lists.

@@ -86,7 +86,7 @@ workspace in its manifest, `workspace = '../../../..'` relative to the
 manifest. A manifest may also name `target_assets`, a tree its content
 compiles to in its asset shard of the target, which becomes its disk;
 `prepare`, a nushell script the tool runs before building, testing, or
-running it; and `adv`, a nushell script whose `main <command>`
+running it; and `do`, a nushell script whose `main <command>`
 definitions are its commands for development.
 
 A build is described by its symbols: `just build --set debug,stats`

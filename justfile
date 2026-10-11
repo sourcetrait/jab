@@ -91,4 +91,4 @@ retire:
 [no-cd]
 [script("nu")]
 do *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' adv '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{jab}}' do '{{here}}' ...$args }
