@@ -32,7 +32,7 @@ conservatively read-in to an assembly codebase.
 
 The 'eye-asm' tool can be used to view all signatures within a given src
 directory and, optionally, specific relative file or directory.
-(Eg, `eye-asm ./kernel/src`, `eye-asm ./kerne/src timer.S`)
+(Eg, `eye-asm ./kernel/src`, `eye-asm ./kernel/src timer.S`)
 
 ## Components
 - Jab Spec
