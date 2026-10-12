@@ -472,11 +472,11 @@ const HOT_FAMILIES = [
     { name: "the packet's render", members: [packet_render band_render span_fill] }
 ]
 # The raster's workers through the console's W frame: the default, every
-# worker started, two on four harts, in bands of GRAIN_DEFAULT rows
-# (render.inc's); the spawn view of the still copy drawn again by the
-# serial backend, by one worker, by two a band a worker, and by two in
-# bands of WORKER_GRAIN rows, each the default's capture over the whole
-# screen and its frame line's counts the default's
+# worker started, two on the specification's three harts, in bands of
+# GRAIN_DEFAULT rows (render.inc's); the spawn view of the still copy drawn
+# again by the serial backend, by one worker, by two a band a worker, and
+# by two in bands of WORKER_GRAIN rows, each the default's capture over
+# the whole screen and its frame line's counts the default's
 const WORKERS_STARTED = 2
 const GRAIN_DEFAULT = 32
 const WORKER_GRAIN = 16
@@ -515,7 +515,7 @@ const IDLE_CASES = [
 # The workers on fewer harts, the machine's secondaries all there are:
 # each machine's workers line, and a W asking two held to those started
 const WORKER_MACHINES = [
-    { harts: 4, started: 2, line: "fps: workers 2 on harts 1 2" }
+    { harts: 3, started: 2, line: "fps: workers 2 on harts 1 2" }
     { harts: 2, started: 1, line: "fps: workers 1 on harts 1" }
     { harts: 1, started: 0, line: "fps: workers 0 on harts" }
 ]
@@ -1264,7 +1264,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
         assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
     }
-    # the workers on each machine: the specification's four harts start
+    # the workers on each machine: the specification's three harts start
     # two, two harts one, one hart none; a W asking two held to those
     # started, the serial backend where none; each the default's picture
     # and counts
@@ -1343,7 +1343,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             }
         }
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows, on four, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
+    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows, on three, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -3923,52 +3923,55 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let five_five = (do $compared [$five_a $five_b] "tiles_us" false)
     assert ($five_five == "") $"two runs at schema 5 compare on tiles_us: ($five_five)"
 
-    # machines: the specification's four harts, two harts diagnostic, and
-    # four harts on another -machine, the PLIC's line before the AIA
-    let four = (jab machine-of 4)
+    # machines: the specification's three harts, two harts diagnostic, and
+    # three harts on another -machine, the PLIC's line before the AIA
+    let three = (jab machine-of 3)
     let two = (jab machine-of 2)
-    let plic = ($four | update machine "virt")
-    let on_four = (fx-gauge $dir "machine_four" "four" "four" 0 $good2 --machine $four)
+    let plic = ($three | update machine "virt")
+    let on_three = (fx-gauge $dir "machine_three" "three" "three" 0 $good2 --machine $three)
     let on_two = (fx-gauge $dir "machine_two" "two" "two" 0 $good2 --machine $two)
     let on_plic = (fx-gauge $dir "machine_plic" "plic" "plic" 0 $good2 --machine $plic)
-    let diag_refused = (try { gauge compare [$on_four $on_two] "draw_us" 50; "" } catch {|e| $e.msg })
+    let diag_refused = (try { gauge compare [$on_three $on_two] "draw_us" 50; "" } catch {|e| $e.msg })
     let diag_says = $"a run on a diagnostic machine is refused as diagnostic: ($diag_refused)"
     assert ($diag_refused | str contains $"($on_two) run 1, diagnostic: a diagnostic machine of 2 harts") $diag_says
-    let diag_admitted = (gauge compare [$on_four $on_two] "draw_us" 50 --diagnostic)
+    let diag_admitted = (gauge compare [$on_three $on_two] "draw_us" 50 --diagnostic)
     assert equal ($diag_admitted.table | where build == "two" | get 0.standings) ["diagnostic"] "--diagnostic admits it marked"
-    let across = (try { gauge compare [$on_four $on_plic] "draw_us" 50; "" } catch {|e| $e.msg })
+    let across = (try { gauge compare [$on_three $on_plic] "draw_us" 50; "" } catch {|e| $e.msg })
     assert ($across | str contains "the runs ran on 2 machines") $"runs on two machines refuse the comparison: ($across)"
-    let across_admitted = (gauge compare [$on_four $on_plic] "draw_us" 50 --diagnostic)
+    let across_admitted = (gauge compare [$on_three $on_plic] "draw_us" 50 --diagnostic)
     let rows = ($across_admitted.table | each {|t| [$t.build $t.machine.machine] })
-    assert equal $rows [[four $four.machine] [plic virt]] $"each build's row names its machine: ($rows)"
+    assert equal $rows [[three $three.machine] [plic virt]] $"each build's row names its machine: ($rows)"
     let one_name = (try {
-        gauge compare [(fx-gauge $dir "mixed_1" "mixed_1" "mixed" 0 $good2 --machine $four) (fx-gauge $dir "mixed_2" "mixed_2" "mixed" 0 $good2 --machine $plic)] "draw_us" 50 --diagnostic
+        gauge compare [(fx-gauge $dir "mixed_1" "mixed_1" "mixed" 0 $good2 --machine $three) (fx-gauge $dir "mixed_2" "mixed_2" "mixed" 0 $good2 --machine $plic)] "draw_us" 50 --diagnostic
         ""
     } catch {|e| $e.msg })
     assert ($one_name | str contains "come from 2 builds") $"one name's runs on two machines are two builds: ($one_name)"
 
     # QEMU words of the launch's own: the machine the launch returns, the
-    # specification's four marked diagnostic, and the one asked for before
+    # specification's three marked diagnostic, and the one asked for before
     # it, unmarked, each with the words beside it; both stand diagnostic,
     # the reason naming the words and no hart count
     let words = ["-global" "virtio-rng-device.period=6000"]
     let worded = [
-        { name: "words_launched", machine: (jab machine-of 4 --overrides $words) }
-        { name: "words_asked", machine: $four }
+        { name: "words_launched", machine: (jab machine-of 3 --overrides $words) }
+        { name: "words_asked", machine: $three }
     ]
     for w in $worded {
         let file = (fx-gauge $dir $w.name $w.name $w.name 0 $good2 --machine $w.machine --overrides $words)
-        let refused = (try { gauge compare [$on_four $file] "draw_us" 50; "" } catch {|e| $e.msg })
+        let refused = (try { gauge compare [$on_three $file] "draw_us" 50; "" } catch {|e| $e.msg })
         let refused_says = $"the ($w.name) run is refused as diagnostic, the words named: ($refused)"
         assert ($refused | str contains $"($file) run 1, diagnostic: QEMU words of its launch's own: ($words | str join ' ')") $refused_says
         assert (not ($refused | str contains "harts")) $"the ($w.name) run's reason names no hart count: ($refused)"
-        let admitted = (gauge compare [$on_four $file] "draw_us" 50 --diagnostic)
+        let admitted = (gauge compare [$on_three $file] "draw_us" 50 --diagnostic)
         assert equal ($admitted.table | where build == $w.name | get 0.standings) ["diagnostic"] $"--diagnostic admits the ($w.name) run marked"
     }
 
-    # a bench of two route steps at cadence 0, one on each machine
+    # a bench of two route steps at cadence 0, one on each machine, its
+    # directory started empty: bench-doc reads every step under it, so a
+    # step a run before left reads as one of this bench's
     let bench = ($dir | path join "bench")
-    for step in [[four $on_four] [two $on_two]] {
+    jab retire $bench
+    for step in [[three $on_three] [two $on_two]] {
         mkdir ($bench | path join $step.0)
         cp $step.1 ($bench | path join $step.0 "gauge.nuon")
     }
@@ -3976,7 +3979,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let pool = ($doc.groups | where kind == "route" | get 0.cadences.0)
     assert equal [$pool.runs $pool.valid] [2 1] $"the bench pools the specification's machine's run alone: ($pool.standings)"
     assert equal ($pool.apart | get standing) ["diagnostic"] $"the diagnostic machine's run kept apart: ($pool.apart)"
-    assert equal ($doc.steps | get machine.harts) [4 2] $"every step names its machine: ($doc.steps)"
+    assert equal ($doc.steps | get machine.harts) [3 2] $"every step names its machine: ($doc.steps)"
     let text = (gauge bench-text $doc | lines)
     let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two"
     assert ($line in $text) $"the report names the step's machine, ($line): ($text)"
@@ -3994,7 +3997,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # a sidecar, an identity file, or a report a run before left reads as
     # evidence, so a rules directory used again would read another run's.
     let ids = ($dir | path join "identities")
-    if ($ids | path type) == "dir" { rm -r $ids }
+    jab retire $ids
     mkdir $ids
     let attempt = {|c: closure| try { do $c } catch {|e| { error: $e.msg } } }
     let debug_flags = "-I src --defsym DEBUG=1 -march=rva23u64 fx-"
@@ -4080,7 +4083,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         assets: { map: "render_0", tree: "t", digest: "fx_assets" },
         route: { file: "route.nuon", sha256: "fx_route" },
         cap: 60,
-        machine: { harts: 4, diagnostic: false, machine: "virt", cpu: "rva23s64", accel: "tcg,thread=multi" },
+        machine: { harts: 3, diagnostic: false, machine: "virt", cpu: "rva23s64", accel: "tcg,thread=multi" },
         overrides: [],
         qemu: { binary: "qemu-system-riscv64", version: "QEMU emulator version 11.1.2" },
         host: { os: "linux", hostname: "fx_host" },

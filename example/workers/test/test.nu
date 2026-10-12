@@ -1,5 +1,6 @@
-# workers's integration test, on a machine of four harts and three
-# workers:
+# workers's integration test, on a machine of four harts, diagnostic
+# beside the specification's three, since its three workers need a
+# fourth:
 # - Hot, first, since it reads the ELF alone: mandel_row within one page of
 #   code and free of ecalls. A loop across a page boundary runs many times
 #   slower, which would fail the animation's timing before this said why.

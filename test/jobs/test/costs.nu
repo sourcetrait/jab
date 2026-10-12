@@ -19,7 +19,7 @@ const TICKS_PER_US = 10
 
 # One launch of the costs scenario, its samples as distributions in
 # microseconds. Untyped because launch's record is wide.
-export def measure [kernel: path, image: path, out: path, set: string, --harts: int = 4] {
+export def measure [kernel: path, image: path, out: path, set: string, --harts: int = 3] {
     let send = [[at, bytes]; [1sec, ("c" | into binary)]]
     let run = (jab launch --kernel $kernel --image $image --out $out --set $set --send $send --harts $harts --seconds 60)
     let line = ($run.serial | lines | where {|l| $l starts-with "jobs: costs, workers " } | get -o 0)
@@ -72,13 +72,13 @@ export def text [doc: record]: nothing -> string {
 }
 
 def main [] {
-    print "nu costs.nu run [--tree release|debug] [--harts 2|4] [--out <dir>] [--label <name>]"
+    print "nu costs.nu run [--tree release|debug] [--harts 2|3|4] [--out <dir>] [--label <name>]"
     print "nu costs.nu report <a bench run's directory>"
 }
 
 # The bench's step: the costs on the tree's build, kept as costs.nuon in
 # `out`.
-def "main run" [--tree: string = "release", --out: string = "", --label: string = "", --harts: int = 4] {
+def "main run" [--tree: string = "release", --out: string = "", --label: string = "", --harts: int = 3] {
     if $tree not-in [release debug] { error make { msg: $"--tree is release or debug, not ($tree)" } }
     let program = ($env.FILE_PWD | path join ".." | path expand)
     let built = (jab program-out $program $tree)

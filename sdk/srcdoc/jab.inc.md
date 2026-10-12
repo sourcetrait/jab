@@ -326,9 +326,10 @@ table of record.
 
 ## .set JAB_HARTS_MAX
 
-`u64`: the most harts the ABI names, 8, the 4K tier's cores: a hart id is
-under it, every hart mask fits its bits, and the kernel keeps a record a
-hart up to it. A tree listing a hart past it is a topology problem.
+`u64`: the most harts the ABI names, 8, room for the seven of
+`doc/SPEC.md`'s 1KB1 and 2KA1: a hart id is under it, every hart mask fits
+its bits, and the kernel keeps a record a hart up to it. A tree listing a
+hart past it is a topology problem.
 
 ## .set JAB_MAIN_STACK
 

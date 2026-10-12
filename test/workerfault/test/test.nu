@@ -4,7 +4,7 @@
 # scenario's letter sent over the API one second in; hart 0 then waits
 # on what never comes, so only the shutdown's wake can end its wait:
 # - store: a worker's store into the kernel's memory, while hart 0
-#   awaits more bytes over the API and harts 2 and 3 idle.
+#   awaits more bytes over the API and hart 2 idles.
 # - two: two workers' stores at once, through one gate: a line each, the
 #   owner's first, and one shutdown. A debug kernel's knob holds the
 #   first claim 200 ms before its wakes (jab.claimhold=200), so the

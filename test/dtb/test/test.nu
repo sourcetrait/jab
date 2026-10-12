@@ -1,5 +1,5 @@
 # dtb's integration test: the kernel's device tree reader, kernel/src/dtb.S,
-# assembled into this program, over QEMU's own tree for a four-hart machine
+# assembled into this program, over QEMU's own tree for a three-hart machine
 # and trees the test breaks from it or builds itself, each held to the code
 # the reader must answer: the tree whole, a bad magic, an unknown version
 # and a last compatible one past the reader's, a total size past the bytes
@@ -35,7 +35,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "trees")
     jab retire $stage
     mkdir $stage
-    let good = (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb") --bootargs $BOOTARGS)
+    let good = (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt3.dtb") --bootargs $BOOTARGS)
     let tree = (open --raw $good | into binary)
     let h = (header $tree)
     assert equal $h.totalsize ($tree | bytes length) "QEMU's tree is its total size"
@@ -78,7 +78,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let intc = (prop-at $tree $h "/cpus/cpu@1/interrupt-controller" "phandle" | into int --endian big)
     let want = [
         "cells 1"
-        "cpus 4"
+        "cpus 3"
         $"timebase ($TIMEBASE)"
         "reg /cpus/cpu@2 2"
         "reg /cpus/cpu 0"
@@ -101,7 +101,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the debug kernel's own reading of its tree
     if ($set | str contains "DEBUG") {
         let debug = ($run.debug | lines)
-        assert ($debug | any {|l| $l == "jab: harts discovered 0x000000000000000f online 0x000000000000000f failed 0x0000000000000000" }) $"the kernel discovered four harts, every one online: ($run.debug)"
+        assert ($debug | any {|l| $l == "jab: harts discovered 0x0000000000000007 online 0x0000000000000007 failed 0x0000000000000000" }) $"the kernel discovered three harts, every one online: ($run.debug)"
         assert ($debug | any {|l| $l == $"jab: bootargs ($BOOTARGS)" }) $"the kernel read its command line from /chosen: ($run.debug)"
     }
     print $"dtb: ($cases | length) trees, each answering its code; QEMU's ($h.totalsize)-byte tree read through every lookup"

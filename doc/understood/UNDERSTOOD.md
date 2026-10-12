@@ -318,14 +318,15 @@ work by; under QEMU's TCG, `cycle` and `instret` both read the host's tick
 counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
 0, since no event is selected and selecting one stays machine mode's.
 
-Every machine has four harts, `-smp 4`, on multithreaded TCG, `-accel
-tcg,thread=multi`, a host thread a hart. The machine is `-machine
+A machine has the specification's three harts, 1KA1's in `doc/SPEC.md`,
+`-smp 3`, on multithreaded TCG, `-accel tcg,thread=multi`, a host thread
+a hart. The machine is `-machine
 virt,aia=aplic-imsic,aclint=on`. Its interrupts go through the RISC-V
 Advanced Interrupt Architecture: the APLIC turns each device's interrupt
 line into a message, and each hart's IMSIC receives those messages in its
-interrupt files. The ACLINT keeps the timer. `--harts 1` or `--harts 2` on
+interrupt files. The ACLINT keeps the timer. `--harts 1`, `2`, or `4` on
 `just run`, `jab.nu plan`, or `jab launch` gives a diagnostic machine of
-one or two harts, which every record of the run labels so, and any other
+that many harts, which every record of the run labels so, and any other
 count is refused before QEMU starts; every launch's record carries its
 machine, the harts asked for, diagnostic or not, `-machine`, the CPU, and
 the accelerator. QEMU hands every hart the device tree it built, and the
@@ -394,11 +395,13 @@ and each publish drops any other, so a cancel left over from an older job
 never ends a newer one, even when the generation count wraps.
 `test/jobs` races every order a job and its wake can come in, a thousand
 rounds each, and `just bench test/jobs/costs` measures what a job costs
-around its work, at four job sizes, with one worker and with three: the
-dispatch to a worker, the barrier back to hart 0, and the least a round of
-jobs costs beyond its work, its slowest dispatch plus its barrier.
+around its work, at four job sizes, with one worker and with two on the
+specification's three harts: the dispatch to a worker, the barrier back
+to hart 0, and the least a round of jobs costs beyond its work, its
+slowest dispatch plus its barrier.
 
-`example/workers` puts the jobs to work. Hart 0 deals the rows of the
+`example/workers` puts the jobs to work on a diagnostic machine of four
+harts, its three workers needing a fourth. Hart 0 deals the rows of the
 Mandelbrot set in bands of eight to one, two, then three workers, five
 seconds each, while the view zooms in by the clock. A bar at the left edge
 shows which hart computed each row, and the frame's time is drawn as text.

@@ -111,8 +111,9 @@ const CADENCES = [0 1 2]
 const CADENCE_AFTER_FLIP = 0
 # the cap a frame's period comes from when a capture's identity names none
 const CAP = 60
-# the specification's harts; a machine of another count is diagnostic
-const HARTS = 4
+# the specification's harts, 1KA1's three; a machine of another count is
+# diagnostic
+const HARTS = 3
 # a frame's next start less its start less its critical path, wait, and
 # await: the microseconds the conversions drop, at most this
 const RESIDUAL_US = 4
@@ -243,8 +244,8 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|4] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1|2|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|3|4] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1|2|3|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
@@ -278,7 +279,7 @@ def "main run" [
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
+    --harts: int = $HARTS        # the machine's harts, the specification's three, or 1, 2, or 4 for a diagnostic run
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
     --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
 ] {
@@ -348,7 +349,7 @@ def "main play" [
     --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = 4             # the machine's harts, 1 or 2 for a diagnostic run
+    --harts: int = $HARTS        # the machine's harts, the specification's three, or 1, 2, or 4 for a diagnostic run
     --qemu: list<string> = []    # words on the launch's line after its own, the run then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
@@ -2163,8 +2164,8 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "after it, or from schema 4 one asking workers not asked before its first frame or"
                 "asked again after it or with a frame drawn by other workers or at another grain, or asking none"
                 "with workers asked after its first frame or frames at more than one count of workers or grain;"
-                "diagnostic, a run on a machine its identity records as diagnostic, fewer harts than the"
-                "specification's four, or whose identity carries QEMU words of its launch's own, each named; those"
+                "diagnostic, a run on a machine its identity records as diagnostic, any count of harts but the"
+                "specification's three, or whose identity carries QEMU words of its launch's own, each named; those"
                 "five refused unless --diagnostic admits it; or valid; each table row names its batches' standings"
             ] | str join " "),
             coverage: ([
@@ -2200,7 +2201,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
 # run that cannot be paired with another (unpaired-reasons); diagnostic,
 # a run on a machine its identity records as diagnostic or whose identity
 # carries QEMU words of its launch's own, the words and a hart count other
-# than the specification's four named; or valid.
+# than the specification's three named; or valid.
 def standing-of [
     m: oneof<record, nothing>    # the run's measurement as its gauge.nuon holds it
     rows: list<any>              # the run's rows
@@ -2240,7 +2241,7 @@ def standing-of [
         let harts = ($machine | get -o harts)
         let causes = ([
             (if ($words | is-empty) { null } else { $"QEMU words of its launch's own: ($words | str join ' ')" }),
-            (if $harts == null or $harts == $HARTS { null } else { $"a diagnostic machine of ($harts) harts, not the specification's four" }),
+            (if $harts == null or $harts == $HARTS { null } else { $"a diagnostic machine of ($harts) harts, not the specification's three" }),
         ] | compact)
         let why = (if ($causes | is-empty) { ["a machine its identity records as diagnostic"] } else { $causes })
         return { standing: "diagnostic", reasons: $why }

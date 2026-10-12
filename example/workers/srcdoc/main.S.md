@@ -51,7 +51,7 @@ plus the widest view's c, so every product stays under 2^62.
 
 ## .set MAX_WORKERS
 
-`u64`: the workers at most, one a secondary of the four-hart machine.
+`u64`: the workers at most, one a secondary of a four-hart machine.
 
 ## .set STACK_BYTES
 

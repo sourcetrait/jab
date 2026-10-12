@@ -1,17 +1,17 @@
 # harts's integration test, first the held span's arithmetic on readings
-# of its own (HeldSpan), then jab.sys.harts on machines of one, two, and
-# four harts, three cold boots of each, every hart of the device tree
-# discovered and online and none failed, read after the program has
-# held two seconds; the kernel's own lines on the debug channel, its
-# masks and every hart's line, each online hart's record and canary
-# read back by hart 0; the idle secondaries' vCPU threads burning no
-# host core over the held span, a second as the launch times it; each
-# launch's record of its machine, one and two harts diagnostic, the line
-# carrying -smp and multithreaded TCG; and a count the machine does not
-# take refused by
-# the launcher before QEMU starts. Then the platform check's two classes
-# on trees of the test's own through -dtb, QEMU's four-hart tree with one
-# change each: a cpu whose id is past JAB_HARTS_MAX, a topology problem,
+# of its own (HeldSpan), then jab.sys.harts on machines of one, two,
+# three, and four harts, three cold boots of each, every hart of the
+# device tree discovered and online and none failed, read after the
+# program has held two seconds; the kernel's own lines on the debug
+# channel, its masks and every hart's line, each online hart's record and
+# canary read back by hart 0; the idle secondaries' vCPU threads burning
+# no host core over the held span, a second as the launch times it; each
+# launch's record of its machine, every count but the specification's
+# three diagnostic, the line carrying -smp and multithreaded TCG; and a
+# count the machine does not take refused by the launcher before QEMU
+# starts. Then the platform check's two classes on trees of the test's
+# own through -dtb, QEMU's four-hart tree with one change each, on a
+# machine of four: a cpu whose id is past JAB_HARTS_MAX, a topology problem,
 # named on the debug channel, the other harts discovered and failed and
 # the kernel going on on hart 0; and a timebase other than QEMU's, which
 # ends the boot with its line on the UART and status 1 before the
@@ -65,7 +65,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let debug = ($set | str contains "DEBUG")
     let threads = ($nu.os-info.name == "linux")
     mut seen = []
-    for n in [1 2 4] {
+    for n in [1 2 3 4] {
         for boot in 1..3 {
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"harts_($n)_($boot)") --set $set --harts $n --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
             assert equal $run.status 0 $"exit status on ($n) harts, boot ($boot): ($run.serial)"
@@ -73,7 +73,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
             let mask = ((1 bit-shl $n) - 1)
             assert equal ($run.serial | lines) [$"harts ($mask) ($mask) 0"] $"on ($n) harts, boot ($boot), every one discovered and online, none failed: ($run.serial)"
             assert equal $run.machine.harts $n $"the launch's record of its harts: ($run.machine)"
-            assert equal $run.machine.diagnostic ($n != 4) $"a machine of ($n) harts diagnostic or not: ($run.machine)"
+            assert equal $run.machine.diagnostic ($n != 3) $"a machine of ($n) harts diagnostic or not: ($run.machine)"
             assert equal $run.machine.accel "tcg,thread=multi" $"multithreaded TCG: ($run.machine)"
             assert ($run.qemu | window 2 | any {|w| $w.0 == "-smp" and $w.1 == ($n | into string) }) $"-smp ($n) on the line: ($run.qemu)"
             assert ($run.qemu | window 2 | any {|w| $w.0 == "-accel" and $w.1 == "tcg,thread=multi" }) $"-accel tcg,thread=multi on the line: ($run.qemu)"
@@ -89,15 +89,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
             if $boot == 1 { $seen = ($seen | append { harts: $n, serial: ($run.serial | str trim) }) }
         }
     }
-    let refused = (try { jab launch --kernel $kernel --image $image --out ($out | path join "harts_3") --set $set --harts 3; "" } catch {|e| $e.msg })
-    assert ($refused | str contains "--harts takes 1, 2, or 4") $"three harts refused before QEMU starts: ($refused)"
+    let refused = (try { jab launch --kernel $kernel --image $image --out ($out | path join "harts_5") --set $set --harts 5; "" } catch {|e| $e.msg })
+    assert ($refused | str contains "--harts takes 1, 2, 3, or 4") $"five harts refused before QEMU starts: ($refused)"
 
+    # QEMU's four-hart tree, and every launch on a tree of it a machine of
+    # four, diagnostic, so the tree and the machine agree
     # a cpu past JAB_HARTS_MAX: cpu@3's reg made 9, so harts 0 to 2 are
     # discovered, every one but the boot hart failed, and hart 0 runs on
-    let tree = (open --raw (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb")) | into binary)
+    let tree = (open --raw (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb") --harts 4) | into binary)
     let past_file = ($out | path join "past_max.dtb")
     put32 $tree (prop-offset $tree "/cpus/cpu@3" "reg") $PAST_MAX | save --raw -f $past_file
-    let past = (jab launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+    let past = (jab launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --harts 4 --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
     assert equal $past.status 0 $"the program runs on hart 0 past a topology problem: ($past.serial)"
     assert equal ($past.serial | lines) ["harts 7 1 6"] $"harts 0 to 2 discovered, hart 0 online, 1 and 2 failed: ($past.serial)"
     # harts 1 and 2 refused and hart 3 outside the tree, each parked in
@@ -116,7 +118,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the program never runs
     let slow_file = ($out | path join "slow_timebase.dtb")
     put32 $tree (prop-offset $tree "/cpus" "timebase-frequency") $SLOW_TIMEBASE | save --raw -f $slow_file
-    let slow = (jab launch --kernel $kernel --image $image --out ($out | path join "slow_timebase") --set $set --dtb $slow_file --seconds 20)
+    let slow = (jab launch --kernel $kernel --image $image --out ($out | path join "slow_timebase") --set $set --harts 4 --dtb $slow_file --seconds 20)
     assert equal $slow.status 1 $"an unsupported timer ends the boot with status 1: ($slow.status), ($slow.serial)"
     assert equal ($slow.serial | lines) [$"jab: timer unsupported: timebase-frequency ($SLOW_TIMEBASE)"] $"its line, and nothing of the program's: ($slow.serial)"
 
@@ -139,7 +141,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ] | each {|t|
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --dtb $file --seconds 20)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status $t.status $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) $t.serial $"($t.name): its line: ($run.serial)"
         $"($t.name): ($run.serial | str trim)"
@@ -160,7 +162,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ] | each {|t|
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --dtb $file --seconds 20)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status 1 $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) [$"jab: interrupt platform refused: code ($t.code)"] $"($t.name): its line: ($run.serial)"
         $"($t.name): ($run.serial | str trim)"
@@ -180,17 +182,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
     mut knobs = []
     if $debug {
-        # the late check-in: hart 2 held until hart 0 has failed it at the
-        # bound, its swap then losing; still failed two seconds on, and
-        # parked, its thread idle
+        # the late check-in, on the specification's three harts: hart 2
+        # held until hart 0 has failed it at the bound, its swap then
+        # losing; still failed two seconds on, and parked, its thread idle
         let late = (jab launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
         assert equal $late.status 0 $"the program runs past a late hart: ($late.serial)"
-        assert equal ($late.serial | lines) ["harts 15 11 4"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
+        assert equal ($late.serial | lines) ["harts 7 3 4"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
         let lines = ($late.debug | lines)
-        for line in ["jab: bootargs jab.late=2" "jab: hart 2 failed: no check-in" "jab: hart 1 online" "jab: hart 3 online"] {
+        for line in ["jab: bootargs jab.late=2" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
             assert ($lines | any {|l| $l == $line }) $"($line): ($late.debug)"
         }
-        if $threads { idle-harts $late [1 2 3] "the late check-in" }
+        if $threads { idle-harts $late [1 2] "the late check-in" }
 
         # the stray kernel fault: the release store's cause at another
         # instruction and address ends the run with the kernel fault line

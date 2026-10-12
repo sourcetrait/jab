@@ -19,7 +19,7 @@ the time counter.
 
 ## .set MAX_WORKERS
 
-`u64`: the workers at most, one a secondary of the four-hart machine.
+`u64`: the workers at most, one a secondary of a four-hart machine.
 
 ## .set OUTPUT_BYTES
 

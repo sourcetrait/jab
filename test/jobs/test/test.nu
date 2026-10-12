@@ -1,9 +1,9 @@
 # jobs's integration test: jab_jobs.inc's mailboxes over the worker
-# calls, a line a fixture read line by line, on machines of two and four
-# harts, one worker and three:
+# calls, a line a fixture read line by line, on machines of two, three,
+# and four harts, one worker, two, and three:
 # - Idle: every worker asleep in its await while hart 0 holds two seconds;
-#   on four harts each worker's vCPU thread under 0.05 of a core over the
-#   held span, a second as the launch times it.
+#   on three harts and four each worker's vCPU thread under 0.05 of a core
+#   over the held span, a second as the launch times it.
 # - Races, a thousand rounds each, every round a job a worker and a join,
 #   each worker's output checked and its completions counted: before (each
 #   worker lingers past its completion, so the next job is published before
@@ -19,7 +19,7 @@
 # - Cancel: a job cancelled a band in, done as cancelled before its last
 #   band; a job cancelled before it is published, done as cancelled with
 #   no band run.
-# Then the costs scenario once on four harts (costs.nu, which `just bench
+# Then the costs scenario once on three harts (costs.nu, which `just bench
 # test/jobs/costs` runs on a release build): every sample in, each a
 # distribution, the round's overhead bound beside the dispatch and the
 # barrier and at least each, held to no number, since a debug build's TCG
@@ -39,9 +39,9 @@ const HELD_AT = 1500ms
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let threads = ($nu.os-info.name == "linux")
     mut seen = []
-    for harts in [2 4] {
+    for harts in [2 3 4] {
         let w = ($harts - 1)
-        let held = ($threads and $harts == 4)
+        let held = ($threads and $harts >= 3)
         let send = [[at, bytes]; [1sec, ("f" | into binary)]]
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"fixture_($harts)") --set $set --send $send --harts $harts --seconds 40 --threads (if $held { $HELD_AT } else { 0sec }))
         let lines = [
@@ -75,9 +75,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $seen = ($seen | append $"($harts) harts: ($got | skip 1 | first 2 | str join '; ')")
     }
 
-    let doc = (costs measure $kernel $image ($out | path join "costs") $set --harts 4)
-    assert equal $doc.workers 3 $"Costs: three workers on four harts: ($doc.workers)"
-    assert equal ($doc.rows | length) 8 $"Costs: four sizes for one worker and for three: ($doc.rows | length)"
+    let doc = (costs measure $kernel $image ($out | path join "costs") $set --harts 3)
+    assert equal $doc.workers 2 $"Costs: two workers on three harts: ($doc.workers)"
+    assert equal ($doc.rows | length) 8 $"Costs: four sizes for one worker and for two: ($doc.rows | length)"
     for r in $doc.rows {
         assert equal $r.dispatch.n (100 * $r.workers) $"Costs: a dispatch a worker a round at ($r.size_us) us, ($r.workers) workers: ($r.dispatch.n)"
         assert equal $r.barrier.n 100 $"Costs: a barrier a round at ($r.size_us) us, ($r.workers) workers: ($r.barrier.n)"
