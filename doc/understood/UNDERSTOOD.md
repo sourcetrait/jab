@@ -20,6 +20,10 @@ runs only under QEMU's `virt` machine.
   and `nu/jab.nu` for its test.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
+- `doc/SPEC.md` the system specifications, TheUser's and the authority;
+  `asset/spec.nuon` their definitions for the tools, one row a spec,
+  following every edit to SPEC.md, and `asset/spec.nutype` the type they
+  are read as.
 - `example/<name>/`, `test/<name>/` programs by category, each with
   `program.jab.toml`, `src/main.S` and its `srcdoc/`, and its
   integration test at `test/test.nu`.

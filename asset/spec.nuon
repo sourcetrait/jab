@@ -1,0 +1,74 @@
+[
+    {
+        name: '1KA1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 3,
+        clock_ghz: 2,
+        ram: 4GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 1920, height: 1080},
+        fps: 60
+    },
+    {
+        name: '1KB1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 7,
+        clock_ghz: 2,
+        ram: 8GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 1920, height: 1080},
+        fps: 60
+    },
+    {
+        name: '2KA1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 7,
+        clock_ghz: 2,
+        ram: 8GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 2560, height: 1440},
+        fps: 60
+    },
+    {
+        name: '2KB1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 15,
+        clock_ghz: 2,
+        ram: 16GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 2560, height: 1440},
+        fps: 60
+    },
+    {
+        name: '4KA1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 15,
+        clock_ghz: 2,
+        ram: 16GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 3840, height: 2160},
+        fps: 60
+    },
+    {
+        name: '4KB1',
+        isa: 'RISC-V',
+        isa_profile: 'RVA23',
+        cores: 31,
+        clock_ghz: 2,
+        ram: 32GiB,
+        gpu: null,
+        vram: null,
+        display: {width: 3840, height: 2160},
+        fps: 60
+    }
+]

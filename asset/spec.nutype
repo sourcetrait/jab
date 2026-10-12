@@ -1,0 +1,12 @@
+table<
+    name: string,
+    isa: string,
+    isa_profile: string,
+    cores: int,
+    clock_ghz: int,
+    ram: filesize,
+    gpu: oneof<string, nothing>,
+    vram: oneof<filesize, nothing>,
+    display: record<width: int, height: int>,
+    fps: int
+>
