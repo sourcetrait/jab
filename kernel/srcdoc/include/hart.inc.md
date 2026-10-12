@@ -1,7 +1,8 @@
 # hart.inc
 
-A hart's area and its record, which boot.S, kernel.S, trap.S, harts.S, and
-workers.S share, the worker's states and bounds, and a fault's kinds. It
+A hart's area and its record, which boot.S, kernel.S, trap.S, harts.S,
+workers.S, and owners.S share, the worker's states and bounds, a fault's
+kinds, and the claims' ids. It
 guards itself against a second inclusion and leans on qemu_virt.inc for the
 timebase.
 
@@ -74,6 +75,24 @@ fields.
 ## .set HART_VALUE
 
 `u64`: a line's fault: the line's address and the value printed after it.
+
+## .set HART_OWNER
+
+`u64`: the record's owner (owners.S): JAB_OWNER_NONE before a reservation
+and on a hart none holds, JAB_OWNER_RESERVED in the reservation's grant, a
+claim's id otherwise; written by hart 0 alone, read by the start and by
+each grant's mask.
+
+## .set OWNER_FIRST_CLAIM
+
+`u64`: the first claim's id, 2, past JAB_OWNER_NONE and JAB_OWNER_RESERVED;
+a claim's id is owners_next plus it.
+
+## .set CLAIM_IDS
+
+`u64`: the claim ids a run has, 2^63 - 2, so the ids run from 2 to
+2^63 - 1, positive and clear of JAB_DENIED's all ones; a claim refuses
+JAB_CLAIM_SPENT once owners_next reaches it.
 
 ## .set HART_PARKED
 ## .set HART_RELEASED

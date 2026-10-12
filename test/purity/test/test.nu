@@ -44,6 +44,9 @@ const debug_text = [
     "jab: cpus refused: "
     "jab: cpu refused: "
     "jab: bootargs "
+    "jab: harts reserved "
+    "jab: harts claimed "
+    "jab: harts released "
 ]
 
 # What every kernel says, because a fault has to be reported whatever

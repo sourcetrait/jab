@@ -3,7 +3,7 @@
 .include "jab.inc"
 .include "hart.inc"
 
-.set SYSCALL_LAST, JAB_SYS_WORKER_STOP
+.set SYSCALL_LAST, JAB_SYS_HARTS_OWNED
 .set UART_PRINT_TICK, 1024
 
 .section .text
@@ -526,6 +526,10 @@ syscall_table:
     .quad sys_worker_wake
     .quad sys_worker_exit
     .quad sys_worker_stop
+    .quad sys_harts_reserve
+    .quad sys_harts_claim
+    .quad sys_harts_release
+    .quad sys_harts_owned
 msg_bad_syscall:
     .asciz "jab: unknown system call "
 msg_bad_address:

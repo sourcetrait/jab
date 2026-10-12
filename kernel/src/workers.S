@@ -280,6 +280,14 @@ sys_worker_start:                           # a0 the hart, a1 the entry, a2 the 
     ld t0, HART_STATE(s5)
     li t1, HART_ONLINE
     bne t0, t1, 9f
+    la t0, owners_reserved
+    ld t0, 0(t0)
+    beqz t0, 10f                            # no reservation: the owner unread, whatever a5 holds
+    li a0, JAB_START_OWNER
+    ld t0, 120(sp)                          # the owner the worker would run under
+    ld t1, HART_OWNER(s5)
+    bne t0, t1, 9f
+10:
 .ifdef DEBUG
     mv a0, s0
     mv a1, s5

@@ -77,6 +77,10 @@
 .set JAB_SYS_WORKER_WAKE, 54
 .set JAB_SYS_WORKER_EXIT, 55
 .set JAB_SYS_WORKER_STOP, 56
+.set JAB_SYS_HARTS_RESERVE, 57
+.set JAB_SYS_HARTS_CLAIM, 58
+.set JAB_SYS_HARTS_RELEASE, 59
+.set JAB_SYS_HARTS_OWNED, 60
 
 .set JAB_HARTS_MAX, 8
 .set JAB_MAIN_STACK, 0x800000
@@ -89,9 +93,29 @@
 .set JAB_START_STACK, 4
 .set JAB_START_OVERLAP, 5
 .set JAB_START_NO_ACK, 6
+.set JAB_START_OWNER, 7
 
 .set JAB_WAIT_CHANGED, 0
 .set JAB_WAIT_STOP, 1
+
+.set JAB_OWNER_NONE, 0
+.set JAB_OWNER_RESERVED, 1
+
+.set JAB_RESERVE_OK, 0
+.set JAB_RESERVE_SHORT, 1
+.set JAB_RESERVE_ALREADY, 2
+.set JAB_RESERVE_BUSY, 3
+
+.set JAB_CLAIM_OK, 0
+.set JAB_CLAIM_UNRESERVED, 1
+.set JAB_CLAIM_HARTS, 2
+.set JAB_CLAIM_BUSY, 3
+.set JAB_CLAIM_FLOOR, 4
+.set JAB_CLAIM_SPENT, 5
+
+.set JAB_RELEASE_OK, 0
+.set JAB_RELEASE_UNKNOWN, 1
+.set JAB_RELEASE_BUSY, 2
 
 .set JAB_TEXT_WIDTH, 12
 .set JAB_TEXT_HEIGHT, 24
@@ -500,7 +524,10 @@
     ecall
 .endm
 
-.macro jab.sys.worker.start hart, entry, argument, stack, size
+.macro jab.sys.worker.start hart, entry, argument, stack, size, owner
+.ifnb \owner
+    mv a5, \owner
+.endif
     mv a4, \size
     mv a3, \stack
     mv a2, \argument
@@ -531,6 +558,30 @@
 .macro jab.sys.worker.stop mask
     mv a0, \mask
     li a7, JAB_SYS_WORKER_STOP
+    ecall
+.endm
+
+.macro jab.sys.harts.reserve count
+    li a0, \count
+    li a7, JAB_SYS_HARTS_RESERVE
+    ecall
+.endm
+
+.macro jab.sys.harts.claim mask
+    mv a0, \mask
+    li a7, JAB_SYS_HARTS_CLAIM
+    ecall
+.endm
+
+.macro jab.sys.harts.release owner
+    mv a0, \owner
+    li a7, JAB_SYS_HARTS_RELEASE
+    ecall
+.endm
+
+.macro jab.sys.harts.owned owner
+    mv a0, \owner
+    li a7, JAB_SYS_HARTS_OWNED
     ecall
 .endm
 

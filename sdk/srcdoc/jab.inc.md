@@ -324,6 +324,22 @@ table of record.
 
 `u64`.
 
+## .set JAB_SYS_HARTS_RESERVE
+
+`u64`.
+
+## .set JAB_SYS_HARTS_CLAIM
+
+`u64`.
+
+## .set JAB_SYS_HARTS_RELEASE
+
+`u64`.
+
+## .set JAB_SYS_HARTS_OWNED
+
+`u64`.
+
 ## .set JAB_HARTS_MAX
 
 `u64`: the most harts the ABI names, 8, room for the seven of
@@ -350,18 +366,56 @@ on hart 0, jab.sys.worker.exit. Nothing is done.
 ## .set JAB_START_STACK
 ## .set JAB_START_OVERLAP
 ## .set JAB_START_NO_ACK
+## .set JAB_START_OWNER
 
 `u64`: jab.sys.worker.start's answers: started; the hart is not an online
 secondary; it runs a worker already; the entry outside the program's window
 or odd; the stack empty, not on 16 bytes, or outside the window; the stack
 reaching into JAB_MAIN_STACK's reservation or a running worker's stack; the
-hart did not take the start within its bound and is failed for the run.
+hart did not take the start within its bound and is failed for the run;
+and, once a reservation stands, the hart another owner's than the start
+names, checked after the hart and ahead of its worker.
 
 ## .set JAB_WAIT_CHANGED
 ## .set JAB_WAIT_STOP
 
 `u64`: jab.sys.worker.wait's answers: the word differs from the value; a
 stop is asked of the calling worker.
+
+## .set JAB_OWNER_NONE
+## .set JAB_OWNER_RESERVED
+
+`u64`: a hart's owners besides a claim's id: none, every online secondary's
+before a reservation; and the reservation, its grant's.
+
+## .set JAB_RESERVE_OK
+## .set JAB_RESERVE_SHORT
+## .set JAB_RESERVE_ALREADY
+## .set JAB_RESERVE_BUSY
+
+`u64`: jab.sys.harts.reserve's answers: reserved; fewer secondaries online
+than the count, nothing reserved; a reservation stands, checked first; a
+worker runs.
+
+## .set JAB_CLAIM_OK
+## .set JAB_CLAIM_UNRESERVED
+## .set JAB_CLAIM_HARTS
+## .set JAB_CLAIM_BUSY
+## .set JAB_CLAIM_FLOOR
+## .set JAB_CLAIM_SPENT
+
+`u64`: jab.sys.harts.claim's answers: claimed; no reservation stands; the
+mask empty or holding hart 0 or a hart outside the grant, offline, failed,
+or claimed; a worker on a hart of it; the grant left below its floor; the
+run's claim ids spent, each of 2 to 2^63 - 1 issued once.
+
+## .set JAB_RELEASE_OK
+## .set JAB_RELEASE_UNKNOWN
+## .set JAB_RELEASE_BUSY
+
+`u64`: jab.sys.harts.release's answers: released; no online hart holds the
+id, JAB_OWNER_NONE and JAB_OWNER_RESERVED among them; a worker on a hart of
+it.
 
 ## .set JAB_TEXT_WIDTH
 
@@ -1169,6 +1223,14 @@ returns. A worker may call jab.sys.harts and the worker calls alone; any
 other call answers JAB_DENIED and does nothing. A worker's fault ends the
 run, every other hart stopped first.
 
+Once the program has reserved its harts (jab.sys.harts.reserve), every
+start names its owner, the sixth operand: JAB_OWNER_RESERVED on the
+reservation's grant, a claim's id on its harts. The macro loads the owner
+into a5 ahead of the other operands, so beside it no other operand names
+a5; with the owner left out it leaves a5 alone, so a caller passing a5 as
+one of the five keeps it, and after a reservation the kernel reads
+whatever a5 holds as the owner.
+
 ## .macro jab.sys.worker.wait
 
 The sleeper's half of a handoff: sleep on a word while it holds a value,
@@ -1190,6 +1252,38 @@ mask's workers runs or will store again, so their stacks and buffers are
 free to reuse. A worker sees the stop as its wait's answer 1 and ends with
 jab.sys.worker.exit; one that never waits is interrupted where it is after
 50 ms.
+
+## .macro jab.sys.harts.reserve
+
+The program's graphics harts, reserved once at its start from its
+declaration: the count is its manifest's `[reserved] gfx_harts`,
+JAB_RESERVED_GFX_HARTS in the build's jab_manifest.inc. The reservation
+takes every online secondary as its grant, and the count is the floor no
+claim takes it below; the renderer uses the harts the grant holds,
+whatever their number past the floor. A refusal reserves nothing, so a
+smaller count may follow SHORT. From the reservation on, every worker's
+start names its owner (jab.sys.worker.start).
+
+## .macro jab.sys.harts.claim
+
+An optional feature's harts, moved from the reservation's grant by mask:
+the program picks harts whose workers it has stopped, and the kernel
+validates them, every refusal before anything moves. Admission is judged
+against the floor, never against idle harts, so surplus the renderer holds
+is claimable once its workers there have exited. The claim's id names it
+to the start, the release, and owned; ids are fresh for the run and never
+reused, so a released id names nothing after.
+
+## .macro jab.sys.harts.release
+
+A claim's harts back to the reservation's grant, the renderer's again,
+once the claim's workers are stopped.
+
+## .macro jab.sys.harts.owned
+
+The harts an owner holds, read at the call from the harts online then, so
+a hart that has failed has left its grant. A grant is reported as a mask,
+so a program and its records name its harts, never their count alone.
 
 ## .macro jab.sys.api.write
 

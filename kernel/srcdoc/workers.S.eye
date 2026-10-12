@@ -8,15 +8,16 @@ ecall sys_worker_wake mask u64 > woken a0 u64 [177:204] :wakes every hart in the
 ecall sys_worker_wait word addr,value u32 > answer a0 u64 [205:260] :sleeps while the word holds the value, draining on each wake and on hart 0 reporting; a shutdown sends the hart to the boundary
  word :inside the program's window on 4 bytes, the run ended otherwise
  answer :JAB_WAIT_CHANGED once the word differs, JAB_WAIT_STOP once a stop is asked of the worker, checked first
-ecall sys_worker_start hart u64,entry addr,argument u64,stack addr,size u64 > code a0 u64 [261:402] :hart 0's: a worker started on an online idle secondary, the idle acquired before anything is written, returning once the hart has taken the start
- code :JAB_START_*, every refusal decided before anything is written; JAB_START_NO_ACK when the hart missed WORK_START_TICKS, failed for the run
-call local stop_pending harts u64 > running a0 u64,clobber a1-a4 [404:444] :those of the harts whose worker is not idle, read before fence r, rw
-ecall sys_worker_stop mask u64 > free a0 u64,interrupted a1 u64 [445:545] :hart 0's: each online secondary of the mask with a worker asked to stop, interrupted past WORK_STOP_TICKS, the run ended with one still in past WORK_FORCE_TICKS more; back once every one reads idle
+ecall sys_worker_start hart u64,entry addr,argument u64,stack addr,size u64,owner u64 > code a0 u64 [261:410] :hart 0's: a worker started on an online idle secondary, the idle acquired before anything is written, returning once the hart has taken the start
+ owner :read only once a reservation stands (owners_reserved), the hart's HART_OWNER then required
+ code :JAB_START_*, every refusal decided before anything is written; JAB_START_OWNER after the hart's own code and ahead of busy; JAB_START_NO_ACK when the hart missed WORK_START_TICKS, failed for the run
+call local stop_pending harts u64 > running a0 u64,clobber a1-a4 [412:452] :those of the harts whose worker is not idle, read before fence r, rw
+ecall sys_worker_stop mask u64 > free a0 u64,interrupted a1 u64 [453:553] :hart 0's: each online secondary of the mask with a worker asked to stop, interrupted past WORK_STOP_TICKS, the run ended with one still in past WORK_FORCE_TICKS more; back once every one reads idle
  free :every online secondary in the mask, none running a worker now
  interrupted :those stopped where they were
-call shutdown_enter > owner shutdown_owner u64,unanswered shutdown_unanswered u64,clobber a0 [546:644] :the run's end claimed for the hart, every other online hart woken and waited for to halt within SHUTDOWN_TICKS; behind another hart's claim the hart parks; under DEBUG a jab.claimhold knob holds a won claim that many ms before the wakes
+call shutdown_enter > owner shutdown_owner u64,unanswered shutdown_unanswered u64,clobber a0 [554:652] :the run's end claimed for the hart, every other online hart woken and waited for to halt within SHUTDOWN_TICKS; behind another hart's claim the hart parks; under DEBUG a jab.claimhold knob holds a won claim that many ms before the wakes
  unanswered :the harts that did not halt in the bound
-j shutdown_park > halted HART_WORK u64 [645:654] :a hart stopped for another's shutdown: its interrupts off, its state halted after fence rw, w, then wfi for good
-call local leavehold_gap > clobber a0 [655:709] :DEBUG: jab.leavehold=<hart> holds that hart's first exit here, its worker's argument the witness word: the word set to LEAVEHOLD_HELD, then released by an observer's code or past LEAVEHOLD_TICKS swapped to LEAVEHOLD_EXPIRED
-call local leavehold_work hart u64,record addr,observer u64 > work a0 u64,clobber a2 [715:742] :DEBUG: the hart's HART_WORK; while jab.leavehold holds it with its word at LEAVEHOLD_HELD, the read is made inside the hold and the observer's code swapped into the word with release
+j shutdown_park > halted HART_WORK u64 [653:662] :a hart stopped for another's shutdown: its interrupts off, its state halted after fence rw, w, then wfi for good
+call local leavehold_gap > clobber a0 [663:717] :DEBUG: jab.leavehold=<hart> holds that hart's first exit here, its worker's argument the witness word: the word set to LEAVEHOLD_HELD, then released by an observer's code or past LEAVEHOLD_TICKS swapped to LEAVEHOLD_EXPIRED
+call local leavehold_work hart u64,record addr,observer u64 > work a0 u64,clobber a2 [723:750] :DEBUG: the hart's HART_WORK; while jab.leavehold holds it with its word at LEAVEHOLD_HELD, the read is made inside the hold and the observer's code swapped into the word with release
  observer :LEAVEHOLD_BY_START or LEAVEHOLD_BY_STOP, to which what was seen is added

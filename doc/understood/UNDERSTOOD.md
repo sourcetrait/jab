@@ -414,6 +414,22 @@ exit halfway, for 200 ms at most, while the worker's argument names a word
 of the program's in which the kernel records what the next start or stop
 saw there. `test/workers` and `test/workerfault` prove each rule.
 
+A program that declares its harts owns them. `jab.sys.harts.reserve count`
+reserves every online hart past hart 0 for the program's graphics, once a
+run. The count is the program's declared `JAB_RESERVED_GFX_HARTS`, the
+floor its grant may not drop below. An optional feature takes harts from
+that grant with `jab.sys.harts.claim mask`, which answers the claim's id,
+and gives them back with `jab.sys.harts.release id`. A claim that would
+leave the grant below its floor is refused, so the reservation's required
+harts are always kept. `jab.sys.harts.owned owner` answers the harts an
+owner holds as a mask. After a reservation every worker's start names its
+owner as a sixth argument, and a start on a hart another owner holds is
+refused. A program that never reserves starts its workers as before. Only
+hart 0 makes these calls; a worker's answer `JAB_DENIED`. A claim's id is
+never used twice in a run, and a debug kernel reads `jab.claimids=<n>` to
+leave only n of them, so a test can reach the limit. `test/reservations`
+proves each rule.
+
 `sdk/src/jab_jobs.inc` gives workers jobs. Each worker has a mailbox in the
 program's memory, two cache lines: hart 0 writes a job into one, and the
 worker writes its completion into the other. `jab.job.publish` writes a job

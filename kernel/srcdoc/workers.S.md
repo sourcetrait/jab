@@ -80,13 +80,19 @@ as sys_await's does, so the sound stream plays on through a join.
 
 ## sys_worker_start
 
-Every refusal is decided before anything is written, in the order of its
-code: the hart, its worker, the entry, the stack, then the overlaps, the
-main stack's reservation under the window's top and each running worker's
-stack. The busy check that finds the hart idle is followed by `fence r,
-rw`, pairing with worker_leave's release, so the record's fields, the
-starting state, and the live bit follow the old worker's finished exit; the
-branch on the read already orders those stores, and the acquire is kept
+Every refusal is decided before anything is written: the hart, its owner
+once a reservation stands, its worker, the entry, the stack, then the
+overlaps, the main stack's reservation under the window's top and each
+running worker's stack. Once a reservation stands (owners.S's
+owners_reserved), a5 is read from the frame as the owner the worker would
+run under, and a hart whose HART_OWNER is another is refused
+JAB_START_OWNER ahead of its busy check, so a stale start on a hart moved
+to another owner is refused even while that hart sleeps idle. Before a
+reservation a5 is never read, so a five-argument caller starts as ever,
+whatever a5 holds. The busy check that finds the hart idle is followed by
+`fence r, rw`, pairing with worker_leave's release, so the record's fields,
+the starting state, and the live bit follow the old worker's finished exit;
+the branch on the read already orders those stores, and the acquire is kept
 explicit. Under DEBUG the busy check's read is leavehold_work's. The
 fields go into the hart's record before its state turns to starting, with
 `fence w, w` between, and the wake follows the state. The

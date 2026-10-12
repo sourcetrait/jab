@@ -22,6 +22,10 @@
 .set HART_TVAL, 112
 .set HART_LINE, 120
 .set HART_VALUE, 128
+.set HART_OWNER, 136
+
+.set OWNER_FIRST_CLAIM, 2
+.set CLAIM_IDS, 0x7ffffffffffffffe
 
 .set HART_PARKED, 0
 .set HART_RELEASED, 1
