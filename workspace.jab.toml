@@ -39,7 +39,8 @@ programs = [
   'test/workers',
   'test/workerfault',
   'test/jobs',
-  'test/spectable'
+  'test/spectable',
+  'test/demand'
 ]
 
 # A word standing for a program's path wherever the tool takes one:

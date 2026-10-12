@@ -28,7 +28,11 @@
 # programs alike. DEBUG picks the target's debug tree, and every other
 # build lands in its release tree, so the two coexist. A program's
 # manifest may name a `prepare` script, run before it is built, tested,
-# or run, and a `do` script, whose commands `just do` lists. `test`
+# or run, and a `do` script, whose commands `just do` lists; and the
+# `specs` it supports, by the names the workspace's asset/spec.nuon gives
+# them, with the harts it reserves, `[reserved]`, and those each of its
+# optional features demands, `[feature.<name>]`, which the build checks
+# and hands the program as constants (program-demand). `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -467,7 +471,9 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # into the device tree's /chosen, where a debug kernel reads its test
 # knobs and a release kernel reads nothing; `dtb` hands the kernel that
 # tree through -dtb in place of the one QEMU builds, QEMU checking its
-# header before any hart runs.
+# header before any hart runs. `demand` is the declared demand of the
+# program the image came from (program-demand), checked again here, null
+# for a program on the legacy path.
 export def plan [
     --kernel: path
     --image: path
@@ -486,7 +492,7 @@ export def plan [
     --harts: int = $harts_default
     --bootargs: string = ""
     --dtb: path = ""
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string> {
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string, demand: oneof<record, nothing>> {
     let machine = (machine-of $harts)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
@@ -494,6 +500,8 @@ export def plan [
     mkdir $out
     let ws = (launch-workspace $kernel $image $out)
     let root = (target-root (if $ws != null { $ws } else { image-home $image }))
+    let manifest = (image-manifest $image)
+    let demand = (if ($manifest | is-empty) { null } else { program-demand $manifest $ws })
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
@@ -512,7 +520,7 @@ export def plan [
     if $wav != "" { retire $wav $root }
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
-    let shown = (if $window { display (image-manifest $image) } else { "none" })
+    let shown = (if $window { display $manifest } else { "none" })
     let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
     let args = ((machine-args $qemu $harts) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
@@ -545,6 +553,7 @@ export def plan [
         bridge: $hosted.bridge,
         machine: $machine,
         bootargs: $bootargs,
+        demand: $demand,
     }
 }
 
@@ -562,7 +571,8 @@ def launch-workspace [kernel: path, image: path, out: path]: nothing -> oneof<st
 }
 
 # The manifest of the program an image was built from (image-home), for
-# the window it names; an empty record when there is none.
+# the window it names and the demand it declares; an empty record when
+# there is none.
 def image-manifest [image: path]: nothing -> record {
     let manifest = (image-home $image | path join "program.jab.toml")
     if ($manifest | path exists) { open $manifest } else { {} }
@@ -626,7 +636,10 @@ def image-manifest [image: path]: nothing -> record {
 # `machine` keeping the platform asked for and marked so (machine-of
 # with the words), and the words
 # come back apart as `overrides`, so the requested platform and the
-# custom command stay distinct; `qemu` is the line as it ran.
+# custom command stay distinct; `qemu` is the line as it ran. `declared`
+# says whether the program's manifest lists its specs, and `diagnostic`
+# is the run's standing: on a diagnostic machine, or of a program on the
+# legacy path, undeclared and claiming no console.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -654,7 +667,7 @@ export def launch [
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
     --threads-at: list<duration> = [] # each time to read every QEMU thread's CPU, kept whole in the result's `thread_readings`; none unless given
     --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
@@ -781,6 +794,7 @@ export def launch [
     }
     let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
     if $bridge != null { try { job kill $bridge } }
+    let ran_on = (machine-of $harts --overrides $qemu)
     {
         status: $result.exit_code,
         serial: (if ($log | path exists) { open --raw $log | decode } else { "" }),
@@ -797,13 +811,15 @@ export def launch [
         overrides: $qemu,
         window: $machine.window,
         audio: $machine.audio,
-        machine: (machine-of $harts --overrides $qemu),
+        machine: $ran_on,
         threads: (if $threads_held == null { [] } else { $threads_held.threads }),
         threads_span: (if $threads_held == null { null } else { $threads_held.span }),
         thread_readings: ($readings | append $unread),
         screen_started: $screen_started,
         screen_completed: $screen_completed,
         send_seconds: $send_seconds,
+        declared: ($machine.demand != null),
+        diagnostic: ($ran_on.diagnostic or $machine.demand == null),
     }
 }
 
@@ -1894,6 +1910,104 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     $id | save -f $stamp
 }
 
+# The roles a manifest's sections may name, each a count of harts: those
+# `[reserved]` may reserve, and those a `[feature.<name>]` may demand.
+const reserved_roles = [gfx_harts]
+const feature_roles = [io_harts]
+
+# A program's declared demand, from the manifest in its directory
+# (program-demand): the specs it supports as asset/spec.nuon names them,
+# its reservation by role, each feature's demand, and its base demand.
+# Null for the legacy path, a manifest with no `specs`. Untyped because it
+# ends in an error.
+export def demand-of [dir: path] {
+    let here = ($dir | path expand)
+    let manifest = (open ($here | path join "program.jab.toml"))
+    program-demand $manifest (workspace-of $here $manifest)
+}
+
+# A manifest's declared demand, validated. `specs` is a nonempty list of
+# names the workspace's spec data defines, matched without regard to case
+# and none twice; either section stands only beside it; `[reserved]` names
+# only the roles a program reserves, and each `[feature.<name>]` has a
+# snake_case name and demands at least one of the roles a feature may,
+# every count a whole number of one or more. The base demand, the main
+# hart and every hart reserved, is held against every listed spec's
+# harts, its `cores`, a spec that cannot hold it refused by name; a
+# feature's demand refuses nothing, since a spec it does not fit runs the
+# program without the feature. The specs come back by their names in the
+# spec data, the reservation with every role, 0 for one not reserved.
+# Null for the legacy path, a manifest with no `specs` and neither
+# section, which builds and launches as before, its runs recorded
+# undeclared. Untyped because it ends in an error.
+def program-demand [m: record, ws: oneof<string, nothing>] {
+    let name = $m.name
+    let specs = ($m | get -o specs)
+    if $specs == null {
+        let sections = ([reserved feature] | where {|k| ($m | get -o $k) != null } | each {|k| $"[($k)]" })
+        if not ($sections | is-empty) { error make {msg: $"($name): ($sections | str join ' and ') beside no `specs`; a reservation or a feature's demand holds only on the specs a program lists"} }
+        return null
+    }
+    if not ($specs | describe | str starts-with "list") { error make {msg: $"($name): `specs` is a list of spec names, not ($specs | describe)"} }
+    if ($specs | is-empty) { error make {msg: $"($name): `specs` names no spec; list the specs it supports, or leave `specs` out for the legacy path"} }
+    let unnamed = ($specs | where {|s| ($s | describe) != "string" or ($s | str trim) == "" })
+    if not ($unnamed | is-empty) { error make {msg: $"($name): `specs` holds ($unnamed | each {|u| $u | to nuon } | str join ', '), no spec's name"} }
+    if $ws == null { error make {msg: $"($name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
+    let table = (specs-of $ws)
+    let picked = ($specs | each {|s| { asked: $s, row: ($table | where {|r| ($r.name | str trim | str lowercase) == ($s | str trim | str lowercase) } | get -o 0) } })
+    let unknown = ($picked | where {|p| $p.row == null } | each {|p| $p.asked })
+    if not ($unknown | is-empty) { error make {msg: $"($name): `specs` names ($unknown | str join ', '), which its workspace's asset/spec.nuon does not define; it defines ($table | get name | str join ', ')"} }
+    let twice = ($picked | group-by {|p| $p.row.name } | transpose spec asked | where {|g| ($g.asked | length) > 1 } | each {|g| $g.spec })
+    if not ($twice | is-empty) { error make {msg: $"($name): `specs` names ($twice | str join ', ') twice, without regard to case"} }
+    let uncounted = ($picked | where {|p| ($p.row | get -o cores | describe) != "int" } | each {|p| $p.row.name })
+    if not ($uncounted | is-empty) { error make {msg: $"($name): ($uncounted | str join ', ') gives no `cores: int`, the harts a base demand is held against"} }
+    let held = (section-counts $name "reserved" ($m | get -o reserved) $reserved_roles)
+    let feature = ($m | get -o feature)
+    if $feature != null and not ($feature | describe | str starts-with "record") { error make {msg: $"($name): `feature` holds a [feature.<name>] table for each feature, not ($feature | describe)"} }
+    mut features = []
+    for f in (if $feature == null { [] } else { $feature | transpose feature demand }) {
+        if not ($f.feature =~ '^[a-z][a-z0-9_]*$') { error make {msg: $"($name): [feature.($f.feature)]: a feature's name is snake_case, a lowercase letter, then lowercase letters, digits, and underscores"} }
+        let counts = (section-counts $name $"feature.($f.feature)" $f.demand $feature_roles)
+        if ($counts | is-empty) { error make {msg: $"($name): [feature.($f.feature)] demands no hart; it names ($feature_roles | str join ' or ')"} }
+        $features = ($features | append ({ name: $f.feature } | merge $counts))
+    }
+    let reservation = ($reserved_roles | reduce --fold {} {|r, acc| $acc | insert $r ($held | get -o $r | default 0) })
+    let reserving = ($reservation | values | math sum)
+    let base = (1 + $reserving)
+    let short = ($picked | where {|p| $p.row.cores < $base } | each {|p| $"($p.row.name)'s ($p.row.cores)" })
+    if not ($short | is-empty) { error make {msg: $"($name): its base demand, the main hart and the ($reserving) its [reserved] holds, is ($base) harts, more than ($short | str join ' and ')"} }
+    { specs: ($picked | each {|p| $p.row.name }), reserved: $reservation, features: $features, base: $base }
+}
+
+# A section's counts as given, a record of role and harts, each role one
+# of `roles` and each count a whole number of one or more; an empty
+# record for a section left out. Untyped because it ends in an error.
+def section-counts [name: string, section: string, value: any, roles: list<string>] {
+    if $value == null { return {} }
+    if not ($value | describe | str starts-with "record") { error make {msg: $"($name): [($section)] is a table of roles and their harts, not ($value | describe)"} }
+    for k in ($value | columns) {
+        if $k not-in $roles { error make {msg: $"($name): [($section)] names ($k); it names ($roles | str join ' or ')"} }
+        let n = ($value | get $k)
+        if ($n | describe) != "int" or $n < 1 { error make {msg: $"($name): ($section).($k) is ($n | to nuon), where a whole number of harts, one or more, is wanted"} }
+    }
+    $value
+}
+
+# A declared demand as the assembly takes it, generated at every build of
+# the program: `jab_manifest.inc` in the build's output directory, which
+# the build carries among its includes, so a program reads its numbers
+# with `.include "jab_manifest.inc"` and keeps no copy of them:
+# JAB_BASE_HARTS; JAB_RESERVED_<ROLE> for every role a program may
+# reserve, 0 where it reserves none; and JAB_FEATURE_<NAME>_<ROLE> for
+# every role each feature demands. Its path.
+def demand-include [d: record, out: path]: nothing -> string {
+    let reserved = ($d.reserved | transpose role harts | each {|r| $".set JAB_RESERVED_($r.role | str uppercase), ($r.harts)" })
+    let features = ($d.features | each {|f| $f | reject name | transpose role harts | each {|r| $".set JAB_FEATURE_($f.name | str uppercase)_($r.role | str uppercase), ($r.harts)" } } | flatten)
+    let file = ($out | path join "jab_manifest.inc")
+    ([$".set JAB_BASE_HARTS, ($d.base)"] ++ $reserved ++ $features | str join "\n") + "\n" | save -f $file
+    $file
+}
+
 # The spec data a program's build reads when its manifest lists `specs`:
 # the workspace's asset/spec.nuon and asset/spec.nutype, inputs of its
 # build, so a changed definition or a changed type alone builds it again
@@ -1911,12 +2025,18 @@ def spec-inputs [c: record]: nothing -> list<string> {
 }
 
 # Builds a program's image when stale, and writes beside it `home`, the
-# program's directory, which image-home reads back from the image.
+# program's directory, which image-home reads back from the image. A
+# program declaring its demand (program-demand) has it checked at every
+# build and assembles with its constants (demand-include); a build of one
+# declaring none retires the constants an earlier declaration left.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
+    let specs = (spec-inputs $c)
+    let demand = (program-demand $m $c.workspace)
     let includes = ($m | get -o includes | default [])
-    let include_flags = ($includes | each {|i| ["-I" $i] } | flatten)
+    let generated = (if $demand == null { [] } else { [$c.out] })
+    let include_flags = (($includes ++ $generated) | each {|i| ["-I" $i] } | flatten)
     let set_flags = (defsyms $names)
     let flags = (($include_flags ++ $set_flags ++ [$march_program $c.prefix]) | str join " ")
     let image = ($c.out | path join $"($m.name).jab")
@@ -1925,10 +2045,11 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let home = ($c.out | path join "home")
     if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ (spec-inputs $c))
+    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs)
     let id = (build-id $flags $inputs)
     if not (stale $image $inputs $id $stamp) { return }
     mkdir $c.out
+    if $demand == null { retire ($c.out | path join "jab_manifest.inc") $c.root } else { demand-include $demand $c.out | ignore }
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objcopy = ($c.prefix + "objcopy")

@@ -93,6 +93,25 @@ compiles to in its asset shard of the target, which becomes its disk;
 running it; and `do`, a nushell script whose `main <command>`
 definitions are its commands for development.
 
+A program names the system specifications it supports with `specs`, a
+list of the names `asset/spec.nuon` gives them, in any case. Beside it
+the manifest says what the program needs of a machine's harts:
+`[reserved]`, whose `gfx_harts` is the number of harts it keeps for
+graphics, and a `[feature.<name>]` table for each optional feature,
+whose `io_harts` is the number of harts that feature needs while it is
+active. The build checks all of it against the spec data. It refuses a
+name the data does not define, a name given twice, a section beside no
+`specs`, a role a section does not take, and a count below one. It
+refuses a program whose base demand, its main hart and the harts it
+reserves, is more than one of its specs has. A feature's demand refuses
+nothing, since a spec too small for the feature runs the program without
+it. The build hands the program the numbers as constants: it writes
+`jab_manifest.inc` beside the image and puts that directory on the
+include path, so `.include "jab_manifest.inc"` gives `JAB_BASE_HARTS`,
+`JAB_RESERVED_GFX_HARTS`, and `JAB_FEATURE_<NAME>_IO_HARTS`. A program
+without `specs` builds as it always has, and its runs are recorded as
+undeclared and diagnostic.
+
 A build is described by its symbols: `just build --set debug,stats`
 names them, in any case, and each reaches the assembler as a defined
 symbol, `DEBUG` and `STATS`, for `.ifdef` to read in the kernel and in

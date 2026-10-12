@@ -7,3 +7,6 @@ target_assets = 'render_0'
 prepare = 'nu/prepare.nu'
 do = 'nu/do.nu'
 specs = [ '1ka1', '1kb1', '2ka1' ]
+
+[reserved]
+gfx_harts = 2
