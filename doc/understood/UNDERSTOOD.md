@@ -112,6 +112,19 @@ include path, so `.include "jab_manifest.inc"` gives `JAB_BASE_HARTS`,
 without `specs` builds as it always has, and its runs are recorded as
 undeclared and diagnostic.
 
+The build records the demand with the image. Beside each image it writes
+`demand.nuon`, a record of two fields: `image`, the image's SHA-256, and
+`demand`, the demand the build checked, null for a program without
+`specs`. A run takes its demand from that record, not from the manifest,
+so an edit to the manifest changes nothing until the program is built
+again. An image with no record beside it runs undeclared and diagnostic.
+A record that does not hold is refused, and the refusal names each fault:
+a record that does not parse, a field missing or one it does not hold,
+the hash of another image, or a demand not in the shape the build
+writes. The build reuses an image only when its record holds and names
+the demand the build reads; otherwise it builds the image again and
+writes a new record.
+
 A build is described by its symbols: `just build --set debug,stats`
 names them, in any case, and each reaches the assembler as a defined
 symbol, `DEBUG` and `STATS`, for `.ifdef` to read in the kernel and in

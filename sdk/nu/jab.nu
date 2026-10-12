@@ -31,8 +31,9 @@
 # or run, and a `do` script, whose commands `just do` lists; and the
 # `specs` it supports, by the names the workspace's asset/spec.nuon gives
 # them, with the harts it reserves, `[reserved]`, and those each of its
-# optional features demands, `[feature.<name>]`, which the build checks
-# and hands the program as constants (program-demand). `test`
+# optional features demands, `[feature.<name>]`, which the build checks,
+# hands the program as constants (program-demand), and records beside
+# its image, where a launch reads it (image-demand). `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -471,9 +472,9 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # into the device tree's /chosen, where a debug kernel reads its test
 # knobs and a release kernel reads nothing; `dtb` hands the kernel that
 # tree through -dtb in place of the one QEMU builds, QEMU checking its
-# header before any hart runs. `demand` is the declared demand of the
-# program the image came from (program-demand), checked again here, null
-# for a program on the legacy path.
+# header before any hart runs. `demand` is the demand recorded with the
+# image at its build (image-demand), null for a program on the legacy path
+# and for an image with no record; a record that does not hold is refused.
 export def plan [
     --kernel: path
     --image: path
@@ -500,8 +501,7 @@ export def plan [
     mkdir $out
     let ws = (launch-workspace $kernel $image $out)
     let root = (target-root (if $ws != null { $ws } else { image-home $image }))
-    let manifest = (image-manifest $image)
-    let demand = (if ($manifest | is-empty) { null } else { program-demand $manifest $ws })
+    let demand = (image-demand $image)
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
@@ -520,7 +520,7 @@ export def plan [
     if $wav != "" { retire $wav $root }
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
-    let shown = (if $window { display $manifest } else { "none" })
+    let shown = (if $window { display (image-manifest $image) } else { "none" })
     let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
     let args = ((machine-args $qemu $harts) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
@@ -571,8 +571,7 @@ def launch-workspace [kernel: path, image: path, out: path]: nothing -> oneof<st
 }
 
 # The manifest of the program an image was built from (image-home), for
-# the window it names and the demand it declares; an empty record when
-# there is none.
+# the window it names; an empty record when there is none.
 def image-manifest [image: path]: nothing -> record {
     let manifest = (image-home $image | path join "program.jab.toml")
     if ($manifest | path exists) { open $manifest } else { {} }
@@ -637,9 +636,10 @@ def image-manifest [image: path]: nothing -> record {
 # with the words), and the words
 # come back apart as `overrides`, so the requested platform and the
 # custom command stay distinct; `qemu` is the line as it ran. `declared`
-# says whether the program's manifest lists its specs, and `diagnostic`
-# is the run's standing: on a diagnostic machine, or of a program on the
-# legacy path, undeclared and claiming no console.
+# says whether the demand recorded with the image at its build declares
+# one (image-demand), and `diagnostic` is the run's standing: on a
+# diagnostic machine, or of an image built on the legacy path or with no
+# record beside it, undeclared and claiming no console.
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -2008,6 +2008,116 @@ def demand-include [d: record, out: path]: nothing -> string {
     $file
 }
 
+# The demand recorded with an image at its build, `demand.nuon` beside it,
+# read and held to its rules (demand-record-problems): exactly `image`, the
+# image's SHA-256, and `demand`, null on the legacy path, else a demand in
+# program-demand's shape. No record beside the image is absent evidence,
+# no declaration, and comes back null as the legacy record's demand does;
+# a record present and unsound, unreadable as NUON, of other fields, of
+# another image, or of a demand off the shape, is refused naming the
+# record and its faults, never read as the legacy path, as is a record
+# beside no image. The demand, or null. Untyped because it can end in an
+# error.
+export def image-demand [image: path] {
+    let image = ($image | path expand)
+    let file = (demand-record-of $image)
+    if not ($file | path exists) { return null }
+    if not ($image | path exists) { error make {msg: $"($file) is the record of an image, and there is none at ($image)"} }
+    let record = (try { open --raw $file | decode | from nuon } catch {|e| error make {msg: $"($file): not NUON the tools can read: ($e.msg)"} })
+    let problems = (demand-record-problems $record (open --raw $image | hash sha256))
+    if not ($problems | is-empty) { error make {msg: ([$"($file) does not hold for ($image):"] ++ ($problems | each {|p| $"  ($p)" }) | str join "\n")} }
+    $record.demand
+}
+
+# Where an image's demand record lies: beside it, demand.nuon.
+def demand-record-of [image: path]: nothing -> string {
+    $image | path expand | path dirname | path join "demand.nuon"
+}
+
+# What is wrong with a demand record for an image of that hash, a line
+# each; none when it holds: a record of exactly `image` and `demand`;
+# `image` the hash; `demand` null, or in program-demand's shape
+# (demand-shape-problems).
+def demand-record-problems [record: any, hash: string]: nothing -> list<string> {
+    let got = ($record | describe)
+    if not ($got | str starts-with "record") { return [$"a record of `image` and `demand` expected, ($got) found"] }
+    let fields = ($record | columns)
+    let missing = ([image demand] | where {|f| $f not-in $fields } | each {|f| $"($f): missing" })
+    let others = ($fields | where {|f| $f not-in [image demand] } | each {|f| $"($f): a field the record does not hold" })
+    let image = (if "image" not-in $fields { [] } else {
+        let i = $record.image
+        if ($i | describe) != "string" { [$"image: string expected, ($i | describe) found"] } else if not ($i =~ '^[0-9a-f]{64}$') { [$"image: ($i | to nuon), no SHA-256"] } else if $i != $hash { [$"image: ($i), where the image's SHA-256 is ($hash)"] } else { [] }
+    })
+    let demand = (if "demand" not-in $fields { [] } else { demand-shape-problems $record.demand })
+    $missing ++ $others ++ $image ++ $demand
+}
+
+# What is wrong with a recorded demand against program-demand's shape, a
+# line each; none for null, the legacy path's: `specs` a nonempty list of
+# names; `reserved` a record of every role reserved_roles names and no
+# other, each an int of 0 or more; `features` a list of records, each a
+# snake_case `name` and at least one role of feature_roles, each an int of
+# 1 or more, and no other field; `base` an int, 1 plus the reserved harts.
+def demand-shape-problems [d: any]: nothing -> list<string> {
+    if $d == null { return [] }
+    let got = ($d | describe)
+    if not ($got | str starts-with "record") { return [$"demand: a record or null expected, ($got) found"] }
+    let fields = ($d | columns)
+    let missing = ([specs reserved features base] | where {|f| $f not-in $fields } | each {|f| $"demand.($f): missing" })
+    let others = ($fields | where {|f| $f not-in [specs reserved features base] } | each {|f| $"demand.($f): a field the demand does not hold" })
+    let specs = (if "specs" not-in $fields { [] } else {
+        let s = $d.specs
+        let kind = ($s | describe)
+        if not ($kind | str starts-with "list") { [$"demand.specs: a list of names expected, ($kind) found"] } else if ($s | is-empty) { ["demand.specs: empty"] } else {
+            $s | enumerate | where {|e| ($e.item | describe) != "string" or ($e.item | str trim) == "" } | each {|e| $"demand.specs.($e.index): ($e.item | to nuon), no spec's name" }
+        }
+    })
+    let reserved = (if "reserved" not-in $fields { [] } else {
+        let r = $d.reserved
+        if not ($r | describe | str starts-with "record") { [$"demand.reserved: a record expected, ($r | describe) found"] } else {
+            let roles = ($r | columns)
+            let absent = ($reserved_roles | where {|k| $k not-in $roles } | each {|k| $"demand.reserved.($k): missing" })
+            let foreign = ($roles | where {|k| $k not-in $reserved_roles } | each {|k| $"demand.reserved.($k): a role no program reserves" })
+            let counts = ($roles | where {|k| $k in $reserved_roles and (($r | get $k | describe) != "int" or ($r | get $k) < 0) } | each {|k| $"demand.reserved.($k): ($r | get $k | to nuon), where a whole number of harts, 0 or more, is wanted" })
+            $absent ++ $foreign ++ $counts
+        }
+    })
+    let features = (if "features" not-in $fields { [] } else {
+        let fs = $d.features
+        let kind = ($fs | describe)
+        if not (($kind | str starts-with "list") or ($kind | str starts-with "table")) { [$"demand.features: a list expected, ($kind) found"] } else {
+            $fs | enumerate | each {|e|
+                let f = $e.item
+                let at = $"demand.features.($e.index)"
+                if not ($f | describe | str starts-with "record") { [$"($at): a record expected, ($f | describe) found"] } else {
+                    let keys = ($f | columns)
+                    let named = (if "name" not-in $keys { [$"($at).name: missing"] } else if ($f.name | describe) != "string" or not ($f.name =~ '^[a-z][a-z0-9_]*$') { [$"($at).name: ($f.name | to nuon), no snake_case name"] } else { [] })
+                    let roles = ($keys | where {|k| $k != "name" })
+                    let foreign = ($roles | where {|k| $k not-in $feature_roles } | each {|k| $"($at).($k): a role no feature demands" })
+                    let none = (if ($roles | where {|k| $k in $feature_roles } | is-empty) { [$"($at): demands no hart"] } else { [] })
+                    let counts = ($roles | where {|k| $k in $feature_roles and (($f | get $k | describe) != "int" or ($f | get $k) < 1) } | each {|k| $"($at).($k): ($f | get $k | to nuon), where a whole number of harts, 1 or more, is wanted" })
+                    $named ++ $foreign ++ $none ++ $counts
+                }
+            } | flatten
+        }
+    })
+    let base = (if "base" not-in $fields { [] } else {
+        let b = $d.base
+        let r = ($d | get -o reserved)
+        let summed = (if ($r | describe | str starts-with "record") and ($reserved_roles | all {|k| ($r | get -o $k | describe) == "int" }) { 1 + ($reserved_roles | each {|k| $r | get $k } | math sum) } else { null })
+        if ($b | describe) != "int" { [$"demand.base: int expected, ($b | describe) found"] } else if $summed != null and $b != $summed { [$"demand.base: ($b), where 1 plus the reserved harts is ($summed)"] } else { [] }
+    })
+    $missing ++ $others ++ $specs ++ $reserved ++ $features ++ $base
+}
+
+# Whether the record beside an image holds (image-demand) and names the
+# demand a build resolved; a record missing, unsound, of another image,
+# or of another demand is false, so the build runs again whole.
+def record-holds [image: path, demand: any]: nothing -> bool {
+    if not (demand-record-of $image | path exists) { return false }
+    try { (image-demand $image) == $demand } catch { false }
+}
+
 # The spec data a program's build reads when its manifest lists `specs`:
 # the workspace's asset/spec.nuon and asset/spec.nutype, inputs of its
 # build, so a changed definition or a changed type alone builds it again
@@ -2028,7 +2138,11 @@ def spec-inputs [c: record]: nothing -> list<string> {
 # program's directory, which image-home reads back from the image. A
 # program declaring its demand (program-demand) has it checked at every
 # build and assembles with its constants (demand-include); a build of one
-# declaring none retires the constants an earlier declaration left.
+# declaring none retires the constants an earlier declaration left. Every
+# build writes `demand.nuon` beside the image, the demand recorded with it
+# (image-demand), and a cached image is taken only beside a record that
+# holds and names the build's demand, any other building again whole, the
+# image and its record together.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
@@ -2047,7 +2161,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     cd $c.here
     let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs)
     let id = (build-id $flags $inputs)
-    if not (stale $image $inputs $id $stamp) { return }
+    if (not (stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
     mkdir $c.out
     if $demand == null { retire ($c.out | path join "jab_manifest.inc") $c.root } else { demand-include $demand $c.out | ignore }
     let asm = ($c.prefix + "as")
@@ -2059,6 +2173,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
     ^$ld -T $m.link -nostdlib $obj -o $elf
     ^$objcopy -O binary $elf $image
+    { image: (open --raw $image | hash sha256), demand: $demand } | to nuon | save -f (demand-record-of $image)
     $id | save -f $stamp
 }
 
