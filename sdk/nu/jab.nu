@@ -173,6 +173,212 @@ def machine-args [qemu: string, harts: int, --options: string = ""]: nothing -> 
     let machine = (if $options == "" { $m.machine } else { $"($m.machine),($options)" })
     ["-machine" $machine "-cpu" (cpu-model $qemu) "-accel" $m.accel "-smp" ($m.harts | into string)] ++ $machine_rest
 }
+
+# The scalar types a spec's type may name.
+const spec_scalars = [string int float number bool filesize duration datetime binary nothing path directory]
+
+# The system specifications as the tools read them. doc/SPEC.md is the
+# authority, TheUser's, and the workspace's asset/spec.nuon carries its
+# definitions for the tools, a table of one row a spec, held to
+# asset/spec.nutype, the type the table takes, which is read from its file
+# with the data and kept nowhere in this tool. `spec-table` reads any such
+# pair and `specs-of` the workspace's own, the one reader the launcher, a
+# build's checks, and an image's list share. Every value is checked
+# against the type field by field: a field missing, a value of another
+# type, and a field the type does not name, at any depth, are each refused
+# naming the row and the field, which nushell's own check of a type does
+# not name. Past the type, the rows must mean something: a spec at least,
+# every name given and none twice without regard to case, since a
+# program's manifest names its specs in any case, and every count, clock,
+# rate, and size the type names above zero, the VRAM only where a spec
+# gives one. A file that does not parse is refused naming it, NUON's own
+# refusal of a field given twice in a record among them. Every problem
+# found is named, a line each. The rows come back as the file has them.
+# Untyped because it ends in an error.
+export def spec-table [data: path, type: path] {
+    for f in [$type $data] { if not ($f | path exists) { error make {msg: $"($f): no such file"} } }
+    let text = (try { open --raw $type | decode } catch {|e| error make {msg: $"($type): unreadable: ($e.msg)"} })
+    let schema = (type-schema $text $type)
+    if $schema.kind != "table" { error make {msg: $"($type): the tools read a table of specs, table<...>, not (type-name $schema)"} }
+    let name_field = ($schema.fields | where name == "name" | get -o 0)
+    if $name_field == null or $name_field.schema != { kind: "scalar", name: "string" } { error make {msg: $"($type): `name: string` is the field the tools match a spec by, and the type has none"} }
+    let rows = (try { open --raw $data | decode | from nuon } catch {|e| error make {msg: $"($data): not NUON the tools can read: ($e.msg)"} })
+    let got = ($rows | describe)
+    if not (($got | str starts-with "table") or ($got | str starts-with "list")) { error make {msg: $"($data): a table of specs expected, ($got) found"} }
+    if ($rows | is-empty) { error make {msg: $"($data): no spec in it"} }
+    let typed = ($rows | enumerate | each {|r|
+        let label = (spec-label $r.index $r.item)
+        record-problems $r.item $schema.fields "" | each {|p| $"  ($label): ($p)" }
+    } | flatten)
+    if not ($typed | is-empty) { error make {msg: ([$"($data) does not hold to ($type):"] ++ $typed | str join "\n")} }
+    let meant = (spec-meaning $rows ($schema.fields | get name))
+    if not ($meant | is-empty) { error make {msg: ([$"($data): its specs do not hold:"] ++ ($meant | each {|m| $"  ($m)" }) | str join "\n")} }
+    $rows
+}
+
+# The workspace's spec data, its asset/spec.nuon held to its
+# asset/spec.nutype (spec-table). Untyped because it ends in an error.
+export def specs-of [ws: path] {
+    let asset = ($ws | path expand | path join "asset")
+    spec-table ($asset | path join "spec.nuon") ($asset | path join "spec.nutype")
+}
+
+# A type's text as nushell writes it, comment lines aside, as its parts:
+# `table` and `record` with their fields in order, `list` with its
+# element, `oneof` with its members, and a scalar by its name. Only that
+# much of the type grammar is read, and anything else is refused naming
+# it, so a type the tools cannot hold a spec to never passes as one they
+# can. Untyped because it ends in an error.
+def type-schema [text: string, file: string] {
+    let body = ($text | lines | where {|l| not ($l | str trim | str starts-with "#") } | str join " ")
+    let tokens = ($body | str replace --all --regex '([<>,:])' ' $1 ' | split row --regex '\s+' | where {|t| $t != "" })
+    if ($tokens | is-empty) { error make {msg: $"($file): no type in it"} }
+    let parsed = (type-parse $tokens 0 $file)
+    if $parsed.next != ($tokens | length) { error make {msg: $"($file): more after the type: ($tokens | skip $parsed.next | first 3 | str join ' ')"} }
+    $parsed.schema
+}
+
+# The type that starts at word `at` of a type's words, and the word after
+# it. Untyped because it ends in an error.
+def type-parse [tokens: list<string>, at: int, file: string] {
+    let name = ($tokens | get -o $at)
+    if $name == null or $name in ["<" ">" "," ":"] {
+        error make {msg: $"($file): a type expected at word ($at + 1), (if $name == null { 'the end' } else { $name }) found"}
+    }
+    if ($tokens | get -o ($at + 1)) != "<" {
+        if $name not-in $spec_scalars { error make {msg: $"($file): ($name) is no type the tools read; they read ($spec_scalars | str join ', '), oneof, list, record, and table"} }
+        return { schema: { kind: "scalar", name: $name }, next: ($at + 1) }
+    }
+    match $name {
+        "table" | "record" => {
+            mut i = ($at + 2)
+            mut fields = []
+            while ($tokens | get -o $i) != ">" {
+                let field = ($tokens | get -o $i)
+                if $field == null or $field in ["<" ">" "," ":"] or ($tokens | get -o ($i + 1)) != ":" {
+                    error make {msg: $"($file): a field and its type expected in ($name)<...>, (if $field == null { 'the end' } else { $tokens | skip $i | first 3 | str join ' ' }) found"}
+                }
+                if ($fields | any {|f| $f.name == $field }) { error make {msg: $"($file): ($field) named twice in ($name)<...>"} }
+                let inner = (type-parse $tokens ($i + 2) $file)
+                $fields = ($fields | append { name: $field, schema: $inner.schema })
+                $i = $inner.next
+                if ($tokens | get -o $i) == "," { $i += 1 }
+            }
+            { schema: { kind: $name, fields: $fields }, next: ($i + 1) }
+        },
+        "list" => {
+            let inner = (type-parse $tokens ($at + 2) $file)
+            if ($tokens | get -o $inner.next) != ">" { error make {msg: $"($file): list<...> holds one type"} }
+            { schema: { kind: "list", of: $inner.schema }, next: ($inner.next + 1) }
+        },
+        "oneof" => {
+            mut i = ($at + 2)
+            mut members = []
+            while ($tokens | get -o $i) != ">" {
+                let inner = (type-parse $tokens $i $file)
+                $members = ($members | append $inner.schema)
+                $i = $inner.next
+                if ($tokens | get -o $i) == "," { $i += 1 }
+            }
+            { schema: { kind: "oneof", members: $members }, next: ($i + 1) }
+        },
+        _ => { error make {msg: $"($file): ($name)<...> is no type the tools read; they read oneof, list, record, and table"} },
+    }
+}
+
+# A type's part as nushell writes it.
+def type-name [schema: record]: nothing -> string {
+    match $schema.kind {
+        "scalar" => $schema.name,
+        "oneof" => $"oneof<($schema.members | each {|m| type-name $m } | str join ', ')>",
+        "list" => $"list<(type-name $schema.of)>",
+        _ => $"($schema.kind)<($schema.fields | each {|f| $'($f.name): (type-name $f.schema)' } | str join ', ')>",
+    }
+}
+
+# A spec's row as a problem names it: its place, and its name when it
+# has one.
+def spec-label [index: int, row: any]: nothing -> string {
+    let name = (if ($row | describe | str starts-with "record") { $row | get -o name } else { null })
+    if ($name | describe) == "string" and $name != "" { $"row ($index + 1) \(($name)\)" } else { $"row ($index + 1)" }
+}
+
+# A field's path below `at`, "" being a row's own.
+def field-path [at: string, name: string]: nothing -> string {
+    if $at == "" { $name } else { $"($at).($name)" }
+}
+
+# What is wrong with a record against its fields, a line each, `at` the
+# path to it: a field missing, a value of another type, and a field the
+# type does not name.
+def record-problems [value: any, fields: list<any>, at: string]: nothing -> list<string> {
+    let got = ($value | describe)
+    if not ($got | str starts-with "record") { return [$"(if $at == '' { 'the row' } else { $at }): a record expected, ($got) found"] }
+    let named = ($fields | get name)
+    let present = ($value | columns)
+    let checked = ($fields | each {|f|
+        let path = (field-path $at $f.name)
+        if $f.name not-in $present { [$"($path): missing"] } else { value-problems ($value | get $f.name) $f.schema $path }
+    } | flatten)
+    let unknown = ($present | where {|c| $c not-in $named } | each {|c| $"(field-path $at $c): a field the type does not name" })
+    $checked ++ $unknown
+}
+
+# What is wrong with a value against its part of a type, a line each, `at`
+# its path; none when it holds.
+def value-problems [value: any, schema: record, at: string]: nothing -> list<string> {
+    let got = ($value | describe)
+    match $schema.kind {
+        "scalar" => {
+            let holds = (match $schema.name {
+                "number" => ($got in ["int" "float"]),
+                "path" | "directory" => ($got == "string"),
+                _ => ($got == $schema.name),
+            })
+            if $holds { [] } else { [$"($at): ($schema.name) expected, ($got) found"] }
+        },
+        "oneof" => {
+            if ($schema.members | any {|m| value-problems $value $m $at | is-empty }) { [] } else { [$"($at): (type-name $schema) expected, ($got) found"] }
+        },
+        "record" => (record-problems $value $schema.fields $at),
+        "list" => {
+            if (not ($got | str starts-with "list")) and (not ($got | str starts-with "table")) { return [$"($at): (type-name $schema) expected, ($got) found"] }
+            $value | enumerate | each {|e| value-problems $e.item $schema.of $"($at).($e.index)" } | flatten
+        },
+        _ => {
+            if (not ($got | str starts-with "list")) and (not ($got | str starts-with "table")) { return [$"($at): (type-name $schema) expected, ($got) found"] }
+            $value | enumerate | each {|e| record-problems $e.item $schema.fields $"($at).($e.index)" } | flatten
+        },
+    }
+}
+
+# What a spec table means that its type cannot say, a line each: every
+# name given and none twice without regard to case; each count, clock,
+# rate, and size the type names above zero, the VRAM only where a spec
+# gives one. `named` are the type's fields, so a rule for a field the type
+# no longer names is passed over.
+def spec-meaning [rows: list<any>, named: list<string>]: nothing -> list<string> {
+    let labelled = ($rows | enumerate | each {|r| { label: (spec-label $r.index $r.item), row: $r.item } })
+    let unnamed = ($labelled | where {|r| ($r.row.name | str trim) == "" } | each {|r| $"($r.label): name empty" })
+    let twice = ($labelled
+        | where {|r| ($r.row.name | str trim) != "" }
+        | group-by {|r| $r.row.name | str trim | str lowercase }
+        | transpose key rows
+        | where {|g| ($g.rows | length) > 1 }
+        | each {|g| $"($g.rows | get label | str join ' and ') name one spec, ($g.key) in any case" })
+    let numbers = {|v| ($v | describe) in ["int" "float"] }
+    let sizes = {|v| ($v | describe) == "filesize" }
+    let below = ($labelled | each {|r|
+        let counts = ([cores clock_ghz fps] | where {|f| $f in $named and (do $numbers ($r.row | get $f)) and ($r.row | get $f) <= 0 } | each {|f| $"($r.label): ($f) ($r.row | get $f), above zero wanted" })
+        let ram = (if "ram" in $named and (do $sizes $r.row.ram) and $r.row.ram <= 0B { [$"($r.label): ram ($r.row.ram), above zero wanted"] } else { [] })
+        let display = (if "display" in $named and ($r.row.display | describe | str starts-with "record") {
+            [width height] | where {|s| (do $numbers ($r.row.display | get -o $s)) and ($r.row.display | get $s) <= 0 } | each {|s| $"($r.label): display.($s) ($r.row.display | get $s), above zero wanted" }
+        } else { [] })
+        let vram = (if "vram" in $named and (do $sizes $r.row.vram) and $r.row.vram <= 0B { [$"($r.label): vram ($r.row.vram), above zero wanted where a spec gives one"] } else { [] })
+        $counts ++ $ram ++ $display ++ $vram
+    } | flatten)
+    $unnamed ++ $twice ++ $below
+}
 # The guest is named for the program, `jab <program>`, which is what
 # QEMU's window shows inside its own prefix, hardcoded in every front
 # end (SDL adds the console's index too: `QEMU (jab pad-0)`), and the
@@ -1688,6 +1894,22 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     $id | save -f $stamp
 }
 
+# The spec data a program's build reads when its manifest lists `specs`:
+# the workspace's asset/spec.nuon and asset/spec.nutype, inputs of its
+# build, so a changed definition or a changed type alone builds it again
+# rather than leaving an image built under the old ones standing; none
+# for a program that lists no specs. A program listing specs whose
+# workspace has no spec data is refused naming where it looked.
+def spec-inputs [c: record]: nothing -> list<string> {
+    if ($c.manifest | get -o specs) == null { return [] }
+    if $c.workspace == null { error make {msg: $"($c.manifest.name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
+    let asset = ($c.workspace | path join "asset")
+    let files = [($asset | path join "spec.nuon") ($asset | path join "spec.nutype")]
+    let missing = ($files | where {|f| not ($f | path exists) })
+    if not ($missing | is-empty) { error make {msg: $"($c.manifest.name) lists specs, and its workspace has no ($missing | str join ' or ')"} }
+    $files
+}
+
 # Builds a program's image when stale, and writes beside it `home`, the
 # program's directory, which image-home reads back from the image.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
@@ -1703,7 +1925,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let home = ($c.out | path join "home")
     if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link])
+    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ (spec-inputs $c))
     let id = (build-id $flags $inputs)
     if not (stale $image $inputs $id $stamp) { return }
     mkdir $c.out
