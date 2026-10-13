@@ -1,0 +1,12 @@
+name = 'feature'
+sdk = '../../sdk'
+includes = ['../../sdk/src']
+link = '../../sdk/src/program.ld'
+display = 'none'
+specs = ['1ka1']
+
+[reserved]
+gfx_harts = 2
+
+[feature.synthetic]
+io_harts = 1
