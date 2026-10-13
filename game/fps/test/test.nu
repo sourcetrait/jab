@@ -3167,7 +3167,17 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # holds, one batch of a build or a whole build, naming the run and its
 # missing legs, and under --diagnostic keeps that build's row for the leg
 # with the batches missing it and no value, the build's other legs valued
-# as before. At schema 2: a frame without its presentation record and a
+# as before. Routes: two runs of one route each missing its last leg are
+# refused partial, and under --diagnostic that leg is missing in their
+# runs, its common entry, and its row, which names the route, each run
+# carrying its route and its expected legs; a recorded route missing and
+# one of another digest are refused unrouted with and without
+# --diagnostic, the file and digests named, as is a run whose rows hold a
+# leg its route does not name; the route kept beside a run is read before
+# the file its identity names; two runs recording no route keep the
+# union; and runs on two routes are refused, and under --diagnostic are
+# two builds, each with its route's legs and its own runs' bins. At
+# schema 2: a frame without its presentation record and a
 # capture of mixed schemas are incomplete; under cadence 1 a wait apart
 # from the critical path balances and a critical path holding it does
 # not; a flip refused as early is valid under cadence 0 and invalid under
@@ -3448,6 +3458,98 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let build_admitted = (gauge compare [$whole_file $short_file] "draw_us" 50 --diagnostic)
     let short_ramp = ($build_admitted.table | where build == "short" and leg == "ramp")
     assert (($short_ramp | length) == 1 and ($short_ramp | get 0.value_us) == null and ($short_ramp | get 0.missing) == 1) $"under --diagnostic a build missing a leg keeps the leg's row, missing: ($build_admitted.table)"
+
+    # routes (RouteLegs): a run's expected legs are its route's, the
+    # route.nuon beside its run before the file its identity names, held
+    # to the SHA-256 the identity recorded; the fixtures' own directory
+    # starts empty. Each comparison a mutant could make throw is attempted.
+    let routes_dir = ($dir | path join "routes")
+    jab retire $routes_dir
+    mkdir $routes_dir
+    let route_file = {|name: string, legs: list<string>|
+        let file = ($routes_dir | path join $"($name).nuon")
+        { legs: ($legs | each {|n| { name: $n, places: [], pad: [] } }) } | to nuon | save --raw -f $file
+        { file: ($file | path expand), sha256: (open --raw $file | into binary | hash sha256) }
+    }
+    let stairs = (do $route_file "stairs" [walk ramp stair])
+    let yard = (do $route_file "yard" [walk yard])
+    # each leg three frames walking `metres` along x
+    let walked = {|legs: list<string>, metres: float|
+        $legs | enumerate | each {|l|
+            0..<3 | each {|n| { run: 1, frame: ($l.index * 3 + $n), leg: $l.item, entry: ($n == 0), x: (1.0 + $n * $metres / 2), y: 1.0, draw_us: (1000 + $l.index * 100), critical_us: 1800 } }
+        } | flatten
+    }
+    let routed = {|label: string, image: string, route: any, rows: list<any>|
+        let file = ($routes_dir | path join $"route_($label).nuon")
+        let doc = { label: $label, identity: { build: { image_sha256: $image }, mode: $serial_mode, route: $route }, runs: [{ run: 1, measured: $checked }], rows: $rows }
+        $doc | to nuon | save --raw -f $file
+        $file | path expand
+    }
+    let attempt = {|files: list<string>, admit: bool| try { gauge compare $files "draw_us" 50 --diagnostic=$admit } catch {|e| { refusal: $e.msg } } }
+    # two runs of one route each missing its last leg, which the union of
+    # their legs would pass
+    let short = [(do $routed "short_1" "short" $stairs (do $walked [walk ramp] 0.0)) (do $routed "short_2" "short" $stairs (do $walked [walk ramp] 0.0))]
+    let short_refused = (do $attempt $short false | get -o refusal | default "")
+    assert ($short | all {|f| $short_refused | str contains $"($f) run 1, partial: missing the legs stair" }) $"two runs of one route each missing its last leg are refused partial: ($short_refused)"
+    let short_admitted = (do $attempt $short true)
+    let unreached = ($short_admitted | get -o common | default [] | where leg == "stair" | get -o 0)
+    assert (($unreached | get -o kind) == "missing" and ($unreached | get -o runs) == 0 and ($unreached | get -o bins) == []) $"a leg no run reached is missing in its common entry: ($unreached) ($short_admitted | get -o refusal)"
+    let stair_kinds = ($short_admitted | get -o runs | default [] | each {|r| $r.legs | where leg == "stair" | get -o 0.kind })
+    assert equal $stair_kinds [missing missing] "a leg no run reached is missing in every run"
+    let stair_row = ($short_admitted | get -o table | default [] | where leg == "stair" | get -o 0 | default {})
+    let stair_says = [($stair_row | get -o value_us) ($stair_row | get -o missing) ($stair_row | get -o batches) ($stair_row | get -o route)]
+    assert equal $stair_says [null 2 2 $stairs.sha256] "a leg no run reached is missing in every batch of its row, which names its route"
+    let short_run = ($short_admitted | get -o runs.0 | default {})
+    assert equal [($short_run | get -o expected) ($short_run | get -o route)] [[walk ramp stair] $stairs] "a run carries its route's file and digest and its expected legs, the route's in order"
+    # a recorded route missing and one of another digest, rejected with and
+    # without --diagnostic
+    let whole_route = (do $routed "whole_route" "whole_route" $stairs (do $walked [walk ramp stair] 0.0))
+    let gone = (do $routed "gone" "gone" { file: ($routes_dir | path join "gone.nuon"), sha256: $stairs.sha256 } (do $walked [walk ramp stair] 0.0))
+    let misread = (do $routed "misread" "misread" { file: $stairs.file, sha256: $yard.sha256 } (do $walked [walk ramp stair] 0.0))
+    let unrouted = [
+        { name: "gone", file: $gone, says: $"its identity records the route ($routes_dir | path join 'gone.nuon') of SHA-256 ($stairs.sha256), and none is beside its run" }
+        { name: "misread", file: $misread, says: $"the route ($stairs.file) has SHA-256 ($stairs.sha256) where its identity recorded ($yard.sha256)" }
+    ]
+    for u in $unrouted {
+        for admit in [false true] {
+            let msg = (do $attempt [$whole_route $u.file] $admit | get -o refusal | default "")
+            assert ($msg | str contains $"($u.file) run 1, unrouted: ") $"a recorded route ($u.name) is refused unrouted, --diagnostic ($admit): ($msg)"
+            assert ($msg | str contains $u.says) $"the ($u.name) route's refusal names its file and digests: ($msg)"
+        }
+    }
+    # a run whose rows hold a leg its route does not name
+    let strayed = (do $routed "strayed" "strayed" $yard (do $walked [walk yard ramp] 0.0))
+    let stray_msg = (do $attempt [$strayed] true | get -o refusal | default "")
+    assert ($stray_msg | str contains $"($strayed) run 1, unrouted: its rows hold legs its route ($yard.file) does not name: ramp") $"a run whose rows hold a leg its route does not name is refused unrouted: ($stray_msg)"
+    # the route kept beside the run before the file its identity names,
+    # which now holds another
+    let kept_home = ($routes_dir | path join "kept")
+    let kept_run = ($kept_home | path join "run_1")
+    mkdir $kept_run
+    open --raw $stairs.file | save --raw -f ($kept_run | path join "route.nuon")
+    let renamed = ($routes_dir | path join "renamed.nuon")
+    open --raw $yard.file | save --raw -f $renamed
+    let kept_report = ($kept_home | path join "gauge.nuon")
+    let kept_id = { build: { image_sha256: "kept" }, mode: $serial_mode, route: { file: $renamed, sha256: $stairs.sha256 } }
+    { label: "kept", identity: $kept_id, runs: [{ run: 1, measured: $checked, out: $kept_run }], rows: (do $walked [walk ramp stair] 0.0) } | to nuon | save --raw -f $kept_report
+    let kept_read = (do $attempt [$kept_report] false)
+    let kept_file = ($kept_read | get -o runs.0.route.file | default "" | path expand)
+    assert equal $kept_file ($kept_run | path join "route.nuon" | path expand) $"a run's route is the one beside it before the file its identity names: ($kept_read | get -o refusal)"
+    # two runs whose identities record no route keep the union
+    let loose = (do $attempt [(do $routed "loose_1" "loose" null (do $walked [walk ramp] 0.0)) (do $routed "loose_2" "loose" null (do $walked [walk ramp] 0.0))] false)
+    assert equal [($loose | get -o table | default [] | get leg) ($loose | get -o method.routes)] [[walk ramp] [{ sha256: null, file: null, legs: [walk ramp] }]] $"two runs with no route recorded keep the union of their legs: ($loose | get -o refusal)"
+    # runs on two routes, one image's: refused, and under --diagnostic two
+    # builds, each with its route's legs and its own runs' bins
+    let on_stairs = (do $routed "stairs" "routes_image" $stairs (do $walked [walk ramp stair] 1.0))
+    let on_yard = (do $routed "yard" "routes_image" $yard (do $walked [walk yard] 3.0))
+    let two_routes = (do $attempt [$on_stairs $on_yard] false | get -o refusal | default "")
+    assert ($two_routes | str contains "the runs played 2 routes") $"runs on two routes refuse the comparison: ($two_routes)"
+    let apart = (do $attempt [$on_stairs $on_yard] true)
+    let apart_rows = ($apart | get -o table | default [] | each {|t| [$t.build $t.leg $t.route] })
+    let apart_expected = [[stairs walk $stairs.sha256] [stairs ramp $stairs.sha256] [stairs stair $stairs.sha256] [yard walk $yard.sha256] [yard yard $yard.sha256]]
+    assert equal $apart_rows $apart_expected $"runs on two routes admitted under --diagnostic are two builds, each with its route's legs: ($apart | get -o refusal)"
+    let walk_bins = ($apart | get -o common | default [] | where leg == "walk" | each {|c| [$c.route ($c.bins | length)] })
+    assert equal $walk_bins [[$stairs.sha256 3] [$yard.sha256 3]] "each route's bins are its own runs'"
 
     # schema 2: every frame's presentation, one schema a capture
     let good2 = (fx-items 3 --schema 2)

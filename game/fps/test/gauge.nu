@@ -29,13 +29,14 @@
 # for a person to play and closes the measurement after `--seconds`;
 # `read` reads a capture either made; `compare` sets builds' captures
 # side by side, a build being an image at the cadence it played on the
-# machine it ran on, a walked leg per stretch of its path, refusing a run
-# measured incomplete, invalid, or before validity was recorded, one that
-# cannot be paired, one on a diagnostic machine or with QEMU words of its
-# launch's own, one missing a leg another run holds, or runs on more than
-# one machine, unless `--diagnostic`
-# admits it, and a run with nothing to compare in it outright, every run's
-# standing and missing legs kept. Each run keeps the route it played and
+# machine and the route it ran on, a walked leg per stretch of its path,
+# refusing a run measured incomplete, invalid, or before validity was
+# recorded, one that cannot be paired, one on a diagnostic machine or
+# with QEMU words of its launch's own, one missing a leg its route names,
+# or runs on more than one machine or route, unless `--diagnostic` admits
+# it, and a run with nothing to compare in it or not on the route its
+# identity recorded outright, every run's standing, route, and missing
+# legs kept. Each run keeps the route it played and
 # its identity beside its capture, then gauge.nuon and the summary. The
 # measurement is the capture read in order through the first end marker;
 # what follows it counts for nothing. A frame's critical path is its start
@@ -210,10 +211,11 @@ const FLIP_VALID = [0 1]
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 const MET = [nothing geometry android]
 # the standings a comparison refuses unless admitted as a diagnostic, and
-# those it refuses even then, holding nothing a comparison can read; a
-# run missing a leg is refused unless admitted too, whatever its standing
+# those it refuses even then, holding nothing a comparison can read or
+# legs not the route's that played (unrouted); a run missing a leg is
+# refused unless admitted too, whatever its standing
 const REFUSED = [incomplete invalid unchecked unpaired diagnostic]
-const REJECTED = [empty unclassified unusable]
+const REJECTED = [empty unclassified unusable unrouted]
 # a run's workers and grain below schema 4 when its records cannot show
 # them (effective-workers), a build of its own
 const UNKNOWN_WORKERS = "unknown"
@@ -1960,38 +1962,69 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
     { legs: ($bytes | decode utf-8 | from nuon | get legs), route: $file, checked: ($recorded != null) }
 }
 
+# A compared run's route (RouteLegs): the SHA-256 its identity recorded,
+# held as legs-for holds it against the route.nuon beside the run's bound
+# identity file, else in the first of its run-dirs holding one, else the
+# file its identity names; its legs the route's names in order. A
+# recorded route missing, of another digest, or naming no legs is the
+# run's problem, its file and digests named; an identity recording no
+# route has no digest and no legs.
+def route-of [report: path, run: record, effective: record]: nothing -> record<sha256: any, file: any, legs: any, problem: any> {
+    let recorded = ($effective.identity | get -o route.sha256)
+    if $recorded == null { return { sha256: null, file: null, legs: null, problem: null } }
+    let named = ($effective.identity | get -o route.file)
+    let bound = (if $effective.file == null { [] } else { [($effective.file | path dirname)] })
+    let kept = ($bound | append (run-dirs $report $run) | uniq | each {|d| $d | path join "route.nuon" } | where {|f| $f | path exists })
+    let file = (if not ($kept | is-empty) { $kept | first } else { $named })
+    if $file == null or (not ($file | path exists)) {
+        return { sha256: $recorded, file: $file, legs: null, problem: $"its identity records the route ($named | default 'unnamed') of SHA-256 ($recorded), and none is beside its run or at that file" }
+    }
+    let bytes = (open --raw $file | into binary)
+    let sha = ($bytes | hash sha256)
+    if $sha != $recorded {
+        return { sha256: $recorded, file: $file, legs: null, problem: $"the route ($file) has SHA-256 ($sha) where its identity recorded ($recorded): its legs are not the ones that played" }
+    }
+    let legs = (try { $bytes | decode utf-8 | from nuon | get legs | get name } catch { [] })
+    if ($legs | is-empty) { return { sha256: $recorded, file: $file, legs: null, problem: $"the route ($file) names no legs" } }
+    { sha256: $recorded, file: $file, legs: $legs, problem: null }
+}
+
 # Set builds' captures side by side: each run of each gauge.nuon a
 # measurement, a build an image at the cadence its runs played
 # (effective-cadence) by the workers at the grain they played
-# (effective-workers) on the machine their identities record, its runs
-# its batches, named by the label less a trailing _<n>, one name a build
-# and one build a name, each run keeping the cadence, the workers, and
-# the grain its identity asked beside those it played, its identity read
-# through identity-of with its source, binding, passes, and corrections
-# named, and a build
-# whose runs' identities differ in its flags or its ELF refused; for each leg a
-# value of `field` a run, a leg
+# (effective-workers) on the machine and the route their identities
+# record, its runs its batches, named by the label less a trailing _<n>,
+# one name a build and one build a name, each run keeping the cadence,
+# the workers, and the grain its identity asked beside those it played,
+# its identity read through identity-of with its source, binding, passes,
+# and corrections named, and a build whose runs' identities differ in its
+# flags or its ELF refused; for each leg a value of `field` a run, a leg
 # whose eye travels one bin or more taken per bin of its path over the
-# bins every run reached, a shorter one over its frames, so a leg's value
-# is its path's and not its frame count's. Every run is classified before
-# any leg is measured (standing-of): one measured incomplete, invalid, or
-# unchecked, one that cannot be paired, or one on a diagnostic machine or
-# with QEMU words of its launch's own is refused unless `diagnostic`
-# admits it, and one empty, unclassified, or
-# unusable is refused even then. A run's expected legs are every leg any
-# compared run holds, and one missing any is refused unless `diagnostic`
-# admits it, its missing legs then an explicit missing result in its run
-# and in its build's row in place of a value, never a mean over fewer
-# batches. The comparison fails with every refused run's file, run, and
-# reasons. Runs on more than one machine, a recorded one or none, are
-# refused unless `diagnostic` admits them. A comparison on a phase of the
-# drawing or its remainder, whose meanings moved with the packets, is
-# refused, `diagnostic` or not, when its runs' classes differ or any is
-# unknown (parts-meaning), each run keeping its classes. The method with
-# the machines, the bins, every run's standing, cadences, machine, missing
-# legs, and bins with their medians, and the table, each row naming its
-# build's machine, its batches' standings, and the batches missing its
-# leg, come back together.
+# bins every run of its route reached, a shorter one over its frames, so
+# a leg's value is its path's and not its frame count's. Every run is
+# classified before any leg is measured (standing-of): one measured
+# incomplete, invalid, or unchecked, one that cannot be paired, or one on
+# a diagnostic machine or with QEMU words of its launch's own is refused
+# unless `diagnostic` admits it, and one empty, unclassified, or unusable
+# is refused even then, as is one unrouted, its identity's recorded route
+# missing, of another digest, or not naming every leg its rows hold
+# (route-of). A run's expected legs are its route's, or for a run whose
+# identity records none every leg any such compared run holds, and one
+# missing any is refused unless `diagnostic` admits it, its missing legs
+# then an explicit missing result in its run and in its build's row in
+# place of a value, never a mean over fewer batches, a leg no run reached
+# missing in its route's common entry too. The comparison fails with
+# every refused run's file, run, and reasons. Runs on more than one
+# machine, a recorded one or none, or on more than one route, are refused
+# unless `diagnostic` admits them, the routes then kept apart. A
+# comparison on a phase of the drawing or its remainder, whose meanings
+# moved with the packets, is refused, `diagnostic` or not, when its runs'
+# classes differ or any is unknown (parts-meaning), each run keeping its
+# classes. The method with the machines, the routes and their expected
+# legs, the bins, every run's standing, cadences, machine, route, expected
+# and missing legs, and bins with their medians, and the table, each row
+# naming its build's machine and route, its batches' standings, and the
+# batches missing its leg, come back together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let file = ($f | path expand)
@@ -2008,7 +2041,16 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let overrides = ($id | get -o overrides)
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
-            let standing = (standing-of $measured $rows $field $requested $asked $machine $overrides)
+            let held = (if ($rows | is-empty) { [] } else { $rows | get leg | uniq })
+            let route = (route-of $file $r $effective)
+            let stray = (if $route.legs == null { [] } else { $held | where {|leg| $leg not-in $route.legs } })
+            let unrouted = (if $route.problem != null {
+                [$route.problem]
+            } else if not ($stray | is-empty) {
+                [$"its rows hold legs its route ($route.file) does not name: ($stray | str join ', ')"]
+            } else { [] })
+            let classed = (standing-of $measured $rows $field $requested $asked $machine $overrides)
+            let standing = (if ($classed.standing in $REJECTED) or ($unrouted | is-empty) { $classed } else { { standing: "unrouted", reasons: $unrouted } })
             let schema = ($measured | get -o schema | default 1)
             let played = (effective-workers $measured $asked)
             {
@@ -2020,13 +2062,25 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 identity_from: $effective.from, identity_file: $effective.file, corrections: $effective.corrections,
                 identity_sha256: $effective.identity_sha256, binding: $effective.binding, passed: $effective.passed,
                 schema: $schema, parts: (parts-meaning $schema (if $image == "" { null } else { $image })),
-                standing: $standing.standing, reasons: $standing.reasons, rows: $rows,
-                held: (if ($rows | is-empty) { [] } else { $rows | get leg | uniq }),
+                route: (if $route.sha256 == null { null } else { { file: $route.file, sha256: $route.sha256 } }),
+                route_legs: $route.legs,
+                standing: $standing.standing, reasons: $standing.reasons, rows: $rows, held: $held,
             }
         }
     } | flatten)
-    let expected = ($classified | get held | flatten | uniq)
-    let covered = ($classified | each {|r| $r | insert missing ($expected | where {|leg| $leg not-in $r.held }) })
+    # each route's expected legs: the route's own, or for the runs whose
+    # identities record none every leg any of them holds
+    let route_key = {|r| $r.route | get -o sha256 }
+    let routes = ($classified | each --keep-empty {|r| do $route_key $r } | uniq | each {|k|
+        let these = ($classified | where {|r| (do $route_key $r) == $k })
+        let named = ($these | get route_legs | compact)
+        let legs = (if $k == null or ($named | is-empty) { $these | get held | flatten | uniq } else { $named | first })
+        { sha256: $k, file: ($these | get route | compact | get -o 0.file), legs: $legs }
+    })
+    let covered = ($classified | each {|r|
+        let expected = ($routes | where {|t| $t.sha256 == (do $route_key $r) } | first | get legs)
+        $r | insert expected $expected | insert missing ($expected | where {|leg| $leg not-in $r.held })
+    })
     let stopped = ($covered | each {|r|
         let standing = (if ($r.standing in $REJECTED) or ((not $diagnostic) and ($r.standing in $REFUSED)) {
             $"($r.file) run ($r.run), ($r.standing): ($r.reasons | str join '; ')"
@@ -2038,7 +2092,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     } | compact)
     if not ($stopped | is-empty) {
         let head = ([
-            $"the comparison refuses ($stopped | length) runs: an empty, unclassified, or unusable run always,"
+            $"the comparison refuses ($stopped | length) runs: an empty, unclassified, unusable, or unrouted run always,"
             "an incomplete, invalid, unchecked, unpaired, or diagnostic one, or one missing a leg another run"
             "holds, unless --diagnostic admits it, marked"
         ] | str join " ")
@@ -2049,6 +2103,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     if ($machines | length) > 1 and (not $diagnostic) {
         let head = $"the runs ran on ($machines | length) machines, a comparison's runs on one unless --diagnostic admits them"
         error make { msg: ([$head] | append ($machines | each {|m| machine-text $m }) | str join "\n  ") }
+    }
+    if ($routes | length) > 1 and (not $diagnostic) {
+        let head = $"the runs played ($routes | length) routes, a comparison's runs on one unless --diagnostic admits them"
+        error make { msg: ([$head] | append ($routes | each {|t| route-text $t }) | str join "\n  ") }
     }
     let moved = ([
         (if $field in $PHASE_FIELDS { "phases" } else { null })
@@ -2072,13 +2130,13 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             leg-measure ($r.rows | where leg == $leg) $leg $field $bin_cm
         })
         let absent = ($r.missing | each {|leg| { leg: $leg, kind: "missing", frames: 0, path_m: null, median: null, bins: [] } })
-        $r | reject rows held | insert legs ($legs | append $absent)
+        $r | reject rows held route_legs | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
-    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain } }
+    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r) } }
     for b in $builds {
         let made = ($runs | where build == $b | each {|r| do $made_of $r } | uniq)
-        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence by its workers on a machine each: ($made | to nuon); a build's batches are one build" } }
+        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence by its workers on a machine and a route each: ($made | to nuon); a build's batches are one build" } }
     }
     for made in ($runs | each {|r| do $made_of $r } | uniq) {
         let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
@@ -2091,19 +2149,29 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             error make { msg: ([$"the runs of ($b) differ in build.flags or build.elf_sha256, its identities' record of one build"] | append $named | str join "\n  ") }
         }
     }
-    let common = ($expected | each {|leg|
-        let measured = ($runs | each {|r| $r.legs | where {|l| $l.leg == $leg and $l.kind != "missing" } | get -o 0 } | compact)
-        let kinds = ($measured | get kind | uniq)
-        if ($kinds | length) > 1 { error make { msg: $"the leg ($leg) is walked in some runs and stands in others" } }
-        let bins = (if ($kinds | first) == "path" {
-            let sets = ($measured | each {|m| $m.bins | get bin })
-            $sets | reduce --fold ($sets | first) {|s, acc| $acc | where {|x| $x in $s } }
-        } else { [] })
-        { leg: $leg, kind: ($kinds | first), runs: ($measured | length), missing: (($runs | length) - ($measured | length)), bins: $bins }
-    })
+    # a leg's kind and the bins every run reached, within its route's runs;
+    # a leg no run reached an explicit missing result
+    let common = ($routes | each {|t|
+        let these = ($runs | where {|r| (do $route_key $r) == $t.sha256 })
+        $t.legs | each {|leg|
+            let measured = ($these | each {|r| $r.legs | where {|l| $l.leg == $leg and $l.kind != "missing" } | get -o 0 } | compact)
+            if ($measured | is-empty) {
+                { route: $t.sha256, leg: $leg, kind: "missing", runs: 0, missing: ($these | length), bins: [] }
+            } else {
+                let kinds = ($measured | get kind | uniq)
+                if ($kinds | length) > 1 { error make { msg: $"the leg ($leg) is walked in some runs and stands in others" } }
+                let bins = (if ($kinds | first) == "path" {
+                    let sets = ($measured | each {|m| $m.bins | get bin })
+                    $sets | reduce --fold ($sets | first) {|s, acc| $acc | where {|x| $x in $s } }
+                } else { [] })
+                { route: $t.sha256, leg: $leg, kind: ($kinds | first), runs: ($measured | length), missing: (($these | length) - ($measured | length)), bins: $bins }
+            }
+        }
+    } | flatten)
     let valued = ($runs | each {|r|
+        let rk = (do $route_key $r)
         $r | merge { legs: ($r.legs | each {|l|
-            let c = ($common | where leg == $l.leg | first)
+            let c = ($common | where {|x| $x.route == $rk and $x.leg == $l.leg } | first)
             let picked = ($l.bins | where {|b| $b.bin in $c.bins })
             let value = (if $l.kind == "missing" { null } else if $l.kind == "frames" { $l.median } else if ($picked | is-empty) { null } else { $picked | get median | math avg })
             $l | insert value $value
@@ -2111,13 +2179,14 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
     })
     let table = ($builds | each {|b|
         let batches = ($valued | where build == $b)
-        $expected | each {|leg|
+        let rk = (do $route_key ($batches | first))
+        $batches | first | get expected | each {|leg|
             let entries = ($batches | each {|r| $r.legs | where leg == $leg | get 0 })
             let missing = ($entries | where {|l| $l.kind == "missing" } | length)
             let values = ($entries | get value | compact)
             let whole = ($missing == 0 and (not ($values | is-empty)))
             {
-                build: $b, leg: $leg, machine: ($batches | get 0.machine),
+                build: $b, leg: $leg, route: $rk, machine: ($batches | get 0.machine),
                 value_us: (if $whole { $values | math avg } else { null }),
                 half_spread_us: (if $whole { (($values | math max) - ($values | math min)) / 2 } else { null }),
                 batches: ($batches | length), missing: $missing, standings: ($batches | get standing | uniq),
@@ -2184,10 +2253,20 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "specification's three, or whose identity carries QEMU words of its launch's own, each named; those"
                 "five refused unless --diagnostic admits it; or valid; each table row names its batches' standings"
             ] | str join " "),
+            route: ([
+                "a run's route is the route.nuon beside its bound identity file, else in the first of its run"
+                "directories holding one, else the file its identity names, held to the SHA-256 its identity"
+                "recorded; a recorded route missing, of another digest, or not naming every leg its rows hold"
+                "leaves the run unrouted, refused even under --diagnostic; runs on more than one route, the runs"
+                "whose identities record none counting as one, are refused unless --diagnostic admits them, then"
+                "kept apart, the route a part of what a build is, and each table row names its route"
+            ] | str join " "),
             coverage: ([
-                "a run's expected legs are every leg any compared run holds; a run missing one is refused unless"
-                "--diagnostic admits it, and then each leg it misses is an explicit missing result in its run and"
-                "its build's row is missing in place of a value, never a mean over fewer batches"
+                "a run's expected legs are its route's, in its order, or for a run whose identity records no route"
+                "every leg any compared run recording none holds; a run missing one is refused unless --diagnostic"
+                "admits it, and then each leg it misses is an explicit missing result in its run and its build's"
+                "row is missing in place of a value, never a mean over fewer batches; the bins every run reached"
+                "are its route's runs', and a leg no run reached is missing in its common entry and every batch"
             ] | str join " "),
             parts: ([
                 "planes_us, walls_us, and sprites_us hold their rendering at schema 1 and are preparation alone at"
@@ -2200,6 +2279,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             ] | str join " "),
             admitted: $diagnostic,
             machines: $machines,
+            routes: $routes,
         },
         common: $common,
         runs: $valued,
@@ -2437,12 +2517,13 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
 # cadence: every leg's value of `--field` a run, a build's mean and half
 # spread a leg, printed, marked with its runs' standings other than
 # valid; a run measured incomplete, invalid, or before validity was
-# recorded, one that cannot be paired, or one missing a leg another run
-# holds, refused unless `--diagnostic` admits it, and one with nothing to
-# compare refused even then, each named with its file, its run, and the
-# reasons; under `--diagnostic` a leg some batch of a build is missing
-# prints as missing in place of a value; the method, the bins every run
-# reached, each run's standing, missing legs, and bins with their
+# recorded, one that cannot be paired, one missing a leg its route names,
+# or runs on more than one route, refused unless `--diagnostic` admits
+# it, and one with nothing to compare or unrouted refused even then, each
+# named with its file, its run, and the reasons; under `--diagnostic` a
+# leg some batch of a build is missing prints as missing in place of a
+# value; the method, the routes, the bins every run reached, each run's
+# standing, route, expected and missing legs, and bins with their
 # medians, and the table go to `--out`, a previous comparison there
 # retired.
 def "main compare" [
@@ -2450,7 +2531,7 @@ def "main compare" [
     --field: string = "draw_us"      # the row's column compared
     --bin-cm: int = 50               # a walked leg's bin, in centimetres of its path
     --out: string = ""               # where the comparison lands, compare.nuon in the program's gauge shard of the target unless given
-    --diagnostic                     # admit runs measured incomplete, invalid, unchecked, or unpaired, or missing a leg, marked
+    --diagnostic                     # admit runs measured incomplete, invalid, unchecked, or unpaired, missing a leg, or on another route, marked
 ] {
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { jab program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
@@ -2650,6 +2731,13 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
         $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.unknown_calls) unknown after a retried flip; ($f.catch_up) catch-up"
         $"    ($f.fast) fast, ($f.fast_waited) of them waited; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
     ] ++ $apart
+}
+
+# A route as a comparison names it (compare's routes), in words: its
+# SHA-256 and a file holding it, or none recorded.
+def route-text [t: record]: nothing -> string {
+    if $t.sha256 == null { return "no route recorded" }
+    $"the route of SHA-256 ($t.sha256), ($t.file | default 'not found')"
 }
 
 # A machine as a run's identity records it, in words: its harts and
