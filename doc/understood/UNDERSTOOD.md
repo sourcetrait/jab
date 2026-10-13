@@ -108,9 +108,12 @@ nothing, since a spec too small for the feature runs the program without
 it. The build hands the program the numbers as constants: it writes
 `jab_manifest.inc` beside the image and puts that directory on the
 include path, so `.include "jab_manifest.inc"` gives `JAB_BASE_HARTS`,
-`JAB_RESERVED_GFX_HARTS`, and `JAB_FEATURE_<NAME>_IO_HARTS`. A program
-without `specs` builds as it always has, and its runs are recorded as
-undeclared and diagnostic.
+`JAB_RESERVED_GFX_HARTS`, and `JAB_FEATURE_<NAME>_IO_HARTS`. The build
+writes that file before it decides whether the image is current, and it
+rewrites the file only when the text changes. So a newer SDK that writes
+different constants builds the program again. A program without `specs`
+builds as it always has, and its runs are recorded as undeclared and
+diagnostic.
 
 The build records the demand with the image. Beside each image it writes
 `demand.nuon`, a record of two fields: `image`, the image's SHA-256, and
@@ -429,6 +432,22 @@ hart 0 makes these calls; a worker's answer `JAB_DENIED`. A claim's id is
 never used twice in a run, and a debug kernel reads `jab.claimids=<n>` to
 leave only n of them, so a test can reach the limit. `test/reservations`
 proves each rule.
+
+`test/feature` proves how an optional feature takes harts from graphics
+and gives them back. The program reserves its graphics harts and draws
+frames on them. It then asks for the hart a synthetic feature needs. It
+takes the hart only if the harts left over still cover the reservation.
+On three harts that check fails, so the feature is refused and graphics
+keeps every hart. On four harts the feature is admitted twice. At
+startup it takes its hart before graphics starts. Later, while graphics
+runs on every hart, it takes the hart at a safe point. The program
+finishes the frame in flight, stops the graphics worker on that hart,
+and only then claims the hart. The kernel refuses the claim while any
+worker still runs there. The feature's worker runs under the claim's id.
+When the feature is done, the program stops that worker, releases the
+hart, and starts graphics on it again. Every frame records which hart
+drew each row, so the test can check that the feature's hart drew no
+row while the feature held it.
 
 `sdk/src/jab_jobs.inc` gives workers jobs. Each worker has a mailbox in the
 program's memory, two cache lines: hart 0 writes a job into one, and the
