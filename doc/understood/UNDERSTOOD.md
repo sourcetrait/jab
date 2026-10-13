@@ -359,10 +359,11 @@ a hart. The machine is `-machine
 virt,aia=aplic-imsic,aclint=on`. Its interrupts go through the RISC-V
 Advanced Interrupt Architecture: the APLIC turns each device's interrupt
 line into a message, and each hart's IMSIC receives those messages in its
-interrupt files. The ACLINT keeps the timer. `--harts 1`, `2`, or `4` on
-`just run`, `jab.nu plan`, or `jab launch` gives a diagnostic machine of
-that many harts, which every record of the run labels so, and any other
-count is refused before QEMU starts; every launch's record carries its
+interrupt files. The ACLINT keeps the timer. `--harts` on `just run`,
+`jab.nu plan`, or `jab launch` with any other count up to eight, the
+`JAB_HARTS_MAX` of `jab.inc`, gives a diagnostic machine of that many
+harts, which every record of the run labels so, and a count past eight is
+refused before QEMU starts; every launch's record carries its
 machine, the harts asked for, diagnostic or not, `-machine`, the CPU, and
 the accelerator. QEMU hands every hart the device tree it built, and the
 kernel reads it once, on hart 0 in machine mode before anything else

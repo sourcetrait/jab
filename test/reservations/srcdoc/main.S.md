@@ -11,7 +11,8 @@ not answer in, so the fixtures of the five-operand form set a5 themselves.
 
 ## .set STACK_BYTES
 
-`u64`: a worker's stack, 16 KiB; stacks holds three, one a hart.
+`u64`: a worker's stack, 16 KiB; stacks holds one for every secondary
+hart the ABI names.
 
 ## .set JOB_WORD
 ## .set JOB_DONE
@@ -35,10 +36,6 @@ four answers, reserve's, claim's, release's, and owned's.
 ## .set A5_SENTINEL
 
 `u64`: a5 in the starts that name no owner the kernel issues.
-
-## .set PAST_HART
-
-`u64`: hart 7's bit, past every machine the test runs.
 
 ## .set SHORT_COUNT
 
@@ -86,7 +83,9 @@ four answers, reserve's, claim's, release's, and owned's.
 
 ## stacks
 
-`3 * STACK_BYTES u8`: the workers' stacks, hart n's at n - 1.
+`(JAB_HARTS_MAX - 1) * STACK_BYTES u8`: the workers' stacks, hart n's at
+n - 1, every secondary the ABI names, so a machine of eight harts finds
+its highest's.
 
 ## line
 

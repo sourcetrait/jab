@@ -85,9 +85,10 @@ const accel = "tcg,thread=multi"
 # interrupt files, with the ACLINT's timer, which only TCG offers.
 const machine_name = "virt,aia=aplic-imsic,aclint=on"
 # The harts a machine takes: the specification's three, 1KA1's in
-# doc/SPEC.md, and one, two, or four for a diagnostic run, which its
-# record labels so.
-const harts_allowed = [1 2 3 4]
+# doc/SPEC.md, and any other count up to the eight of JAB_HARTS_MAX in
+# jab.inc, the most the ABI names, for a diagnostic run, which its record
+# labels so.
+const harts_allowed = [1 2 3 4 5 6 7 8]
 const harts_default = 3
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
@@ -164,9 +165,9 @@ def cpu-model [qemu: string]: nothing -> string {
 # harts asked for, whether the run is diagnostic (any count but the
 # specification's three, or `overrides`, QEMU words of the launch's own on
 # its line), the -machine options, the CPU model, and the accelerator
-# with its thread mode. A count outside 1, 2, 3, and 4 is refused.
+# with its thread mode. A count outside 1 to 8 (harts_allowed) is refused.
 export def machine-of [harts: int, --overrides: list<string> = []]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
-    if $harts not-in $harts_allowed { error make {msg: $"--harts takes 1, 2, 3, or 4, the specification's three or a diagnostic one, two, or four, not ($harts)"} }
+    if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), the specification's three or a diagnostic count, not ($harts)"} }
     { harts: $harts, diagnostic: ($harts != $harts_default or (not ($overrides | is-empty))), machine: $machine_name, cpu: $cpu_profile, accel: $accel }
 }
 
@@ -467,7 +468,7 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # into the retire home of `target`, the workspace's target or else the
 # program's, wherever `out` lies (retire), its pipes kept; `target` is
 # handed back for a harness that clears away files of its own. The
-# machine has `harts` harts, 1, 2, 3, or 4, and `machine` is its record
+# machine has `harts` harts, 1 to 8, and `machine` is its record
 # (machine-of); `bootargs` goes to the kernel through QEMU's -append,
 # into the device tree's /chosen, where a debug kernel reads its test
 # knobs and a release kernel reads nothing; `dtb` hands the kernel that
@@ -661,7 +662,7 @@ export def launch [
     --window                   # the window a run of the program opens, in place of none
     --live-sound               # the sound device over the host's audio as a run discovers it, in place of the --sound recording
     --host-pad                 # the host's own gamepad as a run attaches it, in place of a --pad table
-    --harts: int = $harts_default # the machine's harts, the specification's three, or 1, 2, or 4 for a diagnostic run
+    --harts: int = $harts_default # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
@@ -3230,7 +3231,8 @@ def "main test" [dir: path, ...words: string, --set: string = ""] {
 # otherwise; the API's port on the machine with --api; the keyboard and
 # the tablet off with --no-kbm, the gamepad the host has off with
 # --no-pad, the sound device off with --no-sound; the specification's
-# three harts, or one, two, or four for a diagnostic run with --harts.
+# three harts, or any other count from one to eight for a diagnostic run
+# with --harts.
 # QEMU's exit code is the program's status.
 def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --harts: int = $harts_default] {
     let program = (if (is-workspace $dir) { run-target $dir $words } else { $dir | path expand })
@@ -3262,5 +3264,5 @@ def "main retire" [ws: path] {
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1|2|3|4]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1..8]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }

@@ -244,8 +244,8 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1|2|3|4] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1|2|3|4] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
@@ -279,7 +279,7 @@ def "main run" [
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = $HARTS        # the machine's harts, the specification's three, or 1, 2, or 4 for a diagnostic run
+    --harts: int = $HARTS        # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
     --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
 ] {
@@ -349,7 +349,7 @@ def "main play" [
     --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = $HARTS        # the machine's harts, the specification's three, or 1, 2, or 4 for a diagnostic run
+    --harts: int = $HARTS        # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
     --qemu: list<string> = []    # words on the launch's line after its own, the run then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }

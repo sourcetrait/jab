@@ -10,7 +10,6 @@
 .set JOB_BYTES, 64
 .set A3_SENTINEL, 0x3a3a
 .set A5_SENTINEL, 0x5555
-.set PAST_HART, (1 << 7)
 .set SHORT_COUNT, 9
 
 .section .text
@@ -191,7 +190,7 @@ claim_refused:                              # an empty mask, hart 0, a hart past
     li t0, 1
     jab.sys.harts.claim t0
     mv s5, a0
-    li t0, PAST_HART
+    slli t0, s9, 1                          # the bit past the highest's, a hart the machine lacks
     jab.sys.harts.claim t0
     mv s6, a0
     mv a0, s2
@@ -656,7 +655,7 @@ job_denied:
     .skip JOB_BYTES
 .balign 16
 stacks:
-    .skip (3 * STACK_BYTES)
+    .skip ((JAB_HARTS_MAX - 1) * STACK_BYTES)
 line:
     .skip 160
 digits:

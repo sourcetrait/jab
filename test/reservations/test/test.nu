@@ -1,9 +1,10 @@
 # reservations's integration test: hart ownership by role (the kernel's
 # HartReservations), one program printing a line a step, read on machines
-# of three harts, of four, diagnostic, and of four with hart 2 failed by
-# jab.late=2, a sparse grant; every expected line worked out from the
-# machine's online secondaries S, the lowest L, the highest H and its bit
-# h, and the floor F, one short of S's count:
+# of three harts, of four and of eight, the launcher's greatest, each
+# diagnostic, and of four with hart 2 failed by jab.late=2, a sparse
+# grant; every expected line worked out from the machine's online
+# secondaries S, the lowest L, the highest H and its bit h, and the floor
+# F, one short of S's count:
 # - harts: S, L, and H.
 # - legacy: before a reservation jab.sys.harts leaves a3 as the caller had
 #   it, every online secondary is unowned, a raw five-argument start with
@@ -51,6 +52,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let machines = ([
         { name: "three", harts: 3, bootargs: "", online: [1 2], spent: false }
         { name: "four", harts: 4, bootargs: "", online: [1 2 3], spent: false }
+        { name: "eight", harts: 8, bootargs: "", online: [1 2 3 4 5 6 7], spent: false }
     ] ++ (if $debug { [
         { name: "sparse", harts: 4, bootargs: "jab.late=2", online: [1 3], spent: false }
         { name: "spent", harts: 3, bootargs: "jab.claimids=1", online: [1 2], spent: true }

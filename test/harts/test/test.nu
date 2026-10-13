@@ -1,21 +1,23 @@
 # harts's integration test, first the held span's arithmetic on readings
-# of its own (HeldSpan), then jab.sys.harts on machines of one, two,
-# three, and four harts, three cold boots of each, every hart of the
-# device tree discovered and online and none failed, read after the
-# program has held two seconds; the kernel's own lines on the debug
-# channel, its masks and every hart's line, each online hart's record and
-# canary read back by hart 0; the idle secondaries' vCPU threads burning
-# no host core over the held span, a second as the launch times it; each
-# launch's record of its machine, every count but the specification's
-# three diagnostic, the line carrying -smp and multithreaded TCG; and a
-# count the machine does not take refused by the launcher before QEMU
-# starts. Then the platform check's two classes on trees of the test's
-# own through -dtb, QEMU's four-hart tree with one change each, on a
-# machine of four: a cpu whose id is past JAB_HARTS_MAX, a topology problem,
-# named on the debug channel, the other harts discovered and failed and
-# the kernel going on on hart 0; and a timebase other than QEMU's, which
-# ends the boot with its line on the UART and status 1 before the
-# program runs. The timebase as the device tree specification lets a
+# of its own (HeldSpan); then the launcher's greatest machine held to the
+# SDK's JAB_HARTS_MAX, read from jab.inc (LauncherBound), a machine of
+# that many harts taken and one of a hart more refused before QEMU
+# starts, no QEMU run for it; then jab.sys.harts on machines of one,
+# two, three, and four harts and of JAB_HARTS_MAX's, three cold boots of
+# each, every hart of the device tree discovered and online and none
+# failed, read after the program has held two seconds; the kernel's own
+# lines on the debug channel, its masks and every hart's line, each
+# online hart's record and canary read back by hart 0; the idle
+# secondaries' vCPU threads burning no host core over the held span, a
+# second as the launch times it; and each launch's record of its machine,
+# every count but the specification's three diagnostic, the line carrying
+# -smp and multithreaded TCG. Then the platform check's two classes on
+# trees of the test's own through -dtb, QEMU's four-hart tree with one
+# change each, on a machine of four: a cpu whose id is past
+# JAB_HARTS_MAX, a topology problem, named on the debug channel, the
+# other harts discovered and failed and the kernel going on on hart 0;
+# and a timebase other than QEMU's, which ends the boot with its line on
+# the UART and status 1 before the program runs. The timebase as the device tree specification lets a
 # tree write it: in two cells, read whole, the high cell 0 booting and a
 # high cell of 1 ending the boot with the whole rate; and in the cpu
 # nodes, each cpu's own read before /cpus's, every cpu's own with none
@@ -62,10 +64,23 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let idle = ($held.threads | get 1)
     assert equal [$idle.delta $idle.rate] [0.0 0.0] $"HeldSpan: an idle thread's delta and rate none: ($idle)"
 
+    # the launcher's greatest machine held to the ABI's bound: a machine of
+    # JAB_HARTS_MAX's harts, read from jab.inc, taken, and one of a hart
+    # more refused before QEMU starts, its output directory emptied first
+    # and no serial log written there
+    let max = (harts-max)
+    let taken = (try { jab machine-of $max | get harts } catch {|e| $e.msg })
+    assert equal $taken $max $"LauncherBound: a machine of JAB_HARTS_MAX's ($max) harts taken: ($taken)"
+    let past_out = ($out | path join $"harts_($max + 1)")
+    jab retire $past_out
+    let refused = (try { jab launch --kernel $kernel --image $image --out $past_out --set $set --harts ($max + 1); "" } catch {|e| $e.msg })
+    assert ($refused | str contains $"--harts takes 1 to ($max)") $"LauncherBound: ($max + 1) harts refused before QEMU starts: ($refused)"
+    assert (($past_out | path join "serial.log" | path type) == null) $"LauncherBound: no QEMU run for ($max + 1) harts: ($past_out)"
+
     let debug = ($set | str contains "DEBUG")
     let threads = ($nu.os-info.name == "linux")
     mut seen = []
-    for n in [1 2 3 4] {
+    for n in [1 2 3 4 $max] {
         for boot in 1..3 {
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"harts_($n)_($boot)") --set $set --harts $n --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
             assert equal $run.status 0 $"exit status on ($n) harts, boot ($boot): ($run.serial)"
@@ -89,8 +104,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
             if $boot == 1 { $seen = ($seen | append { harts: $n, serial: ($run.serial | str trim) }) }
         }
     }
-    let refused = (try { jab launch --kernel $kernel --image $image --out ($out | path join "harts_5") --set $set --harts 5; "" } catch {|e| $e.msg })
-    assert ($refused | str contains "--harts takes 1, 2, 3, or 4") $"five harts refused before QEMU starts: ($refused)"
 
     # QEMU's four-hart tree, and every launch on a tree of it a machine of
     # four, diagnostic, so the tree and the machine agree
@@ -204,8 +217,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $knobs = [$"late: ($late.serial | str trim)" $"stray: ($stray.serial | str trim)"]
     }
 
-    print $"harts: ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($refused | str join '; '); missing: ($missing.serial | str trim); ($knobs | str join '; ')"
+    print $"harts: the launcher takes ($max) and refuses ($max + 1); ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($refused | str join '; '); missing: ($missing.serial | str trim); ($knobs | str join '; ')"
     print "harts: ok"
+}
+
+# The most harts the ABI names, the SDK's `.set JAB_HARTS_MAX` in
+# jab.inc, read beside this test's own SDK.
+def harts-max []: nothing -> int {
+    let inc = ($env.FILE_PWD | path join ".." ".." ".." "sdk" "src" "jab.inc")
+    let found = (open --raw $inc | decode | lines | parse --regex '^\.set JAB_HARTS_MAX,\s*(?P<n>\d+)\s*$' | get -o 0.n)
+    if $found == null { error make {msg: $"no .set JAB_HARTS_MAX in ($inc)"} }
+    $found | into int
 }
 
 # Each of the named harts' vCPU threads idle over the launch's held
