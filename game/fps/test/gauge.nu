@@ -219,6 +219,10 @@ const REJECTED = [empty unclassified unusable unrouted]
 # a run's workers and grain below schema 4 when its records cannot show
 # them (effective-workers), a build of its own
 const UNKNOWN_WORKERS = "unknown"
+# a run's selection of its raster's workers (run-request): automatic when
+# its identity asks none, forced when it asks a count
+const AUTOMATIC = "automatic"
+const FORCED = "forced"
 # the identity's fields a correction may change: the build's flags and its
 # ELF's SHA-256, each read from beside the image at the run's start
 const CORRECTABLE = ["build.flags" "build.elf_sha256"]
@@ -836,6 +840,29 @@ export def identity-of [report: path, run: record, legacy: any]: nothing -> reco
     }
     let from = (if (no-evidence $legacy) { $FROM_NONE } else { $FROM_LEGACY })
     { identity: (if $from == $FROM_NONE { $ALONE } else { $legacy }), from: $from, file: null, corrections: null, identity_sha256: null, binding: null, passed: $passed, seed: $seed }
+}
+
+# A report's run as its own identity asks it (SelectionIdentity), the one
+# reader of a run's selection and request: the identity identity-of
+# resolves, with its provenance as identity-of gives it, the report's
+# summary only that identity's fallback, and the fields read from it: the
+# selection, AUTOMATIC when it asks no workers and FORCED when it asks a
+# count, the cadence, the workers, the grain, the machine, the QEMU's
+# version, the pad, and the cap.
+export def run-request [report: path, run: record, legacy: any]: nothing -> record {
+    let effective = (identity-of $report $run $legacy)
+    let id = $effective.identity
+    let workers = ($id | get -o mode.workers)
+    $effective | merge {
+        selection: (if $workers == null { $AUTOMATIC } else { $FORCED }),
+        cadence: ($id | get -o mode.cadence),
+        workers: $workers,
+        grain: ($id | get -o mode.grain),
+        machine: ($id | get -o machine),
+        qemu: ($id | get -o qemu.version),
+        pad: ($id | get -o mode.pad),
+        cap: ($id | get -o cap),
+    }
 }
 
 # The identity a capture in `dir` was launched under. The reports it
@@ -1993,12 +2020,15 @@ def route-of [report: path, run: record, effective: record]: nothing -> record<s
 # measurement, a build an image at the cadence its runs played
 # (effective-cadence) by the workers at the grain they played
 # (effective-workers) on the machine and the route their identities
-# record, its runs its batches, named by the label less a trailing _<n>,
-# one name a build and one build a name, each run keeping the cadence,
-# the workers, and the grain its identity asked beside those it played,
-# its identity read through identity-of with its source, binding, passes,
-# and corrections named, and a build whose runs' identities differ in its
-# flags or its ELF refused; for each leg a value of `field` a run, a leg
+# record under their selection, automatic or forced, its runs its
+# batches, named by the label less a trailing _<n>, one name a build and
+# one build a name, so a label whose runs mix selections is refused as two
+# builds whatever they played; each run keeping its selection and the
+# cadence, the workers, and the grain its identity asked beside those it
+# played, all read through run-request with its identity's source,
+# binding, passes, and corrections named, and a build whose runs'
+# identities differ in its flags or its ELF refused; for each leg a value
+# of `field` a run, a leg
 # whose eye travels one bin or more taken per bin of its path over the
 # bins every run of its route reached, a shorter one over its frames, so
 # a leg's value is its path's and not its frame count's. Every run is
@@ -2021,10 +2051,11 @@ def route-of [report: path, run: record, effective: record]: nothing -> record<s
 # moved with the packets, is refused, `diagnostic` or not, when its runs'
 # classes differ or any is unknown (parts-meaning), each run keeping its
 # classes. The method with the machines, the routes and their expected
-# legs, the bins, every run's standing, cadences, machine, route, expected
-# and missing legs, and bins with their medians, and the table, each row
-# naming its build's machine and route, its batches' standings, and the
-# batches missing its leg, come back together.
+# legs, the bins, every run's standing, selection, cadences, machine,
+# route, expected and missing legs, and bins with their medians, and the
+# table, each row naming its build's selection, machine, and route, its
+# batches' standings, and the batches missing its leg, come back
+# together.
 export def compare [files: list<string>, field: string, bin_cm: int, --diagnostic]: nothing -> record {
     let classified = ($files | each {|f|
         let file = ($f | path expand)
@@ -2032,12 +2063,12 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         let build = ($g.label | str replace --regex '_\d+$' '')
         let all_rows = ($g.rows? | default [])
         $g.runs | each {|r|
-            let effective = (identity-of $file $r ($g | get -o identity))
+            let effective = (run-request $file $r ($g | get -o identity))
             let id = $effective.identity
             let image = ($id | get -o build.image_sha256 | default "")
-            let requested = ($id | get -o mode.cadence)
-            let asked = { workers: ($id | get -o mode.workers), grain: ($id | get -o mode.grain) }
-            let machine = ($id | get -o machine)
+            let requested = $effective.cadence
+            let asked = { workers: $effective.workers, grain: $effective.grain }
+            let machine = $effective.machine
             let overrides = ($id | get -o overrides)
             let measured = ($r.measured? | default null)
             let rows = ($all_rows | where run == $r.run)
@@ -2056,7 +2087,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             {
                 file: $file, label: $g.label, build: $build, image: $image, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
-                requested_workers: $asked.workers, requested_grain: $asked.grain,
+                selection: $effective.selection, requested_workers: $asked.workers, requested_grain: $asked.grain,
                 effective_workers: $played.workers, effective_grain: $played.grain,
                 flags: ($id | get -o build.flags), elf_sha256: ($id | get -o build.elf_sha256),
                 identity_from: $effective.from, identity_file: $effective.file, corrections: $effective.corrections,
@@ -2133,10 +2164,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         $r | reject rows held route_legs | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
-    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r) } }
+    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r), selection: $r.selection } }
     for b in $builds {
         let made = ($runs | where build == $b | each {|r| do $made_of $r } | uniq)
-        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence by its workers on a machine and a route each: ($made | to nuon); a build's batches are one build" } }
+        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence by its workers on a machine and a route under a selection each: ($made | to nuon); a build's batches are one build" } }
     }
     for made in ($runs | each {|r| do $made_of $r } | uniq) {
         let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
@@ -2186,7 +2217,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let values = ($entries | get value | compact)
             let whole = ($missing == 0 and (not ($values | is-empty)))
             {
-                build: $b, leg: $leg, route: $rk, machine: ($batches | get 0.machine),
+                build: $b, leg: $leg, route: $rk, selection: ($batches | get 0.selection), machine: ($batches | get 0.machine),
                 value_us: (if $whole { $values | math avg } else { null }),
                 half_spread_us: (if $whole { (($values | math max) - ($values | math min)) / 2 } else { null }),
                 batches: ($batches | length), missing: $missing, standings: ($batches | get standing | uniq),
@@ -2209,9 +2240,12 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "were drawn by from schema 4; below it the serial backend, 0 at grain 0, for a run with a W 0"
                 "answered before its first frame and no W after it, and unknown for any other, which leaves the run"
                 "unpaired and under --diagnostic a build of its own, never one with a known configuration, workers"
-                "asked above 0 leaving it unpaired too; a capture's label less a trailing _<n> names it, one name a"
-                "build and one build a name, and its runs are its batches, whose identities hold one build's flags"
-                "and ELF; each run keeps the cadence, workers, and grain asked beside those played"
+                "asked above 0 leaving it unpaired too; under its selection, automatic when its identity asks no"
+                "workers and forced when it asks a count, so an automatic run and a forced one are two builds"
+                "whatever they played; a capture's label less a trailing _<n> names it, one name a build and one"
+                "build a name, and its runs are its batches, whose identities hold one build's flags and ELF; each"
+                "run keeps its selection and the cadence, workers, and grain asked beside those played, all read"
+                "from its own identity (run-request), never the report's summary unless that is its identity"
             ] | str join " "),
             identities: ([
                 "each run's identity is its own file, its directory found beside its report before the path the"
@@ -2645,33 +2679,35 @@ def column-of [rows: list<any>, name: string]: nothing -> list<any> {
     $rows | each {|r| $r | get -o $name }
 }
 
-# One step of a bench's run as its gauge.nuon holds it: a play when its
-# identity names the host's own pad, else a batch of the route; its
-# cadence and period; the machine and the QEMU its identity records; and
-# every run with its standing and reasons as a comparison classifies it
-# (standing-of) from its own identity (identity-of), its CPU seconds over
-# wall seconds, its outcomes, and its frames (presented-calls). A step
-# with no gauge.nuon holds no runs.
+# One step of a bench's run as its gauge.nuon holds it, its label, state,
+# and file, and every run of it as its own identity asks it
+# (run-request), never the report's summary: a play when that identity
+# names the host's own pad, else a batch of the route; its selection, its
+# cadence, workers, and grain asked, and its period from its cap; the
+# machine and the QEMU it records; its standing and reasons as a
+# comparison classifies it (standing-of); its CPU seconds over wall
+# seconds, its outcomes, and its frames (presented-calls). A step with no
+# gauge.nuon holds no runs.
 def bench-step [dir: path, label: string, state: any]: nothing -> record {
     let file = ($dir | path join $label "gauge.nuon")
-    if not ($file | path exists) { return { label: $label, state: $state, kind: null, cadence: null, period_us: null, machine: null, qemu: null, file: null, runs: [] } }
+    if not ($file | path exists) { return { label: $label, state: $state, file: null, runs: [] } }
     let g = (open $file)
-    let period = (1000000 / ($g.identity | get -o cap | default $CAP))
-    let requested = ($g.identity | get -o mode.cadence)
-    let machine = ($g.identity | get -o machine)
     let all_rows = ($g.rows? | default [])
     let runs = ($g.runs | each {|r|
         let m = ($r | get -o measured)
         let rows = ($all_rows | where run == $r.run)
-        let id = (identity-of $file $r ($g | get -o identity) | get identity)
-        let asked = { workers: ($id | get -o mode.workers), grain: ($id | get -o mode.grain) }
-        let standing = (standing-of $m $rows "critical_us" ($id | get -o mode.cadence) $asked ($id | get -o machine) ($id | get -o overrides))
+        let request = (run-request $file $r ($g | get -o identity))
+        let asked = { workers: $request.workers, grain: $request.grain }
+        let standing = (standing-of $m $rows "critical_us" $request.cadence $asked $request.machine ($request.identity | get -o overrides))
         let ran = ($r | get -o ran | default {})
         let wall = ($ran | get -o wall_seconds | default 0)
         let cpu = ($ran | get -o cpu_seconds)
+        let period = (1000000 / ($request.cap | default $CAP))
         {
-            run: $r.run,
-            seed: ($r | get -o seed),
+            label: $label, run: $r.run, seed: ($r | get -o seed),
+            kind: (if $request.pad == "host" { "play" } else { "route" }), cadence: $request.cadence, period_us: $period,
+            selection: $request.selection, workers: $request.workers, grain: $request.grain,
+            machine: $request.machine, qemu: $request.qemu,
             standing: $standing.standing,
             reasons: $standing.reasons,
             cpu_over_wall: (if $wall == 0 or $cpu == null { null } else { $cpu / $wall }),
@@ -2679,24 +2715,24 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
             rows: (presented-calls $rows $period),
         }
     })
-    let kind = (if ($g.identity | get -o mode.pad) == "host" { "play" } else { "route" })
-    let qemu = ($g.identity | get -o qemu.version)
-    { label: $label, state: $state, kind: $kind, cadence: $requested, period_us: $period, machine: $machine, qemu: $qemu, file: $file, runs: $runs }
+    { label: $label, state: $state, file: $file, runs: $runs }
 }
 
-# A cadence's steps of one kind: the valid runs (standing-of) pooled,
-# their CPU seconds over wall seconds and their frames (bench-frames);
-# every other run, one on a diagnostic machine among them, kept apart
-# with its standing, its reasons, and its own frames, a diagnostic
-# outside the pool; and each run's standing and outcomes.
-def bench-cadence [steps: list<any>, cadence: any]: nothing -> record {
-    let runs = ($steps | each {|s| $s.runs | each {|r| $r | insert label $s.label } } | flatten)
-    let period = ($steps | first | get period_us)
+# A group of a bench's runs, one kind's at one cadence and period: the
+# valid runs (standing-of) pooled, their CPU seconds over wall seconds and
+# their frames (bench-frames) at the group's period; every other run, one
+# on a diagnostic machine among them, kept apart with its standing, its
+# reasons, and its own frames, a diagnostic outside the pool; and each
+# run's standing and outcomes.
+def bench-cadence [runs: list<any>]: nothing -> record {
+    let cadence = ($runs | first | get cadence)
+    let period = ($runs | first | get period_us)
     let pooled = ($runs | where standing == "valid")
     let apart = ($runs | where standing != "valid")
     {
         cadence: $cadence,
-        steps: ($steps | get label),
+        period_us: $period,
+        steps: ($runs | get label | uniq),
         runs: ($runs | length),
         valid: ($pooled | length),
         standings: ($runs | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reasons: $r.reasons } }),
@@ -2714,7 +2750,7 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let f = $c.frames
     let cpu = ($c.cpu_over_wall | compact)
     let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
-    let head = $"  cadence ($c.cadence | default 'none asked'), ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
+    let head = $"  cadence ($c.cadence | default 'none asked') at a period of (ms $c.period_us) ms, ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
     let apart = ($c.apart | each {|a|
         let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, presented every (ms $a.frames.interval.median) ms at the median" })
         $"    left out of the pool, a diagnostic: ($a.label) run ($a.run), ($a.standing): ($a.reasons | str join '; '); ($seen)"
@@ -2749,14 +2785,15 @@ def machine-text [m: any]: nothing -> string {
     $"($m | get -o harts) harts($kind), -machine ($m | get -o machine), -cpu ($m | get -o cpu), -accel ($m | get -o accel)"
 }
 
-# A bench's report as text: the steps, the machines and QEMUs they ran
-# on, each kind's cadences, then the comparisons.
+# A bench's report as text: the steps, each machine and QEMU with the runs
+# that ran on it, `<step> run <n>` each once, each kind's cadences, then
+# the comparisons.
 export def bench-text [doc: record]: nothing -> string {
     let named = (if $doc.bench == null { "" } else { $"($doc.bench) " })
-    let ran = ($doc.steps | where file != null)
-    let machines = ($ran | each {|s| { machine: $s.machine, qemu: $s.qemu } } | uniq | each {|m|
-        let labels = ($ran | where {|s| $s.machine == $m.machine and $s.qemu == $m.qemu } | get label)
-        $"machine: (machine-text $m.machine); ($m.qemu | default 'QEMU unrecorded'): ($labels | str join ' ')"
+    let placed = ($doc.runs | each {|r| { machine: $r.machine, qemu: $r.qemu, run: $"($r.label) run ($r.run)" } })
+    let machines = ($placed | each {|p| { machine: $p.machine, qemu: $p.qemu } } | uniq | each {|m|
+        let runs = ($placed | where {|p| $p.machine == $m.machine and $p.qemu == $m.qemu } | get run)
+        $"machine: (machine-text $m.machine); ($m.qemu | default 'QEMU unrecorded'): ($runs | str join ', ')"
     })
     let head = [
         $"bench ($named)run ($doc.stamp | default '-') in ($doc.dir)"
@@ -2787,14 +2824,18 @@ export def bench-text [doc: record]: nothing -> string {
 
 # A bench's report over the steps a run of the bench wrote in `dir`,
 # each a directory holding its gauge.nuon, in the order bench.nuon lists
-# them, else every directory's by name: each step with its machine and
-# QEMU (bench-step); the plays, each on the host's own pad, and the
-# route's batches apart, each per cadence with its valid runs pooled,
-# untrimmed, and every other run kept apart as a diagnostic
-# (bench-cadence); then the route's batches compared at 50 cm on
+# them, else every directory's by name: each step's runs as their own
+# identities ask them (bench-step); the runs, never the steps, grouped by
+# their own kind, the plays on the host's own pad apart from the route's
+# batches, their cadence, and their period, each run in one group, its
+# valid runs pooled, untrimmed, and every other run kept apart as a
+# diagnostic (bench-cadence); every run listed once with its settings;
+# then the reports whose runs are all the route's compared at 50 cm on
 # critical_us and draw_us, a build a cadence, its batches its steps
 # (compare), and when the comparison refuses a run, compared again as a
-# diagnostic admitting it, marked.
+# diagnostic admitting it, marked. A report mixing plays and route runs
+# refuses the route comparison on every field, even as a diagnostic,
+# naming the report and its kinds, since compare reads a report whole.
 export def bench-doc [dir: path]: nothing -> record {
     let dir = ($dir | path expand)
     let listed = ($dir | path join "bench.nuon")
@@ -2804,12 +2845,19 @@ export def bench-doc [dir: path]: nothing -> record {
         let state = (if $bench == null { null } else { $bench.steps | where label == $label | get -o 0.state })
         bench-step $dir $label $state
     })
+    let runs = ($steps | get runs | flatten | each {|r| $r | insert group { cadence: $r.cadence, period_us: $r.period_us } })
     let groups = (["play" "route"] | each {|kind|
-        let these = ($steps | where kind == $kind)
-        { kind: $kind, cadences: ($these | get cadence | uniq | sort | each {|c| bench-cadence ($these | where cadence == $c) $c }) }
+        let these = ($runs | where kind == $kind)
+        let keys = ($these | get group | uniq | sort-by cadence)
+        { kind: $kind, cadences: ($keys | each {|k| bench-cadence ($these | where {|r| $r.group == $k }) }) }
     } | where {|g| not ($g.cadences | is-empty) })
-    let files = ($steps | where kind == "route" | get file)
-    let compared = (if ($files | is-empty) { [] } else {
+    let reports = ($steps | where file != null | each {|s| { file: $s.file, kinds: ($s.runs | get kind | uniq | sort) } })
+    let mixed = ($reports | where {|x| ($x.kinds | length) > 1 })
+    let files = ($reports | where {|x| $x.kinds == ["route"] } | get file)
+    let compared = (if not ($mixed | is-empty) {
+        let named = ($mixed | each {|x| $"($x.file) holds ($x.kinds | str join ' and ') runs" } | str join "; ")
+        ["critical_us" "draw_us"] | each {|field| { field: $field, error: $"the route comparison refuses a report mixing plays and route runs, which compare would read whole: ($named)" } }
+    } else if ($files | is-empty) { [] } else {
         ["critical_us" "draw_us"] | each {|field|
             try { { field: $field, diagnostic: false, table: (compare $files $field 50 | get table) } } catch {|refusal|
                 try { { field: $field, diagnostic: true, refused: $refusal.msg, table: (compare $files $field 50 --diagnostic | get table) } } catch {|e| { field: $field, error: $e.msg } }
@@ -2821,6 +2869,7 @@ export def bench-doc [dir: path]: nothing -> record {
         stamp: ($bench | get -o stamp),
         dir: $dir,
         steps: ($steps | each {|s| $s | reject runs }),
+        runs: ($runs | each {|r| $r | select label run seed kind selection cadence workers grain period_us machine qemu standing reasons }),
         groups: $groups,
         compared: $compared,
     }

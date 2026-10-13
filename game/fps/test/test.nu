@@ -3242,8 +3242,18 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # as diagnostic, its machine the one the launch marked or the one asked
 # for, the reason naming the words and no hart count; and a bench pools
 # the specification's machine's run alone, keeps the diagnostic machine's
-# apart, and names every step's machine in its report, its cadence's lines
-# led by the pool's median against the ceiling. Identities: a run's
+# apart, names every run's machine in its report, its cadence's lines led
+# by the pool's median against the ceiling, and compares its two route
+# steps on both fields. Requests (SelectionIdentity): run-request reads a
+# run's selection and request from its own bound identity under a summary
+# asking none over a forced run and one asking workers over an automatic
+# run, and from the report's one identity for a legacy report; compare
+# takes a run's from it; an automatic run and a forced one played alike
+# are two builds under two labels and refused under one; a bench of one
+# report's three runs, each its own identity's, under a summary naming
+# none of their settings, stands, groups, and names each run as its own
+# identity asks, once; and beside a play run the bench groups and names it
+# once and refuses the route comparison on both fields. Identities: a run's
 # own file read with its bound correction applied and named; a correction
 # bound to another identity or image, holding an old value the file does
 # not, or naming a third field stopping the read; a run directory without
@@ -3933,8 +3943,10 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         let run = ($admitted.runs | where label == $u.name | get 0)
         assert equal [$run.standing $run.effective_workers $run.effective_grain] [unpaired unknown unknown] $"--diagnostic admits the ($u.name) run marked unpaired, its workers unknown: ($run | select standing effective_workers effective_grain)"
     }
+    # both ask W 0, one answered and one not, so the selection is alike and
+    # only the unknown workers keep them apart
     let unknown_merged = (try {
-        gauge compare [(fx-gauge $dir "known_1" "legacy_pair_1" "legacy_pair_image" 0 $three_asked --workers 0 --grain 0) (fx-gauge $dir "unknown_1" "legacy_pair_2" "legacy_pair_image" 0 $three_bare --unasked)] "draw_us" 50 --diagnostic
+        gauge compare [(fx-gauge $dir "known_1" "legacy_pair_1" "legacy_pair_image" 0 $three_asked --workers 0 --grain 0) (fx-gauge $dir "unknown_1" "legacy_pair_2" "legacy_pair_image" 0 $three_bare --workers 0 --grain 0)] "draw_us" 50 --diagnostic
         ""
     } catch {|e| $e.msg })
     assert ($unknown_merged | str contains "come from 2 builds") $"one image's schema 3 runs, the serial backend and unknown workers, under one name are two builds even under --diagnostic: ($unknown_merged)"
@@ -4097,12 +4109,99 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let pool = ($doc.groups | where kind == "route" | get 0.cadences.0)
     assert equal [$pool.runs $pool.valid] [2 1] $"the bench pools the specification's machine's run alone: ($pool.standings)"
     assert equal ($pool.apart | get standing) ["diagnostic"] $"the diagnostic machine's run kept apart: ($pool.apart)"
-    assert equal ($doc.steps | get machine.harts) [3 2] $"every step names its machine: ($doc.steps)"
+    assert equal ($doc.runs | get machine.harts) [3 2] $"every run names its machine: ($doc.runs)"
     let text = (gauge bench-text $doc | lines)
-    let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two"
-    assert ($line in $text) $"the report names the step's machine, ($line): ($text)"
+    let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two run 1"
+    assert ($line in $text) $"the report names the run's machine, ($line): ($text)"
     let pooled = ($text | skip until {|l| $l | str starts-with "  cadence 0" } | get -o 1)
     assert equal $pooled "    median 1.8 ms under the 15 ms ceiling, a tail of 0 of 3 frames at or over it" "a cadence's lines lead with the pool's median against the ceiling, its tail beside"
+    let tabled = ($doc.compared | each {|c| [$c.field ($c | get -o table | default [] | get build | uniq)] })
+    assert equal $tabled [[critical_us [three two]] [draw_us [three two]]] $"a bench of route runs alone compares them on both fields, each table naming both builds: ($doc.compared | get -o error)"
+
+    # requests (SelectionIdentity): a run's selection and request are its
+    # own identity's, read through run-request, the report's summary its
+    # fallback alone; its own directory started empty
+    let requests = ($dir | path join "requests")
+    jab retire $requests
+    let forced_id = { build: { image_sha256: "selection_image" }, mode: { cadence: 0, workers: 2, grain: 0, pad: "route" } }
+    let automatic_id = { build: { image_sha256: "selection_image" }, mode: { cadence: 0, pad: "route" } }
+    let forced_items = (fx-items 3 --schema 4 --asked)
+    let automatic_items = (fx-items 3 --schema 4)
+    let null_summary = { build: { image_sha256: "selection_image" }, mode: { cadence: 1, pad: "host" } }
+    let forced_summary = { build: { image_sha256: "selection_image" }, mode: { cadence: 1, workers: 1, grain: 16, pad: "host" } }
+    let under_null = (fx-request-report ($requests | path join "under_null") "forced" $null_summary [{ run: 1, id: $forced_id, items: $forced_items }])
+    let under_forced = (fx-request-report ($requests | path join "under_forced") "automatic" $forced_summary [{ run: 1, id: $automatic_id, items: $automatic_items }])
+    let request_of = {|file: string| let g = (open $file); gauge run-request $file ($g.runs | first) ($g | get -o identity) }
+    let forced_read = (do $request_of $under_null)
+    assert equal [$forced_read.selection $forced_read.workers $forced_read.grain $forced_read.cadence $forced_read.from] [forced 2 0 0 file] "a null summary over a forced run leaves the run's own request"
+    let automatic_read = (do $request_of $under_forced)
+    assert equal [$automatic_read.selection $automatic_read.workers $automatic_read.grain $automatic_read.cadence $automatic_read.from] [automatic null null 0 file] "a forced summary over an automatic run leaves the run's own request"
+    let legacy_home = ($requests | path join "legacy")
+    mkdir $legacy_home
+    let legacy_file = ($legacy_home | path join "gauge.nuon")
+    let legacy_m = (gauge measure (fx-bytes $forced_items) [{ name: "walk", places: [], pad: [] }])
+    { label: "legacy", identity: $forced_id, runs: [{ run: 1, measured: ($legacy_m | reject rows) }], rows: ($legacy_m.rows | each {|r| $r | insert run 1 }) } | to nuon | save --raw -f $legacy_file
+    let legacy_read = (do $request_of $legacy_file)
+    assert equal [$legacy_read.selection $legacy_read.workers $legacy_read.from] [forced 2 legacy] "a legacy report's run falls back to the report's one identity"
+    let compared_one = (try { gauge compare [$under_null] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    let one = ($compared_one | get -o runs.0 | default {})
+    let one_says = [($one | get -o selection) ($one | get -o requested_workers) ($one | get -o requested_grain) ($one | get -o requested_cadence)]
+    assert equal $one_says [forced 2 0 0] $"a compared run's selection and request are its own identity's: ($compared_one | get -o refusal)"
+    # an automatic run and a forced one played alike, one image, cadence,
+    # and machine: two builds under two labels, refused under one
+    let forced_two = (fx-request-report ($requests | path join "forced_two") "forced_two" $forced_summary [{ run: 1, id: $forced_id, items: $forced_items }])
+    let automatic_two = (fx-request-report ($requests | path join "automatic_two") "automatic_two" $forced_summary [{ run: 1, id: $automatic_id, items: $automatic_items }])
+    let two_builds = (try { gauge compare [$forced_two $automatic_two] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    let built = ($two_builds | get -o table | default [] | each {|t| [$t.build $t.selection] } | uniq)
+    assert equal $built [[forced_two forced] [automatic_two automatic]] $"an automatic run and a forced one played alike under two labels are two builds, each row its own: ($two_builds | get -o refusal)"
+    let pair_forced = (fx-request-report ($requests | path join "pair_1") "pair_1" $forced_summary [{ run: 1, id: $forced_id, items: $forced_items }])
+    let pair_automatic = (fx-request-report ($requests | path join "pair_2") "pair_2" $forced_summary [{ run: 1, id: $automatic_id, items: $automatic_items }])
+    let one_label = (try { gauge compare [$pair_forced $pair_automatic] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($one_label | str contains "the captures labelled pair come from 2 builds") $"an automatic run and a forced one under one label are refused as two builds: ($one_label)"
+
+    # a bench of one report's three runs, each bound by its own identity
+    # file and differing, under a summary naming none of their settings:
+    # each run stands, groups, and is named as its own identity asks
+    let qemu_runs = "QEMU emulator version 10.1.2"
+    let qemu_summary = "QEMU emulator version 9.2.4"
+    let routed_id = {|cadence: int, harts: int, cap: int|
+        { build: { image_sha256: "bench_image" }, cap: $cap, machine: (jab machine-of $harts), qemu: { binary: "qemu-system-riscv64", version: $qemu_runs }, mode: { cadence: $cadence, workers: 2, grain: 0, pad: "route" } }
+    }
+    let bench_summary = { build: { image_sha256: "bench_image" }, cap: 50, machine: (jab machine-of 4), qemu: { binary: "qemu-system-riscv64", version: $qemu_summary }, mode: { cadence: 1, workers: 1, grain: 16, pad: "host" } }
+    let three_runs = [
+        { run: 1, id: (do $routed_id 0 3 60), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+        { run: 2, id: (do $routed_id 2 2 60), items: (fx-items 3 --schema 4 --asked --cadence 2) }
+        { run: 3, id: (do $routed_id 0 3 30), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+    ]
+    let bench_runs = ($dir | path join "bench_runs")
+    jab retire $bench_runs
+    fx-request-report ($bench_runs | path join "one") "one" $bench_summary $three_runs | ignore
+    let runs_doc = (gauge bench-doc $bench_runs)
+    for x in [[1 valid] [2 diagnostic] [3 valid]] {
+        assert equal ($runs_doc.runs | where run == $x.0 | get -o 0.standing) $x.1 $"run ($x.0) of the bench stands ($x.1)"
+    }
+    let group_of = {|doc: record, run: int| $doc.groups | each {|g| $g.cadences | each {|c| $c.standings | where run == $run | each { [$g.kind $c.cadence $c.period_us] } } | flatten } | flatten }
+    for x in [[1 0 60] [2 2 60] [3 0 30]] {
+        assert equal (do $group_of $runs_doc $x.0) [[route $x.1 (1000000 / $x.2)]] $"run ($x.0)'s group is its own kind, cadence, and period, once"
+    }
+    let three_m = (jab machine-of 3)
+    let two_m = (jab machine-of 2)
+    let three_line = $"machine: 3 harts, -machine ($three_m.machine), -cpu ($three_m.cpu), -accel ($three_m.accel); ($qemu_runs)"
+    let two_line = $"machine: 2 harts, diagnostic, -machine ($two_m.machine), -cpu ($two_m.cpu), -accel ($two_m.accel); ($qemu_runs)"
+    let runs_lines = (gauge bench-text $runs_doc | lines | where {|l| $l starts-with "machine: " })
+    assert equal $runs_lines [$"($three_line): one run 1, one run 3" $"($two_line): one run 2"] "the bench names each run once under its own machine and QEMU, the summary's nowhere"
+    # the same report with a play beside its route runs
+    let bench_mixed = ($dir | path join "bench_mixed")
+    jab retire $bench_mixed
+    let played_id = ((do $routed_id 0 3 60) | update mode.pad "host")
+    fx-request-report ($bench_mixed | path join "one") "one" $bench_summary ($three_runs | append { run: 4, id: $played_id, items: (fx-items 3 --schema 4 --asked --cadence 0) }) | ignore
+    let mixed_doc = (gauge bench-doc $bench_mixed)
+    assert equal (do $group_of $mixed_doc 4) [[play 0 (1000000 / 60)]] "the play run sits in the play group, once"
+    let mixed_lines = (gauge bench-text $mixed_doc | lines | where {|l| $l starts-with "machine: " })
+    assert equal $mixed_lines [$"($three_line): one run 1, one run 3, one run 4" $"($two_line): one run 2"] "beside a play the bench names each run once under its own machine and QEMU"
+    let mixed_report = ($bench_mixed | path join "one" "gauge.nuon" | path expand)
+    let mixed_refusals = ($mixed_doc.compared | each {|c| [$c.field ($c | get -o error | default "" | str contains $"($mixed_report) holds play and route runs") ($c | get -o table)] })
+    assert equal $mixed_refusals [[critical_us true null] [draw_us true null]] $"a report mixing a play and route runs refuses the route comparison on both fields, no table holding the play: ($mixed_doc.compared)"
 
     # identities: a run's own file with its audited correction applied,
     # else the report's embedded copy with its correction provenance, else
@@ -4954,6 +5053,28 @@ def fx-gauge [dir: path, name: string, label: string, image: string, cadence: an
         runs: [{ run: 1, measured: ($m | reject rows) }],
         rows: ($m.rows | each {|r| $r | insert run 1 }),
     } | to nuon | save --raw -f $file
+    $file | path expand
+}
+
+# A report at `home` holding `runs` as `run` writes them, each a record of
+# its `run` number, its identity `id`, and its capture's `items`: each
+# run's identity file in its directory beside the report, bound by the
+# SHA-256 the run records, its capture measured as `measure` reads it,
+# and `summary` the report's one identity.
+def fx-request-report [home: path, label: string, summary: record, runs: list<any>]: nothing -> string {
+    mkdir $home
+    let made = ($runs | each {|x|
+        let dir = ($home | path join $"run_($x.run)")
+        mkdir $dir
+        let sha = (gauge write-identity $x.id $dir)
+        let m = (gauge measure (fx-bytes $x.items) [{ name: "walk", places: [], pad: [] }])
+        {
+            run: { run: $x.run, seed: $x.run, out: $dir, identity_sha256: $sha, measured: ($m | reject rows), ran: { wall_seconds: 10, cpu_seconds: 6 } },
+            rows: ($m.rows | each {|r| $r | insert run $x.run }),
+        }
+    })
+    let file = ($home | path join "gauge.nuon")
+    { label: $label, identity: $summary, runs: ($made | get run), rows: ($made | get rows | flatten) } | to nuon | save --raw -f $file
     $file | path expand
 }
 
