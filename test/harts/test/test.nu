@@ -146,19 +146,22 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let name_offset = ($tree | bytes at ($at_cpus - 4)..<$at_cpus | into int --endian big)
     let own = {|b: binary, cpu: string, hz: int| splice $b (node-body $b $"/cpus/($cpu)") (prop-bytes $name_offset (be32 $hz)) }
     let every = (["cpu@0" "cpu@1" "cpu@2" "cpu@3"] | reduce --fold (nop-prop $tree $at_cpus) {|cpu, b| do $own $b $cpu $rate })
-    let tried = ([
+    # each tree's run asserted in a loop, never inside an each, whose
+    # wrapper would come before the assertion's own failure
+    mut tried = []
+    for t in [
         { name: "wide_same", tree: (do $wide 0), status: 0, serial: ["harts 15 15 0"] }
         { name: "wide_high", tree: (do $wide 1), status: 1, serial: [$"jab: timer unsupported: timebase-frequency ((1 bit-shl 32) + $rate)"] }
         { name: "own_every", tree: $every, status: 0, serial: ["harts 15 15 0"] }
         { name: "own_slow", tree: (do $own $tree "cpu@2" $SLOW_TIMEBASE), status: 1, serial: [$"jab: timer unsupported: timebase-frequency ($SLOW_TIMEBASE)"] }
-    ] | each {|t|
+    ] {
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status $t.status $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) $t.serial $"($t.name): its line: ($run.serial)"
-        $"($t.name): ($run.serial | str trim)"
-    })
+        $tried = ($tried | append $"($t.name): ($run.serial | str trim)")
+    }
 
     # the interrupt platform: aia.inc's AIA_NO_IMSIC_S, AIA_NO_TIMER,
     # AIA_NO_DOMAINS, AIA_NOT_QEMU, and AIA_TOO_MANY, the supervisor
@@ -166,20 +169,21 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the root's delegation loop would run on into other registers
     let s_imsic = "/soc/interrupt-controller@28000000"
     let s_domain = "/soc/interrupt-controller@d000000"
-    let refused = ([
+    mut platform = []
+    for t in [
         { name: "no_imsic", tree: (nop-node $tree $s_imsic), code: 1 }
         { name: "no_timer", tree: (nop-node $tree "/soc/mtimer@2007ff8"), code: 4 }
         { name: "no_domain", tree: (nop-node $tree $s_domain), code: 3 }
         { name: "moved_imsic", tree: (put32 $tree ((prop-offset $tree $s_imsic "reg") + 4) 0x29000000), code: 5 }
         { name: "many_sources", tree: (put32 $tree (prop-offset $tree $s_domain "riscv,num-sources") 2048), code: 9 }
-    ] | each {|t|
+    ] {
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status 1 $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) [$"jab: interrupt platform refused: code ($t.code)"] $"($t.name): its line: ($run.serial)"
-        $"($t.name): ($run.serial | str trim)"
-    })
+        $platform = ($platform | append $"($t.name): ($run.serial | str trim)")
+    }
 
     # the missing hart: QEMU's four-hart tree on a two-hart machine, the
     # release stores to harts 2 and 3's files caught, nothing at either
@@ -217,7 +221,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $knobs = [$"late: ($late.serial | str trim)" $"stray: ($stray.serial | str trim)"]
     }
 
-    print $"harts: the launcher takes ($max) and refuses ($max + 1); ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($refused | str join '; '); missing: ($missing.serial | str trim); ($knobs | str join '; ')"
+    print $"harts: the launcher takes ($max) and refuses ($max + 1); ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($platform | str join '; '); missing: ($missing.serial | str trim); ($knobs | str join '; ')"
     print "harts: ok"
 }
 
