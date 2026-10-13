@@ -23,7 +23,11 @@
 # - Registers: twice on one hart, the floating-point and vector state as
 #   a start leaves it, then set, and kept across a wait, the wake that
 #   ends it, the stop's interrupt in a spin of user code, and the stop's
-#   answer; the second start follows a worker that left them set.
+#   answer; the second start follows a worker that left them set. Its
+#   gate stays closed until a wake answers the worker's bit, which shows
+#   the worker inside its wait; a handshake that never shows it fails
+#   first as RegistersHandshake, ahead of every line, so a timeout is
+#   never read as a register's change.
 # - Pestered: a worker waking hart 0 as fast as it can while hart 0
 #   waits once on the worker's word, the wait ending only when the word
 #   moves, then hart 0 awaiting display ticks, each await ending on its
@@ -72,6 +76,7 @@ const LINES = [
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let run = (jab launch --kernel $kernel --image $image --out ($out | path join "workers") --set $set --harts 4 --sound --seconds 30)
     let got = ($run.serial | lines)
+    assert (not ($got | any {|l| $l | str ends-with ": no wait witnessed" })) "RegistersHandshake: no wait witnessed"
     for row in ($LINES | enumerate) {
         assert equal ($got | get -o $row.index) $row.item.line $"($row.item.fixture), line ($row.index + 1): ($run.serial)"
     }

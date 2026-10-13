@@ -21,7 +21,7 @@
 .set VELOCITY, 127
 .set HOLD, JAB_TIME_HZ
 .set TAIL, (JAB_TIME_HZ / 2)
-.set SETTLE_TICKS, 2
+.set HANDSHAKE_WAIT, JAB_TIME_HZ
 .set SPIN_CHUNK, (JAB_TIME_HZ / 50)
 .set PESTER_WAKES, 20000
 .set TICKS, 6
@@ -288,23 +288,39 @@ registers:
     la s3, stacks
     li s4, STACK_BYTES
     jab.sys.worker.start s0, regs_worker, s1, s3, s4
-    li s2, SETTLE_TICKS
+    rdtime s2
+    li t0, HANDSHAKE_WAIT
+    add s2, s2, t0                          # the handshake's bound
 51:
-    jab.sys.display.await                   # the worker asleep at its gate by the end
-    addi s2, s2, -1
-    bnez s2, 51b
+    li t0, 2
+    jab.sys.worker.wake t0                  # the gate closed: a wake ends a wfi the worker sleeps again after
+    mv s5, a0
+    andi t0, s5, 2
+    bnez t0, 52f                            # its bit: the worker inside its gate's wait
+    rdtime t0
+    bltu t0, s2, 51b
+    la s11, line
+    la a1, word_registers
+    mv a0, s10
+    call field
+    la a1, word_no_wait
+    call put_str
+    call say
+    li t0, 2
+    jab.sys.worker.stop t0
+    jab.sys.exit 3
+52:
     li t0, 1
     sw t0, JOB_GATE(s1)
     li t0, 2
-    jab.sys.worker.wake t0
-    mv s5, a0                               # 2 when it slept
-52:
+    jab.sys.worker.wake t0                  # its answer unread: 0 once the worker has left its wait
+53:
     lw t0, JOB_SPINNING(s1)
-    bnez t0, 53f
+    bnez t0, 54f
     addi a0, s1, JOB_SPINNING
     jab.sys.worker.wait a0, zero
-    j 52b
-53:
+    j 53b
+54:
     li t0, 2
     jab.sys.worker.stop t0                  # its interrupt lands in the worker's spin
     mv s6, a0
@@ -1026,6 +1042,8 @@ word_kept:
     .asciz ", kept "
 word_woke:
     .asciz ", woke "
+word_no_wait:
+    .asciz ": no wait witnessed"
 word_pestered:
     .asciz "pestered: done "
 word_woken:

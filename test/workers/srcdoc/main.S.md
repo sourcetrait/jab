@@ -60,10 +60,12 @@ jab.sys.harts's after.
 
 `u64`: how long hart 0 spins after the note's release, half a second.
 
-## .set SETTLE_TICKS
+## .set HANDSHAKE_WAIT
 
-`u64`: the display ticks hart 0 lets pass before it opens the registers'
-gate, so the worker is asleep at it.
+`u64`: the registers' handshake's bound, a second of the time counter:
+hart 0 wakes the worker's hart with its gate closed until a wake answers
+the hart's bit, and past the bound it says the run saw no wait, stops the
+worker, and exits 3.
 
 ## .set SPIN_CHUNK
 
@@ -162,9 +164,17 @@ registers with argument 0, so a start wrongly made shows in the line.
 
 Twice on hart 1, so the second start follows a worker that left its
 floating-point and vector registers set, and the entry's count shows the
-start reset them. The wake reaches the worker asleep at its gate; the stop's
-first wake lands while it spins in user mode, an interrupt the vector takes,
-and its next poll sees the stop and ends it.
+start reset them. The gate stays closed while hart 0 wakes the hart until a
+wake answers its bit: the kernel's wait holds HART_SLEEPING through its
+whole loop, so that answer is the witness that the worker is inside its
+gate's wait, and each wake before it only ends a `wfi` the worker answers
+by reading the closed gate and sleeping again. Opening the gate first and
+waking after was the race: a worker out of its `wfi` early read the open
+gate and left before the wake looked, which answered 0. `woke` is the
+witness. Then the gate opens and one more wake ends the wait, its answer
+unread, 0 being right once the worker has left; the stop's first wake
+lands while it spins in user mode, an interrupt the vector takes, and its
+next poll sees the stop and ends it.
 
 ## pestered
 
@@ -243,6 +253,7 @@ its group or 0, the hart, the entry, the stack, and its size.
 ## word_entry
 ## word_kept
 ## word_woke
+## word_no_wait
 ## word_pestered
 ## word_woken
 ## word_awaits
