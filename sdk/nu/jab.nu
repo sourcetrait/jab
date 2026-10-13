@@ -1994,17 +1994,21 @@ def section-counts [name: string, section: string, value: any, roles: list<strin
 }
 
 # A declared demand as the assembly takes it, generated at every build of
-# the program: `jab_manifest.inc` in the build's output directory, which
-# the build carries among its includes, so a program reads its numbers
-# with `.include "jab_manifest.inc"` and keeps no copy of them:
-# JAB_BASE_HARTS; JAB_RESERVED_<ROLE> for every role a program may
-# reserve, 0 where it reserves none; and JAB_FEATURE_<NAME>_<ROLE> for
-# every role each feature demands. Its path.
+# the program ahead of its staleness check: `jab_manifest.inc` in the
+# build's output directory, which the build carries among its includes
+# and its inputs, so a program reads its numbers with `.include
+# "jab_manifest.inc"` and keeps no copy of them: JAB_BASE_HARTS;
+# JAB_RESERVED_<ROLE> for every role a program may reserve, 0 where it
+# reserves none; and JAB_FEATURE_<NAME>_<ROLE> for every role each feature
+# demands. The file is written only when its text differs from what is
+# there, so its time moves with its text alone. Its path.
 def demand-include [d: record, out: path]: nothing -> string {
     let reserved = ($d.reserved | transpose role harts | each {|r| $".set JAB_RESERVED_($r.role | str uppercase), ($r.harts)" })
     let features = ($d.features | each {|f| $f | reject name | transpose role harts | each {|r| $".set JAB_FEATURE_($f.name | str uppercase)_($r.role | str uppercase), ($r.harts)" } } | flatten)
     let file = ($out | path join "jab_manifest.inc")
-    ([$".set JAB_BASE_HARTS, ($d.base)"] ++ $reserved ++ $features | str join "\n") + "\n" | save -f $file
+    let text = (([$".set JAB_BASE_HARTS, ($d.base)"] ++ $reserved ++ $features | str join "\n") + "\n")
+    let held = (if ($file | path exists) { open --raw $file | into binary | decode } else { "" })
+    if $held != $text { $text | save -f $file }
     $file
 }
 
@@ -2137,12 +2141,14 @@ def spec-inputs [c: record]: nothing -> list<string> {
 # Builds a program's image when stale, and writes beside it `home`, the
 # program's directory, which image-home reads back from the image. A
 # program declaring its demand (program-demand) has it checked at every
-# build and assembles with its constants (demand-include); a build of one
-# declaring none retires the constants an earlier declaration left. Every
-# build writes `demand.nuon` beside the image, the demand recorded with it
-# (image-demand), and a cached image is taken only beside a record that
-# holds and names the build's demand, any other building again whole, the
-# image and its record together.
+# build and assembles with its constants (demand-include), written ahead
+# of the staleness check and counted among the build's inputs, so a
+# change in the text the SDK generates builds the image again; a build of
+# one declaring none retires the constants an earlier declaration left.
+# Every build writes `demand.nuon` beside the image, the demand recorded
+# with it (image-demand), and a cached image is taken only beside a record
+# that holds and names the build's demand, any other building again whole,
+# the image and its record together.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
@@ -2158,12 +2164,13 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     mkdir $c.out
     let home = ($c.out | path join "home")
     if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
+    let constants = (if $demand == null { [] } else { [(demand-include $demand $c.out)] })
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs)
+    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants)
     let id = (build-id $flags $inputs)
     if (not (stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
     mkdir $c.out
-    if $demand == null { retire ($c.out | path join "jab_manifest.inc") $c.root } else { demand-include $demand $c.out | ignore }
+    if $demand == null { retire ($c.out | path join "jab_manifest.inc") $c.root }
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objcopy = ($c.prefix + "objcopy")

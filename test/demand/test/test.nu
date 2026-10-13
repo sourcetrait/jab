@@ -30,14 +30,16 @@
 # of the demand's shape broken in turn, each refused naming its fault, as
 # is a record beside no image; a record altered alone and kept to the
 # shape passes a launch. A build beside a record that holds takes its
-# cached image; beside one of another demand, one unreadable, an altered
-# image, which a launch refuses, or none, it builds again whole, writing
-# the record afresh, and a launch with the record retired runs undeclared
-# and diagnostic. A legacy program built records a null demand, builds
-# again with its record retired, and given `specs` without a rebuild
-# plans none. Then the declared program's declaration dropped, its next
-# build retiring the constants, including none, and recording a null
-# demand.
+# cached image; beside its generated include holding other text under a
+# time older than the image, as a changed generator leaves it, it writes
+# the include again and builds again; beside a record of another demand,
+# one unreadable, an altered image, which a launch refuses, or none, it
+# builds again whole, writing the record afresh, and a launch with the
+# record retired runs undeclared and diagnostic. A legacy program built
+# records a null demand, builds again with its record retired, and given
+# `specs` without a rebuild plans none. Then the declared program's
+# declaration dropped, its next build retiring the constants, including
+# none, and recording a null demand.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -184,6 +186,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $held.exit_code 0 $"the declared fixture builds over its cached image: ($held.stderr)"
     assert equal (written $declared_image) $held_at "a build beside a record that holds takes its cached image"
 
+    # the generated include among the build's inputs, read against what
+    # the generator writes now: other text under a time older than the
+    # image, as a changed generator leaves it, is written again and the
+    # image built again
+    let include_file = ($declared_out | path join "jab_manifest.inc")
+    let generated_text = (open --raw $include_file | into binary | decode)
+    ".set JAB_BASE_HARTS, 9\n" | save -f $include_file
+    touch -m -r ($declared | path join "src" "main.S") $include_file
+    assert ((written $include_file) < (written $declared_image)) "the include's other text stands under a time older than its image"
+    rebuilt $tool $declared $declared_image $whole "a build beside an include its generator no longer writes"
+    let regenerated = (open --raw $include_file | into binary | decode)
+    assert equal $regenerated $generated_text "the include its generator no longer wrote holds the generator's text after the build"
+
     # the record held to its rules (image-demand), each fault refused
     # naming it
     let record_file = (record-of $declared_image)
@@ -282,7 +297,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let undeclared_record = (recorded $declared_image)
     assert equal $undeclared_record { image: (sha $declared_image), demand: null } $"a build with the declaration dropped records a null demand: ($undeclared_record | to nuon)"
 
-    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside a record of another demand, an unreadable one, an altered image, or none built again whole"
+    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside an include its generator no longer writes, a record of another demand, an unreadable one, an altered image, or none built again whole"
     print "demand: ok"
 }
 
