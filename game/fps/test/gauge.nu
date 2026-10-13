@@ -38,25 +38,26 @@
 # standing and missing legs kept. Each run keeps the route it played and
 # its identity beside its capture, then gauge.nuon and the summary. The
 # measurement is the capture read in order through the first end marker;
-# what follows it counts for nothing. A frame passes the ceiling when its
-# critical path, its start to the end of its reporting with the wait and
-# the await apart, is under 15 ms; a measurement is valid when it is
-# complete, every flip presented or refused as its cadence allows, every
-# phase within its frame, every frame's clock agreeing with its state,
-# from schema 2 every frame's start, critical path, wait, and await
-# adding up to the next frame's start and its start, simulation, flip
-# end, and next start in that order, from schema 3 every frame's
-# drawing its preparation and its raster, the bytes its packets held its
-# commands' and its span records', and its packets prepared from its own
-# simulation, from schema 4 every frame's workers at most WORKERS_MAX at
-# a grain within the screen's rows, its round times none under the serial
-# backend and its slowest worker, dispatch, and barrier within its raster,
-# its busy time at least its slowest worker's and at most W times it with
-# the W - 1 microseconds its conversions drop, and at schema 5 every
-# frame's tile pool within its slots and memory, its batch the frame
-# before's and accounted, its records agreeing with each other and with
-# the configuration in force (invalidity), and passes when it is valid
-# and every frame in it passes.
+# what follows it counts for nothing. A frame's critical path is its start
+# to the end of its reporting, the wait and the await apart; a measurement
+# is valid when it is complete, every flip presented or refused as its
+# cadence allows, every phase within its frame, every frame's clock
+# agreeing with its state, from schema 2 every frame's start, critical
+# path, wait, and await adding up to the next frame's start and its start,
+# simulation, flip end, and next start in that order, from schema 3 every
+# frame's drawing its preparation and its raster, the bytes its packets
+# held its commands' and its span records', and its packets prepared from
+# its own simulation, from schema 4 every frame's workers at most
+# WORKERS_MAX at a grain within the screen's rows, its round times none
+# under the serial backend and its slowest worker, dispatch, and barrier
+# within its raster, its busy time at least its slowest worker's and at
+# most W times it with the W - 1 microseconds its conversions drop, and at
+# schema 5 every frame's tile pool within its slots and memory, its batch
+# the frame before's and accounted, its records agreeing with each other
+# and with the configuration in force (invalidity). The ceiling is judged
+# on the critical path's median: a valid measurement is under the ceiling
+# when its median is under 15 ms, and its frames at or over 15 ms are its
+# tail, counted beside the median.
 # A capture holding no record of the clock's kinds, 7 to 10 and 12 to 15,
 # is a build older than them: it holds no measurement and is read from
 # its state records alone, the drawing's and the game's microseconds.
@@ -1283,13 +1284,15 @@ export def phase-images []: nothing -> record {
 # as its cadence requires, a phase or a part sums past its whole, a
 # frame's clock disagrees with its state, or from schema 2 a frame's
 # presentation, from schema 3 its packets, from schema 4 its workers, or
-# at schema 5 its tile pool break their rules (invalidity); it passes
-# when it is valid and no frame reaches the ceiling. A frame is fast when
-# its critical path is under the period of `cap`, whatever its cadence. A
-# capture with no record of the clock's kinds, 7 to 10 and 12 to 15, is a
-# build older than them: its rows are its state records' alone and it
-# holds no window. Any one of them marks the capture clocked and holds it
-# to its window.
+# at schema 5 its tile pool break their rules (invalidity). A valid
+# window is under the ceiling when its critical path's median is under
+# CEILING_US, `under` null for one not valid; its frames at or over the
+# ceiling, each row's `over`, are its tail, counted in any clocked
+# capture. A frame is fast when its critical path is under the period of
+# `cap`, whatever its cadence. A capture with no record of the clock's
+# kinds, 7 to 10 and 12 to 15, is a build older than them: its rows are
+# its state records' alone and it holds no window. Any one of them marks
+# the capture clocked and holds it to its window.
 export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
     let s = (stream $api)
     let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs] | any {|k| not ($k | is-empty) }) or $s.end != null)
@@ -1304,6 +1307,7 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
     let period_us = (1000000 / $cap)
     let names = ($legs | get name)
     let summaries = ($names | each {|n| leg-summary $n ($rows | where leg == $n) $period_us } | where frames > 0)
+    let whole = (leg-summary "whole" $rows $period_us)
     {
         clocked: $clocked,
         schema: $schema,
@@ -1324,9 +1328,9 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
         period_us: $period_us,
         frames: ($rows | length),
         past_window: $s.past,
-        passes: ($valid and ($rows | where {|r| $r.over } | is-empty)),
+        under: (if $valid { under-ceiling $whole.critical.median } else { null }),
         over: (if $clocked { $rows | where {|r| $r.over == true } | length } else { null }),
-        whole: (leg-summary "whole" $rows $period_us),
+        whole: $whole,
         legs: $summaries,
         outliers: (if $clocked { outliers $rows $schema } else { [] }),
         outcomes: (outcomes-of $s.events $rows $last),
@@ -1807,11 +1811,12 @@ def outcomes-of [events: list<any>, rows: list<any>, last: int]: nothing -> reco
     }
 }
 
-# One line on a run: complete or not and why, valid or not and why,
-# passing or not, the schema, the critical path's spread, the seed, the
-# cadence from schema 2, the workers and grain from schema 4, a program
-# fault.
-def run-line [label: string, n: int, m: record, ran: record]: nothing -> string {
+# One line on a run: complete or not and why, valid or not and why, a
+# valid run's critical path at the median against the ceiling (`under`)
+# with its tail beside it, the schema, the critical path's spread, the
+# seed, the cadence from schema 2, the workers and grain from schema 4, a
+# program fault.
+export def run-line [label: string, n: int, m: record, ran: record]: nothing -> string {
     let name = (if $label == "" { "" } else { $"($label): " })
     let fault = (if ($ran.fault? | default null) == null { "" } else { $"; a program fault: ($ran.fault)" })
     if not $m.clocked {
@@ -1821,10 +1826,9 @@ def run-line [label: string, n: int, m: record, ran: record]: nothing -> string 
         $"incomplete: ($m.problems | str join '; ')"
     } else if not $m.valid {
         $"complete but invalid: ($m.invalid | str join '; ')"
-    } else if $m.passes {
-        "complete, valid, passes"
     } else {
-        $"complete, valid, fails: ($m.over) of ($m.frames) frames at or over 15 ms"
+        let against = (if $m.under { "under" } else { "at or over" })
+        $"complete, valid, median (ms $m.whole.critical.median) ms ($against) the ($CEILING_US // 1000) ms ceiling, a tail of ($m.over) of ($m.frames) frames at or over it"
     })
     let seed = (if $m.seeded and (not $m.late_seed) { "seeded" } else if $m.late_seed { "seeded late, no paired comparison" } else { "unseeded" })
     let cadence = (if ($m.schema | default 1) < 2 {
@@ -1890,9 +1894,21 @@ export def report-doc [label: string, id: record, runs: list<any>]: nothing -> r
     }
 }
 
+# A critical path's median under the ceiling, the rule a measurement's
+# `under`, a leg's line, and a bench's pool are judged by.
+def under-ceiling [median: number]: nothing -> bool {
+    $median < $CEILING_US
+}
+
+# The ceiling's words for a critical path's median (under-ceiling).
+def against-ceiling [median: number]: nothing -> string {
+    if (under-ceiling $median) { "under" } else { "at or over" }
+}
+
 # A leg's line under a run as the report prints it: a capture with no
-# clock its drawing and game spreads; else its frames, those at or over
-# the ceiling and fast, the critical path's spread, the medians of the
+# clock its drawing and game spreads; else its critical path's median
+# against the ceiling, its tail, the frames at or over the ceiling, beside
+# its frames, the fast frames, the critical path's spread, the medians of the
 # drawing, its parts, and the frame's phases, the tiles built, named
 # cells below schema 5 and tiles at it, with the frames building them,
 # the pixels tiled and lit by the fallback, the flips early and refused,
@@ -1902,7 +1918,7 @@ export def leg-text [run: int, schema: any, l: record]: nothing -> string {
     if ($l.critical? | default null) == null {
         $"gauge:   run ($run) ($l.leg): ($l.frames) frames; draw (spread $l.draw), game (spread $l.game)"
     } else {
-        $"gauge:   run ($run) ($l.leg): ($l.frames) frames, ($l.over) at or over, ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) ($built) built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
+        $"gauge:   run ($run) ($l.leg): median (ms $l.critical.median) ms (against-ceiling $l.critical.median) the ceiling, a tail of ($l.over) of ($l.frames); ($l.fast) fast and ($l.fast_waited) of them waited; critical (spread $l.critical); draw (ms $l.draw.median), preparation (ms $l.preparation.median), raster (ms $l.raster.median), slowest worker (ms $l.slowest.median), dispatch (ms $l.dispatch.median), barrier (ms $l.barrier.median), game (ms $l.game.median), flip (ms $l.flip.median), report (ms $l.report.median), await (ms $l.await.median), wait (ms $l.wait.median), pacing (ms $l.pacing.median), tiles (ms $l.tiles.median) median; ($l.tiles_built) ($built) built over ($l.building_frames) frames, ($l.tiled_pixels) tiled and ($l.fallback_pixels) fallback lit pixels; flips early ($l.flips_early), refusals ($l.refusals); unattributed (ms $l.unattributed.max) at most"
     }
 }
 
@@ -2504,9 +2520,10 @@ def presented-calls [rows: list<any>, period: number]: nothing -> list<any> {
 # millisecond of a whole number of periods, counted by that number, the
 # rest off it, and the intervals unknown after a retried flip apart
 # (presented-calls); the wakes, attempts, and refusals; the flips early
-# and failed; the frames at or over the ceiling; the fast frames, under
-# the period, and those of them that waited; and the catch-up intervals,
-# under half a period after a frame past it, of the known.
+# and failed; the frames at or over the ceiling, the tail; the fast
+# frames, under the period, and those of them that waited; and the
+# catch-up intervals, under half a period after a frame past it, of the
+# known.
 def bench-frames [rows: list<any>, period: number]: nothing -> record {
     if ($rows | is-empty) { return { frames: 0 } }
     let calls = (column-of $rows "call_interval_us" | compact)
@@ -2610,7 +2627,8 @@ def bench-cadence [steps: list<any>, cadence: any]: nothing -> record {
 }
 
 # A cadence's lines in a bench's report, milliseconds to a tenth as
-# least, median, 95th, 99th, and greatest.
+# least, median, 95th, 99th, and greatest, the pool's critical path at
+# the median against the ceiling leading, its tail beside.
 def bench-cadence-text [c: record]: nothing -> list<string> {
     let f = $c.frames
     let cpu = ($c.cpu_over_wall | compact)
@@ -2624,12 +2642,13 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let grid = (if ($f.grid | is-empty) { "none" } else { $f.grid | each {|g| $"($g.intervals) at ($g.periods)P" } | str join ", " })
     [
         $head
+        $"    median (ms $f.critical.median) ms (against-ceiling $f.critical.median) the ($CEILING_US // 1000) ms ceiling, a tail of ($f.over) of ($f.frames) frames at or over it"
         $"    ($f.frames) frames, ($f.presented) presented every (spread $f.interval)"
         $"    submission age (spread $f.submission_age)"
         $"    critical path (spread $f.critical); drawing (spread $f.draw)"
         $"    wait (spread $f.wait); pacing (ms $f.pacing.median) and await (ms $f.await.median) at the median"
         $"    presenting calls on the tick grid: ($grid); ($f.off_grid) off it; ($f.unknown_calls) unknown after a retried flip; ($f.catch_up) catch-up"
-        $"    ($f.fast) fast, ($f.fast_waited) of them waited; ($f.over) at or over 15 ms; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
+        $"    ($f.fast) fast, ($f.fast_waited) of them waited; flips early ($f.flips_early), failed ($f.flips_failed); wakes ($f.wakes), refusals ($f.refusals)"
     ] ++ $apart
 }
 

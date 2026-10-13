@@ -3148,7 +3148,10 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # changes nothing; a marker at another schema refuses the window; a flip
 # never shown, a phase or a part past its whole, and a clock disagreeing
 # with its state each make a complete window invalid, while a flip
-# refused as early does not; a frame at the ceiling fails a valid window;
+# refused as early does not; a frame at the ceiling leaves a window valid
+# and under on its median, that frame its tail, and a median at the
+# ceiling leaves it valid and not under, the run's line and a leg's
+# leading with the median against the ceiling, the tail beside;
 # a seed answered after the first state is late; a frame record, a draw
 # record, or a marker alone among the states makes a capture clocked and
 # incomplete, where states alone are clockless; a route the identity did
@@ -3229,7 +3232,8 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # as diagnostic, its machine the one the launch marked or the one asked
 # for, the reason naming the words and no hart count; and a bench pools
 # the specification's machine's run alone, keeps the diagnostic machine's
-# apart, and names every step's machine in its report. Identities: a run's
+# apart, and names every step's machine in its report, its cadence's lines
+# led by the pool's median against the ceiling. Identities: a run's
 # own file read with its bound correction applied and named; a correction
 # bound to another identity or image, holding an old value the file does
 # not, or naming a third field stopping the read; a run directory without
@@ -3251,7 +3255,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let measure = {|items: list<any>| gauge measure (fx-bytes $items) $legs }
     let good = (fx-items 3)
     let m = (do $measure $good)
-    assert ($m.complete and $m.valid and $m.passes and $m.seeded) $"a well-formed capture: ($m.problems) ($m.invalid)"
+    assert ($m.complete and $m.valid and $m.under and $m.seeded) $"a well-formed capture: ($m.problems) ($m.invalid)"
     assert equal [$m.final $m.frames $m.past_window] [2 3 2] "the marker names frame 2: three frames in the window, two past it"
 
     let sent_late = ($good | where {|i| not ($i.kind == "frame" and $i.frame == 1) } | append (fx-frame 1))
@@ -3287,9 +3291,21 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let misaligned = ($good | each {|i| if $i.kind == "state" and ($i.frame? == 2) { $i | insert draw 999 } else { $i } })
     let mm = (do $measure $misaligned)
     assert ((not $mm.valid) and ($mm.invalid | any {|r| $r =~ "differs" })) $"a clock disagreeing with its state: ($mm.invalid)"
+    # the ceiling on the median: one frame of three at 15 ms is the tail of
+    # a window under on its median, two put its median at the ceiling
     let over = ($good | each {|i| if $i.kind == "frame" and $i.frame == 2 { $i | update critical 15000 } else { $i } })
     let mo = (do $measure $over)
-    assert ($mo.valid and (not $mo.passes)) "a frame at 15 ms leaves the window valid and failing"
+    assert ($mo.valid and $mo.under == true) $"a frame at 15 ms leaves the window valid and under on its median: ($mo.whole.critical)"
+    assert equal $mo.over 1 "a frame at 15 ms is the window's tail"
+    let at = ($good | each {|i| if $i.kind == "frame" and $i.frame >= 1 { $i | update critical 15000 } else { $i } })
+    let ma = (do $measure $at)
+    assert ($ma.valid and $ma.under == false) $"a median at 15 ms leaves the window valid and not under: ($ma.whole.critical)"
+    let under_line = (gauge run-line "" 1 $mo {})
+    assert ($under_line | str contains "complete, valid, median 1.8 ms under the 15 ms ceiling, a tail of 1 of 3 frames at or over it;") $"a run's line leads with its median under the ceiling, its tail beside: ($under_line)"
+    let at_line = (gauge run-line "" 1 $ma {})
+    assert ($at_line | str contains "complete, valid, median 15.0 ms at or over the 15 ms ceiling, a tail of 2 of 3 frames at or over it;") $"a run's line leads with its median at or over the ceiling: ($at_line)"
+    let leg_line = (gauge leg-text 1 $mo.schema ($mo.legs | first))
+    assert ($leg_line | str contains "walk: median 1.8 ms under the ceiling, a tail of 1 of 3;") $"a leg's line leads with its median against the ceiling, its tail beside: ($leg_line)"
     let late = ($good | skip 1 | insert 1 { kind: "ack" })
     let ml = (do $measure $late)
     assert ((not $ml.seeded) and $ml.late_seed) "a seed answered after the first state is late"
@@ -3436,7 +3452,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # schema 2: every frame's presentation, one schema a capture
     let good2 = (fx-items 3 --schema 2)
     let m2 = (do $measure $good2)
-    assert ($m2.complete and $m2.valid and $m2.passes and $m2.seeded and $m2.cadence_set) $"a well-formed capture at schema 2: ($m2.problems) ($m2.invalid)"
+    assert ($m2.complete and $m2.valid and $m2.under and $m2.seeded and $m2.cadence_set) $"a well-formed capture at schema 2: ($m2.problems) ($m2.invalid)"
     assert equal [$m2.schema $m2.cadences $m2.final $m2.frames] [2 [0] 2 3] "schema 2, cadence 0, frames 0 to 2"
     let unpresented = (do $measure ($good2 | where {|i| not ($i.kind == "present" and $i.frame == 1) }))
     let without_record = $"a frame without its presentation record leaves the window incomplete: ($unpresented.problems)"
@@ -3577,7 +3593,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # 1 and invalid for that alone
     let good3 = (fx-items 3 --schema 3)
     let m3 = (do $measure $good3)
-    assert ($m3.complete and $m3.valid and $m3.passes and $m3.seeded and $m3.cadence_set) $"a well-formed capture at schema 3: ($m3.problems) ($m3.invalid)"
+    assert ($m3.complete and $m3.valid and $m3.under and $m3.seeded and $m3.cadence_set) $"a well-formed capture at schema 3: ($m3.problems) ($m3.invalid)"
     assert equal [$m3.schema $m3.cadences $m3.final $m3.frames] [3 [0] 2 3] "schema 3, cadence 0, frames 0 to 2"
     let read3 = ($m3.rows | get 2 | select preparation_us raster_us commands flushes invalidated packet_bytes snapshot packet_residual_us)
     let read3_holds = { preparation_us: 960, raster_us: 40, commands: 3, flushes: 1, invalidated: 2, packet_bytes: 1016, snapshot: 2, packet_residual_us: 0 }
@@ -3625,7 +3641,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # worker's each invalid for that alone
     let good4 = (fx-items 3 --schema 4)
     let m4 = (do $measure $good4)
-    assert ($m4.complete and $m4.valid and $m4.passes) $"a well-formed capture at schema 4: ($m4.problems) ($m4.invalid)"
+    assert ($m4.complete and $m4.valid and $m4.under) $"a well-formed capture at schema 4: ($m4.problems) ($m4.invalid)"
     assert equal [$m4.schema $m4.workers $m4.grains] [4 [2] [0]] $"schema 4, two workers, grain 0: ($m4.schema) ($m4.workers) ($m4.grains)"
     let read4 = ($m4.rows | get 2 | select workers grain slowest_us busy_us dispatch_us barrier_us)
     let read4_holds = { workers: 2, grain: 0, slowest_us: 30, busy_us: 55, dispatch_us: 2, barrier_us: 1 }
@@ -3672,7 +3688,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # that alone
     let good5 = (fx-items 3 --schema 5)
     let m5 = (do $measure $good5)
-    assert ($m5.complete and $m5.valid and $m5.passes and $m5.schema == 5) $"a well-formed capture at schema 5: ($m5.problems) ($m5.invalid)"
+    assert ($m5.complete and $m5.valid and $m5.under and $m5.schema == 5) $"a well-formed capture at schema 5: ($m5.problems) ($m5.invalid)"
     let warming5 = ($m5.rows | get 2)
     assert ($warming5.admitted == 0 and $warming5.merged == 2 and $warming5.tiles_built == 2) $"the warming frame merges and builds the frame before's requests, admitting none, in a valid capture: ($warming5 | select admitted merged tiles_built)"
     let leg5 = (gauge leg-text 1 $m5.schema ($m5.legs | first))
@@ -3983,6 +3999,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let text = (gauge bench-text $doc | lines)
     let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two"
     assert ($line in $text) $"the report names the step's machine, ($line): ($text)"
+    let pooled = ($text | skip until {|l| $l | str starts-with "  cadence 0" } | get -o 1)
+    assert equal $pooled "    median 1.8 ms under the 15 ms ceiling, a tail of 0 of 3 frames at or over it" "a cadence's lines lead with the pool's median against the ceiling, its tail beside"
 
     # identities: a run's own file with its audited correction applied,
     # else the report's embedded copy with its correction provenance, else
