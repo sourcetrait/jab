@@ -293,11 +293,12 @@ from tile.S's batch fields; the storage record takes the pool at the
 boundary's end, which nothing changes before the next boundary, so both
 are still the frame before's at this frame's start; the draw record's tile
 bytes are the slots in use's. The harts record takes workers.S's masks:
-the online secondaries, the floor, the grant read at the frame's latch,
-the harts under the program's claims, 0 since it makes none, the harts
-started, the frame's round harts as its active, and the harts its jobs
-reported, all still the frame before's at this frame's start, since the
-latch runs inside the next drawing. The seven records go in one write, the API's
+the online secondaries, the floor, the grant and the harts under the
+program's claim read at the frame's latch, the harts started, the frame's
+round harts as its active, and the harts its jobs reported, all still the
+frame before's at this frame's start, since the console's H moves the
+grant only at its read after these records and the latch runs inside the
+next drawing. The seven records go in one write, the API's
 write being the one call besides the await that can wait, and its cost is
 the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker
@@ -646,6 +647,11 @@ carries none.
 
 `32 u8`.
 
+## word_space
+
+`2 u8`: in every build, workers.S's append_harts separating each hart of a
+mask in the take's interrupted line as in the debug lines.
+
 ## msg_ambient
 
 `14 u8`.
@@ -653,10 +659,6 @@ carries none.
 The debug lines' text, from here to word_cancelled, is in a debug build alone,
 and the count line's after it, msg_count to word_count_mismatches, in a
 COUNT build alone.
-
-## word_space
-
-`2 u8`.
 
 ## word_loaded
 

@@ -84,9 +84,10 @@ const CRACKS = 32
 const RECORD = 64
 const CLOCK_KINDS = [7 8 9 10 12 13 14 15 18]
 # A console record carries the command's byte, a u32 word, where the
-# state's sector sits; the P frame's, and the D frame's
+# state's sector sits; the P frame's, the D frame's, and the H frame's
 const CONSOLE_P = 80
 const CONSOLE_D = 68
+const CONSOLE_H = 72
 # render.inc's REPORT_CONSOLE: a console answer's kind
 const CONSOLE_KIND = 11
 # The clock over Render Zero's walk: the seed and the cadence sent before
@@ -505,12 +506,40 @@ const JOB_CASES = [
 const IDLE_RATE = 0.05
 const IDLE_AT = 2500ms
 # the same launches' readings at a list of times (`jab launch
-# --threads-at`), the last past the run's six-second bound and missing
+# --threads-at`), the last past the run's six-second bound and missing;
+# on eight harts a W of two leaves the five started past it asleep
 const IDLE_READINGS = [3sec 4sec 60sec]
 const IDLE_CASES = [
-    { workers: 0, asleep: [1 2] }
-    { workers: 1, asleep: [2] }
+    { harts: 3, workers: 0, asleep: [1 2] }
+    { harts: 3, workers: 1, asleep: [2] }
+    { harts: 8, workers: 2, asleep: [3 4 5 6 7] }
 ]
+# The transitions through the console's H frame, a debug build's: on
+# four harts the spawn view settled, the grant's highest hart taken at
+# TAKE_AT under the program's claim, a placement read while it is held
+# (TAKEN_AT), the hart given back at GIVE_AT, and a placement read on the
+# three again (GIVEN_AT), the measurement closed at TAKE_END_AT; each
+# frame's masks from the harts records, the grant, the claimed, the
+# started, the dispatched, and the reporting, against the frames that
+# answered the two H frames. Drawn by the default and by a W of three at
+# a band a worker asked before the take, its count held to the started
+# at each frame; the picture while taken and after the give-back the
+# default's. On three harts the take is refused by the floor, nothing
+# moved
+const TAKE_AT = 2500ms
+const TAKEN_AT = 2900ms
+const GIVE_AT = 3300ms
+const GIVEN_AT = 3700ms
+const TAKE_END_AT = 4100ms
+const TAKE_CAPTURE_AT = 4500ms
+const TAKE_HARTS = 4
+const TAKE_LINES = ["fps: workers stopped on harts 3" "fps: harts claimed 2, harts 3"]
+const GIVE_LINES = ["fps: harts released 2, harts 3" "fps: workers started on harts 3"]
+const FLOOR_LINE = "fps: harts take refused under the floor: 1 of grant 1 2, floor 2"
+const MOVE_PREFIXES = ["fps: workers stopped" "fps: workers started" "fps: worker refused" "fps: harts claim" "fps: harts release" "fps: harts take" "fps: harts give"]
+const HARTS_THREE = 14
+const HARTS_TWO = 6
+const HART_THREE = 8
 # The workers on each machine, the program's reservation of two taking
 # every online secondary as its grant and a raster worker started on each
 # hart of it, its slot the hart's: three harts, four, eight, and four
@@ -582,6 +611,16 @@ const DEBUG_TEXT = [
     "fps: harts reserved "
     "fps: workers "
     "fps: worker refused on hart "
+    "fps: workers stopped on harts"
+    "fps: workers started on harts"
+    "fps: harts claimed "
+    "fps: harts claim refused "
+    "fps: harts released "
+    "fps: harts release refused "
+    "fps: harts take refused under the floor: "
+    "fps: harts take refused: claim "
+    "fps: harts give refused: no claim standing"
+    "fps: dispatch outside the grant: active"
     "fps: round lost bands\n"
     "fps: round unjoined\n"
     "fps: tile pool changed in flight\n"
@@ -598,6 +637,7 @@ const EXIT_TEXT = [
     "fps: the disk has no /map/name\n"
     "fps: harts short: "
     "fps: harts reserve refused "
+    "fps: harts take interrupted on harts"
 ]
 # The engine's own images and sounds, every one in a tree of ours
 const FRAMES_LINE = "fps: frames 69 loaded, 0 missing"
@@ -1328,6 +1368,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert ($h.line in ($run.serial | lines)) $"($h.harts) harts hold fewer secondaries than the reservation, refused with its line, ($h.line): ($run.serial | lines | last 3)"
         assert equal $run.status $SHORT_EXIT $"a machine short of the reservation ends the run with ($SHORT_EXIT) on ($h.harts) harts: ($run.serial | lines | last 3)"
     }
+    # the grant moved through the H frame (take-holds): a hart taken and
+    # given back on four harts, by the default and by a W of three, and
+    # the take refused by the floor on three
+    let take = (take-holds $kernel $image $out $set ($out | path join "still.romfs") $default_frame $spawn_captures.tiled.bytes)
     # the jobs' behaviours (JOB_CASES): a held worker, the cancel, the
     # fault, and idle workers asleep
     for j in $JOB_CASES {
@@ -1372,8 +1416,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     if $nu.os-info.name == "linux" {
         for i in $IDLE_CASES {
             let sends = [{ at: 1300ms, bytes: (gauge workers-frame $i.workers 0) }]
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.workers)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT --threads-at $IDLE_READINGS)
-            assert (not ($run.threads | is-empty)) $"the threads read over the held span with ($i.workers) workers drawing: ($run.threads)"
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.harts)_($i.workers)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT --threads-at $IDLE_READINGS --harts $i.harts)
+            assert (not ($run.threads | is-empty)) $"the threads read over the held span with ($i.workers) workers drawing on ($i.harts) harts: ($run.threads)"
             let readings = $run.thread_readings
             let taken = ($readings | where {|r| $r.at != null })
             let taken_held = (($readings | length) == 3 and ($taken | length) == 2 and ($taken | all {|r| $r.at >= $r.requested and ($r.threads | any {|t| $t.name == "CPU 1/TCG" }) }))
@@ -1382,11 +1426,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             for h in $i.asleep {
                 let thread = ($run.threads | where name == $"CPU ($h)/TCG" | get -o 0)
                 assert ($thread != null) $"hart ($h)'s thread among ($run.threads | get name)"
-                assert ($thread.rate <= $IDLE_RATE) $"hart ($h)'s worker, given no job with ($i.workers) workers drawing, asleep: ($thread.rate) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
+                assert ($thread.rate <= $IDLE_RATE) $"hart ($h)'s worker, given no job with ($i.workers) workers drawing on ($i.harts) harts, asleep: ($thread.rate) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
             }
         }
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows; on three, four, and eight harts and on four with hart 2 failed, every grant hart's worker drawing a band a worker and at the default grain; with a worker held and every round cancelled, each the default's picture and counts; two and one harts refused short; a worker's fault ends the run; an idle worker sleeps"
+    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows; on three, four, and eight harts and on four with hart 2 failed, every grant hart's worker drawing a band a worker and at the default grain; hart 3 taken and given back on four harts, ($take.default_taken) frames drawn by two while taken by the default and ($take.asked_taken) by a W of three, and the take refused by the floor on three; with a worker held and every round cancelled, each the default's picture and counts; two and one harts refused short; a worker's fault ends the run; an idle worker sleeps, on eight harts five past a W of two"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -2044,6 +2088,113 @@ def settled [placed: record]: nothing -> list<any> {
 # its position, JOB_HOLD_US at most.
 def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int, --hold]: nothing -> binary {
     [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (if $hold { 0x[01] } else { 0x[00] }), (0..<49 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The console's H frame, a debug build's: byte 4 the harts to take, the
+# grant's highest, held idle under the program's claim; 0 gives the
+# claim's harts back to the raster.
+def harts-frame [take: int]: nothing -> binary {
+    [("H" | into binary), 0x[00 00 00], ($take | into binary | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# The H frame's transitions on the still copy's spawn view settled, each
+# launch's moves the program's lines of them in order (MOVE_PREFIXES), and
+# no frame dispatched to a hart outside the started or the grant:
+# - taken: four harts, the take of one at TAKE_AT and a placement read at
+#   TAKEN_AT, the capture at GIVE_AT: hart 3's worker stopped, then the
+#   hart claimed; the frame read drawn by the two started, no band on hart
+#   3, every band of its rounds rendered once; the default's counts and
+#   picture;
+# - given, by the default and by a W of three at a band a worker asked
+#   before the take: the give-back at GIVE_AT and a placement read at
+#   GIVEN_AT too, the measurement closed at TAKE_END_AT: complete and
+#   valid; each frame's masks, from the harts records, the three harts'
+#   before the frame that answered the take, the grant harts 1 2 with 3
+#   claimed and two drawing from it to the frame that answered the
+#   give-back, the three's again from it; the frame read while taken
+#   drawn by two, no band on hart 3, and the one after by three, a band a
+#   worker on each for the W; both the default's counts, the capture the
+#   default's picture;
+# - floor: three harts, the take refused under the floor with its line,
+#   nothing stopped or claimed, every frame on harts 1 2.
+# Returns the frames each given run drew while taken.
+def take-holds [kernel: path, image: path, out: path, set: string, disk: path, default_frame: record, default_bytes: binary]: nothing -> record<default_taken: int, asked_taken: int> {
+    let base = ([{ at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
+    let launch = {|name: string, harts: int, sends: list<any>, capture: duration|
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"take_($name)") --set $set --sound --api --disk $disk --serial "fps" --send ($base | append $sends | sort-by at) --capture $capture --seconds 7 --harts $harts)
+        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the take's ($name)"
+        let outside = ($run.serial | lines | where {|l| $l starts-with "fps: dispatch outside the grant" })
+        assert ($outside | is-empty) $"the take's ($name) dispatches to started harts inside the grant alone: ($outside)"
+        assert ($run.screen != "") $"a screen was taken on the take's ($name)"
+        $run
+    }
+    let moves = {|run: record| $run.serial | lines | where {|l| $MOVE_PREFIXES | any {|p| $l starts-with $p } } }
+    let frames = {|run: record| $run.serial | lines | where {|l| $l starts-with "fps: frame in" } | each {|l| $l | parse $FRAME | get 0 | update cells {|c| $c | into int } } }
+    let counted = {|f: record, label: string|
+        let differ = ($WORKER_COUNTS | where {|c| ($f | get $c) != ($default_frame | get $c) })
+        assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($f | get $c) against ($default_frame | get $c)' } | str join ', ')"
+    }
+    let pictured = {|run: record, label: string|
+        let rows = (rows-differ (open --raw $run.screen | into binary) $default_bytes [0 0 1920 1080])
+        assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
+    }
+
+    let taken = (do $launch "taken" $TAKE_HARTS [{ at: $TAKE_AT, bytes: (harts-frame 1) }, { at: $TAKEN_AT, bytes: (pose pose-frame $SPAWN_POSE) }] $GIVE_AT)
+    assert equal (do $moves $taken) $TAKE_LINES "the take on four harts stops hart 3's worker, then claims the hart"
+    let taken_frames = (do $frames $taken)
+    assert equal ($taken_frames | length) 4 $"the first frame and the three placements reported on the take's taken: ($taken.serial | lines | last 3)"
+    let held = ($taken_frames | last)
+    assert ($held.workers == 2 and $held.grain == $GRAIN_DEFAULT and $held.bands3 == 0) $"the frame read while hart 3 is taken drawn by the two started, no band on hart 3: ($held)"
+    assert equal (band-sum $held) ($held.rounds * (($SCREEN_ROWS + $GRAIN_DEFAULT - 1) // $GRAIN_DEFAULT)) $"every band of every round rendered once while hart 3 is taken: ($held)"
+    do $counted $held "the frame read while hart 3 is taken"
+    do $pictured $taken "the frame read while hart 3 is taken"
+
+    mut drawn = {}
+    for asked in [{ name: "default", workers: null }, { name: "asked", workers: 3 }] {
+        let label = $"the take and give-back on four harts by the ($asked.name)"
+        let ask = (if $asked.workers == null { [] } else { [{ at: 1300ms, bytes: (gauge workers-frame $asked.workers 0) }] })
+        let run = (do $launch $"given_($asked.name)" $TAKE_HARTS ($ask | append [
+            { at: $TAKE_AT, bytes: (harts-frame 1) }
+            { at: $TAKEN_AT, bytes: (pose pose-frame $SPAWN_POSE) }
+            { at: $GIVE_AT, bytes: (harts-frame 0) }
+            { at: $GIVEN_AT, bytes: (pose pose-frame $SPAWN_POSE) }
+            { at: $TAKE_END_AT, bytes: (pose command-frame "E") }
+        ]) $TAKE_CAPTURE_AT)
+        assert equal (do $moves $run) ($TAKE_LINES | append $GIVE_LINES) $"($label): hart 3's worker stopped and the hart claimed, then the claim released and the hart's worker started"
+        let m = (gauge measure $run.api [{ name: "start", places: [], pad: [] }, { name: "placed", places: [$SPAWN_POSE $SPAWN_POSE $SPAWN_POSE $SPAWN_POSE], pad: [] }])
+        assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"($label) complete and valid at schema ($CLOCK_SCHEMA): ($m.problems | str join '; ') ($m.invalid | str join '; ')"
+        let answered = (answered-frames $run.api $CONSOLE_H)
+        assert equal ($answered | length) 2 $"($label): the take and the give-back each answered once: ($answered)"
+        let take_at = ($answered | get 0)
+        let give_at = ($answered | get 1)
+        assert ($give_at > $take_at) $"($label): frames drawn while taken, from ($take_at) to ($give_at)"
+        let three = [$HARTS_THREE 0 $HARTS_THREE $HARTS_THREE $HARTS_THREE 3]
+        let two = [$HARTS_TWO $HART_THREE $HARTS_TWO $HARTS_TWO $HARTS_TWO 2]
+        let wrong = ($m.rows | where {|r| [$r.grant $r.claimed $r.started $r.active $r.reported $r.workers] != (if $r.frame < $take_at or $r.frame >= $give_at { $three } else { $two }) })
+        assert ($wrong | is-empty) $"($label): the masks the three harts' before frame ($take_at), the grant harts 1 2 with 3 claimed and two drawing from it to frame ($give_at), the three's again from it: ($wrong | length) frames otherwise, first ($wrong | first 3 | select frame grant claimed started active reported workers)"
+        let read = (do $frames $run)
+        assert equal ($read | length) 5 $"the first frame and the four placements reported on ($label): ($run.serial | lines | last 3)"
+        let grain = (if $asked.workers == null { $GRAIN_DEFAULT } else { 0 })
+        let while_taken = ($read | get 3)
+        let after = ($read | get 4)
+        assert ($while_taken.workers == 2 and $while_taken.grain == $grain and $while_taken.bands3 == 0) $"($label): the frame read while taken drawn by two, no band on hart 3: ($while_taken)"
+        assert ($after.workers == 3 and $after.grain == $grain) $"($label): the frame read after the give-back drawn by three: ($after)"
+        if $asked.workers != null {
+            assert ($after.bands1 == $after.rounds and $after.bands2 == $after.rounds and $after.bands3 == $after.rounds) $"($label): a band a worker after the give-back, hart 3's among them: ($after)"
+        }
+        do $counted $while_taken $"($label), the frame read while taken,"
+        do $counted $after $"($label), the frame read after the give-back,"
+        do $pictured $run $"($label), after the give-back,"
+        $drawn = ($drawn | insert $asked.name ($give_at - $take_at))
+    }
+
+    let floor = (do $launch "floor" 3 [{ at: $TAKE_AT, bytes: (harts-frame 1) }, { at: $TAKEN_AT, bytes: (pose pose-frame $SPAWN_POSE) }, { at: $GIVE_AT, bytes: (pose command-frame "E") }] $GIVEN_AT)
+    assert equal (do $moves $floor) [$FLOOR_LINE] "the take on three harts refused under the floor, nothing stopped or claimed"
+    let fm = (gauge measure $floor.api [{ name: "start", places: [], pad: [] }, { name: "placed", places: [$SPAWN_POSE $SPAWN_POSE $SPAWN_POSE], pad: [] }])
+    assert ($fm.complete and $fm.valid and $fm.schema == $CLOCK_SCHEMA) $"the take refused on three harts complete and valid at schema ($CLOCK_SCHEMA): ($fm.problems | str join '; ') ($fm.invalid | str join '; ')"
+    let moved = ($fm.rows | where {|r| [$r.grant $r.claimed $r.started $r.active $r.reported $r.workers] != [$HARTS_TWO 0 $HARTS_TWO $HARTS_TWO $HARTS_TWO 2] })
+    assert ($moved | is-empty) $"the take refused on three harts: every frame on harts 1 2, nothing claimed: ($moved | length) frames otherwise, first ($moved | first 3 | select frame grant claimed started active reported workers)"
+    { default_taken: $drawn.default, asked_taken: $drawn.asked }
 }
 
 # The console's Q frame, a CENSUS build's: a census context line's chunk

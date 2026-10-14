@@ -8,8 +8,9 @@ cadence chosen, W the raster's workers and grain chosen, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
 build the tile pool's knobs, B on a debug build every tile of a surface built
 at the next boundary, D on a debug build a surface's tiles read back over the
-API, M on a debug build every block's level raised, J on a debug build the
-jobs' hold, cancel, and fault, Q on a CENSUS build the census's chunk, each
+API, M on a debug build every block's level raised, H on a debug build the
+graphics grant's harts taken or given back, J on a debug build the jobs'
+hold, cancel, and fault, Q on a CENSUS build the census's chunk, each
 reported back as REPORT_CONSOLE.
 
 B and D are the builder's assertion's hands, a debug build's alone. B takes
@@ -33,6 +34,15 @@ frame's number from the frame that reads it on (hud.S's hud_stamp), so a
 screen names the frame it shows. The test's `raise-frame` builds it, its
 `--stamp` setting byte 5.
 
+H is the transitions' driver, a debug build's alone, fps having no feature
+to claim harts: byte 4 the harts to take, the grant's highest, under the
+program's claim and held idle (workers.S's gfx_take), 0 the claim's harts
+given back to the raster (gfx_give). It acts at the console's read,
+between frames, every round of the frame before joined, so the frame that
+reads it is the first drawn on the grant it leaves. The routines are every
+build's; the frame that drives them is the debug build's. The test's
+`harts-frame` builds it.
+
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
 bound (census.S's CENSUS_CHUNK), standing from the frame's census lines on,
@@ -50,11 +60,15 @@ until the round's join passes its position, JOB_HOLD_US at most
 (workers.S's job_hold_wait). The test's `jobs-frame` builds it, its
 `--hold` setting byte 14.
 
-W takes byte 4 as the frame's workers, 0 for the serial backend, held to the
-workers started (workers.S), and bytes 8 to 11 as the rows a band, 0 for a
-band a worker, held to the screen's rows; both from the next drawing on,
-since world_draw takes them at its start, in release and debug alike, so one
-image draws by the serial backend or by any count of the workers started.
+W takes byte 4 as the frame's workers asked, 0 for the serial backend, and
+bytes 8 to 11 as the rows a band, 0 for a band a worker, held to the
+screen's rows; both from the next drawing on, since world_draw takes them
+at its start, in release and debug alike, so one image draws by the serial
+backend or by any count of the workers started. The count is kept as asked
+and held to the workers started at each frame's latch (workers.S's
+workers_latch), so a count asked before a take draws with those left while
+the harts are taken and with the count again once they are given back.
+With no W the frame draws with the default's count and grain.
 
 C takes byte 4 as the cadence, render.inc's CADENCE_*, from the reading
 frame's flip on (main.S's CLOCK_CADENCE); a value past the three leaves the

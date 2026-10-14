@@ -172,13 +172,8 @@ console_frame:
     li t1, 'W'
     bne t0, t1, 13f
     lbu t1, 4(s2)
-    la t2, workers_started
-    lwu t2, 0(t2)
-    bleu t1, t2, 121f
-    mv t1, t2                       # no more than started
-121:
-    la t2, workers_active
-    sw t1, 0(t2)                    # from the next frame's drawing on
+    la t2, workers_asked
+    sw t1, 0(t2)                    # from the next frame's drawing on, held to the started at each latch
     lwu t1, 8(s2)
     li t2, SCREEN_H
     bleu t1, t2, 122f
@@ -293,13 +288,23 @@ console_frame:
     j 8f
 151:
     li t1, 'M'
-    bne t0, t1, 15f
+    bne t0, t1, 152f
     lbu t1, 4(s2)
     la t2, level_raise
     sb t1, 0(t2)                    # every block's level raised by it from this frame's drawing
     lbu t1, 5(s2)
     la t2, hud_stamp
     sb t1, 0(t2)                    # the frame's number stamped by the HUD while set
+    j 8f
+152:
+    li t1, 'H'
+    bne t0, t1, 15f
+    lbu a0, 4(s2)
+    beqz a0, 153f
+    call gfx_take                   # the grant's highest harts taken under a claim, held idle
+    j 8f
+153:
+    call gfx_give                   # the claim's harts given back to the raster
     j 8f
 15:
     li t1, 'J'

@@ -682,7 +682,9 @@ frame_records:
     la t2, frame_grant
     ld t2, 0(t2)
     sw t2, HARTS_GRANT(t1)          # the grant read at the frame's latch
-    sw zero, HARTS_CLAIMED(t1)      # the harts under the program's claims: it makes none
+    la t2, frame_claimed
+    ld t2, 0(t2)
+    sw t2, HARTS_CLAIMED(t1)        # the harts under the program's claim, read with it
     la t2, workers_mask
     ld t2, 0(t2)
     sw t2, HARTS_STARTED(t1)        # the harts holding a raster worker
@@ -1602,11 +1604,11 @@ msg_no_disk:
     .asciz "fps: no disk of serial fps\n"
 msg_no_name:
     .asciz "fps: the disk has no /map/name\n"
+word_space:
+    .asciz " "
 .ifdef DEBUG
 msg_ambient:
     .asciz "fps: ambient "
-word_space:
-    .asciz " "
 word_loaded:
     .asciz " loaded in "
 word_ms:

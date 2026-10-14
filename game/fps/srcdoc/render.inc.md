@@ -774,13 +774,37 @@ are the grant's and a frame's workers the lowest W of those started, each
 kept apart from the storage. A round's harts are a word's mask, so the
 bound stays within 32.
 
+## .set GFX_GUIDELINE
+
+`u32`: the most workers the default draws with, every started worker up
+to it; GFX_SLOTS, so every started worker, until GfxScaling's forced-count
+runs measure a lower useful count, its evidence and workload then
+recorded beside it. A W frame's count is held to the started alone.
+
+## .set GFX_FLOOR
+
+`i64`: gfx_take's refusal when the grant left would sit under the floor,
+the program's own check before any stop.
+
+## .set GFX_STANDING
+
+`i64`: gfx_take's refusal while the program's claim stands; it holds one.
+
+## .set GFX_NONE
+
+`i64`: gfx_give's refusal with no claim standing.
+
+The three sit below zero, apart from the kernel's claim and release codes
+the two routines answer otherwise.
+
 ## .set WORKER_STACK
 
 A worker's stack's bytes.
 
 ## .set GRAIN_DEFAULT
 
-`u32`: the rows a band until a console W chooses, 0 for a band a worker.
+`u32`: the rows a band of grain_by_count's every row until GfxScaling's
+sweep fills them, 0 meaning a band a worker.
 
 Thirty-two, the screen's 1080 rows in 34 bands, the last 24 rows. Measured
 with the program's gauge on its settled route, two workers drew the still
@@ -2110,9 +2134,9 @@ The harts record's masks are by hart, bit h hart h's, so the gauge reads
 which harts, never a count alone: the online secondaries, the reservation's
 floor and grant, the harts under the program's claims, those holding a
 raster worker, those the frame dispatched to, and those whose workers
-completed its jobs. The grant is read at the frame's start, so a claim or
-a release shows at the frame it governs. The program makes no claims, so
-HARTS_CLAIMED is 0. 36 to 56 are free.
+completed its jobs. The grant and the program's claim are read at the
+frame's start, so a take or a give-back shows at the frame that read its H
+frame, the first it governs. 36 to 56 are free.
 
 ## .set HARTS_FLOOR
 
@@ -2124,7 +2148,7 @@ HARTS_CLAIMED is 0. 36 to 56 are free.
 
 ## .set HARTS_CLAIMED
 
-`u32`: the harts under the program's claims, `owned` of each claim standing.
+`u32`: the harts under the program's claim, its `owned` read at the frame's start, 0 with none standing; the program holds one claim at most (gfx_take).
 
 ## .set HARTS_STARTED
 

@@ -8,77 +8,31 @@
 .section .text
 
 workers_start:
-    addi sp, sp, -80
-    sd ra, 72(sp)
-    sd s0, 64(sp)
-    sd s1, 56(sp)
-    sd s2, 48(sp)
-    sd s3, 40(sp)
-    sd s4, 32(sp)
-    sd s5, 24(sp)
-    sd s6, 16(sp)
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
     jab.sys.harts
     andi t0, a1, -2                 # the online secondaries
     la t1, workers_online
     sd t0, 0(t1)
     jab.sys.harts.reserve JAB_RESERVED_GFX_HARTS
     bnez a0, 80f
-    mv s2, a1                       # the grant
+    mv s1, a1                       # the grant
     li t0, JAB_RESERVED_GFX_HARTS
     la t1, workers_floor
     sw t0, 0(t1)
-    li s0, 0                        # the workers started
-    li s6, 0                        # their harts
-    li s1, 1                        # the hart
-    li s5, WORKER_STACK
-1:
-    li t0, JAB_HARTS_MAX
-    bgeu s1, t0, 3f
-    srl t0, s2, s1
-    andi t0, t0, 1
-    beqz t0, 2f
-    addi t1, s1, -1                 # its slot
-    slli s3, t1, 7
-    la t0, mailboxes
-    add s3, s3, t0                  # its mailbox, its argument
-    mul s4, t1, s5
-    la t0, worker_stacks
-    add s4, s4, t0                  # its stack
-    li t2, JAB_OWNER_RESERVED
-    jab.sys.worker.start s1, raster_worker, s3, s4, s5, t2
-    bnez a0, 21f
-    li t0, 1
-    sll t0, t0, s1
-    or s6, s6, t0
-    addi s0, s0, 1
-    j 2f
-21:
-.ifdef DEBUG
-    mv s3, a0
-    la a0, line
-    la a1, msg_refused
-    call append_str
-    mv a1, s1
-    call append_dec
-    la a1, word_code
-    call append_str
-    mv a1, s3
-    call append_dec
-    call line_end
-.endif
-2:
-    addi s1, s1, 1
-    j 1b
-3:
+    li t0, -1
+    la t1, workers_asked
+    sw t0, 0(t1)                    # no W asked: the default's count
+    mv a0, s1
+    call workers_start_on
+    mv s0, a0                       # the harts started
     la t0, workers_mask
-    sd s6, 0(t0)
+    sd s0, 0(t0)
+    call harts_count
     la t0, workers_started
-    sw s0, 0(t0)
-    la t0, workers_active
-    sw s0, 0(t0)                    # every worker started, until a W
-    li t1, GRAIN_DEFAULT
-    la t0, band_grain
-    sw t1, 0(t0)
+    sw a0, 0(t0)
 .ifdef DEBUG
     la a0, line
     la a1, msg_reserved
@@ -87,43 +41,33 @@ workers_start:
     call append_dec
     la a1, word_grant
     call append_str
-    mv a1, s2
+    mv a1, s1
     call append_harts
     call line_end
     la a0, line
     la a1, msg_workers
     call append_str
-    mv a1, s0
+    la t0, workers_started
+    lwu a1, 0(t0)
     call append_dec
     la a1, word_on_harts
     call append_str
-    mv a1, s6
+    mv a1, s0
     call append_harts
     call line_end
 .endif
-    ld ra, 72(sp)
-    ld s0, 64(sp)
-    ld s1, 56(sp)
-    ld s2, 48(sp)
-    ld s3, 40(sp)
-    ld s4, 32(sp)
-    ld s5, 24(sp)
-    ld s6, 16(sp)
-    addi sp, sp, 80
+    ld ra, 24(sp)
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    addi sp, sp, 32
     ret
 80:
     li t0, JAB_RESERVE_SHORT
     bne a0, t0, 81f
     la t0, workers_online
-    ld t1, 0(t0)
-    li s0, 0                        # the online secondaries, counted
-82:
-    beqz t1, 83f
-    andi t2, t1, 1
-    add s0, s0, t2
-    srli t1, t1, 1
-    j 82b
-83:
+    ld a0, 0(t0)
+    call harts_count
+    mv s0, a0                       # the online secondaries, counted
     la a0, line
     la a1, msg_short
     call append_str
@@ -147,7 +91,113 @@ workers_start:
     call line_end
     jab.sys.exit 17
 
+workers_start_on:
+    addi sp, sp, -64
+    sd ra, 56(sp)
+    sd s0, 48(sp)
+    sd s1, 40(sp)
+    sd s2, 32(sp)
+    sd s3, 24(sp)
+    sd s4, 16(sp)
+    sd s5, 8(sp)
+    mv s0, a0                       # the harts asked
+    li s2, 0                        # those started
+    li s1, 1                        # the hart
+    li s5, WORKER_STACK
+1:
+    li t0, JAB_HARTS_MAX
+    bgeu s1, t0, 3f
+    srl t0, s0, s1
+    andi t0, t0, 1
+    beqz t0, 2f
+    addi t1, s1, -1                 # its slot
+    slli s3, t1, 7
+    la t0, mailboxes
+    add s3, s3, t0                  # its mailbox, its argument
+    mul s4, t1, s5
+    la t0, worker_stacks
+    add s4, s4, t0                  # its stack
+    li t2, JAB_OWNER_RESERVED
+    jab.sys.worker.start s1, raster_worker, s3, s4, s5, t2
+    bnez a0, 21f
+    li t0, 1
+    sll t0, t0, s1
+    or s2, s2, t0
+    j 2f
+21:
 .ifdef DEBUG
+    mv s3, a0
+    la a0, line
+    la a1, msg_refused
+    call append_str
+    mv a1, s1
+    call append_dec
+    la a1, word_code
+    call append_str
+    mv a1, s3
+    call append_dec
+    call line_end
+.endif
+2:
+    addi s1, s1, 1
+    j 1b
+3:
+    mv a0, s2
+    ld ra, 56(sp)
+    ld s0, 48(sp)
+    ld s1, 40(sp)
+    ld s2, 32(sp)
+    ld s3, 24(sp)
+    ld s4, 16(sp)
+    ld s5, 8(sp)
+    addi sp, sp, 64
+    ret
+
+workers_restart:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    mv s0, a0
+    call workers_start_on
+    mv s1, a0
+    la t0, workers_mask
+    ld t1, 0(t0)
+    not t2, s0
+    and t1, t1, t2
+    or t1, t1, s1
+    sd t1, 0(t0)                    # the harts asked out, those started in
+    mv a0, t1
+    call harts_count
+    la t0, workers_started
+    sw a0, 0(t0)
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_started
+    call append_str
+    mv a1, s1
+    call append_harts
+    call line_end
+.endif
+    mv a0, s1
+    ld ra, 24(sp)
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    addi sp, sp, 32
+    ret
+
+harts_count:
+    li t0, 0
+1:
+    beqz a0, 2f
+    andi t1, a0, 1
+    add t0, t0, t1
+    srli a0, a0, 1
+    j 1b
+2:
+    mv a0, t0
+    ret
+
 append_harts:
     addi sp, sp, -32
     sd ra, 24(sp)
@@ -175,36 +225,54 @@ append_harts:
     ld ra, 24(sp)
     addi sp, sp, 32
     ret
-.endif
 
 workers_latch:
-    la t0, workers_active
-    lwu t2, 0(t0)                   # the asked count, no more than started
+    la t0, workers_started
+    lwu t2, 0(t0)                   # the workers started
+    la t0, workers_asked
+    lw t1, 0(t0)                    # a W's count, below zero for none
+    bltz t1, 1f
+    bgeu t1, t2, 11f
+    mv t2, t1                       # the asked, no more than started
+11:
+    la t0, band_grain
+    lwu t1, 0(t0)                   # and the W's grain
+    j 3f
+1:
+    li t0, GFX_GUIDELINE
+    bleu t2, t0, 2f
+    mv t2, t0                       # every started worker, up to the guideline
+2:
+    li t1, 0
+    beqz t2, 3f
+    slli t0, t2, 2
+    la t3, grain_by_count
+    add t3, t3, t0
+    lwu t1, -4(t3)                  # the grain its count's row holds
+3:
     la t0, round_workers
     sw t2, 0(t0)                    # the frame's workers, every render's
-    la t0, band_grain
-    lwu t1, 0(t0)
     la t0, round_grain
     sw t1, 0(t0)                    # and its grain
     la t0, workers_mask
     ld t3, 0(t0)
     li t4, 0                        # the frame's harts
     li t5, 1                        # the hart
-1:
-    beqz t2, 3f
+4:
+    beqz t2, 6f
     li t0, JAB_HARTS_MAX
-    bgeu t5, t0, 3f
+    bgeu t5, t0, 6f
     srl t0, t3, t5
     andi t0, t0, 1
-    beqz t0, 2f
+    beqz t0, 5f
     li t0, 1
     sll t0, t0, t5
     or t4, t4, t0
     addi t2, t2, -1
-2:
+5:
     addi t5, t5, 1
-    j 1b
-3:
+    j 4b
+6:
     la t0, round_harts
     sd t4, 0(t0)                    # the lowest of the started, a hart a worker
     la t0, frame_reported
@@ -213,6 +281,243 @@ workers_latch:
     jab.sys.harts.owned t0
     la t0, frame_grant
     sd a0, 0(t0)                    # the grant, read once a frame
+    la t0, gfx_claim
+    ld t1, 0(t0)
+    li a0, 0
+    beqz t1, 7f
+    jab.sys.harts.owned t1
+7:
+    la t0, frame_claimed
+    sd a0, 0(t0)                    # the harts under the program's claim, read with it
+.ifdef DEBUG
+    la t0, workers_mask
+    ld t1, 0(t0)
+    la t0, frame_grant
+    ld t2, 0(t0)
+    and t1, t1, t2                  # started and inside the grant read
+    not t1, t1
+    la t0, round_harts
+    ld t2, 0(t0)
+    and t1, t1, t2
+    bnez t1, 8f                     # a hart dispatched outside them
+.endif
+    ret
+.ifdef DEBUG
+8:
+    la a0, line
+    la a1, msg_outside
+    call append_str
+    la t0, round_harts
+    ld a1, 0(t0)
+    call append_harts
+    la a1, word_started
+    call append_str
+    la t0, workers_mask
+    ld a1, 0(t0)
+    call append_harts
+    la a1, word_grant
+    call append_str
+    la t0, frame_grant
+    ld a1, 0(t0)
+    call append_harts
+    call line_end
+    jab.sys.exit 18
+.endif
+
+gfx_take:
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s0, 32(sp)
+    sd s1, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
+    mv s0, a0                       # the harts to take
+    la t0, gfx_claim
+    ld t1, 0(t0)
+    bnez t1, 70f                    # the program's one claim already stands
+    li t0, JAB_OWNER_RESERVED
+    jab.sys.harts.owned t0
+    mv s2, a0                       # the grant
+    call harts_count
+    sub t2, a0, s0                  # the grant left
+    la t0, workers_floor
+    lwu t1, 0(t0)
+    blt t2, t1, 71f                 # under the floor: refused before any stop
+    li s1, 0                        # the harts taken, the grant's highest
+    mv t2, s0
+    li t3, (JAB_HARTS_MAX - 1)
+1:
+    beqz t2, 3f
+    beqz t3, 3f
+    srl t0, s2, t3
+    andi t0, t0, 1
+    beqz t0, 2f
+    li t0, 1
+    sll t0, t0, t3
+    or s1, s1, t0
+    addi t2, t2, -1
+2:
+    addi t3, t3, -1
+    j 1b
+3:
+    jab.sys.worker.stop s1          # their workers, idle in their mailboxes, exit
+    bnez a1, 75f                    # one forced: its job never completed
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_stopped
+    call append_str
+    mv a1, s1
+    call append_harts
+    call line_end
+.endif
+    jab.sys.harts.claim s1
+    bnez a0, 72f
+    la t0, gfx_claim
+    sd a1, 0(t0)                    # held idle under the claim's id
+    la t0, workers_mask
+    ld t1, 0(t0)
+    not t2, s1
+    and t1, t1, t2
+    sd t1, 0(t0)                    # the started without them
+    mv a0, t1
+    call harts_count
+    la t0, workers_started
+    sw a0, 0(t0)
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_claimed
+    call append_str
+    la t0, gfx_claim
+    ld a1, 0(t0)
+    call append_dec
+    la a1, word_harts
+    call append_str
+    mv a1, s1
+    call append_harts
+    call line_end
+.endif
+    li a0, 0
+    j 9f
+70:
+.ifdef DEBUG
+    mv s3, t1
+    la a0, line
+    la a1, msg_take_standing
+    call append_str
+    mv a1, s3
+    call append_dec
+    la a1, word_standing
+    call append_str
+    call line_end
+.endif
+    li a0, GFX_STANDING
+    j 9f
+71:
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_take_floor
+    call append_str
+    mv a1, s0
+    call append_dec
+    la a1, word_of_grant
+    call append_str
+    mv a1, s2
+    call append_harts
+    la a1, word_floor
+    call append_str
+    la t0, workers_floor
+    lwu a1, 0(t0)
+    call append_dec
+    call line_end
+.endif
+    li a0, GFX_FLOOR
+    j 9f
+72:
+    mv s3, a0                       # the claim's refusal
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_claim_refused
+    call append_str
+    mv a1, s3
+    call append_dec
+    call line_end
+.endif
+    mv a0, s1
+    call workers_restart            # the stopped workers started again
+    mv a0, s3
+    j 9f
+75:
+    mv s3, a1
+    la a0, line
+    la a1, msg_interrupted
+    call append_str
+    mv a1, s3
+    call append_harts
+    call line_end
+    jab.sys.exit 19
+9:
+    ld ra, 40(sp)
+    ld s0, 32(sp)
+    ld s1, 24(sp)
+    ld s2, 16(sp)
+    ld s3, 8(sp)
+    addi sp, sp, 48
+    ret
+
+gfx_give:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    la t0, gfx_claim
+    ld s0, 0(t0)
+    beqz s0, 70f                    # no claim stands
+    jab.sys.harts.release s0
+    bnez a0, 71f
+    mv s1, a1                       # the harts back to the reservation
+    la t0, gfx_claim
+    sd zero, 0(t0)
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_released
+    call append_str
+    mv a1, s0
+    call append_dec
+    la a1, word_harts
+    call append_str
+    mv a1, s1
+    call append_harts
+    call line_end
+.endif
+    mv a0, s1
+    call workers_restart            # a raster worker on each again, under the reservation
+    li a0, 0
+    j 9f
+70:
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_give_none
+    call append_str
+    call line_end
+.endif
+    li a0, GFX_NONE
+    j 9f
+71:
+    mv s1, a0                       # the release's refusal
+.ifdef DEBUG
+    la a0, line
+    la a1, msg_release_refused
+    call append_str
+    mv a1, s1
+    call append_dec
+    call line_end
+.endif
+    mv a0, s1
+9:
+    ld ra, 24(sp)
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    addi sp, sp, 32
     ret
 
 round_run:
@@ -718,6 +1023,11 @@ round_joined:
 .endif
 
 .section .rodata
+.balign 4
+grain_by_count:                     # the default's grain, a row a count from one
+.rept GFX_SLOTS
+    .word GRAIN_DEFAULT
+.endr
 msg_short:
     .asciz "fps: harts short: "
 word_short_online:
@@ -726,6 +1036,8 @@ word_short_reserved:
     .asciz " reserved"
 msg_reserve_refused:
     .asciz "fps: harts reserve refused "
+msg_interrupted:
+    .asciz "fps: harts take interrupted on harts"
 .ifdef DEBUG
 msg_reserved:
     .asciz "fps: harts reserved "
@@ -737,6 +1049,36 @@ word_on_harts:
     .asciz " on harts"
 msg_refused:
     .asciz "fps: worker refused on hart "
+msg_outside:
+    .asciz "fps: dispatch outside the grant: active"
+word_started:
+    .asciz ", started"
+msg_stopped:
+    .asciz "fps: workers stopped on harts"
+msg_started:
+    .asciz "fps: workers started on harts"
+msg_claimed:
+    .asciz "fps: harts claimed "
+word_harts:
+    .asciz ", harts"
+msg_claim_refused:
+    .asciz "fps: harts claim refused "
+msg_released:
+    .asciz "fps: harts released "
+msg_release_refused:
+    .asciz "fps: harts release refused "
+msg_take_floor:
+    .asciz "fps: harts take refused under the floor: "
+word_of_grant:
+    .asciz " of grant"
+word_floor:
+    .asciz ", floor "
+msg_take_standing:
+    .asciz "fps: harts take refused: claim "
+word_standing:
+    .asciz " standing"
+msg_give_none:
+    .asciz "fps: harts give refused: no claim standing"
 msg_lost_bands:
     .asciz "fps: round lost bands\n"
 msg_unjoined:
@@ -768,11 +1110,15 @@ frame_grant:
     .skip 8
 frame_reported:
     .skip 8
+frame_claimed:
+    .skip 8
+gfx_claim:
+    .skip 8
 workers_floor:
     .skip 4
 workers_started:
     .skip 4
-workers_active:
+workers_asked:
     .skip 4
 band_grain:
     .skip 4

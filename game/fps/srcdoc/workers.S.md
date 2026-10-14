@@ -10,7 +10,16 @@ The storage is sized by the ABI's bound, GFX_SLOTS, JAB_HARTS_MAX less hart
 STAT_BANDS counter are its slot's, so a raised bound is a rebuild and no
 change here. Three things are kept apart: the storage, the bound's; the
 harts owned, the reservation's grant; and the workers a frame draws with,
-the lowest W of the harts started.
+the lowest W of the harts started. W is the count a W frame asked, held
+to the started at each frame, else every started worker up to
+GFX_GUIDELINE, the grain coming with the count from grain_by_count; the
+started past W get no job and sleep in their mailboxes.
+
+The grant moves at one explicit transition alone, between frames, the
+frame before joined: gfx_take takes the grant's highest harts from the
+raster under the program's claim and holds them idle, gfx_give gives
+them back. Both are in every build, for a feature's admission; fps has
+no feature, so the debug H frame drives them. Nothing else moves a hart.
 
 A worker lives for the run. Its argument is its mailbox, whose place in
 `mailboxes` is its slot, which gives it its context in `worker_contexts`,
@@ -55,34 +64,102 @@ frame's first round takes no round.
 `jab.sys.harts.reserve JAB_RESERVED_GFX_HARTS`, the build's constant from
 the manifest's `[reserved] gfx_harts` (`jab_manifest.inc`), takes every
 online secondary into the reservation with that count its floor and
-returns the grant. A raster worker starts on each hart of the grant, in
-its slot, under JAB_OWNER_RESERVED, the start macro's sixth operand, which
-the kernel holds to the hart's owner once a reservation stands; a start
-the kernel refuses leaves its slot empty, and a debug build names the hart
-and the code. workers_mask holds the harts started, workers_started their
-count, and workers_floor the count reserved. The console's W starts at
-every worker started and the grain at GRAIN_DEFAULT. A debug build reports
-`fps: harts reserved M, grant <harts>` and `fps: workers N on harts
-<harts>`.
+returns the grant. workers_start_on starts the raster workers on the
+grant; workers_mask holds the harts started, workers_started their count,
+and workers_floor the count reserved. No W is asked yet, workers_asked
+below zero. A debug build reports `fps: harts reserved M, grant <harts>`
+and `fps: workers N on harts <harts>`.
 
 A refused reservation ends the run on every build, exit 17: JAB_RESERVE_SHORT
 with `fps: harts short: N secondaries online for the M reserved`, any other
 status with `fps: harts reserve refused <status>`. A machine short of the
 reservation is one the build does not run on.
 
+## workers_start_on
+
+A raster worker starts on each hart of the mask, in its slot, under
+JAB_OWNER_RESERVED, the start macro's sixth operand, which the kernel
+holds to the hart's owner once a reservation stands; a start the kernel
+refuses leaves the hart out of the mask returned, and a debug build names
+the hart and the code (`fps: worker refused on hart N code C`). A worker
+started again on a slot finds its mailbox's completion equal to its
+generation, the last job joined, and sleeps until a round publishes.
+
+## workers_restart
+
+gfx_take's after a refused claim and gfx_give's after a release: the
+harts asked leave the started mask and those started join it, so a start
+the kernel refuses leaves the hart without a worker and out of the
+dispatch. A debug build reports `fps: workers started on harts <harts>`.
+
 ## append_harts
 
-A debug build's: a mask's harts in ascending order, each after a space,
-for the reserved and workers lines.
+A mask's harts in ascending order, each after a space, for the reserved
+and workers lines and the transitions' lines; in every build, since the
+take's interrupted line is.
 
 ## workers_latch
 
-world_draw's, at the frame's start: the W asked, held to the workers
-started, is the frame's round_workers, its grain round_grain; round_harts
-takes the lowest round_workers harts of workers_mask; frame_reported is
-zeroed for the joins to fill; frame_grant is `jab.sys.harts.owned
-JAB_OWNER_RESERVED`, read once a frame for the harts record. The program
-claims no harts, so the grant read is the reservation's whole.
+world_draw's, at the frame's start. A W asked (workers_asked at or above
+zero) is held to the workers started and draws at the W's grain; else
+the frame draws with every started worker up to GFX_GUIDELINE at its
+count's row of grain_by_count, none for the serial backend. The count is
+the frame's round_workers, the grain round_grain; round_harts takes the
+lowest round_workers harts of workers_mask; frame_reported is zeroed for
+the joins to fill; frame_grant is `jab.sys.harts.owned
+JAB_OWNER_RESERVED` and frame_claimed the program's claim's `owned`, 0
+with none standing, both read once a frame for the harts record. Holding
+the count at each latch rather than at the W frame's read keeps an asked
+count across a take: three asked draw with two while a hart is taken and
+with three once it is given back.
+
+A debug build then guards the dispatch: every hart of round_harts must
+be started and inside the grant just read, else `fps: dispatch outside
+the grant: active <harts>, started <harts>, grant <harts>` and exit 18,
+before any job is published, so a started mask left stale by a take
+fails with its line and never publishes to a hart whose worker is gone,
+whose join would wait for ever.
+
+## gfx_take
+
+The grant's highest harts, a0 of them, leave the raster for the
+program's claim:
+
+1. With the program's claim already standing (gfx_claim) the take is
+   refused, GFX_STANDING, `fps: harts take refused: claim <id> standing`;
+   the program holds one claim.
+2. The program's own floor check, before any stop: the grant read now
+   less the harts asked must keep workers_floor, else GFX_FLOOR, `fps:
+   harts take refused under the floor: N of grant <harts>, floor F`, and
+   nothing moves. The kernel's claim would refuse the same with
+   JAB_CLAIM_FLOOR, but only after the workers were stopped.
+3. `jab.sys.worker.stop` on the harts. Between frames every worker sleeps
+   in its mailbox's wait, which answers the stop, and the worker exits;
+   the kernel forces one that does not reach a wait in WORK_STOP_TICKS
+   and names it interrupted. An interrupted mask ends the run on every
+   build with `fps: harts take interrupted on harts <harts>`, exit 19,
+   nothing joined after it, since a forced worker never completes its
+   job. A debug build reports `fps: workers stopped on harts <harts>`.
+4. `jab.sys.harts.claim` of the harts. A refusal names its code (`fps:
+   harts claim refused C`, a debug build's) and starts the stopped
+   workers again through workers_restart; a0 is the code. An admission
+   holds the claim's id in gfx_claim and takes the harts out of
+   workers_mask and workers_started, so the next latch dispatches to the
+   rest; the harts sit idle under the claim. A debug build reports `fps:
+   harts claimed <id>, harts <harts>`.
+
+The H frame takes them at the console's read, before the frame's drawing,
+so the first frame drawn without them is the one that read the H.
+
+## gfx_give
+
+The program's claim released (`jab.sys.harts.release`), its harts back to
+the reservation, and a raster worker started on each through
+workers_restart, the started mask taking them; the next latch draws with
+them. With no claim standing the give-back is refused, GFX_NONE, `fps:
+harts give refused: no claim standing`; a release refused names its code
+(`fps: harts release refused C`) and moves nothing. A debug build reports
+`fps: harts released <id>, harts <harts>`, then the started line.
 
 ## round_run
 
@@ -167,6 +244,12 @@ completes, or on a no-progress timeout, so the exit has no fixed bound.
 The machine ended about 3 to 4 s after the line in the join probes, and a
 run its screen ends sooner carries the line with status 0.
 
+## grain_by_count
+
+`GFX_SLOTS u32`: the default's grain, rows a band, by its count, the row
+for a count of one first; every row GRAIN_DEFAULT until GfxScaling's sweep
+of the grain on eight harts fills it. A W's grain stands apart from it.
+
 ## msg_short
 
 `19 u8`.
@@ -183,7 +266,11 @@ run its screen ends sooner carries the line with status 0.
 
 `28 u8`.
 
-The refusals' text, msg_short to msg_reserve_refused, is in every build.
+## msg_interrupted
+
+`37 u8`.
+
+The exits' text, msg_short to msg_interrupted, is in every build.
 
 ## msg_reserved
 
@@ -204,6 +291,66 @@ The refusals' text, msg_short to msg_reserve_refused, is in every build.
 ## msg_refused
 
 `29 u8`.
+
+## msg_outside
+
+`40 u8`.
+
+## word_started
+
+`10 u8`.
+
+## msg_stopped
+
+`30 u8`.
+
+## msg_started
+
+`30 u8`.
+
+## msg_claimed
+
+`20 u8`.
+
+## word_harts
+
+`8 u8`.
+
+## msg_claim_refused
+
+`26 u8`.
+
+## msg_released
+
+`21 u8`.
+
+## msg_release_refused
+
+`28 u8`.
+
+## msg_take_floor
+
+`42 u8`.
+
+## word_of_grant
+
+`10 u8`.
+
+## word_floor
+
+`9 u8`.
+
+## msg_take_standing
+
+`32 u8`.
+
+## word_standing
+
+`10 u8`.
+
+## msg_give_none
+
+`43 u8`.
 
 ## msg_lost_bands
 
@@ -260,21 +407,29 @@ build alone.
 
 `u64`: the harts whose jobs completed the frame's rounds, by their JOB_HART, zeroed at the frame's start.
 
+## frame_claimed
+
+`u64`: the harts under the program's claim read at the frame's start, by hart, 0 with none standing.
+
+## gfx_claim
+
+`u64`: the program's standing claim's id, 0 with none; ids start at 2.
+
 ## workers_floor
 
 `u32`: the count reserved, JAB_RESERVED_GFX_HARTS.
 
 ## workers_started
 
-`u32`: the workers started.
+`u32`: the workers started, workers_mask's count.
 
-## workers_active
+## workers_asked
 
-`u32`: the workers the next frame draws with, a W's, 0 for the serial backend.
+`u32`: a W frame's count, held to the started at each frame, 0 for the serial backend; read signed, below zero none asked and the frame draws with the default's count.
 
 ## band_grain
 
-`u32`: the rows a band the next frame draws with, a W's, 0 for a band a worker.
+`u32`: a W frame's rows a band, 0 for a band a worker, read only while a W is asked.
 
 ## round_workers
 
