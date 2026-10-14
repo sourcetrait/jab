@@ -3,8 +3,8 @@
 # verdicts, and every frame read against the directory as census_print
 # writes it. A frame stands valid when it is whole and accounts: its frame
 # line; each side the directory names, in its order, once, its side line
-# followed by its contexts 0 to CONTEXTS less one in order, each a head
-# and its continuations; the end line last; every context's list
+# followed by its contexts 0 to the directory's count less one in order,
+# each a head and its continuations; the end line last; every context's list
 # reassembled from its chunks, its surfaces the directory's, each once,
 # each count at least 1; no block dropped; and each side's counts in the
 # relations census.S keeps among them.
@@ -13,20 +13,24 @@ const FRAME = "fps: census frame {frame}: blocks {blocks}, passing {passing}, dr
 const SIDE = "fps: census {side}: eligible {eligible} blocks {eligible_pixels} pixels, straddling {straddling} blocks {straddling_pixels} pixels, outside {outside}; demand {demand}: planes {planes}, walls {walls}, openings {openings}; sampled {sampled}, uniform {uniform}, checked {checked}, mismatches {mismatches}, surfaces {surfaces}; working {w1}, {w30}, {w120}: planes {p1}, {p30}, {p120}, walls {q1}, {q30}, {q120}"
 const HEAD = "fps: census {side} context {context}: requests {requests}, distinct {distinct}, surfaces {listed};{items}"
 const MORE = "fps: census {side} context {context} more:{items}"
-const DIRECTORY = "fps: census directory: {maps} maps, planes below {planes_below} of {surfaces}; {sides}"
+const DIRECTORY = "fps: census directory: {maps} maps, planes below {planes_below} of {surfaces}, contexts {contexts}; {sides}"
+# the directory's first format, naming no contexts: its census kept
+# three, hart 0's and two workers', the count its logs are read against
+const DIRECTORY_FIRST = "fps: census directory: {maps} maps, planes below {planes_below} of {surfaces}; {sides}"
+const FIRST_CONTEXTS = 3
 const EDGE = "fps: census edge: nodes {nodes}, sampler {sampler}"
 const END = "fps: census end {frame}"
-# render.inc's CENSUS_CONTEXTS, WORKERS_MAX + 1: hart 0's context and a
-# worker's each
-const CONTEXTS = 3
 
 # The directory the census sized at the load: the lumel maps it holds,
-# the surface index the walls start at, the surfaces in all, and each
-# tile side's entries and bytes; null when the log holds no directory
+# the surface index the walls start at, the surfaces in all, the contexts
+# a side's lines name each frame, and each tile side's entries and bytes;
+# null when the log holds no directory
 export def directory [serial: string]: nothing -> oneof<record, nothing> {
     let found = ($serial | lines | where {|l| $l starts-with "fps: census directory: " })
     if ($found | is-empty) { return null }
-    let parsed = ($found | get 0 | parse $DIRECTORY)
+    let line = ($found | get 0)
+    let current = ($line | parse $DIRECTORY)
+    let parsed = (if not ($current | is-empty) { $current } else { $line | parse $DIRECTORY_FIRST | each {|d| $d | insert contexts $"($FIRST_CONTEXTS)" } })
     if ($parsed | is-empty) { return null }
     let d = ($parsed | get 0)
     let sides = ($d.sides | split row "; " | each {|s| $s | parse "{side}: entries {entries}, bytes {bytes}" })
@@ -35,6 +39,7 @@ export def directory [serial: string]: nothing -> oneof<record, nothing> {
         maps: ($d.maps | into int),
         planes_below: ($d.planes_below | into int),
         surfaces: ($d.surfaces | into int),
+        contexts: ($d.contexts | into int),
         sides: ($sides | each {|s| $s | get 0 | update cells {|c| $c | into int } }),
     }
 }
@@ -148,7 +153,7 @@ def frame-of [lines: list<string>, dir: oneof<record, nothing>]: nothing -> reco
     let accounted = (if $dir == null or $frame.dropped > 0 { [] } else {
         let per_side = ($read_sides | each {|s|
             let mine = ($listed | where side == $s.side)
-            if ($mine | get context) == (0..<$CONTEXTS | each {|c| $c }) { accounting $frame $s $mine $dir.planes_below } else { [] }
+            if ($mine | get context) == (0..<$dir.contexts | each {|c| $c }) { accounting $frame $s $mine $dir.planes_below } else { [] }
         } | flatten)
         $per_side | append (if $frame.passing > $frame.blocks { [$"the frame's ($frame.passing) passing blocks past its ($frame.blocks) blocks"] } else { [] })
     })
@@ -174,9 +179,10 @@ def frame-of [lines: list<string>, dir: oneof<record, nothing>]: nothing -> reco
 }
 
 # The records a whole frame holds between its frame and end lines, in
-# order: each side the directory names, its line, then its contexts
+# order: each side the directory names, its line, then the contexts the
+# directory counts
 def expected-shape [dir: record]: nothing -> list<string> {
-    $dir.sides | each {|d| [$"side ($d.side)"] | append (0..<$CONTEXTS | each {|c| $"side ($d.side) context ($c)" }) } | flatten
+    $dir.sides | each {|d| [$"side ($d.side)"] | append (0..<$dir.contexts | each {|c| $"side ($d.side) context ($c)" }) } | flatten
 }
 
 # What keeps a frame's records from the whole frame's: those missing,

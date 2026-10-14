@@ -1,43 +1,55 @@
 .if JAB_JOB_BYTES != 128
 .error "a worker's mailbox is found by a shift of 7"
 .endif
+.if GFX_SLOTS > 32
+.error "a round's harts are a word's mask"
+.endif
 
 .section .text
 
 workers_start:
-    addi sp, sp, -64
-    sd ra, 56(sp)
-    sd s0, 48(sp)
-    sd s1, 40(sp)
-    sd s2, 32(sp)
-    sd s3, 24(sp)
-    sd s4, 16(sp)
-    sd s5, 8(sp)
+    addi sp, sp, -80
+    sd ra, 72(sp)
+    sd s0, 64(sp)
+    sd s1, 56(sp)
+    sd s2, 48(sp)
+    sd s3, 40(sp)
+    sd s4, 32(sp)
+    sd s5, 24(sp)
+    sd s6, 16(sp)
     jab.sys.harts
-    andi s2, a1, -2                 # the online secondaries
+    andi t0, a1, -2                 # the online secondaries
+    la t1, workers_online
+    sd t0, 0(t1)
+    jab.sys.harts.reserve JAB_RESERVED_GFX_HARTS
+    bnez a0, 80f
+    mv s2, a1                       # the grant
+    li t0, JAB_RESERVED_GFX_HARTS
+    la t1, workers_floor
+    sw t0, 0(t1)
     li s0, 0                        # the workers started
+    li s6, 0                        # their harts
     li s1, 1                        # the hart
     li s5, WORKER_STACK
 1:
     li t0, JAB_HARTS_MAX
     bgeu s1, t0, 3f
-    li t0, WORKERS_MAX
-    bgeu s0, t0, 3f
     srl t0, s2, s1
     andi t0, t0, 1
     beqz t0, 2f
-    slli s3, s0, 7
+    addi t1, s1, -1                 # its slot
+    slli s3, t1, 7
     la t0, mailboxes
     add s3, s3, t0                  # its mailbox, its argument
-    mul s4, s0, s5
+    mul s4, t1, s5
     la t0, worker_stacks
     add s4, s4, t0                  # its stack
-    jab.sys.worker.start s1, raster_worker, s3, s4, s5
+    li t2, JAB_OWNER_RESERVED
+    jab.sys.worker.start s1, raster_worker, s3, s4, s5, t2
     bnez a0, 21f
-    la t0, worker_hart
-    slli t1, s0, 3
-    add t0, t0, t1
-    sd s1, 0(t0)
+    li t0, 1
+    sll t0, t0, s1
+    or s6, s6, t0
     addi s0, s0, 1
     j 2f
 21:
@@ -58,6 +70,8 @@ workers_start:
     addi s1, s1, 1
     j 1b
 3:
+    la t0, workers_mask
+    sd s6, 0(t0)
     la t0, workers_started
     sw s0, 0(t0)
     la t0, workers_active
@@ -67,35 +81,138 @@ workers_start:
     sw t1, 0(t0)
 .ifdef DEBUG
     la a0, line
+    la a1, msg_reserved
+    call append_str
+    li a1, JAB_RESERVED_GFX_HARTS
+    call append_dec
+    la a1, word_grant
+    call append_str
+    mv a1, s2
+    call append_harts
+    call line_end
+    la a0, line
     la a1, msg_workers
     call append_str
     mv a1, s0
     call append_dec
     la a1, word_on_harts
     call append_str
-    li s1, 0
-4:
-    bgeu s1, s0, 5f
-    la a1, word_space
-    call append_str
-    la t0, worker_hart
-    slli t1, s1, 3
-    add t0, t0, t1
-    ld a1, 0(t0)
-    call append_dec
-    addi s1, s1, 1
-    j 4b
-5:
+    mv a1, s6
+    call append_harts
     call line_end
 .endif
-    ld ra, 56(sp)
-    ld s0, 48(sp)
-    ld s1, 40(sp)
-    ld s2, 32(sp)
-    ld s3, 24(sp)
-    ld s4, 16(sp)
-    ld s5, 8(sp)
-    addi sp, sp, 64
+    ld ra, 72(sp)
+    ld s0, 64(sp)
+    ld s1, 56(sp)
+    ld s2, 48(sp)
+    ld s3, 40(sp)
+    ld s4, 32(sp)
+    ld s5, 24(sp)
+    ld s6, 16(sp)
+    addi sp, sp, 80
+    ret
+80:
+    li t0, JAB_RESERVE_SHORT
+    bne a0, t0, 81f
+    la t0, workers_online
+    ld t1, 0(t0)
+    li s0, 0                        # the online secondaries, counted
+82:
+    beqz t1, 83f
+    andi t2, t1, 1
+    add s0, s0, t2
+    srli t1, t1, 1
+    j 82b
+83:
+    la a0, line
+    la a1, msg_short
+    call append_str
+    mv a1, s0
+    call append_dec
+    la a1, word_short_online
+    call append_str
+    li a1, JAB_RESERVED_GFX_HARTS
+    call append_dec
+    la a1, word_short_reserved
+    call append_str
+    call line_end
+    jab.sys.exit 17
+81:
+    mv s0, a0
+    la a0, line
+    la a1, msg_reserve_refused
+    call append_str
+    mv a1, s0
+    call append_dec
+    call line_end
+    jab.sys.exit 17
+
+.ifdef DEBUG
+append_harts:
+    addi sp, sp, -32
+    sd ra, 24(sp)
+    sd a1, 16(sp)                   # the mask
+    li t0, 1
+    sd t0, 8(sp)                    # the hart
+1:
+    ld t0, 8(sp)
+    li t1, JAB_HARTS_MAX
+    bgeu t0, t1, 3f
+    ld t1, 16(sp)
+    srl t1, t1, t0
+    andi t1, t1, 1
+    beqz t1, 2f
+    la a1, word_space
+    call append_str
+    ld a1, 8(sp)
+    call append_dec
+2:
+    ld t0, 8(sp)
+    addi t0, t0, 1
+    sd t0, 8(sp)
+    j 1b
+3:
+    ld ra, 24(sp)
+    addi sp, sp, 32
+    ret
+.endif
+
+workers_latch:
+    la t0, workers_active
+    lwu t2, 0(t0)                   # the asked count, no more than started
+    la t0, round_workers
+    sw t2, 0(t0)                    # the frame's workers, every render's
+    la t0, band_grain
+    lwu t1, 0(t0)
+    la t0, round_grain
+    sw t1, 0(t0)                    # and its grain
+    la t0, workers_mask
+    ld t3, 0(t0)
+    li t4, 0                        # the frame's harts
+    li t5, 1                        # the hart
+1:
+    beqz t2, 3f
+    li t0, JAB_HARTS_MAX
+    bgeu t5, t0, 3f
+    srl t0, t3, t5
+    andi t0, t0, 1
+    beqz t0, 2f
+    li t0, 1
+    sll t0, t0, t5
+    or t4, t4, t0
+    addi t2, t2, -1
+2:
+    addi t5, t5, 1
+    j 1b
+3:
+    la t0, round_harts
+    sd t4, 0(t0)                    # the lowest of the started, a hart a worker
+    la t0, frame_reported
+    sd zero, 0(t0)
+    li t0, JAB_OWNER_RESERVED
+    jab.sys.harts.owned t0
+    la t0, frame_grant
+    sd a0, 0(t0)                    # the grant, read once a frame
     ret
 
 round_run:
@@ -127,6 +244,9 @@ round_run:
     la t0, round_workers
     lwu s1, 0(t0)                   # the round's workers
     sw s1, ROUND_WORKERS(s0)
+    la t0, round_harts
+    ld t1, 0(t0)
+    sw t1, ROUND_HARTS(s0)          # and their harts, for the round's walks after it
     la t0, round_grain
     lwu t1, 0(t0)
     sw t1, ROUND_GRAIN(s0)
@@ -158,57 +278,76 @@ round_run:
     la t0, frame_clock
     ld s5, CLOCK_SNAPSHOT(t0)       # the frame, each job's
     rdtime s2                       # the round's start, before its first publish
-    li s3, 0                        # the worker
-    li s4, 0                        # the round's harts
+    li s3, 0                        # the position
+    li s4, 1                        # the hart
 3:
     bgeu s3, s1, 4f
-    slli s6, s3, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s4, t0, 4f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s4
+    andi t0, t0, 1
+    beqz t0, 31f
+    addi t1, s4, -1
+    slli s6, t1, 7
     la t0, mailboxes
-    add s6, s6, t0
+    add s6, s6, t0                  # its slot's mailbox
+    sd s3, JOB_POSITION(s6)         # its place, before the publish's fence
     jab.job.publish s6, s5, zero, zero, t3
-    la t0, worker_hart
-    slli t1, s3, 3
-    add t0, t0, t1
-    ld t1, 0(t0)
-    li t0, 1
-    sll t0, t0, t1
-    or s4, s4, t0
     addi s3, s3, 1
+31:
+    addi s4, s4, 1
     j 3b
 4:
-    jab.sys.worker.wake s4          # one wake for the round
+    lwu t0, ROUND_HARTS(s0)
+    jab.sys.worker.wake t0          # one wake for the round
 .ifdef DEBUG
     la t0, job_cancel
     lbu t1, 0(t0)
     beqz t1, 42f
-    li s3, 0
+    li s4, 1
 41:
-    bgeu s3, s1, 42f
-    slli s6, s3, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s4, t0, 42f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s4
+    andi t0, t0, 1
+    beqz t0, 43f
+    addi t1, s4, -1
+    slli s6, t1, 7
     la t0, mailboxes
     add s6, s6, t0
     lw t3, JAB_JOB_GEN(s6)
     jab.job.cancel s6, t3           # the J frame's cancel of the job in flight
-    addi s3, s3, 1
+43:
+    addi s4, s4, 1
     j 41b
 42:
 .endif
-    li s3, 0
+    li s3, 0                        # the position
+    li s4, 1                        # the hart
 5:
-    bgeu s3, s1, 6f
-    slli s6, s3, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s4, t0, 6f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s4
+    andi t0, t0, 1
+    beqz t0, 51f
+    addi t1, s4, -1
+    slli s6, t1, 7
     la t0, mailboxes
     add s6, s6, t0
+    addi s3, s3, 1
 .ifdef DEBUG
-    addi t0, s3, 1
-    sw t0, ROUND_RELEASE(s0)        # the join reached this index: its held worker released
+    sw s3, ROUND_RELEASE(s0)        # the join reached this position: its held worker released
 .endif
     jab.job.join s6
-    addi s3, s3, 1
+51:
+    addi s4, s4, 1
     j 5b
 6:
     rdtime s7                       # the joins' end
-    li s3, 0
+    li s3, 1                        # the hart
     li s4, 0                        # the latest start
     li s8, 0                        # the latest end
     sd zero, 0(sp)                  # the slowest's busy ticks
@@ -216,8 +355,14 @@ round_run:
     sd zero, 16(sp)                 # the bands rendered
     sd zero, 24(sp)                 # a job cancelled
 7:
-    bgeu s3, s1, 8f
-    slli s6, s3, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s3, t0, 8f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s3
+    andi t0, t0, 1
+    beqz t0, 75f
+    addi t1, s3, -1
+    slli s6, t1, 7
     la t0, mailboxes
     add s6, s6, t0
     ld t0, JOB_START(s6)
@@ -241,21 +386,31 @@ round_run:
     add t3, t3, t0
     sd t3, 16(sp)
     la t1, stats
-    slli t2, s3, 3
+    addi t2, s3, -1
+    slli t2, t2, 3
     add t1, t1, t2
     ld t2, STAT_BANDS(t1)
     add t2, t2, t0
-    sd t2, STAT_BANDS(t1)           # its bands, the frame's
+    sd t2, STAT_BANDS(t1)           # its bands, its slot's for the frame
+    ld t0, JOB_HART(s6)
+    li t1, 1
+    sll t1, t1, t0
+    la t2, frame_reported
+    ld t3, 0(t2)
+    or t3, t3, t1
+    sd t3, 0(t2)                    # the hart its job says completed it
     lw t0, JAB_JOB_STATUS(s6)
     li t1, JAB_JOB_CANCELLED
     bne t0, t1, 74f
     li t0, 1
     sd t0, 24(sp)
 74:
-    slli t0, s3, CTX_SHIFT
+    addi t0, s3, -1
+    slli t0, t0, CTX_SHIFT
     la tp, worker_contexts
     add tp, tp, t0
     call context_counts             # its counts, the frame's
+75:
     addi s3, s3, 1
     j 7b
 8:
@@ -291,15 +446,21 @@ round_run:
     sd t1, STAT_CANCELLED(t0)
 85:
 .ifdef DEBUG
-    li s3, 0
+    li s3, 1
 86:
-    bgeu s3, s1, 87f
-    slli s6, s3, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s3, t0, 87f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s3
+    andi t0, t0, 1
+    addi s3, s3, 1
+    beqz t0, 86b
+    addi t1, s3, -2
+    slli s6, t1, 7
     la t0, mailboxes
     add s6, s6, t0
     lw t0, JAB_JOB_DONE(s6)
     lw t1, JAB_JOB_GEN(s6)
-    addi s3, s3, 1
     beq t0, t1, 86b                 # its job joined, the round's
     jab.sys.uart.print msg_unjoined
     jab.sys.exit 13
@@ -329,7 +490,7 @@ raster_worker:
     mv s1, a1                       # its hart
     la t0, mailboxes
     sub t0, s0, t0
-    srli s2, t0, 7                  # its index, the mailbox's place
+    srli s2, t0, 7                  # its slot, the mailbox's place
     slli t0, s2, CTX_SHIFT
     la tp, worker_contexts
     add tp, tp, t0                  # its context
@@ -341,10 +502,9 @@ raster_worker:
     la s4, round
 .ifdef DEBUG
     lwu t1, ROUND_FAULT_WORKER(s4)
-    addi t2, s2, 1
-    bne t1, t2, 2f
+    bne t1, s1, 2f                  # the J frame's fault, keyed to its hart
     li t0, SCRATCH_POISON
-    ld t0, 0(t0)                    # the J frame's fault: a load no page maps
+    ld t0, 0(t0)                    # a load no page maps
 2:
 .endif
     lwu s5, ROUND_FLAGS(s4)         # the clear
@@ -353,18 +513,20 @@ raster_worker:
     li s7, JAB_JOB_OK
     bnez s8, 3f
 .ifdef DEBUG
-    mv a0, s2
+    mv a0, s1
     call job_delay
-    mv a0, s2
+    mv a0, s1
+    ld a1, JOB_POSITION(s0)
     call job_hold_wait
 .endif
-    jab.job.cancelled s0, s3, t2    # fixed bands: its own, the worker's index
+    jab.job.cancelled s0, s3, t2    # fixed bands: its own, by its position
     bnez t2, 7f
     lwu t2, ROUND_WORKERS(s4)
+    ld t5, JOB_POSITION(s0)
     li t3, SCREEN_H
-    mul a0, s2, t3
+    mul a0, t5, t3
     divu a0, a0, t2
-    addi t4, s2, 1
+    addi t4, t5, 1
     mul a1, t4, t3
     divu a1, a1, t2
     mv a2, s5
@@ -375,7 +537,7 @@ raster_worker:
     lwu s9, ROUND_BANDS(s4)
 4:
 .ifdef DEBUG
-    mv a0, s2
+    mv a0, s1
     call job_delay
 .endif
     jab.job.cancelled s0, s3, t2    # at every band's boundary
@@ -398,6 +560,7 @@ raster_worker:
     li s7, JAB_JOB_CANCELLED
 8:
     sd s6, JOB_BANDS(s0)
+    sd s1, JOB_HART(s0)             # its hart, ordered by the completion's fence
     rdtime t0
     sd t0, JOB_END(s0)
     jab.job.complete s0, s3, s7
@@ -416,6 +579,7 @@ round_finish:
     sd s3, 24(sp)
     sd s4, 16(sp)
     sd s5, 8(sp)
+    sd s6, 0(sp)
 .ifdef DEBUG
     call tile_check                 # the pool as the boundary left it
 .endif
@@ -426,23 +590,32 @@ round_finish:
     li s3, 0                        # the bands hart 0 renders
     bnez s1, 3f
     lwu s4, ROUND_WORKERS(s0)
-    li s5, 0                        # the worker
+    li s5, 1                        # the hart
+    li s6, 0                        # its position
 1:
-    bgeu s5, s4, 5f
-    slli t0, s5, 7
+    li t0, JAB_HARTS_MAX
+    bgeu s5, t0, 5f
+    lwu t0, ROUND_HARTS(s0)
+    srl t0, t0, s5
+    andi t0, t0, 1
+    beqz t0, 2f
+    addi t0, s5, -1
+    slli t0, t0, 7
     la t1, mailboxes
     add t0, t0, t1
     ld t1, JOB_BANDS(t0)
-    bnez t1, 2f                     # its band rendered before it read the cancel
+    bnez t1, 11f                    # its band rendered before it read the cancel
     li t3, SCREEN_H
-    mul a0, s5, t3
+    mul a0, s6, t3
     divu a0, a0, s4
-    addi t4, s5, 1
+    addi t4, s6, 1
     mul a1, t4, t3
     divu a1, a1, s4
     mv a2, s2
     call band_render
     addi s3, s3, 1
+11:
+    addi s6, s6, 1
 2:
     addi s5, s5, 1
     j 1b
@@ -473,6 +646,7 @@ round_finish:
     ld s3, 24(sp)
     ld s4, 16(sp)
     ld s5, 8(sp)
+    ld s6, 0(sp)
     addi sp, sp, 64
     ret
 
@@ -480,8 +654,7 @@ round_finish:
 job_delay:
     la t0, round
     lwu t1, ROUND_DELAY_WORKER(t0)
-    addi t2, a0, 1
-    bne t1, t2, 9f
+    bne t1, a0, 9f                  # keyed to the worker's hart
     lwu t1, ROUND_DELAY_US(t0)
     li t2, US_TICKS
     mul t1, t1, t2
@@ -498,14 +671,14 @@ job_hold_wait:
     lwu t1, ROUND_HOLD(t0)
     beqz t1, 9f
     lwu t1, ROUND_DELAY_WORKER(t0)
-    addi t2, a0, 1
-    bne t1, t2, 9f                  # another worker: no hold
+    bne t1, a0, 9f                  # another worker's hart: no hold
+    addi t2, a1, 1                  # released once the join reaches its position
     rdtime t3
     li t4, (JOB_HOLD_US * US_TICKS)
     add t3, t3, t4                  # the watchdog's end
 1:
     lwu t1, ROUND_RELEASE(t0)
-    bgeu t1, t2, 9f                 # the join reached its index: released
+    bgeu t1, t2, 9f                 # the join reached its position: released
     rdtime t4
     bltu t4, t3, 1b
     li t1, 1
@@ -522,16 +695,21 @@ round_joined:
     jab.sys.exit 16
 1:
     la t0, round
-    lwu t1, ROUND_WORKERS(t0)       # the last round's workers
-    li t2, 0
+    lwu t1, ROUND_HARTS(t0)         # the last round's harts
+    li t2, 1
 2:
-    bgeu t2, t1, 9f
-    slli t3, t2, 7
+    li t3, JAB_HARTS_MAX
+    bgeu t2, t3, 9f
+    srl t3, t1, t2
+    andi t3, t3, 1
+    addi t2, t2, 1
+    beqz t3, 2b
+    addi t3, t2, -2
+    slli t3, t3, 7
     la t4, mailboxes
     add t3, t3, t4
     lw t5, JAB_JOB_DONE(t3)
     lw t6, JAB_JOB_GEN(t3)
-    addi t2, t2, 1
     beq t5, t6, 2b                  # its job joined
     jab.sys.uart.print msg_boundary_unjoined
     jab.sys.exit 15
@@ -540,7 +718,19 @@ round_joined:
 .endif
 
 .section .rodata
+msg_short:
+    .asciz "fps: harts short: "
+word_short_online:
+    .asciz " secondaries online for the "
+word_short_reserved:
+    .asciz " reserved"
+msg_reserve_refused:
+    .asciz "fps: harts reserve refused "
 .ifdef DEBUG
+msg_reserved:
+    .asciz "fps: harts reserved "
+word_grant:
+    .asciz ", grant"
 msg_workers:
     .asciz "fps: workers "
 word_on_harts:
@@ -560,16 +750,26 @@ msg_hold_expired:
 .section .bss
 .balign 64
 mailboxes:
-    .skip (WORKERS_MAX * JAB_JOB_BYTES)
+    .skip (GFX_SLOTS * JAB_JOB_BYTES)
 worker_contexts:
-    .skip (WORKERS_MAX * CTX_SIZE)
+    .skip (GFX_SLOTS * CTX_SIZE)
 round:
     .skip ROUND_SIZE
 round_next:
     .skip 64
 .balign 8
-worker_hart:
-    .skip (WORKERS_MAX * 8)
+workers_online:
+    .skip 8
+workers_mask:
+    .skip 8
+round_harts:
+    .skip 8
+frame_grant:
+    .skip 8
+frame_reported:
+    .skip 8
+workers_floor:
+    .skip 4
 workers_started:
     .skip 4
 workers_active:
@@ -599,4 +799,4 @@ job_delay_us:
 .endif
 .balign 16
 worker_stacks:
-    .skip (WORKERS_MAX * WORKER_STACK)
+    .skip (GFX_SLOTS * WORKER_STACK)

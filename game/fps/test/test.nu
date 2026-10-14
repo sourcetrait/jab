@@ -57,13 +57,11 @@ use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
 use ./gauge.nu
-use ./census.nu
-use ./census_holds.nu [census-reader-holds]
 use ./tiles.nu [builder-texel]
 use std/assert
 
 const LOAD = "fps: {name} loaded in {ms} ms: {sectors} sectors, {walls} walls, {vertices} vertices, {portals} portals, {entities} entities, {lights} lights, {lumel_maps} lumel maps, {sprites} sprites, {materials} materials, {textures} textures, {missing} missing"
-const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, slots {slots}, commands {commands}, flushes {flushes}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands0} {bands1}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}, cancelled {cancelled}"
+const FRAME = "fps: frame in {us} us: {sectors} sectors, {walls} walls, {pieces} pieces, {planes} planes, {openings} openings, {sprites} sprites, {uncovered} uncovered; clear, planes, walls, portals, sprites, raster us {clear}, {plane_us}, {wall_us}, {portal_us}, {sprite_us}, {raster_us}; spans {spans}, pixels {pixels}, lit spans {lit_spans}, lit pixels {lit_pixels}, light us {light_us}, rejected {rejected}, samples {samples}, tiles built {tiles_built}, tiled {tiled}, resets {resets}, slots {slots}, commands {commands}, flushes {flushes}, workers {workers}, grain {grain}, rounds {rounds}, bands {bands1} {bands2} {bands3} {bands4} {bands5} {bands6} {bands7}, dispatch us {dispatch}, barrier us {barrier}, slowest us {slowest}, busy us {busy}, cancelled {cancelled}"
 const SHORT_BYTES = 2000
 # The pixels a frame may leave unreached where two surfaces meet, the
 # float steps of their edges disagreeing by a rounding
@@ -78,13 +76,13 @@ const CRACKS = 32
 # pickup (the rounds), 6 a trace's answer (0 nothing, 1 a plane, 2 a
 # piece, 3 an android, 4 the player; the distance and the point in
 # millimetres); kinds 7, 8, 10, and 12 the frame before's clock, its
-# drawing, its presentation, and its packets, and 13 and 15 its tile
-# pool's activity and storage, sent at each frame's start, 14 the pool's
-# configuration ahead of the frame it governs, and 9 the end of a
-# measurement, which gauge.nu reads (`gauge measure`) and `records`
-# leaves out
+# drawing, its presentation, and its packets, 13 and 15 its tile pool's
+# activity and storage, and 18 its harts' masks, sent at each frame's
+# start, 14 the pool's configuration ahead of the frame it governs, and 9
+# the end of a measurement, which gauge.nu reads (`gauge measure`) and
+# `records` leaves out
 const RECORD = 64
-const CLOCK_KINDS = [7 8 9 10 12 13 14 15]
+const CLOCK_KINDS = [7 8 9 10 12 13 14 15 18]
 # A console record carries the command's byte, a u32 word, where the
 # state's sector sits; the P frame's, and the D frame's
 const CONSOLE_P = 80
@@ -100,7 +98,7 @@ const CLOCK_SEED = 7
 const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
-const CLOCK_SCHEMA = 5
+export const CLOCK_SCHEMA = 6
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
@@ -490,17 +488,18 @@ const WORKER_MODES = [
 const WORKER_COUNTS = [spans pixels lit_spans lit_pixels rejected samples tiled commands flushes]
 const WORKER_FREEZE_AT = 2100ms
 # The jobs' behaviours through the console's J frame, a debug build's,
-# on the spawn view with two workers: worker 1 held before each band at a
-# band a worker, the frame waiting for it, and at 16 rows, the other
-# taking its bands; every round cancelled after its publish, worker 1
-# held so its band is left to hart 0, and at 16 rows; each the default's
-# picture and counts. Worker 0 faulting on its next round ends the run
-# with its line; an idle worker's thread under IDLE_RATE of a core over
-# the span held from IDLE_AT
+# its delay and fault keyed to a worker's hart, on the spawn view with two
+# workers: hart 2's worker held before each band at a band a worker, the
+# frame waiting for it, and at 16 rows, the other taking its bands; every
+# round cancelled after its publish, hart 2's worker held so its band is
+# left to hart 0, and at 16 rows; each the default's picture and counts.
+# Hart 1's worker faulting on its next round ends the run with its line;
+# an idle worker's thread under IDLE_RATE of a core over the span held
+# from IDLE_AT
 const JOB_CASES = [
-    { name: "worker 1 held at a band a worker", grain: 0, delayed: 2, delay_us: 150000, cancel: false }
-    { name: "worker 1 held at 16 rows", grain: 16, delayed: 2, delay_us: 150000, cancel: false }
-    { name: "every round cancelled, worker 1 held, at a band a worker", grain: 0, delayed: 2, delay_us: 50000, cancel: true }
+    { name: "hart 2's worker held at a band a worker", grain: 0, delayed: 2, delay_us: 150000, cancel: false }
+    { name: "hart 2's worker held at 16 rows", grain: 16, delayed: 2, delay_us: 150000, cancel: false }
+    { name: "every round cancelled, hart 2's worker held, at a band a worker", grain: 0, delayed: 2, delay_us: 50000, cancel: true }
     { name: "every round cancelled at 16 rows", grain: 16, delayed: 0, delay_us: 0, cancel: true }
 ]
 const IDLE_RATE = 0.05
@@ -512,13 +511,26 @@ const IDLE_CASES = [
     { workers: 0, asleep: [1 2] }
     { workers: 1, asleep: [2] }
 ]
-# The workers on fewer harts, the machine's secondaries all there are:
-# each machine's workers line, and a W asking two held to those started
+# The workers on each machine, the program's reservation of two taking
+# every online secondary as its grant and a raster worker started on each
+# hart of it, its slot the hart's: three harts, four, eight, and four
+# with hart 2 failed by the kernel's jab.late knob, the sparse grant 1 3;
+# each machine's reserved and workers lines, and a W asking GFX_SLOTS held
+# to those started, a band a worker and at the default grain. Two harts
+# and one hold fewer secondaries than the reservation: each refused at
+# the start with its line and exit 17
+const GFX_SLOTS = 7
 const WORKER_MACHINES = [
-    { harts: 3, started: 2, line: "fps: workers 2 on harts 1 2" }
-    { harts: 2, started: 1, line: "fps: workers 1 on harts 1" }
-    { harts: 1, started: 0, line: "fps: workers 0 on harts" }
+    { harts: 3, bootargs: "", started: 2, harts_of: "1 2" }
+    { harts: 4, bootargs: "", started: 3, harts_of: "1 2 3" }
+    { harts: 8, bootargs: "", started: 7, harts_of: "1 2 3 4 5 6 7" }
+    { harts: 4, bootargs: "jab.late=2", started: 2, harts_of: "1 3" }
 ]
+const SHORT_MACHINES = [
+    { harts: 2, line: "fps: harts short: 1 secondaries online for the 2 reserved" }
+    { harts: 1, line: "fps: harts short: 0 secondaries online for the 2 reserved" }
+]
+const SHORT_EXIT = 17
 # The packet's bounds, through the console's K frame on a debug build.
 # The still copy of Render Zero's spawn view, settled on its tiles,
 # drawn in packets of at most PACKET_CAPS' commands and spans, so a frame
@@ -534,7 +546,8 @@ const PACKET_CAPS = { commands: 7, spans: 500 }
 # under a merge's share of a microsecond, so the ring overflows and the
 # merge stops after a surface, drawn by two workers in bands of 16 rows
 # in packets of PACKET_CAPS; and TILE_CONTEXTS, every context a tier
-# admits in, so a surface merges at most its tier times them in a pass
+# admits in, hart 0's and a slot's for each secondary the ABI allows, so
+# a surface merges at most its tier times them in a pass
 const POOL_LIFTED = 1
 const POOL_FROZEN = 2
 const POOL_STALE = 4
@@ -542,7 +555,7 @@ const POOL_ONCE = 8
 const POOL_PLACE_AT = 1500ms
 const POOL_END_AT = 4500ms
 const POOL_ROTATION = { guarantee: 1, ring: 4, merge_us: 1, workers: 2, grain: 16 }
-const TILE_CONTEXTS = 3
+const TILE_CONTEXTS = 8
 # the stale entries' cap, under the 272 tiles the spawn view asks, so
 # every pass evicts and builds, and the capture's time, past the E since
 # a capture ends its run
@@ -566,6 +579,7 @@ const DEBUG_TEXT = [
     "fps: alpha "
     "fps: mips "
     "fps: tile pool: side "
+    "fps: harts reserved "
     "fps: workers "
     "fps: worker refused on hart "
     "fps: round lost bands\n"
@@ -582,6 +596,8 @@ const EXIT_TEXT = [
     "fps: no sound\n"
     "fps: no disk of serial fps\n"
     "fps: the disk has no /map/name\n"
+    "fps: harts short: "
+    "fps: harts reserve refused "
 ]
 # The engine's own images and sounds, every one in a tree of ours
 const FRAMES_LINE = "fps: frames 69 loaded, 0 missing"
@@ -621,7 +637,10 @@ const SPAWN_POSE = { name: "spawn", x: 29.0, y: 2.5, z: 1.6, yaw: 150, pitch: 0 
 # two surfaces or more splits; the L frames setting every lumel full
 # bright, by its node's parity, and full bright again, each lighting
 # revision two seconds long and each frame with the build budget held so
-# no surface builds tiles under it; the capture ending the run
+# no surface builds tiles under it; the capture ending the run; on
+# CENSUS_HARTS, seven workers each drawing into its context, hart 0's
+# left empty while they draw
+const CENSUS_HARTS = 8
 const CENSUS_SHRUNK = 96
 const CENSUS_SHRINK = { from: 1400ms, to: 2400ms }
 const CENSUS_LIGHTS = [
@@ -705,6 +724,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert (not $plain_faulted) $"no program or worker fault drawing the plain run's frames: ($plain_run.serial | lines | where {|l| $l starts-with 'jab: ' })"
     assert (not ($plain_run.serial | str contains "fps: tile pool changed in flight")) $"the tile pool held unchanged through every frame's renders on the plain run: ($plain_run.serial | lines | last 2)"
     assert ($plain_run.screen != "") "a screen was taken on the plain run"
+    # the program's start on the specification's three harts: the
+    # reservation's grant, harts 1 and 2, a raster worker on each
+    let plain_lines = ($plain_run.serial | lines)
+    assert ("fps: harts reserved 2, grant 1 2" in $plain_lines) $"the plain run names its grant, harts 1 and 2: ($plain_lines | where {|l| $l starts-with 'fps: harts' })"
+    assert ("fps: workers 2 on harts 1 2" in $plain_lines) $"the plain run names its workers, a raster worker on each hart of its grant: ($plain_lines | where {|l| $l starts-with 'fps: worker' })"
     let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
     let sprite_lines = ($sprite_run.serial | lines)
@@ -1061,12 +1085,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # tile and storage records at the schema; each frame's drawing its
     # preparation and its raster, the
     # bytes its packets held its commands' and span records', and its
-    # packets prepared from its own simulation, and its workers' round
-    # times within its raster, the gauge's rules at schema 5 which its
-    # validity holds; commands and spans in every frame; every frame drawn
-    # by the default, every worker started in bands of GRAIN_DEFAULT rows,
-    # with a slowest worker's time; and the game going on past the
-    # measurement
+    # packets prepared from its own simulation, its workers' round times
+    # within its raster, and its harts within their grant, the gauge's
+    # rules at schema 6 which its validity holds; commands and spans in
+    # every frame; every frame drawn by the default, every worker started
+    # in bands of GRAIN_DEFAULT rows, with a slowest worker's time, on its
+    # grant's two harts, both started and active; and the game going on past
+    # the measurement
     let walk_clock = (gauge measure $render_0_walk.api [{ name: "walk", places: $render_0_starts, pad: [] }])
     assert $walk_clock.seeded "the walk's seed answered before its first frame"
     assert ($walk_clock.cadence_set and (not $walk_clock.late_cadence)) "the walk's cadence asked before its first frame, once"
@@ -1092,6 +1117,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert ($unprepared | is-empty) $"each frame of the walk prepares commands and spans into its packets: ($unprepared | select frame commands spans | first 3)"
     let undrawn = ($clock_rows | where {|r| $r.workers != $WORKERS_STARTED or $r.grain != $GRAIN_DEFAULT or $r.slowest_us == 0 or $r.busy_us == 0 })
     assert ($undrawn | is-empty) $"every frame of the walk drawn by the ($WORKERS_STARTED) workers started in bands of ($GRAIN_DEFAULT) rows, a slowest worker and busy time recorded:($undrawn | select frame workers grain slowest_us busy_us | first 3)"
+    let unmasked = ($clock_rows | where {|r| $r.grant != 6 or $r.started != 6 or $r.active != 6 or $r.reported != 6 })
+    assert ($unmasked | is-empty) $"every frame of the walk on its grant, harts 1 and 2, both started and active: ($unmasked | select frame grant started active reported | first 3)"
     print $"fps: the clock over the walk: ($walk_clock.frames) frames to frame ($walk_clock.final) at schema ($walk_clock.schema), the critical path's median ($walk_clock.whole.critical.median) us, unattributed at most ($walk_clock.whole.unattributed.max) us of a frame and ($walk_clock.whole.parts_unattributed.max) us of a drawing, residual at most ($clock_rows | get residual_us | math max) us, ($walk_clock.whole.refusals) flips early; the preparation's median ($walk_clock.whole.preparation.median) us and the raster's ($walk_clock.whole.raster.median) us, ($walk_clock.whole.commands.min) to ($walk_clock.whole.commands.max) commands a frame, ($walk_clock.whole.flushes) flushes, ($walk_clock.whole.packet_bytes_max) packet bytes at most; ($walk_clock.whole.tiles_built) tiles built, ($walk_clock.whole.tile_peak) bytes of tiles at most; ($walk_clock.workers | str join ', ') workers, the slowest's median ($walk_clock.whole.slowest.median) us, dispatch ($walk_clock.whole.dispatch.median) and barrier ($walk_clock.whole.barrier.median)"
 
     # the three cadences on a schedule of stalls and trigger reports and
@@ -1239,7 +1266,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let default_frame = $spawn_captures.tiled.frame
     let default_bands = (($SCREEN_ROWS + $GRAIN_DEFAULT - 1) // $GRAIN_DEFAULT)
     assert ($default_frame.workers == $WORKERS_STARTED and $default_frame.grain == $GRAIN_DEFAULT) $"the default draws with every worker started in bands of ($GRAIN_DEFAULT) rows: ($default_frame)"
-    assert ($default_frame.rounds == 1 and ($default_frame.bands0 + $default_frame.bands1) == $default_bands and $default_frame.clear == 0) $"the default's one round, its ($default_bands) bands each rendered once, the clear theirs: ($default_frame)"
+    assert ($default_frame.rounds == 1 and (band-sum $default_frame) == $default_bands and $default_frame.clear == 0) $"the default's one round, its ($default_bands) bands each rendered once, the clear theirs: ($default_frame)"
     for m in $WORKER_MODES {
         let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
         let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false) }, { at: $WORKER_FREEZE_AT, bytes: (pool-frame --modes $POOL_FROZEN) }] | append (settled $SPAWN_POSE) | sort-by at)
@@ -1251,39 +1278,55 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert ($frame.workers == $m.workers and $frame.grain == $m.grain) $"($label) drawn as the W frame chose: ($frame)"
         assert ($frame.tiles_built == 0 and $frame.slots == $default_frame.slots) $"($label) drawn from the pool held as the default's settled view left it, ($default_frame.slots) slots: ($frame)"
         let bands = (if $m.workers == 0 { 0 } else if $m.grain == 0 { $m.workers } else { ($SCREEN_ROWS + $m.grain - 1) // $m.grain })
-        assert equal ($frame.bands0 + $frame.bands1) ($frame.rounds * $bands) $"every band of every round rendered once on ($label): ($frame)"
+        assert equal (band-sum $frame) ($frame.rounds * $bands) $"every band of every round rendered once on ($label): ($frame)"
         if $m.workers == 0 {
             assert ($frame.rounds == 0 and $frame.clear > 0) $"the serial backend takes no round and clears on hart 0: ($frame)"
         } else {
             assert ($frame.rounds == 1 and $frame.clear == 0) $"($label) one round, the clear the bands': ($frame)"
         }
-        if $m.workers == 1 { assert equal $frame.bands1 0 $"one worker renders every band: ($frame)" }
+        if $m.workers == 1 { assert equal $frame.bands1 (band-sum $frame) $"one worker, hart 1's, renders every band: ($frame)" }
         let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
         assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
         assert ($run.screen != "") $"a screen was taken on ($label)"
         let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
         assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
     }
-    # the workers on each machine: the specification's three harts start
-    # two, two harts one, one hart none; a W asking two held to those
-    # started, the serial backend where none; each the default's picture
-    # and counts
+    # the workers on each machine (WORKER_MACHINES): the reservation's
+    # grant every online secondary, a raster worker on each hart of it; a W
+    # asking GFX_SLOTS held to those started, a band a worker and at the
+    # default grain, every band rendered once by the harts started, each
+    # the default's picture and counts; two harts and one refused
     for h in $WORKER_MACHINES {
-        let label = $"the spawn view on ($h.harts) harts with two workers asked"
-        let sends = ([{ at: 1300ms, bytes: (gauge workers-frame 2 0) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_harts_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5 --harts $h.harts)
-        assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
-        let lines = ($run.serial | lines)
-        assert ($h.line in $lines) $"($label) names its workers, ($h.line): ($lines | where {|l| $l starts-with 'fps: worker' })"
-        let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
-        assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
-        let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
-        assert equal $frame.workers $h.started $"($label) drawn by the ($h.started) workers started: ($frame)"
-        let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
-        assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
-        assert ($run.screen != "") $"a screen was taken on ($label)"
-        let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
-        assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
+        for grain in [0 $GRAIN_DEFAULT] {
+            let label = $"the spawn view on ($h.harts) harts(if $h.bootargs == '' { '' } else { $', ($h.bootargs),' }) ($GFX_SLOTS) workers asked in bands of ($grain) rows"
+            let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $GFX_SLOTS $grain) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
+            let dir = ($out | path join $"spawn_harts_($h.harts)(if $h.bootargs == '' { '' } else { '_late' })_g($grain)")
+            let run = (jab launch --kernel $kernel --image $image --out $dir --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 6 --harts $h.harts --bootargs $h.bootargs)
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
+            let lines = ($run.serial | lines)
+            let reserved = $"fps: harts reserved 2, grant ($h.harts_of)"
+            assert ($reserved in $lines) $"($label) names its grant, ($reserved): ($lines | where {|l| $l starts-with 'fps: harts' })"
+            let workers = $"fps: workers ($h.started) on harts ($h.harts_of)"
+            assert ($workers in $lines) $"($label) names its workers, ($workers): ($lines | where {|l| $l starts-with 'fps: worker' })"
+            let frames = ($lines | where {|l| $l starts-with "fps: frame in" })
+            assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
+            let frame = ($frames | last | parse $FRAME | get 0 | update cells {|c| $c | into int })
+            assert equal [$frame.workers $frame.grain] [$h.started $grain] $"($label) drawn by the ($h.started) workers started: ($frame)"
+            let bands = (if $grain == 0 { $h.started } else { ($SCREEN_ROWS + $grain - 1) // $grain })
+            assert equal (band-sum $frame) ($frame.rounds * $bands) $"every band of every round rendered once on ($label): ($frame)"
+            let banded = (1..$GFX_SLOTS | where {|s| ($frame | get $"bands($s)") > 0 } | each {|s| $s | into string } | str join " ")
+            if $grain == 0 { assert equal $banded $h.harts_of $"($label) a band a worker, on the harts started: ($frame)" }
+            let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
+            assert ($differ | is-empty) $"($label) counts as the default's: ($differ | each {|c| $'($c) ($frame | get $c) against ($default_frame | get $c)' } | str join ', ')"
+            assert ($run.screen != "") $"a screen was taken on ($label)"
+            let rows = (rows-differ (open --raw $run.screen | into binary) $spawn_captures.tiled.bytes [0 0 1920 1080])
+            assert ($rows | is-empty) $"($label) the default's picture: rows ($rows | first 5) differ, ($rows | length) in all"
+        }
+    }
+    for h in $SHORT_MACHINES {
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_short_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts $h.harts)
+        assert ($h.line in ($run.serial | lines)) $"($h.harts) harts hold fewer secondaries than the reservation, refused with its line, ($h.line): ($run.serial | lines | last 3)"
+        assert equal $run.status $SHORT_EXIT $"a machine short of the reservation ends the run with ($SHORT_EXIT) on ($h.harts) harts: ($run.serial | lines | last 3)"
     }
     # the jobs' behaviours (JOB_CASES): a held worker, the cancel, the
     # fault, and idle workers asleep
@@ -1302,17 +1345,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let bands = (if $j.grain == 0 { 2 } else { ($SCREEN_ROWS + $j.grain - 1) // $j.grain })
         if $j.cancel {
             assert equal $frame.cancelled $frame.rounds $"($label) cancels its every round: ($frame)"
-            assert (($frame.bands0 + $frame.bands1) <= ($frame.rounds * $bands)) $"($label) no band rendered twice: ($frame)"
-            if $j.delayed > 0 { assert equal $frame.bands1 0 $"($label) worker 1 reads the cancel after its hold, its band hart 0's: ($frame)" }
+            assert ((band-sum $frame) <= ($frame.rounds * $bands)) $"($label) no band rendered twice: ($frame)"
+            if $j.delayed > 0 { assert equal $frame.bands2 0 $"($label) hart 2's worker reads the cancel after its hold, its band hart 0's: ($frame)" }
             let built = ((gauge stream $run.api).draws | where {|d| $d.tiles_built > 0 } | length)
             assert ($built > 0) $"($label) built tiles at the boundaries of frames whose every round was cancelled, the pool held unchanged through round_finish: ($built) frames"
         } else {
-            assert ($frame.cancelled == 0 and ($frame.bands0 + $frame.bands1) == ($frame.rounds * $bands)) $"($label) every band rendered once by the workers: ($frame)"
+            assert ($frame.cancelled == 0 and (band-sum $frame) == ($frame.rounds * $bands)) $"($label) every band rendered once by the workers: ($frame)"
             assert ($frame.slowest >= $j.delay_us) $"($label) the slowest worker held ($j.delay_us) us: ($frame)"
             if $j.grain == 0 {
-                assert ($frame.bands0 == $frame.rounds and $frame.bands1 == $frame.rounds) $"($label) each worker its own band: ($frame)"
+                assert ($frame.bands1 == $frame.rounds and $frame.bands2 == $frame.rounds) $"($label) each worker its own band: ($frame)"
             } else {
-                assert ($frame.bands0 > $frame.bands1) $"($label) worker 0 takes the held worker's bands: ($frame)"
+                assert ($frame.bands1 > $frame.bands2) $"($label) hart 1's worker takes the held worker's bands: ($frame)"
             }
         }
         let differ = ($WORKER_COUNTS | where {|c| ($frame | get $c) != ($default_frame | get $c) })
@@ -1324,7 +1367,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let fault_sends = [{ at: 1300ms, bytes: (jobs-frame 0 0 false 1) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
     let fault_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_jobs_fault") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $fault_sends --capture 3000ms --seconds 5)
     let fault_lines = ($fault_run.serial | lines | where {|l| $l starts-with "jab: worker fault: " })
-    assert (($fault_lines | length) == 1 and ($fault_lines | get 0 | str starts-with "jab: worker fault: hart=1 argument=")) $"worker 0 on hart 1 faults on its round with its line: ($fault_run.serial | lines | last 3)"
+    assert (($fault_lines | length) == 1 and ($fault_lines | get 0 | str starts-with "jab: worker fault: hart=1 argument=")) $"hart 1's worker faults on its round with its line: ($fault_run.serial | lines | last 3)"
     assert equal $fault_run.status 1 $"a worker's fault ends the run with status 1: ($fault_run.serial | lines | last 3)"
     if $nu.os-info.name == "linux" {
         for i in $IDLE_CASES {
@@ -1343,7 +1386,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             }
         }
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows, on three, two, and one harts, with a worker held and every round cancelled, each the default's picture and counts; a worker's fault ends the run; an idle worker sleeps"
+    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows; on three, four, and eight harts and on four with hart 2 failed, every grant hart's worker drawing a band a worker and at the default grain; with a worker held and every round cancelled, each the default's picture and counts; two and one harts refused short; a worker's fault ends the run; an idle worker sleeps"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,
@@ -1982,18 +2025,23 @@ def handoff-unsettled [rows: list<any>, kind: string, slots: int]: nothing -> li
     }
 }
 
+# The bands a frame line counts over every slot's hart, 1 to GFX_SLOTS.
+def band-sum [frame: record]: nothing -> int {
+    1..$GFX_SLOTS | each {|s| $frame | get $"bands($s)" } | math sum
+}
+
 # A view placed at PLACE_AT and again at SETTLE_AT, so the frame line
 # read, the second placement's, draws it settled on its tiles.
 def settled [placed: record]: nothing -> list<any> {
     [{ at: $PLACE_AT, bytes: (pose pose-frame $placed) }, { at: $SETTLE_AT, bytes: (pose pose-frame $placed) }]
 }
 
-# The console's J frame, a debug build's: the delayed worker's index plus
-# one in byte 4, 0 for none, and its delay before each band in
-# microseconds from byte 8; byte 12 set cancels every round after its
-# publish; byte 13 the faulting worker's index plus one, its next round;
-# byte 14 set (`--hold`) holds the delayed worker in fixed bands until
-# the round's join reaches its index, JOB_HOLD_US at most.
+# The console's J frame, a debug build's: the delayed worker's hart in
+# byte 4, 0 for none, and its delay before each band in microseconds
+# from byte 8; byte 12 set cancels every round after its publish; byte 13
+# the faulting worker's hart, its next round; byte 14 set (`--hold`)
+# holds the delayed worker in fixed bands until the round's join reaches
+# its position, JOB_HOLD_US at most.
 def jobs-frame [delayed: int, delay_us: int, cancel: bool, fault: int, --hold]: nothing -> binary {
     [("J" | into binary), 0x[00 00 00], ($delayed | into binary | bytes at 0..<1), 0x[00 00 00], ($delay_us | into binary | bytes at 0..<4), (if $cancel { 0x[01] } else { 0x[00] }), ($fault | into binary | bytes at 0..<1), (if $hold { 0x[01] } else { 0x[00] }), (0..<49 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
@@ -2050,7 +2098,7 @@ def pool-trace [serial: string]: nothing -> table<frame: int, requesting: list<i
 # The tile pool's own fixtures on the still copy's spawn view, each
 # launch a cold start with the view placed (pool-frame's `--cold`), read
 # from the frame of the cold start, the configuration's first, through
-# gauge measure, complete and valid at schema 5:
+# gauge measure, complete and valid at CLOCK_SCHEMA:
 # - the rotation, under POOL_ROTATION's admission with the pool's trace:
 #   every surface the passes find requesting built within the most
 #   surfaces one pass found requesting of its first request, the merge's
@@ -2082,7 +2130,7 @@ def pool-holds [kernel: path, image: path, out: path, set: string, disk: path, l
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --capture $POOL_CAPTURE_AT --seconds 7)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the pool's ($name)"
         let m = (gauge measure $run.api [{ name: "start", places: [], pad: [] }, { name: "sight", places: [$SPAWN_POSE], pad: [] }])
-        assert ($m.complete and $m.valid and $m.schema == 5) $"the pool's ($name) complete and valid at schema 5: ($m.problems | str join '; ') ($m.invalid | str join '; ')"
+        assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the pool's ($name) complete and valid at schema ($CLOCK_SCHEMA): ($m.problems | str join '; ') ($m.invalid | str join '; ')"
         assert ($m.rows | any {|r| $r.leg == "sight" }) $"the pool's ($name) placed its view"
         let cold = ((gauge stream $run.api).configs | last | get from)
         assert ($cold > 0) $"the pool's ($name) cold start a configuration of its own: from ($cold)"
@@ -2780,7 +2828,7 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
 # Each run's frame line, the second placement's, held:
 # the wall drawn from settled tiles, from none held off, and under partial
 # residency from the slots built once, fewer blocks than settled. Each
-# run read by gauge measure, complete and valid at schema 5, its window
+# run read by gauge measure, complete and valid at CLOCK_SCHEMA, its window
 # from the second placement's frame through the marker's held to its
 # kind (handoff-unsettled); its screen, taken while the run goes on,
 # whole, its stamp a frame of that window before the marker's; and its E
@@ -2891,7 +2939,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
         assert ($line.uncovered < $CRACKS) $"no pixel uncovered on ($label): ($line)"
         assert ($run.screen != "") $"a screen taken whole on ($label), asked at ($run.screen_started) s"
         let m = (gauge measure $run.api $legs)
-        assert ($m.complete and $m.valid and $m.schema == 5) $"($label) complete and valid at schema 5: ($m.problems | str join '; ') ($m.invalid | str join '; ')"
+        assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"($label) complete and valid at schema ($CLOCK_SCHEMA): ($m.problems | str join '; ') ($m.invalid | str join '; ')"
         let window = ($m.rows | where leg == "second")
         let stamp = (stamp-of (open --raw $run.screen | into binary))
         let written = {|at: duration, bytes: binary| $run.send_seconds | get ($all | enumerate | where {|x| $x.item.at == $at and $x.item.bytes == $bytes } | get 0.index) }
@@ -3469,98 +3517,6 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let short_ramp = ($build_admitted.table | where build == "short" and leg == "ramp")
     assert (($short_ramp | length) == 1 and ($short_ramp | get 0.value_us) == null and ($short_ramp | get 0.missing) == 1) $"under --diagnostic a build missing a leg keeps the leg's row, missing: ($build_admitted.table)"
 
-    # routes (RouteLegs): a run's expected legs are its route's, the
-    # route.nuon beside its run before the file its identity names, held
-    # to the SHA-256 the identity recorded; the fixtures' own directory
-    # starts empty. Each comparison a mutant could make throw is attempted.
-    let routes_dir = ($dir | path join "routes")
-    jab retire $routes_dir
-    mkdir $routes_dir
-    let route_file = {|name: string, legs: list<string>|
-        let file = ($routes_dir | path join $"($name).nuon")
-        { legs: ($legs | each {|n| { name: $n, places: [], pad: [] } }) } | to nuon | save --raw -f $file
-        { file: ($file | path expand), sha256: (open --raw $file | into binary | hash sha256) }
-    }
-    let stairs = (do $route_file "stairs" [walk ramp stair])
-    let yard = (do $route_file "yard" [walk yard])
-    # each leg three frames walking `metres` along x
-    let walked = {|legs: list<string>, metres: float|
-        $legs | enumerate | each {|l|
-            0..<3 | each {|n| { run: 1, frame: ($l.index * 3 + $n), leg: $l.item, entry: ($n == 0), x: (1.0 + $n * $metres / 2), y: 1.0, draw_us: (1000 + $l.index * 100), critical_us: 1800 } }
-        } | flatten
-    }
-    let routed = {|label: string, image: string, route: any, rows: list<any>|
-        let file = ($routes_dir | path join $"route_($label).nuon")
-        let doc = { label: $label, identity: { build: { image_sha256: $image }, mode: $serial_mode, route: $route }, runs: [{ run: 1, measured: $checked }], rows: $rows }
-        $doc | to nuon | save --raw -f $file
-        $file | path expand
-    }
-    let attempt = {|files: list<string>, admit: bool| try { gauge compare $files "draw_us" 50 --diagnostic=$admit } catch {|e| { refusal: $e.msg } } }
-    # two runs of one route each missing its last leg, which the union of
-    # their legs would pass
-    let short = [(do $routed "short_1" "short" $stairs (do $walked [walk ramp] 0.0)) (do $routed "short_2" "short" $stairs (do $walked [walk ramp] 0.0))]
-    let short_refused = (do $attempt $short false | get -o refusal | default "")
-    assert ($short | all {|f| $short_refused | str contains $"($f) run 1, partial: missing the legs stair" }) $"two runs of one route each missing its last leg are refused partial: ($short_refused)"
-    let short_admitted = (do $attempt $short true)
-    let unreached = ($short_admitted | get -o common | default [] | where leg == "stair" | get -o 0)
-    assert (($unreached | get -o kind) == "missing" and ($unreached | get -o runs) == 0 and ($unreached | get -o bins) == []) $"a leg no run reached is missing in its common entry: ($unreached) ($short_admitted | get -o refusal)"
-    let stair_kinds = ($short_admitted | get -o runs | default [] | each {|r| $r.legs | where leg == "stair" | get -o 0.kind })
-    assert equal $stair_kinds [missing missing] "a leg no run reached is missing in every run"
-    let stair_row = ($short_admitted | get -o table | default [] | where leg == "stair" | get -o 0 | default {})
-    let stair_says = [($stair_row | get -o value_us) ($stair_row | get -o missing) ($stair_row | get -o batches) ($stair_row | get -o route)]
-    assert equal $stair_says [null 2 2 $stairs.sha256] "a leg no run reached is missing in every batch of its row, which names its route"
-    let short_run = ($short_admitted | get -o runs.0 | default {})
-    assert equal [($short_run | get -o expected) ($short_run | get -o route)] [[walk ramp stair] $stairs] "a run carries its route's file and digest and its expected legs, the route's in order"
-    # a recorded route missing and one of another digest, rejected with and
-    # without --diagnostic
-    let whole_route = (do $routed "whole_route" "whole_route" $stairs (do $walked [walk ramp stair] 0.0))
-    let gone = (do $routed "gone" "gone" { file: ($routes_dir | path join "gone.nuon"), sha256: $stairs.sha256 } (do $walked [walk ramp stair] 0.0))
-    let misread = (do $routed "misread" "misread" { file: $stairs.file, sha256: $yard.sha256 } (do $walked [walk ramp stair] 0.0))
-    let unrouted = [
-        { name: "gone", file: $gone, says: $"its identity records the route ($routes_dir | path join 'gone.nuon') of SHA-256 ($stairs.sha256), and none is beside its run" }
-        { name: "misread", file: $misread, says: $"the route ($stairs.file) has SHA-256 ($stairs.sha256) where its identity recorded ($yard.sha256)" }
-    ]
-    for u in $unrouted {
-        for admit in [false true] {
-            let msg = (do $attempt [$whole_route $u.file] $admit | get -o refusal | default "")
-            assert ($msg | str contains $"($u.file) run 1, unrouted: ") $"a recorded route ($u.name) is refused unrouted, --diagnostic ($admit): ($msg)"
-            assert ($msg | str contains $u.says) $"the ($u.name) route's refusal names its file and digests: ($msg)"
-        }
-    }
-    # a run whose rows hold a leg its route does not name
-    let strayed = (do $routed "strayed" "strayed" $yard (do $walked [walk yard ramp] 0.0))
-    let stray_msg = (do $attempt [$strayed] true | get -o refusal | default "")
-    assert ($stray_msg | str contains $"($strayed) run 1, unrouted: its rows hold legs its route ($yard.file) does not name: ramp") $"a run whose rows hold a leg its route does not name is refused unrouted: ($stray_msg)"
-    # the route kept beside the run before the file its identity names,
-    # which now holds another
-    let kept_home = ($routes_dir | path join "kept")
-    let kept_run = ($kept_home | path join "run_1")
-    mkdir $kept_run
-    open --raw $stairs.file | save --raw -f ($kept_run | path join "route.nuon")
-    let renamed = ($routes_dir | path join "renamed.nuon")
-    open --raw $yard.file | save --raw -f $renamed
-    let kept_report = ($kept_home | path join "gauge.nuon")
-    let kept_id = { build: { image_sha256: "kept" }, mode: $serial_mode, route: { file: $renamed, sha256: $stairs.sha256 } }
-    { label: "kept", identity: $kept_id, runs: [{ run: 1, measured: $checked, out: $kept_run }], rows: (do $walked [walk ramp stair] 0.0) } | to nuon | save --raw -f $kept_report
-    let kept_read = (do $attempt [$kept_report] false)
-    let kept_file = ($kept_read | get -o runs.0.route.file | default "" | path expand)
-    assert equal $kept_file ($kept_run | path join "route.nuon" | path expand) $"a run's route is the one beside it before the file its identity names: ($kept_read | get -o refusal)"
-    # two runs whose identities record no route keep the union
-    let loose = (do $attempt [(do $routed "loose_1" "loose" null (do $walked [walk ramp] 0.0)) (do $routed "loose_2" "loose" null (do $walked [walk ramp] 0.0))] false)
-    assert equal [($loose | get -o table | default [] | get leg) ($loose | get -o method.routes)] [[walk ramp] [{ sha256: null, file: null, legs: [walk ramp] }]] $"two runs with no route recorded keep the union of their legs: ($loose | get -o refusal)"
-    # runs on two routes, one image's: refused, and under --diagnostic two
-    # builds, each with its route's legs and its own runs' bins
-    let on_stairs = (do $routed "stairs" "routes_image" $stairs (do $walked [walk ramp stair] 1.0))
-    let on_yard = (do $routed "yard" "routes_image" $yard (do $walked [walk yard] 3.0))
-    let two_routes = (do $attempt [$on_stairs $on_yard] false | get -o refusal | default "")
-    assert ($two_routes | str contains "the runs played 2 routes") $"runs on two routes refuse the comparison: ($two_routes)"
-    let apart = (do $attempt [$on_stairs $on_yard] true)
-    let apart_rows = ($apart | get -o table | default [] | each {|t| [$t.build $t.leg $t.route] })
-    let apart_expected = [[stairs walk $stairs.sha256] [stairs ramp $stairs.sha256] [stairs stair $stairs.sha256] [yard walk $yard.sha256] [yard yard $yard.sha256]]
-    assert equal $apart_rows $apart_expected $"runs on two routes admitted under --diagnostic are two builds, each with its route's legs: ($apart | get -o refusal)"
-    let walk_bins = ($apart | get -o common | default [] | where leg == "walk" | each {|c| [$c.route ($c.bins | length)] })
-    assert equal $walk_bins [[$stairs.sha256 3] [$yard.sha256 3]] "each route's bins are its own runs'"
-
     # schema 2: every frame's presentation, one schema a capture
     let good2 = (fx-items 3 --schema 2)
     let m2 = (do $measure $good2)
@@ -3696,6 +3652,98 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($legacy.runs | get effective_cadence) [0 0] $"both played cadence 0: ($legacy.runs | get effective_cadence)"
     assert equal ($legacy.runs | get requested_cadence) [null 0] $"each keeps the cadence it asked: ($legacy.runs | get requested_cadence)"
 
+    # routes (RouteLegs): a run's expected legs are its route's, the
+    # route.nuon beside its run before the file its identity names, held
+    # to the SHA-256 the identity recorded; the fixtures' own directory
+    # starts empty. Each comparison a mutant could make throw is attempted.
+    let routes_dir = ($dir | path join "routes")
+    jab retire $routes_dir
+    mkdir $routes_dir
+    let route_file = {|name: string, legs: list<string>|
+        let file = ($routes_dir | path join $"($name).nuon")
+        { legs: ($legs | each {|n| { name: $n, places: [], pad: [] } }) } | to nuon | save --raw -f $file
+        { file: ($file | path expand), sha256: (open --raw $file | into binary | hash sha256) }
+    }
+    let stairs = (do $route_file "stairs" [walk ramp stair])
+    let yard = (do $route_file "yard" [walk yard])
+    # each leg three frames walking `metres` along x
+    let walked = {|legs: list<string>, metres: float|
+        $legs | enumerate | each {|l|
+            0..<3 | each {|n| { run: 1, frame: ($l.index * 3 + $n), leg: $l.item, entry: ($n == 0), x: (1.0 + $n * $metres / 2), y: 1.0, draw_us: (1000 + $l.index * 100), critical_us: 1800 } }
+        } | flatten
+    }
+    let routed = {|label: string, image: string, route: any, rows: list<any>|
+        let file = ($routes_dir | path join $"route_($label).nuon")
+        let doc = { label: $label, identity: { build: { image_sha256: $image }, mode: $serial_mode, route: $route }, runs: [{ run: 1, measured: $checked }], rows: $rows }
+        $doc | to nuon | save --raw -f $file
+        $file | path expand
+    }
+    let attempt = {|files: list<string>, admit: bool| try { gauge compare $files "draw_us" 50 --diagnostic=$admit } catch {|e| { refusal: $e.msg } } }
+    # two runs of one route each missing its last leg, which the union of
+    # their legs would pass
+    let short = [(do $routed "short_1" "short" $stairs (do $walked [walk ramp] 0.0)) (do $routed "short_2" "short" $stairs (do $walked [walk ramp] 0.0))]
+    let short_refused = (do $attempt $short false | get -o refusal | default "")
+    assert ($short | all {|f| $short_refused | str contains $"($f) run 1, partial: missing the legs stair" }) $"two runs of one route each missing its last leg are refused partial: ($short_refused)"
+    let short_admitted = (do $attempt $short true)
+    let unreached = ($short_admitted | get -o common | default [] | where leg == "stair" | get -o 0)
+    assert (($unreached | get -o kind) == "missing" and ($unreached | get -o runs) == 0 and ($unreached | get -o bins) == []) $"a leg no run reached is missing in its common entry: ($unreached) ($short_admitted | get -o refusal)"
+    let stair_kinds = ($short_admitted | get -o runs | default [] | each {|r| $r.legs | where leg == "stair" | get -o 0.kind })
+    assert equal $stair_kinds [missing missing] "a leg no run reached is missing in every run"
+    let stair_row = ($short_admitted | get -o table | default [] | where leg == "stair" | get -o 0 | default {})
+    let stair_says = [($stair_row | get -o value_us) ($stair_row | get -o missing) ($stair_row | get -o batches) ($stair_row | get -o route)]
+    assert equal $stair_says [null 2 2 $stairs.sha256] "a leg no run reached is missing in every batch of its row, which names its route"
+    let short_run = ($short_admitted | get -o runs.0 | default {})
+    assert equal [($short_run | get -o expected) ($short_run | get -o route)] [[walk ramp stair] $stairs] "a run carries its route's file and digest and its expected legs, the route's in order"
+    # a recorded route missing and one of another digest, rejected with and
+    # without --diagnostic
+    let whole_route = (do $routed "whole_route" "whole_route" $stairs (do $walked [walk ramp stair] 0.0))
+    let gone = (do $routed "gone" "gone" { file: ($routes_dir | path join "gone.nuon"), sha256: $stairs.sha256 } (do $walked [walk ramp stair] 0.0))
+    let misread = (do $routed "misread" "misread" { file: $stairs.file, sha256: $yard.sha256 } (do $walked [walk ramp stair] 0.0))
+    let unrouted = [
+        { name: "gone", file: $gone, says: $"its identity records the route ($routes_dir | path join 'gone.nuon') of SHA-256 ($stairs.sha256), and none is beside its run" }
+        { name: "misread", file: $misread, says: $"the route ($stairs.file) has SHA-256 ($stairs.sha256) where its identity recorded ($yard.sha256)" }
+    ]
+    for u in $unrouted {
+        for admit in [false true] {
+            let msg = (do $attempt [$whole_route $u.file] $admit | get -o refusal | default "")
+            assert ($msg | str contains $"($u.file) run 1, unrouted: ") $"a recorded route ($u.name) is refused unrouted, --diagnostic ($admit): ($msg)"
+            assert ($msg | str contains $u.says) $"the ($u.name) route's refusal names its file and digests: ($msg)"
+        }
+    }
+    # a run whose rows hold a leg its route does not name
+    let strayed = (do $routed "strayed" "strayed" $yard (do $walked [walk yard ramp] 0.0))
+    let stray_msg = (do $attempt [$strayed] true | get -o refusal | default "")
+    assert ($stray_msg | str contains $"($strayed) run 1, unrouted: its rows hold legs its route ($yard.file) does not name: ramp") $"a run whose rows hold a leg its route does not name is refused unrouted: ($stray_msg)"
+    # the route kept beside the run before the file its identity names,
+    # which now holds another
+    let kept_home = ($routes_dir | path join "kept")
+    let kept_run = ($kept_home | path join "run_1")
+    mkdir $kept_run
+    open --raw $stairs.file | save --raw -f ($kept_run | path join "route.nuon")
+    let renamed = ($routes_dir | path join "renamed.nuon")
+    open --raw $yard.file | save --raw -f $renamed
+    let kept_report = ($kept_home | path join "gauge.nuon")
+    let kept_id = { build: { image_sha256: "kept" }, mode: $serial_mode, route: { file: $renamed, sha256: $stairs.sha256 } }
+    { label: "kept", identity: $kept_id, runs: [{ run: 1, measured: $checked, out: $kept_run }], rows: (do $walked [walk ramp stair] 0.0) } | to nuon | save --raw -f $kept_report
+    let kept_read = (do $attempt [$kept_report] false)
+    let kept_file = ($kept_read | get -o runs.0.route.file | default "" | path expand)
+    assert equal $kept_file ($kept_run | path join "route.nuon" | path expand) $"a run's route is the one beside it before the file its identity names: ($kept_read | get -o refusal)"
+    # two runs whose identities record no route keep the union
+    let loose = (do $attempt [(do $routed "loose_1" "loose" null (do $walked [walk ramp] 0.0)) (do $routed "loose_2" "loose" null (do $walked [walk ramp] 0.0))] false)
+    assert equal [($loose | get -o table | default [] | get leg) ($loose | get -o method.routes)] [[walk ramp] [{ sha256: null, file: null, legs: [walk ramp] }]] $"two runs with no route recorded keep the union of their legs: ($loose | get -o refusal)"
+    # runs on two routes, one image's: refused, and under --diagnostic two
+    # builds, each with its route's legs and its own runs' bins
+    let on_stairs = (do $routed "stairs" "routes_image" $stairs (do $walked [walk ramp stair] 1.0))
+    let on_yard = (do $routed "yard" "routes_image" $yard (do $walked [walk yard] 3.0))
+    let two_routes = (do $attempt [$on_stairs $on_yard] false | get -o refusal | default "")
+    assert ($two_routes | str contains "the runs played 2 routes") $"runs on two routes refuse the comparison: ($two_routes)"
+    let apart = (do $attempt [$on_stairs $on_yard] true)
+    let apart_rows = ($apart | get -o table | default [] | each {|t| [$t.build $t.leg $t.route] })
+    let apart_expected = [[stairs walk $stairs.sha256] [stairs ramp $stairs.sha256] [stairs stair $stairs.sha256] [yard walk $yard.sha256] [yard yard $yard.sha256]]
+    assert equal $apart_rows $apart_expected $"runs on two routes admitted under --diagnostic are two builds, each with its route's legs: ($apart | get -o refusal)"
+    let walk_bins = ($apart | get -o common | default [] | where leg == "walk" | each {|c| [$c.route ($c.bins | length)] })
+    assert equal $walk_bins [[$stairs.sha256 3] [$yard.sha256 3]] "each route's bins are its own runs'"
+
     # schema 3: every frame's packets, read at their offsets, a capture's
     # records at one schema, the packet records clock evidence; the drawing
     # its preparation and its raster to within the microsecond the
@@ -3747,7 +3795,8 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # schema 4: every frame's packets carry the workers that drew them, the
     # grain, and the rounds' slowest worker, busy time, dispatch, and
     # barrier, read at their offsets; a frame drawn by more than
-    # WORKERS_MAX workers, at a grain past the screen's rows, of the serial
+    # WORKERS_MAX_TO_FIVE workers below 6, at a grain past the screen's
+    # rows, of the serial
     # backend carrying a round's time, with a slowest worker, a dispatch, or
     # a barrier past its raster, or with its busy time under its slowest
     # worker's each invalid for that alone
@@ -3874,6 +3923,62 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let full5 = (do $measure (fx-set-all (fx-set-config $good5 { effective: 5 }) "storage" { effective: 5 }))
     assert ($full5.complete and $full5.valid) $"every effective slot in use is valid: ($full5.invalid)"
 
+    # schema 6 (GfxStorage): every frame's harts record, its masks by hart,
+    # read at its offsets; a valid capture, its reporting harts its active;
+    # a frame without its harts record and one at schema 5 in a capture at
+    # 6 incomplete; harts records alone among the states clocked at 6 and
+    # incomplete; on six online secondaries with five granted, every rule
+    # broken by one copy of a mask, the others left, invalid for that
+    # alone, Astra's two negatives among them; a release restoring the
+    # grant, the frames after it drawn on the restored harts, valid; the
+    # comparison of schemas 5 and 6 after the pairing it leans on
+    let good6 = (fx-items 3 --schema 6)
+    let m6 = (do $measure $good6)
+    assert ($m6.complete and $m6.valid and $m6.under and $m6.schema == 6) $"a well-formed capture at schema 6: ($m6.problems) ($m6.invalid)"
+    assert equal ($m6.rows | each {|r| [$r.active $r.reported] } | uniq) [[6 6]] "a valid capture's reporting harts are its active"
+    assert equal [$m6.grants $m6.actives] [[6] [6]] "the measurement carries the grants and the active masks its frames hold"
+    assert equal ([$m6.whole] | append $m6.legs | each {|l| [$l.grants $l.actives] } | uniq) [[[6] [6]]] "each leg's summary and the whole's carry the grants and the active masks"
+    let distinct6 = (fx-set $good6 "harts" 2 { online: 401, floor: 402, grant: 403, claimed: 404, started: 405, active: 406, reported: 407 })
+    let s6 = (gauge stream (fx-bytes $distinct6))
+    assert equal ($s6.harts | get 2 | reject frame schema) { online: 401, floor: 402, grant: 403, claimed: 404, started: 405, active: 406, reported: 407 } "frame 2's harts record read at its offsets, every field a distinct value"
+    let window6 = [
+        { name: "a frame without its harts record", items: ($good6 | where {|i| not ($i.kind == "harts" and $i.frame == 1) }), says: "2 harts records before the end marker for 3 frames" }
+        { name: "a harts record at schema 5", items: (fx-set $good6 "harts" 1 { schema: 5 }), says: "clock records at schemas 5 in a capture at schema 6" }
+    ]
+    for c in $window6 {
+        let mc = (do $measure $c.items)
+        assert ((not $mc.complete) and ($c.says in $mc.problems)) $"($c.name) leaves the window incomplete: ($mc.problems)"
+    }
+    let alone6 = (do $measure ($good6 | where {|i| $i.kind in ["ack" "cack" "state" "harts"] }))
+    assert ($alone6.clocked and $alone6.schema == 6 and (not $alone6.complete)) $"states with harts records alone are clocked at schema 6 and incomplete: ($alone6.schema) ($alone6.problems)"
+    # harts 1 to 6 online (126), five of them granted and started (62), the
+    # frame's five workers on them
+    let six = (fx-set-all (fx-set-all $good6 "harts" { online: 126, floor: 5, grant: 62, started: 62, active: 62, reported: 62 }) "packet" { workers: 5 })
+    let base6 = (do $measure $six)
+    assert ($base6.complete and $base6.valid) $"five workers on a grant of five of six online secondaries is valid: ($base6.problems) ($base6.invalid)"
+    let harts_cases = [
+        { name: "six workers on a grant of five", items: (fx-set (fx-set $six "harts" 1 { active: 126, reported: 126 }) "packet" 1 { workers: 6 }), says: "1 frames dispatched to a hart holding no raster worker" }
+        { name: "five workers, a claimed hart among them still holding its raster worker", items: (fx-set $six "harts" 1 { floor: 4, grant: 94, claimed: 32 }), says: "1 frames with a raster worker on a hart outside the grant" }
+        { name: "workers other than the active harts' count", items: (fx-set $six "packet" 1 { workers: 4 }), says: "1 frames whose packet record's workers are not their active harts' count" }
+        { name: "reporting harts other than the active", items: (fx-set $six "harts" 1 { reported: 30 }), says: "1 frames whose reporting harts are not their active" }
+        { name: "a claimed hart inside the grant", items: (fx-set $six "harts" 1 { claimed: 2 }), says: "1 frames with a claimed hart inside the grant" }
+        { name: "a grant outside the online secondaries", items: (fx-set $six "harts" 1 { grant: 190 }), says: "1 frames whose grant or claimed harts lie outside the online secondaries" }
+        { name: "a claimed hart outside the online secondaries", items: (fx-set $six "harts" 1 { claimed: 128 }), says: "1 frames whose grant or claimed harts lie outside the online secondaries" }
+        { name: "an online mask holding hart 0", items: (fx-set $six "harts" 1 { online: 127 }), says: "1 frames whose online mask holds hart 0 or a hart past the ABI's bound" }
+        { name: "an online mask holding a hart past the bound", items: (fx-set $six "harts" 1 { online: 382 }), says: "1 frames whose online mask holds hart 0 or a hart past the ABI's bound" }
+        { name: "a grant short of its floor", items: (fx-set $six "harts" 1 { floor: 6 }), says: "1 frames whose grant holds fewer harts than its floor" }
+    ]
+    for c in $harts_cases {
+        let mc = (do $measure $c.items)
+        assert ($mc.complete and $mc.invalid == [$c.says]) $"($c.name) is invalid for that alone: ($mc.problems) ($mc.invalid)"
+    }
+    # a claim of hart 5 at frame 0, released before frame 1: the grant and
+    # the started harts four, then five again, each frame's workers on its
+    # own grant
+    let released = (fx-set (fx-set $six "harts" 0 { floor: 4, grant: 30, claimed: 32, started: 30, active: 30, reported: 30 }) "packet" 0 { workers: 4 })
+    let mr = (do $measure $released)
+    assert ($mr.complete and $mr.valid) $"a release restoring the grant, the frames after it drawn on the restored harts, is valid: ($mr.problems) ($mr.invalid)"
+
     # pairing from schema 4: workers asked and unanswered, answered late,
     # or answered and drawn by other workers or at another grain, and below
     # schema 4 an identity asking workers other than 0 each leave a run
@@ -3918,6 +4023,14 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let legacy_serial = (try { gauge compare [$paired4 (fx-gauge $dir "legacy_serial" "legacy_serial" "legacy_serial" 0 $three_asked --workers 0 --grain 0)] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
     assert (($legacy_serial | get -o refusal) == null) $"a schema 3 run with W 0 answered before its first frame stands: ($legacy_serial | get -o refusal)"
     assert equal ($legacy_serial.runs | where label == "legacy_serial" | get 0.effective_workers) 0 "a schema 3 run plays the serial backend, 0 workers"
+
+    # schemas 5 and 6 compared on tiles_us and critical_us, after the
+    # pairing their runs, asking no workers, lean on
+    let five_six = [(fx-gauge $dir "schema_five" "schema_five" "five_image" 0 $good5) (fx-gauge $dir "schema_six" "schema_six" "six_image" 0 $good6)]
+    for field in [tiles_us critical_us] {
+        let compared56 = (try { gauge compare $five_six $field 50 | get table | get build | uniq } catch {|e| [$e.msg] })
+        assert equal $compared56 [schema_five schema_six] $"schemas 5 and 6 compare on ($field)"
+    }
 
     # below schema 4 the records hold no workers: a run asking W 0,
     # answered before its first frame and no W after it, drew with the
@@ -4118,6 +4231,15 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let tabled = ($doc.compared | each {|c| [$c.field ($c | get -o table | default [] | get build | uniq)] })
     assert equal $tabled [[critical_us [three two]] [draw_us [three two]]] $"a bench of route runs alone compares them on both fields, each table naming both builds: ($doc.compared | get -o error)"
 
+    # written: the hash write-identity returns is its identity file's as
+    # written, which the requests' and the binding's fixtures after it
+    # bind by; its own directory started empty
+    let written = ($dir | path join "written")
+    jab retire $written
+    mkdir $written
+    let w_sha = (gauge write-identity { build: { image_sha256: "written_image" }, mode: { cadence: 0, workers: 2, grain: 0, pad: "route" } } $written)
+    assert equal $w_sha (open --raw ($written | path join "identity.nuon") | into binary | hash sha256) "the hash a run records is its identity file's as written"
+
     # requests (SelectionIdentity): a run's selection and request are its
     # own identity's, read through run-request, the report's summary its
     # fallback alone; its own directory started empty
@@ -4309,10 +4431,6 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         toolchain: { prefix: "fx-", assembler: "GNU assembler 2.47", link: "riscv" },
         mode: { window: false, sound: "recorded", pad: "route", seed: 1, cadence: 1, workers: 2, grain: 32, end: 10sec, capture: 12sec },
     }
-    let w_dir = ($bnd | path join "written")
-    mkdir $w_dir
-    let w_sha = (gauge write-identity $full_id $w_dir)
-    assert equal $w_sha (open --raw ($w_dir | path join "identity.nuon") | into binary | hash sha256) "the hash a run records is its identity file's as written"
     let h_dir = ($bnd | path join "hash" "run_1")
     let h_sha = (fx-id-file $h_dir $full_id)
     let h_run = { run: 1, seed: 1, out: $h_dir, identity: $full_id, corrections: null, identity_sha256: $h_sha }
@@ -4870,24 +4988,26 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 
 # A synthetic capture's records as the program sends them over `frames`
 # frames: the seed's answer, from schema 2 the cadence's, and with
-# `asked` the W's, at schema 5 the tile pool's configuration from frame 0,
-# frame 0's state, then at each frame's top the frame before's clock,
-# drawing, from schema 2 presentation, from schema 3 packets, drawn at
-# schema 4 by `workers`, and at schema 5 its tile pool's activity and
-# storage (fx-pool), the end marker after the final frame's, and the
-# frame's state, two frames' states past the window.
+# `asked` the W's, from schema 5 the tile pool's configuration from frame
+# 0, frame 0's state, then at each frame's top the frame before's clock,
+# drawing, from schema 2 presentation, from schema 3 packets, drawn from
+# schema 4 by `workers`, from schema 5 its tile pool's activity and
+# storage (fx-pool), and at schema 6 its harts (fx-harts), the end marker
+# after the final frame's, and the frame's state, two frames' states past
+# the window.
 def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
         [(fx-frame ($n - 1) $schema) (fx-draw ($n - 1) $schema)]
         | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
         | append (if $schema >= 3 { [(fx-packet ($n - 1) $schema $workers)] } else { [] })
-        | append (if $schema >= 5 { [(fx-tile ($n - 1)) (fx-storage ($n - 1))] } else { [] })
+        | append (if $schema >= 5 { [(fx-tile ($n - 1) $schema) (fx-storage ($n - 1) $schema)] } else { [] })
+        | append (if $schema >= 6 { [(fx-harts ($n - 1) $workers)] } else { [] })
         | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
     let answers = (if $schema >= 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
     let worked = (if $asked { $answers | append { kind: "wack" } } else { $answers })
-    let configured = (if $schema >= 5 { $worked | append (fx-config 0) } else { $worked })
+    let configured = (if $schema >= 5 { $worked | append (fx-config 0 $schema) } else { $worked })
     $configured | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
 }
 
@@ -4925,39 +5045,52 @@ def fx-pool [frame: int]: nothing -> record<admitted: int, filtered: int, batch:
 # admitted and filtered, none dropped; the batch the frame before's, all
 # ones at frame 0; its merge whole, nothing evicted; the construction 40
 # us of the boundary's 100; the blocks drawn without their tiles the
-# requests.
-def fx-tile [frame: int]: nothing -> record {
+# requests; at `schema`, 5 unless given.
+def fx-tile [frame: int, schema: int = 5]: nothing -> record {
     let p = (fx-pool $frame)
     {
         kind: "tile", frame: $frame, admitted: $p.admitted, dropped: 0, filtered: $p.filtered,
         source: (if $frame == 0 { $FX_NO_BATCH } else { $frame - 1 }), batch: $p.batch, merged: $p.merged,
         unprocessed: 0, evicted: 0, build: 40, overrun: 0, hits: 10, straddling: 2,
-        missed: ($p.admitted + $p.filtered), schema: 5,
+        missed: ($p.admitted + $p.filtered), schema: $schema,
     }
 }
 
 # A storage record's fields for a synthetic capture (fx-pool): the slots
 # in use, every slot the pool's, none BUILDING, a requesting surface for
 # a batch with requests, the merge's entries the keys merged, and the
-# memory in use the tables' and the slots', its own high-water.
-def fx-storage [frame: int]: nothing -> record {
+# memory in use the tables' and the slots', its own high-water; at
+# `schema`, 5 unless given.
+def fx-storage [frame: int, schema: int = 5]: nothing -> record {
     let p = (fx-pool $frame)
     let memory = ($FX_TABLES + $p.slots * $FX_TILE)
     {
         kind: "storage", frame: $frame, used: $p.slots, effective: $FX_SLOTS, building: 0, ring: 0,
-        requesting: (if $p.batch > 0 { 1 } else { 0 }), merge: $p.merged, memory: $memory, peak: $memory, schema: 5,
+        requesting: (if $p.batch > 0 { 1 } else { 0 }), merge: $p.merged, memory: $memory, peak: $memory, schema: $schema,
     }
 }
 
 # A configuration record's fields for a synthetic capture, in force from
 # `from`: a pool of 32-texel tiles in 32 MiB, the synthetic captures' own
 # whatever the build's side, since the rules read a capture's records
-# against each other.
-def fx-config [from: int]: nothing -> record {
+# against each other; at `schema`, 5 unless given.
+def fx-config [from: int, schema: int = 5]: nothing -> record {
     {
         kind: "config", merge: 250, from: $from, shift: 5, size: $FX_TILE, slots: $FX_SLOTS, effective: $FX_SLOTS,
         quota: 98304, allowance: 1000, flags: 0, guarantee: 16, ring: 4096, recent: 4096, directory: 1537780,
-        memory: $FX_MEMORY, schema: 5,
+        memory: $FX_MEMORY, schema: $schema,
+    }
+}
+
+# A harts record's masks for a synthetic capture at schema 6, a machine of
+# two online secondaries, harts 1 and 2, both reserved, granted, and
+# holding a raster worker: the frame dispatched to the lowest `workers` of
+# them, each reporting its job.
+def fx-harts [frame: int, workers: int = 2]: nothing -> record {
+    let active = (if $workers >= 2 { 6 } else if $workers == 1 { 2 } else { 0 })
+    {
+        kind: "harts", frame: $frame, online: 6, floor: 2, grant: 6, claimed: 0, started: 6,
+        active: $active, reported: $active, schema: 6,
     }
 }
 
@@ -5185,6 +5318,10 @@ def fx-bytes [items: list<any>]: nothing -> binary {
                 } else { fx-zeros 24 })
                 (fx-u32 $i.schema)
             ] | bytes collect),
+            "harts" => ([
+                0x[12 00 00 00] (fx-u32 $i.frame) (fx-u32 $i.online) (fx-u32 $i.floor) (fx-u32 $i.grant) (fx-u32 $i.claimed)
+                (fx-u32 $i.started) (fx-u32 $i.active) (fx-u32 $i.reported) (fx-zeros 24) (fx-u32 $i.schema)
+            ] | bytes collect),
             "end" => ([0x[09 00 00 00] (fx-u32 $i.frame) (fx-zeros 52) (fx-u32 $i.schema)] | bytes collect),
         }
     } | bytes collect
@@ -5198,18 +5335,12 @@ def fx-zeros [n: int]: nothing -> binary { if $n <= 0 { 0x[] } else { 1..$n | ea
 def fx-pad [b: binary]: nothing -> binary { [$b (fx-zeros ($RECORD - ($b | bytes length)))] | bytes collect }
 
 # The census's own fixtures, a CENSUS build's (census.S, census.nu), on
-# the still copy of Render Zero's spawn view in one launch: the clamped
-# edge's case at the load, a tile past a map's last node read shaded by
-# its nodes and by lumel_sample, where nodes clamped to the last column
-# alone read it uniform; every frame valid as census.nu reads it, whole
-# and accounting; the shrunk chunk splitting every list of two surfaces or
-# more and the build's own bound splitting none; planes and walls both
-# demanded; the lighting's revisions in order, no tile uniform by its
-# nodes and not by lumel_sample, the ordinary light's uniform tiles
-# checked, every demanded tile uniform and checked in a full bright
-# revision's first frame and uniform through it, none uniform or checked
-# under the parity; and the reader's refusals on the run's own log
-# (census-reader-holds).
+# the still copy of Render Zero's spawn view in one launch on eight harts,
+# every context the directory counts written each frame: the launch here,
+# QEMU silent and no fault, then the run's log read in a nu of its own by
+# census_holds.nu's census-fixture-holds, which holds what the census
+# writes and the reader's refusals on it, since test.nu's modules loaded
+# around that reading slow its closures about tenfold.
 export def census-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
     let dir = ($out | path join "census")
     mkdir $dir
@@ -5221,73 +5352,18 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
         { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
         { at: $CENSUS_SHRINK.to, bytes: (census-frame 0) }
     ] | append $lights | sort-by at)
-    let run = (jab launch --kernel $kernel --image $image --out ($dir | path join "run") --set $set --sound --api --disk $still_disk --serial "fps" --send $sends --capture $CENSUS_END --seconds 10)
+    let run = (jab launch --kernel $kernel --image $image --out ($dir | path join "run") --set $set --sound --api --disk $still_disk --serial "fps" --send $sends --capture $CENSUS_END --seconds 10 --harts $CENSUS_HARTS)
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the census run"
     let faults = ($run.serial | lines | where {|l| $l starts-with "jab: " })
     assert ($faults | is-empty) $"no fault on the census run: ($faults)"
 
-    # the clamped edge: a 3 by 3 map whose last column's nodes are alike
-    # and whose penultimate column's last node is a level under, a tile at
-    # level 1 past the last node, which lumel_sample reads through the
-    # penultimate cell; its nodes from the sampler's clamp and the sampler
-    # itself both find it shaded
-    let edge = (census edge $run.serial)
-    assert ($edge != null) "the clamped edge's line after the load"
-    assert (not $edge.skipped) $"the clamped edge's case ran: ($edge)"
-    assert equal $edge.nodes 0 $"the tile past the last node shaded by its nodes, the penultimate column's in reach as lumel_sample clamps: ($edge)"
-    assert equal $edge.sampler 0 $"the tile past the last node shaded at lumel_sample's texel centres: ($edge)"
-
-    let directory = (census directory $run.serial)
-    assert ($directory != null) "the census's directory after the load"
-    assert ($directory.maps > 0 and $directory.planes_below > 0 and $directory.surfaces > $directory.planes_below) $"the directory's maps and surfaces: ($directory)"
-    let read = (census frames $run.serial)
-    let cut = ($read | enumerate | where {|e| not $e.item.ended } | get index)
-    assert ($cut | all {|i| $i == (($read | length) - 1) }) $"only the log's last frame cut by the run's end: frames ($cut) of ($read | length)"
-    let frames = ($read | where ended)
-    assert (($frames | length) > 50) $"census frames through the run: ($frames | length)"
-    let invalid = ($frames | where {|f| not $f.valid })
-    assert ($invalid | is-empty) $"every census frame whole and accounting: ($invalid | first 3 | select frame reasons)"
-    let lists = {|fs: list| $fs | each {|f| $f.sides | each {|s| $s.contexts } | flatten } | flatten }
-
-    # the line's bound: the shrunk chunk splits every list of two surfaces
-    # or more, each reassembled whole, and the build's own bound none here
-    let shrunk = ($frames | where chunk == $CENSUS_SHRUNK)
-    assert (not ($shrunk | is-empty)) $"frames under the shrunk chunk: ($frames | get chunk | uniq)"
-    let unsplit = (do $lists $shrunk | where {|l| ($l.pairs | length) >= 2 and $l.chunks < 2 })
-    assert ($unsplit | is-empty) $"every list of two surfaces or more split under the shrunk chunk: ($unsplit | first 3 | select side context listed chunks)"
-    let split = (do $lists $shrunk | where {|l| $l.chunks > 1 })
-    assert (not ($split | is-empty)) "lists split under the shrunk chunk"
-    let whole = (do $lists ($frames | where chunk != $CENSUS_SHRUNK) | where {|l| $l.chunks > 1 })
-    assert ($whole | is-empty) $"no list split under the build's own bound: ($whole | first 3 | select side context listed chunks)"
-
-    let sides = ($frames | each {|f| $f.sides | each {|s| $s | insert frame $f.frame | insert lighting $f.lighting } } | flatten)
-    assert (($sides | where {|s| $s.p1 > 0 and $s.q1 > 0 } | length) > 0) "planes and walls both demanded from the spawn view"
-
-    # the lighting: the revisions in order, no tile its nodes call uniform
-    # that lumel_sample does not, the ordinary light's uniform tiles
-    # checked, every demanded tile uniform and checked in a full bright
-    # revision's first frame and uniform through it, none under the parity
-    assert equal ($frames | get lighting | uniq) [0 1 2 3] $"the lighting's revisions in order, one an L: ($frames | get lighting | uniq)"
-    let mismatched = ($sides | where mismatches > 0)
-    assert ($mismatched | is-empty) $"no tile uniform by its nodes and not by lumel_sample: ($mismatched | first 3 | select frame side uniform checked mismatches)"
-    let ordinary = ($sides | where lighting == 0)
-    assert (not ($ordinary | is-empty)) "frames under the ordinary light"
-    let ordinary_checked = ($ordinary | get checked | math sum)
-    assert ($ordinary_checked > 0) $"the ordinary light's uniform tiles checked by lumel_sample: ($ordinary_checked)"
-    for revision in [1 3] {
-        let lit = ($frames | where lighting == $revision)
-        assert (not ($lit | is-empty)) $"frames under full bright, revision ($revision)"
-        let first = ($lit | first)
-        let unchecked = ($first.sides | where {|s| $s.demand == 0 or $s.uniform != $s.demand or $s.checked != $s.demand })
-        assert ($unchecked | is-empty) $"under full bright every demanded tile uniform and checked in revision ($revision)'s first frame ($first.frame): ($unchecked | select side demand uniform checked)"
-        let shaded = ($sides | where {|s| $s.lighting == $revision and $s.uniform != $s.demand })
-        assert ($shaded | is-empty) $"every demanded tile uniform through revision ($revision): ($shaded | first 3 | select frame side demand uniform)"
-    }
-    let parity = ($sides | where lighting == 2)
-    assert (not ($parity | is-empty)) "frames under the parity"
-    let even = ($parity | where {|s| $s.uniform > 0 or $s.checked > 0 })
-    assert ($even | is-empty) $"under the parity no tile uniform and none checked: ($even | first 3 | select frame side demand uniform checked)"
-
-    census-reader-holds $run.serial
-    print $"fps: the census's ($frames | length) frames, ($shrunk | length) under the shrunk chunk, revisions ($frames | get lighting | uniq | str join ' '), the edge's verdicts ($edge.nodes) and ($edge.sampler)"
+    # the run's log read in a nu of its own (census_holds.nu's
+    # census-fixture-holds), its failure's own report first in the output
+    let holds = ($game | path join "test" "census_holds.nu")
+    let serial = ($dir | path join "run" "serial.log")
+    let command = ("use '" + $holds + "' [census-fixture-holds]; print (census-fixture-holds (open --raw '" + $serial + "' | decode) " + ($CENSUS_SHRUNK | into string) + " " + ($GFX_SLOTS | into string) + ")")
+    let read = (^nu -c $command | complete)
+    print -n $read.stdout
+    if $read.exit_code != 0 { print -e -n $read.stderr }
+    assert equal $read.exit_code 0 "the census fixture's reading held in a nu of its own"
 }

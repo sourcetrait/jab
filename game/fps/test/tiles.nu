@@ -38,7 +38,7 @@ const SIDE = 64
 const DUMP_TEXELS = 12
 const DUMP_RECORDS = 342
 # render.inc's REPORT_SCHEMA_VERSION and REPORT_SCHEMA, its offset
-const SCHEMA = 5
+const SCHEMA = 6
 const SCHEMA_AT = 60
 
 # A tile's records closed: the problems its count and its padding raise,

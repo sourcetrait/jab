@@ -757,16 +757,22 @@ A span block's pixels.
 
 `u32`: the depth a sky pixel stores, so anything drawn later overwrites it.
 
-## .set WORKERS_MAX
+## .set GFX_SLOTS
 
-The raster's workers at most, each on a secondary hart of its own.
+The raster's worker slots, the ABI's bound less hart 0, JAB_HARTS_MAX less
+one, seven.
 
-The raster's workers (workers.S): started once after the load on the
-lowest online secondaries, each with its mailbox (`jab_jobs.inc`), a
-context, and a stack; a frame renders each packet in a round, the frame's
-workers each rendering whole bands of rows. Two, harts 1 and 2 on the
-specification's four, the third secondary left for the game and its
-services.
+The raster's workers (workers.S): started once after the load on every
+hart of the reservation's grant, each in its hart's slot, slot s hart s +
+1's, with its mailbox (`jab_jobs.inc`), a context, a stack, and a
+STAT_BANDS counter; a frame renders each packet in a round, the frame's
+workers each rendering whole bands of rows. The storage is sized by the
+bound so a raised bound is a rebuild and no change in the program: a
+slot's WORKER_STACK and context, about 115 KiB for seven, and the tile
+pool's and the census's contexts at GFX_SLOTS plus one. The harts owned
+are the grant's and a frame's workers the lowest W of those started, each
+kept apart from the storage. A round's harts are a word's mask, so the
+bound stays within 32.
 
 ## .set WORKER_STACK
 
@@ -792,8 +798,9 @@ workers' mean; at 32 rows it stayed within a tenth of one.
 `u32`: the round's packet's commands.
 
 The round record, hart 0's, published with each job of the round: what
-the packet holds, the workers, the grain and the bands it makes, and the
-clear. A worker reads it after its await and nothing else hart 0 keeps.
+the packet holds, the workers and their harts, the grain and the bands it
+makes, and the clear. A worker reads it after its await and nothing else
+hart 0 keeps.
 
 ## .set ROUND_SPANS
 
@@ -817,7 +824,7 @@ clear. A worker reads it after its await and nothing else hart 0 keeps.
 
 ## .set ROUND_DELAY_WORKER
 
-`u32`: on a debug build, the J frame's delayed worker's index plus one, 0 for none.
+`u32`: on a debug build, the J frame's delayed worker's hart, 0 for none.
 
 ## .set ROUND_DELAY_US
 
@@ -825,15 +832,19 @@ clear. A worker reads it after its await and nothing else hart 0 keeps.
 
 ## .set ROUND_FAULT_WORKER
 
-`u32`: on a debug build, the J frame's faulting worker's index plus one for this round alone, 0 for none.
+`u32`: on a debug build, the J frame's faulting worker's hart for this round alone, 0 for none.
 
 ## .set ROUND_HOLD
 
-`u32`: on a debug build, the J frame's hold, the delayed worker in fixed bands held until the join reaches its index.
+`u32`: on a debug build, the J frame's hold, the delayed worker in fixed bands held until the join passes its position.
 
 ## .set ROUND_RELEASE
 
-`u32`: on a debug build, the join's progress, 0 at the publish and each index plus one as the join loop reaches it, the one word of the record hart 0 writes while the round runs.
+`u32`: on a debug build, the join's progress, 0 at the publish and each position plus one as the join loop reaches it, the one word of the record hart 0 writes while the round runs.
+
+## .set ROUND_HARTS
+
+`u32`: the round's harts, by hart, the lowest of the started a worker; the publishes, the joins, and the walks after the round go over them ascending, a worker's position its place among them.
 
 ## .set ROUND_SIZE
 
@@ -842,6 +853,10 @@ The round record's bytes, a line.
 ## .set ROUND_CLEAR
 
 `u32`: the round clears each band's depth before its spans, and on a debug build prepaints its pixels.
+
+## .set JOB_POSITION
+
+`u64`: the job's position among the round's harts, in its arguments, hart 0's, stored before the publish's fence; the worker's fixed band and its hold.
 
 ## .set JOB_START
 
@@ -854,6 +869,10 @@ The round record's bytes, a line.
 ## .set JOB_BANDS
 
 `u64`: the bands it rendered in the round.
+
+## .set JOB_HART
+
+`u64`: the hart that rendered the job, the kernel's a1, written before the completion, whose fence orders it; read into the frame's reporting mask.
 
 ## .set STAT_SECTORS
 
@@ -1044,7 +1063,7 @@ backend drew.
 
 ## .set STAT_BANDS
 
-`WORKERS_MAX u64`: the bands each worker rendered over the frame's rounds.
+`GFX_SLOTS u64`: the bands each slot's worker rendered over the frame's rounds, every slot's cleared at the frame's start.
 
 ## .set STAT_SIZE
 
@@ -1263,7 +1282,7 @@ request.
 
 ## .set TILE_CONTEXTS
 
-`u64`: the raster contexts that request tiles, hart 0's and the workers'.
+`u64`: the raster contexts that request tiles, hart 0's and a slot's each, GFX_SLOTS plus one, an admission block each in the pool's tables; a context's index is its hart.
 
 ## .set TILE_MERGE
 
@@ -1511,7 +1530,7 @@ A census slot's bytes.
 
 ## .set CENSUS_CONTEXTS
 
-`u64`: the raster contexts the census reads, hart 0's and the workers'.
+`u64`: the raster contexts the census reads, hart 0's and a slot's each, GFX_SLOTS plus one, a context's index its hart; a tile's entry holds a bit a context from CENSUS_CONTEXT_SHIFT, and the directory line names the count.
 
 ## .set SCRATCH_POISON
 
@@ -1525,11 +1544,11 @@ The records over the API are 64 bytes each. An event carries the state's
 fields and its own from REPORT_FIELD0.
 
 The clock records, REPORT_FRAME, REPORT_DRAW, REPORT_PRESENT,
-REPORT_PACKET, REPORT_TILE, and REPORT_STORAGE, and the end marker,
-REPORT_END, put the frame's number where the state puts its sector and the
-schema's version in the last word, so a reader refuses a layout it does not
-know; the state record keeps its layout and meanings. The six clock records
-of a frame go out in one write at the next frame's start, and a
+REPORT_PACKET, REPORT_TILE, REPORT_STORAGE, and REPORT_HARTS, and the end
+marker, REPORT_END, put the frame's number where the state puts its sector
+and the schema's version in the last word, so a reader refuses a layout it
+does not know; the state record keeps its layout and meanings. The seven
+clock records of a frame go out in one write at the next frame's start, and a
 configuration record, REPORT_CONFIG, ahead of the first frame it governs.
 The frame record's start and flip's end are 64 bits on 8-byte
 boundaries and every other field 32. Its critical path runs from the frame's
@@ -1709,13 +1728,17 @@ A record's bytes, zero to the end.
 
 `u32`: on a debug build, DUMP_TEXELS texels of the tile the dump record before it names, TEXELS_* fields; the clock's readers pass both kinds over.
 
+## .set REPORT_HARTS
+
+`u32`: the frame before's harts, HARTS_* fields, beside its clock: the program's masks by hart, so the gauge holds each frame's workers to the grant in force at it.
+
 ## .set REPORT_FRAME_RECORDS
 
-`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, and storage records.
+`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, and harts records, 448 bytes.
 
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out, 5 with the tile pool's records.
+`u32`: the clock records' layout as this source lays them out, 6 with the harts record, every record at it; 5 added the tile pool's records.
 
 ## .set TIME_START
 
@@ -2078,6 +2101,42 @@ consults no checkout. A changed capacity governs the admissions after it.
 ## .set STORE_PEAK
 
 `u32`: its high-water since the load.
+
+## .set HARTS_ONLINE
+
+`u32`: the online secondaries at the start, by hart.
+
+The harts record's masks are by hart, bit h hart h's, so the gauge reads
+which harts, never a count alone: the online secondaries, the reservation's
+floor and grant, the harts under the program's claims, those holding a
+raster worker, those the frame dispatched to, and those whose workers
+completed its jobs. The grant is read at the frame's start, so a claim or
+a release shows at the frame it governs. The program makes no claims, so
+HARTS_CLAIMED is 0. 36 to 56 are free.
+
+## .set HARTS_FLOOR
+
+`u32`: the count reserved, JAB_RESERVED_GFX_HARTS.
+
+## .set HARTS_GRANT
+
+`u32`: the reservation's grant read at the frame's start, `jab.sys.harts.owned JAB_OWNER_RESERVED`.
+
+## .set HARTS_CLAIMED
+
+`u32`: the harts under the program's claims, `owned` of each claim standing.
+
+## .set HARTS_STARTED
+
+`u32`: the harts holding a raster worker.
+
+## .set HARTS_ACTIVE
+
+`u32`: the harts the frame dispatched to, its rounds' harts.
+
+## .set HARTS_REPORTED
+
+`u32`: the harts whose workers completed the frame's jobs, read from each job's JOB_HART.
 
 ## .set DUMP_SLOT
 

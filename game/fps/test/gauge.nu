@@ -17,11 +17,15 @@
 # filtered, the batch its boundary consumed, the merge, the eviction, the
 # construction, and the blocks hit, straddling, and missed, its storage
 # record (kind 15), the slots and memory at the boundary's end, and a
-# configuration record (kind 14) ahead of the first frame it governs.
+# configuration record (kind 14) ahead of the first frame it governs; and
+# at schema 6 its harts record (kind 18), masks by hart: the online
+# secondaries, the count reserved, the grant at the frame's latch, the
+# harts under the program's claims, those holding a raster worker, those
+# the frame dispatched to, and those whose workers completed its jobs.
 # After the console's E
 # the end marker (kind 9) names the final frame of the measurement, which
 # the frames from 0 to it make up. render.inc lays the records out; this
-# reader takes schemas 1 to 5. `run` plays a route on a build `--runs`
+# reader takes schemas 1 to 6. `run` plays a route on a build `--runs`
 # times, headless or with `--host` in the host's window and audio, each
 # run seeded by the console's R, asking its cadence by the console's C and
 # with `--workers` its workers and grain by the console's W before its
@@ -48,19 +52,23 @@
 # simulation, flip end, and next start in that order, from schema 3 every
 # frame's drawing its preparation and its raster, the bytes its packets
 # held its commands' and its span records', and its packets prepared from
-# its own simulation, from schema 4 every frame's workers at most
-# WORKERS_MAX at a grain within the screen's rows, its round times none
-# under the serial backend and its slowest worker, dispatch, and barrier
-# within its raster, its busy time at least its slowest worker's and at
-# most W times it with the W - 1 microseconds its conversions drop, and at
-# schema 5 every frame's tile pool within its slots and memory, its batch
-# the frame before's and accounted, its records agreeing with each other
-# and with the configuration in force (invalidity). The ceiling is judged
-# on the critical path's median: a valid measurement is under the ceiling
-# when its median is under 15 ms, and its frames at or over 15 ms are its
-# tail, counted beside the median.
-# A capture holding no record of the clock's kinds, 7 to 10 and 12 to 15,
-# is a build older than them: it holds no measurement and is read from
+# its own simulation, from schema 4 every frame's workers, below 6 at
+# most WORKERS_MAX_TO_FIVE, at a grain within the screen's rows, its round
+# times none under the serial backend and its slowest worker, dispatch,
+# and barrier within its raster, its busy time at least its slowest
+# worker's and at most W times it with the W - 1 microseconds its
+# conversions drop, from schema 5 every frame's tile pool within its slots
+# and memory, its batch the frame before's and accounted, its records
+# agreeing with each other and with the configuration in force, and at
+# schema 6 every frame's workers its active harts, inside its started
+# harts, inside its grant, inside the online secondaries, its reporting
+# harts its active, its claims outside its grant, and its grant at least
+# its floor (invalidity). The ceiling is judged on the critical path's
+# median: a valid measurement is under the ceiling when its median is
+# under 15 ms, and its frames at or over 15 ms are its tail, counted
+# beside the median.
+# A capture holding no record of the clock's kinds, 7 to 10, 12 to 15,
+# and 18, is a build older than them: it holds no measurement and is read from
 # its state records alone, the drawing's and the game's microseconds.
 # `bench-report` reads a run of a bench whose steps are this script's,
 # every cadence's frames pooled. `just do gauge`, `just do gauge-play`,
@@ -83,7 +91,7 @@ use ./pose.nu
 const WORKSPACE = (path self | path dirname | path join ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
-const SCHEMAS = [1 2 3 4 5]
+const SCHEMAS = [1 2 3 4 5 6]
 const CEILING_US = 15000
 const KIND_STATE = 1
 const KIND_FRAME = 7
@@ -95,6 +103,7 @@ const KIND_PACKET = 12
 const KIND_TILE = 13
 const KIND_CONFIG = 14
 const KIND_STORAGE = 15
+const KIND_HARTS = 18
 # the batch source of the first boundary, which consumes none
 const NO_BATCH = 4294967295
 # the console's commands as its records name them: P a placement, R a
@@ -103,9 +112,13 @@ const CONSOLE_P = 80
 const CONSOLE_R = 82
 const CONSOLE_C = 67
 const CONSOLE_W = 87
-# the raster's workers a frame may have, render.inc's WORKERS_MAX, and the
+# the raster's workers a frame may have through schema 5, render.inc's
+# bound then; from schema 6 a frame's workers are its active harts, a
+# slot a secondary (GFX_SLOTS, the ABI's JAB_HARTS_MAX less hart 0); the
 # screen's rows, a grain's bound
-const WORKERS_MAX = 2
+const WORKERS_MAX_TO_FIVE = 2
+const GFX_SLOTS = 7
+const HARTS_MAX = 8
 const SCREEN_ROWS = 1080
 # the cadences: 0 awaits after the flip, 1 waits before it only when
 # presenting would be early, 2 holds every flip to the display's tick
@@ -124,7 +137,7 @@ const SPAN_RECORDS = 65536
 # a command's bytes in a packet by schema, the polygon's record copied
 # whole, 312 while it carried its tile bindings and 232 from the pool on,
 # and a span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
-const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232 }
+const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232, "6": 232 }
 const SPAN_BYTES = 16
 # a frame's drawing less its preparation and its raster: the microsecond
 # the three conversions drop, at most this
@@ -140,6 +153,7 @@ const PHASES = {
     "3": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "4": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "5": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+    "6": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
 }
 const PARTS = {
     "1": [clear_us portals_us planes_us walls_us sprites_us],
@@ -147,6 +161,7 @@ const PARTS = {
     "3": [clear_us portals_us planes_us walls_us sprites_us raster_us],
     "4": [clear_us portals_us planes_us walls_us sprites_us raster_us],
     "5": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
+    "6": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
 }
 # the drawing's parts whose meaning moved with the packets (compare): the
 # phases, holding their rendering before the packets and preparation
@@ -251,8 +266,8 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0|1|2] [--grain N] [--harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
@@ -501,11 +516,11 @@ export def workers-frame [workers: int, grain: int]: nothing -> binary {
 
 # The workers and grain a run asks for, as its identity records them:
 # none, both null, for workers under 0, so no W goes out and the image's
-# own default draws; else the workers, 0 to WORKERS_MAX, and the grain, 0
+# own default draws; else the workers, 0 to GFX_SLOTS, and the grain, 0
 # to the screen's rows.
 def workers-asked [workers: int, grain: int]: nothing -> record<workers: oneof<int, nothing>, grain: oneof<int, nothing>> {
     if $workers < 0 { return { workers: null, grain: null } }
-    if $workers > $WORKERS_MAX { error make { msg: $"--workers is 0 to ($WORKERS_MAX), not ($workers)" } }
+    if $workers > $GFX_SLOTS { error make { msg: $"--workers is 0 to ($GFX_SLOTS), not ($workers)" } }
     if $grain < 0 or $grain > $SCREEN_ROWS { error make { msg: $"--grain is 0 to ($SCREEN_ROWS), not ($grain)" } }
     { workers: $workers, grain: $grain }
 }
@@ -1132,11 +1147,12 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # times from its schema 4 and null below it, the tile, storage, and
 # configuration records, kinds 13, 15, and 14, a configuration's frame
 # the first it governs and its arrival, the state records and the frame
-# records that came before it, and the marker, kind 9, with
+# records that came before it, the harts records, kind 18, each a frame's
+# masks by hart, and the marker, kind 9, with
 # its frame and schema, null when none came. What follows the marker is
 # outside the measurement: its state records are counted as `past` and
 # nothing else in it is read.
-export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
     mut states = []
     mut events = []
     mut frames = []
@@ -1146,6 +1162,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
     mut tiles = []
     mut storages = []
     mut configs = []
+    mut harts = []
     mut placed = 0
     mut seeded = false
     mut late_seed = false
@@ -1237,6 +1254,12 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 directory_bytes: (u32-at $r 52), tile_memory: (u32-at $r 56), schema: (u32-at $r 60),
                 arrival_states: ($states | length), arrival_frames: ($frames | length),
             })
+        } else if $kind == $KIND_HARTS {
+            $harts = ($harts | append {
+                frame: (u32-at $r 4), online: (u32-at $r 8), floor: (u32-at $r 12), grant: (u32-at $r 16),
+                claimed: (u32-at $r 20), started: (u32-at $r 24), active: (u32-at $r 28), reported: (u32-at $r 32),
+                schema: (u32-at $r 60),
+            })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
@@ -1245,7 +1268,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
         draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
-        end: $end, past: $past,
+        harts: $harts, end: $end, past: $past,
     }
 }
 
@@ -1253,7 +1276,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
 # first clock record's; null for a capture with none.
 def schema-of [s: record]: nothing -> oneof<int, nothing> {
     if $s.end != null { return $s.end.schema }
-    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | get -o 0)
+    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | get -o 0)
     if $first == null { null } else { $first.schema }
 }
 
@@ -1279,13 +1302,13 @@ def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
 # identity's commit or dirty flag says, since the commit is the
 # checkout's at launch and never the image's; any other run unknown. The
 # tiles were built inside the plane and wall phases at every schema below
-# 5, whatever the image, and at the pool's boundary at 5. A measurement
-# written before schema 2 was read is at schema 1, as compare hands it
-# here.
+# 5, whatever the image, and at the pool's boundary from 5, schema 6
+# holding the parts as 5 does. A measurement written before schema 2 was
+# read is at schema 1, as compare hands it here.
 def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, tiles: string, evidence: string> {
-    let tiles = (if $schema == 5 { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
+    let tiles = (if $schema in [5 6] { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
     if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, tiles: $tiles, evidence: "schema 1" } }
-    if $schema in [3 4 5] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
+    if $schema in [3 4 5 6] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
     let listed = (if $schema == 2 and $image != null { $PHASE_IMAGES | transpose image entry | where image == $image | get -o 0.entry } else { null })
     if $listed != null {
         return { phases: $listed.phases, remainder: $listed.remainder, tiles: $tiles, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }
@@ -1319,12 +1342,13 @@ export def phase-images []: nothing -> record {
 # ceiling, each row's `over`, are its tail, counted in any clocked
 # capture. A frame is fast when its critical path is under the period of
 # `cap`, whatever its cadence. A capture with no record of the clock's
-# kinds, 7 to 10 and 12 to 15, is a build older than them: its rows are
-# its state records' alone and it holds no window. Any one of them marks
-# the capture clocked and holds it to its window.
+# kinds, 7 to 10, 12 to 15, and 18, is a build older than them: its rows
+# are its state records' alone and it holds no window. Any one of them
+# marks the capture clocked and holds it to its window. The measurement
+# carries the grants and the active masks its frames hold.
 export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
     let s = (stream $api)
-    let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs] | any {|k| not ($k | is-empty) }) or $s.end != null)
+    let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs $s.harts] | any {|k| not ($k | is-empty) }) or $s.end != null)
     let schema = (if $clocked { schema-of $s } else { null })
     let final = (if $s.end == null { null } else { $s.end.frame })
     let problems = (if not $clocked { [] } else { window-problems $s $schema })
@@ -1354,6 +1378,8 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
         late_workers: $s.late_workers,
         workers: ($rows | get -o workers | compact | uniq | sort),
         grains: ($rows | get -o grain | compact | uniq | sort),
+        grants: ($rows | get -o grant | compact | uniq | sort),
+        actives: ($rows | get -o active | compact | uniq | sort),
         period_us: $period_us,
         frames: ($rows | length),
         past_window: $s.past,
@@ -1372,8 +1398,9 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 # does not take, a clock record at a schema other than the capture's, a
 # record numbered out of order or twice, and a frame short of a record or
 # one too many, the presentation records counted from schema 2, the
-# packet records from schema 3, and the tile and storage records at
-# schema 5, where a frame with no configuration in force, none from it
+# packet records from schema 3, the tile and storage records from schema
+# 5, and the harts records at schema 6; from 5 a frame with no
+# configuration in force, none from it
 # or before, leaves the window incomplete too, as does a configuration
 # arriving other than after exactly `from` state records and `from` frame
 # records: the program writes one at the boundary of the first frame it
@@ -1393,7 +1420,8 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
     let records = ([[name items]; [frame $s.frames] [draw $s.draws]]
         | append (if $at >= 2 { [[name items]; [presentation $s.presents]] } else { [] })
         | append (if $at >= 3 { [[name items]; [packet $s.packets]] } else { [] })
-        | append (if $at >= 5 { [[name items]; [tile $s.tiles] [storage $s.storages]] } else { [] }))
+        | append (if $at >= 5 { [[name items]; [tile $s.tiles] [storage $s.storages]] } else { [] })
+        | append (if $at >= 6 { [[name items]; [harts $s.harts]] } else { [] }))
     for kind in $records {
         let order = ($kind.items | enumerate | where {|e| $e.item.frame != $e.index } | length)
         if $order > 0 { $problems = ($problems | append $"($order) ($kind.name) records out of order or repeated") }
@@ -1411,7 +1439,7 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
         }
     }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
-    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
+    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
     if not ($others | is-empty) { $problems = ($problems | append $"clock records at schemas ($others | str join ', ') in a capture at schema ($schema)") }
     $problems
 }
@@ -1435,15 +1463,16 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
 # preparation and its raster is not 0 to PACKET_RESIDUAL_US, so the raster
 # lies within the drawing; a frame whose packets' bytes are not its
 # commands' and its span records'; and a frame whose packets were
-# prepared from another frame's simulation, a stale snapshot drawn. At
-# schema 4: a frame drawn by more than WORKERS_MAX workers; one at a grain
-# past the screen's rows; one of the serial backend, 0 workers, carrying
-# a round's time; one whose slowest worker, dispatch, or barrier is past
-# its raster, each a part of the raster's span on hart 0; and one whose
-# workers' busy time is less than its slowest worker's, which it sums, or
-# past W times it with the W - 1 microseconds the conversions drop, since
-# each round's busy time is at most W times its slowest and each total is
-# converted once.
+# prepared from another frame's simulation, a stale snapshot drawn. From
+# schema 4: below 6 a frame drawn by more than WORKERS_MAX_TO_FIVE
+# workers; one at a grain past the screen's rows; one of the serial
+# backend, 0 workers, carrying a round's time; one whose slowest worker,
+# dispatch, or barrier is past its raster, each a part of the raster's
+# span on hart 0; and one whose workers' busy time is less than its
+# slowest worker's, which it sums, or past W times it with the W - 1
+# microseconds the conversions drop, since each round's busy time is at
+# most W times its slowest and each total is converted once. From schema
+# 5 the tile pool (pool-invalidity), and at 6 the harts (harts-invalidity).
 def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<string> {
     let unshown = ($rows | where {|r| $r.flip_status not-in $FLIP_VALID })
     let negative = ($rows | where {|r| $r.unattributed_us < 0 or $r.parts_unattributed_us < 0 })
@@ -1492,14 +1521,14 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
         (if ($stale | is-empty) { null } else { $"($stale | length) frames whose packets were prepared from another frame's simulation" }),
     ]
     if $at < 4 { return ($base | append $presented | append $packets | compact) }
-    let crowded = ($packed | where {|r| ($r.workers | default 0) > $WORKERS_MAX })
+    let crowded = (if $at >= 6 { [] } else { $packed | where {|r| ($r.workers | default 0) > $WORKERS_MAX_TO_FIVE } })
     let coarse = ($packed | where {|r| ($r.grain | default 0) > $SCREEN_ROWS })
     let serial_timed = ($packed | where {|r| $r.workers == 0 and ([$r.slowest_us $r.busy_us $r.dispatch_us $r.barrier_us] | any {|t| ($t | default 0) != 0 }) })
     let overtimed = ($packed | where {|r| ($r.workers | default 0) > 0 and ([$r.slowest_us $r.dispatch_us $r.barrier_us] | any {|t| ($t | default 0) > $r.raster_us }) })
     let short_busy = ($packed | where {|r| ($r.workers | default 0) > 0 and ($r.busy_us | default 0) < ($r.slowest_us | default 0) })
     let long_busy = ($packed | where {|r| let w = ($r.workers | default 0); $w > 0 and ($r.busy_us | default 0) > ($w * ($r.slowest_us | default 0) + $w - 1) })
     let workers = [
-        (if ($crowded | is-empty) { null } else { $"($crowded | length) frames drawn by more than ($WORKERS_MAX) workers" }),
+        (if ($crowded | is-empty) { null } else { $"($crowded | length) frames drawn by more than ($WORKERS_MAX_TO_FIVE) workers" }),
         (if ($coarse | is-empty) { null } else { $"($coarse | length) frames at a grain past the screen's ($SCREEN_ROWS) rows" }),
         (if ($serial_timed | is-empty) { null } else { $"($serial_timed | length) frames of the serial backend carrying a round's time" }),
         (if ($overtimed | is-empty) { null } else { $"($overtimed | length) frames whose slowest worker, dispatch, or barrier is past their raster" }),
@@ -1507,7 +1536,49 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
         (if ($long_busy | is-empty) { null } else { $"($long_busy | length) frames whose workers' busy time is past W times their slowest's" }),
     ]
     if $at < 5 { return ($base | append $presented | append $packets | append $workers | compact) }
-    $base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | compact
+    if $at < 6 { return ($base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | compact) }
+    $base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | append (harts-invalidity $every) | compact
+}
+
+# The harts a mask holds.
+def popcount [mask: int]: nothing -> int {
+    0..<$HARTS_MAX | where {|h| (($mask bit-shr $h) bit-and 1) == 1 } | length
+}
+
+# What makes a complete window at schema 6 invalid in its harts, each mask
+# a frame's, by hart: a frame without its harts record, which the rest are
+# read without; a frame dispatched to a hart holding no raster worker, its
+# active mask outside its started; a raster worker on a hart outside the
+# grant, its started outside its grant, the two together holding the
+# active mask inside the grant; a packet record's workers other than the
+# count of its active harts; reporting harts other than the active; a
+# claimed hart inside the grant; a grant or a claimed hart outside the
+# online secondaries; an online mask holding hart 0 or a hart at or past
+# the ABI's bound, every other mask lying within it by the rules before;
+# and a grant of fewer harts than its floor, the count reserved. The run's
+# eligible count bounds nothing: a claim leaves it above the grant.
+def harts-invalidity [rows: list<any>]: nothing -> list<any> {
+    let unharted = ($rows | where {|r| $r.online == null })
+    let masked = ($rows | where {|r| $r.online != null })
+    let unhoused = ($masked | where {|r| ($r.active bit-and $r.started) != $r.active })
+    let ungranted = ($masked | where {|r| ($r.started bit-and $r.grant) != $r.started })
+    let miscounted = ($masked | where {|r| $r.workers != null and $r.workers != (popcount $r.active) })
+    let misreported = ($masked | where {|r| $r.reported != $r.active })
+    let doubled = ($masked | where {|r| ($r.claimed bit-and $r.grant) != 0 })
+    let offline = ($masked | where {|r| ($r.grant bit-and $r.online) != $r.grant or ($r.claimed bit-and $r.online) != $r.claimed })
+    let impossible = ($masked | where {|r| ($r.online bit-and 1) != 0 or $r.online >= (1 bit-shl $HARTS_MAX) })
+    let underfloor = ($masked | where {|r| (popcount $r.grant) < $r.floor })
+    [
+        (if ($unharted | is-empty) { null } else { $"($unharted | length) frames without a harts record" }),
+        (if ($unhoused | is-empty) { null } else { $"($unhoused | length) frames dispatched to a hart holding no raster worker" }),
+        (if ($ungranted | is-empty) { null } else { $"($ungranted | length) frames with a raster worker on a hart outside the grant" }),
+        (if ($miscounted | is-empty) { null } else { $"($miscounted | length) frames whose packet record's workers are not their active harts' count" }),
+        (if ($misreported | is-empty) { null } else { $"($misreported | length) frames whose reporting harts are not their active" }),
+        (if ($doubled | is-empty) { null } else { $"($doubled | length) frames with a claimed hart inside the grant" }),
+        (if ($offline | is-empty) { null } else { $"($offline | length) frames whose grant or claimed harts lie outside the online secondaries" }),
+        (if ($impossible | is-empty) { null } else { $"($impossible | length) frames whose online mask holds hart 0 or a hart past the ABI's bound" }),
+        (if ($underfloor | is-empty) { null } else { $"($underfloor | length) frames whose grant holds fewer harts than its floor" }),
+    ]
 }
 
 # What makes a complete window at schema 5 invalid in its tile pool: a
@@ -1583,13 +1654,14 @@ def pool-invalidity [rows: list<any>]: nothing -> list<any> {
 # the preparation, the raster, the commands, the flushes, the bindings
 # invalidated, the bytes, the snapshot, and what its drawing leaves past
 # its preparation and its raster, from schema 4 the workers, the grain,
-# and the rounds' slowest worker, busy time, dispatch, and barrier, and at
+# and the rounds' slowest worker, busy time, dispatch, and barrier, from
 # schema 5 the tile record's columns, the storage record's, and the
 # configuration's in force, the last whose first frame is at or before
-# the row's. Without the clock records the clock's columns are null, the
-# presentation's below schema 2 or without its record, the packets' below
-# schema 3 or without theirs, the workers' below schema 4, and the
-# pool's below schema 5 or without theirs.
+# the row's, and at schema 6 the harts record's masks. Without the clock
+# records the clock's columns are null, the presentation's below schema 2
+# or without its record, the packets' below schema 3 or without theirs,
+# the workers' below schema 4, the pool's below schema 5 or without
+# theirs, and the masks below schema 6 or without theirs.
 def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]: nothing -> list<any> {
     let names = ($legs | get name)
     let reach = ($legs | enumerate | each {|e| $legs | first ($e.index + 1) | each {|l| $l.places | length } | math sum })
@@ -1612,12 +1684,14 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let pool = ((if $t == null { tileless } else { $t | reject frame schema })
             | merge (if $o == null { storageless } else { $o | reject frame schema })
             | merge (if ($governing | is-empty) { configless } else { $governing | last | reject schema arrival_states arrival_frames }))
+        let h = (if $at >= 6 { $s.harts | get -o $st.frame } else { null })
+        let masks = (if $h == null { hartsless } else { $h | reject frame schema })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
         }
         if $f == null or $d == null {
-            $rows = ($rows | append ($base | merge (clockless) | merge $pool))
+            $rows = ($rows | append ($base | merge (clockless) | merge $pool | merge $masks))
         } else {
             let presented = ($f.flip_status == $FLIP_PRESENTED)
             let interval = (if $presented and $previous_flip != null { $f.flip_done_us - $previous_flip } else { null })
@@ -1651,10 +1725,17 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 tile_bytes: $d.tile_bytes, tile_peak: $d.tile_peak, spans: $d.spans, spans_over: ($d.spans > $SPAN_RECORDS),
                 over: ($f.critical_us >= $CEILING_US),
                 aligned: ($f.draw_us == $st.draw_us and $f.game_us == $st.game_us),
-            } | merge $shown | merge $packed | merge $pool))
+            } | merge $shown | merge $packed | merge $pool | merge $masks))
         }
     }
     $rows
+}
+
+# The harts record's masks of a row below schema 6 or without its record,
+# all null.
+def hartsless []: nothing -> record {
+    [online floor grant claimed started active reported]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
 # The clock's columns of a row with no clock records, all null, the
@@ -1777,6 +1858,8 @@ def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> r
         packet_bytes_max: (if ($held | is-empty) { null } else { $held | math max }),
         workers: ($clocked | get workers | compact | uniq | sort),
         grains: ($clocked | get grain | compact | uniq | sort),
+        grants: ($clocked | get grant | compact | uniq | sort),
+        actives: ($clocked | get active | compact | uniq | sort),
         slowest: (stats ($clocked | get slowest_us)),
         busy: (stats ($clocked | get busy_us)),
         dispatch: (stats ($clocked | get dispatch_us)),

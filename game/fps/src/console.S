@@ -310,7 +310,7 @@ console_frame:
 .endif
     lbu t1, 4(s2)
     la t2, job_delay_worker
-    sb t1, 0(t2)                    # the delayed worker's index plus one, 0 for none
+    sb t1, 0(t2)                    # the delayed worker's hart, 0 for none
     lwu t1, 8(s2)
     la t2, job_delay_us
     sw t1, 0(t2)                    # its delay before each band
@@ -319,10 +319,10 @@ console_frame:
     sb t1, 0(t2)                    # every round cancelled after its publish while set
     lbu t1, 13(s2)
     la t2, job_fault_worker
-    sb t1, 0(t2)                    # the faulting worker's index plus one, its next round
+    sb t1, 0(t2)                    # the faulting worker's hart, its next round
     lbu t1, 14(s2)
     la t2, job_hold
-    sb t1, 0(t2)                    # the delayed worker held until the round's join releases it
+    sb t1, 0(t2)                    # the delayed worker held until the join reaches its position
 .ifdef CENSUS
     j 8f
 16:

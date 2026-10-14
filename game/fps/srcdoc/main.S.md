@@ -18,11 +18,11 @@ the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The frame's whole time is measured too, its critical path from its start to
 the end of its reporting less any wait before the flip, with the crosshair,
 the mix, the flip, and the reporting timed apart and the await after the path
-alone; the frame before's six records go over the API at a frame's start,
+alone; the frame before's seven records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
 frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW,
-REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, and REPORT_STORAGE, read by
-test/gauge.nu). A frame presents under one of
+REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, REPORT_STORAGE, and
+REPORT_HARTS, read by test/gauge.nu). A frame presents under one of
 three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
 a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits
 the display's tick or the pad after its reporting, the loop as it first
@@ -45,7 +45,8 @@ place at every site, so the engine carries no sine, cosine, arctangent, dot,
 length, or generator of its own. A vector that lives in a record goes through
 the memory forms; one computed in registers goes through the `reg` forms,
 which touch only their destination, so no site stores a vector to be read
-back.
+back. `jab_manifest.inc` is the build's, written from the manifest's
+`[reserved]` table: JAB_RESERVED_GFX_HARTS, the harts workers.S reserves.
 
 A step the load cannot take exits with its own code and a line naming it, the
 codes and lines being the loader's contract with the test.
@@ -291,7 +292,12 @@ record takes the frame's requests from the stats and its boundary's batch
 from tile.S's batch fields; the storage record takes the pool at the
 boundary's end, which nothing changes before the next boundary, so both
 are still the frame before's at this frame's start; the draw record's tile
-bytes are the slots in use's. The six records go in one write, the API's
+bytes are the slots in use's. The harts record takes workers.S's masks:
+the online secondaries, the floor, the grant read at the frame's latch,
+the harts under the program's claims, 0 since it makes none, the harts
+started, the frame's round harts as its active, and the harts its jobs
+reported, all still the frame before's at this frame's start, since the
+latch runs inside the next drawing. The seven records go in one write, the API's
 write being the one call besides the await that can wait, and its cost is
 the reporting's. An E the
 console read in the frame just recorded set measure_end, and the end marker
@@ -384,9 +390,10 @@ slots in use. The tile pool's directory is sized from the maps after the
 bake (tiles_init). The packet follows: the raster's microseconds among
 the phases, the commands the frame's packets held, and the flushes
 (raster.S). The workers close the line: the frame's workers and
-grain, its rounds, each worker's bands, the rounds' dispatch, barrier,
+grain, its rounds, the bands a hart, `bands b1 ... b7` for harts 1 to
+GFX_SLOTS, a hart drawing nothing 0, the rounds' dispatch, barrier,
 slowest worker, and every worker's busy time in microseconds, and the
-rounds cancelled (workers.S), the two band counts WORKERS_MAX's.
+rounds cancelled (workers.S).
 
 ## count_report
 
@@ -493,7 +500,7 @@ carries none.
 
 ## clock_records
 
-`REPORT_SIZE*REPORT_FRAME_RECORDS u8`: the frame's clock, drawing, presentation, packet, tile, and storage records, written as one.
+`REPORT_SIZE*REPORT_FRAME_RECORDS u8`: the frame's clock, drawing, presentation, packet, tile, storage, and harts records, written as one.
 
 ## end_record
 

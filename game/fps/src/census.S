@@ -9,9 +9,9 @@
 .set CENSUS_ENTRIES, (8 * 1024 * 1024)
 .set CENSUS_SAMPLED_SHIFT, 24
 .set CENSUS_CONTEXT_SHIFT, 48
-.set CENSUS_CLASS_SHIFT, 51
-.set CENSUS_KNOWN_BIT, 54
-.set CENSUS_UNIFORM_BIT, 55
+.set CENSUS_CLASS_SHIFT, (CENSUS_CONTEXT_SHIFT + CENSUS_CONTEXTS)
+.set CENSUS_KNOWN_BIT, (CENSUS_CLASS_SHIFT + 3)
+.set CENSUS_UNIFORM_BIT, (CENSUS_KNOWN_BIT + 1)
 .set CENSUS_PLANE, 0
 .set CENSUS_WALL, 1
 .set CENSUS_OPENING, 2
@@ -58,8 +58,8 @@
 .if (CS_GRIDS + CENSUS_SIZES * MIP_LEVELS * CS_GRID_SIZE) > CS_SIZE
 .error "a surface's census record holds a grid a size and a level"
 .endif
-.if CENSUS_CONTEXTS > 3
-.error "an entry holds three contexts' bits"
+.if CENSUS_UNIFORM_BIT > 63
+.error "an entry holds its contexts', classes', and verdict's bits above its stamps"
 .endif
 
 .section .text
@@ -218,6 +218,10 @@ census_init:
     call append_str
     li a1, LUMAP_COUNT
     call append_dec
+    la a1, word_census_contexts
+    call append_str
+    li a1, CENSUS_CONTEXTS
+    call append_dec                 # the count every frame's context lines are read against
     li s0, 0                        # the size
 34:
     li t0, CENSUS_SIZES
@@ -746,7 +750,7 @@ census_first_demand:
     srli t1, t1, 40
     sub t0, t0, t1
     or t0, t0, s0                   # this frame's stamp
-    li t1, 0x3f
+    li t1, ((1 << (CENSUS_KNOWN_BIT - CENSUS_CONTEXT_SHIFT)) - 1)
     slli t1, t1, CENSUS_CONTEXT_SHIFT
     not t1, t1
     and t0, t0, t1                  # its contexts and classes cleared for the frame
@@ -1320,6 +1324,8 @@ word_census_planes_below:
     .asciz ", planes below "
 word_census_of:
     .asciz " of "
+word_census_contexts:
+    .asciz ", contexts "
 word_census_semicolon:
     .asciz "; "
 word_census_entries:

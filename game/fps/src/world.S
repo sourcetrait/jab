@@ -18,14 +18,9 @@ world_draw:
     sd s2, 32(sp)
     sd s3, 24(sp)
     sd s4, 16(sp)
-    la t0, workers_active
-    lwu t2, 0(t0)
+    call workers_latch              # the frame's workers, harts, grain, and grant
     la t0, round_workers
-    sw t2, 0(t0)                    # the frame's workers, every render's
-    la t0, band_grain
-    lwu t1, 0(t0)
-    la t0, round_grain
-    sw t1, 0(t0)                    # and its grain
+    lwu t2, 0(t0)
     beqz t2, 10f
     li t1, 1
     la t0, round_first
@@ -108,8 +103,12 @@ world_draw:
     sd zero, STAT_TILE_EVICTED(t1)
     sd zero, STAT_TILE_MERGED(t1)
     sd zero, STAT_TILE_UNPROCESSED(t1)
-    sd zero, STAT_BANDS(t1)
-    sd zero, (STAT_BANDS + 8)(t1)
+    addi t3, t1, STAT_BANDS
+    addi t4, t1, STAT_SIZE
+13:
+    sd zero, 0(t3)                  # every slot's bands
+    addi t3, t3, 8
+    bltu t3, t4, 13b
 .ifdef COUNT
     la t1, count_stats
     sd zero, COUNT_DIVIDES(t1)

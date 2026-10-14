@@ -3,6 +3,7 @@
 .include "jab_f32.inc"
 .include "jab_f64.inc"
 .include "jab_rng.inc"
+.include "jab_manifest.inc"
 .include "src/map.inc"
 .include "src/render.inc"
 
@@ -666,6 +667,31 @@ frame_records:
     la t2, tile_memory_peak
     ld t2, 0(t2)
     sw t2, STORE_PEAK(t1)
+    addi t1, t1, REPORT_SIZE        # the harts record, each a mask by hart
+    li t2, REPORT_HARTS
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    la t2, workers_online
+    ld t2, 0(t2)
+    sw t2, HARTS_ONLINE(t1)         # the online secondaries
+    la t2, workers_floor
+    lwu t2, 0(t2)
+    sw t2, HARTS_FLOOR(t1)          # the count reserved
+    la t2, frame_grant
+    ld t2, 0(t2)
+    sw t2, HARTS_GRANT(t1)          # the grant read at the frame's latch
+    sw zero, HARTS_CLAIMED(t1)      # the harts under the program's claims: it makes none
+    la t2, workers_mask
+    ld t2, 0(t2)
+    sw t2, HARTS_STARTED(t1)        # the harts holding a raster worker
+    la t2, round_harts
+    ld t2, 0(t2)
+    sw t2, HARTS_ACTIVE(t1)         # the harts the frame dispatched to
+    la t2, frame_reported
+    ld t2, 0(t2)
+    sw t2, HARTS_REPORTED(t1)       # the harts whose workers completed its jobs
     la t0, clock_records
     li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
@@ -1112,14 +1138,24 @@ frame_report:
     call append_dec
     la a1, word_bands
     call append_str
-    la t0, stats
-    ld a1, STAT_BANDS(t0)
-    call append_dec
+    sd zero, 0(sp)                  # the slot
+91:
+    ld t0, 0(sp)
+    beqz t0, 92f
     la a1, word_space
     call append_str
-    la t0, stats
-    ld a1, (STAT_BANDS + 8)(t0)
-    call append_dec
+    ld t0, 0(sp)
+92:
+    slli t0, t0, 3
+    la t1, stats
+    add t1, t1, t0
+    ld a1, STAT_BANDS(t1)
+    call append_dec                 # a count a hart, hart 1's first
+    ld t0, 0(sp)
+    addi t0, t0, 1
+    sd t0, 0(sp)
+    li t1, GFX_SLOTS
+    bltu t0, t1, 91b
     la a1, word_dispatch
     call append_str
     la t0, stats

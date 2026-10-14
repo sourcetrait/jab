@@ -77,8 +77,11 @@ their sector's rectangle, which also stops a quad poking through a wall
 from showing in the sector beyond.
 
 The frame's workers and grain are taken once, at its start, from what the
-console last chose, so every render of the frame is one kind: the serial
-backend at 0 workers, else a round each, the first of them clearing. The
+console last chose, with their harts and the reservation's grant
+(workers.S's workers_latch), so every render of the frame is one kind: the
+serial backend at 0 workers, else a round each on the same harts, the
+first of them clearing. The bands' counters are zeroed over every slot
+with the frame's other counts. The
 depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached;

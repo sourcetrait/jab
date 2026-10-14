@@ -80,10 +80,11 @@ The lines, every frame:
 
 the end line closing the frame's lines, so a frame without it was cut by the
 run's end, and once after the load the directory's, its maps, the surface index the
-walls start at, the surfaces in all, and each side's entries and bytes, a
-u32 an entry as the pool's directory holds them, then the edge's:
+walls start at, the surfaces in all, the contexts each side's lines name a
+frame, CENSUS_CONTEXTS, and each side's entries and bytes, a u32 an entry as
+the pool's directory holds them, then the edge's:
 
-    fps: census directory: M maps, planes below LP of LC; 32: entries E, bytes B; 64: ...; 128: ...
+    fps: census directory: M maps, planes below LP of LC, contexts X; 32: entries E, bytes B; 64: ...; 128: ...
     fps: census edge: nodes N, sampler S
 
 R is the lighting's revision and C the chunk in force; K counts the tiles
@@ -93,7 +94,10 @@ line ends and a continuation begins when its bytes with the longest item
 would pass the chunk, CENSUS_CHUNK or the console's Q frame's smaller one,
 so no line passes the buffer whatever the surfaces a frame lists; a reader
 joins a context's chunks in order, as many surfaces as its head lists, their
-counts summing to its distinct tiles (the test's `census.nu`). Dropped counts
+counts summing to its distinct tiles (the test's `census.nu`). A reader takes
+the contexts a frame holds from the directory line, never from the lines that
+arrived; the directory's first format, before it named them, held three.
+Dropped counts
 the blocks the slots could not keep and any record the directory cannot
 place; a frame with any is incomplete evidence.
 
@@ -136,16 +140,16 @@ build's.
 
 ## .set CENSUS_CONTEXT_SHIFT
 
-`u64`: an entry's contexts' bits, one a context that requested it this frame.
+`u64`: an entry's contexts' bits, one a context that requested it this frame, CENSUS_CONTEXTS of them from bit 48, to 55 at eight.
 
 ## .set CENSUS_CLASS_SHIFT
 
-`u64`: an entry's classes' bits, one a demand class that requested it this frame.
+`u64`: an entry's classes' bits, one a demand class that requested it this frame, from just past the contexts', 56 to 58 at eight.
 
 ## .set CENSUS_KNOWN_BIT
 ## .set CENSUS_UNIFORM_BIT
 
-`u64`: whether the tile's uniformity is known in the lighting's revision, and it.
+`u64`: whether the tile's uniformity is known in the lighting's revision, and it, the two bits after the classes', 59 and 60 at eight; the source refuses a count that would carry the uniform bit past 63. A frame's clear takes the contexts' and the classes' bits together, the mask from CENSUS_CONTEXT_SHIFT to the known bit.
 
 ## .set CENSUS_PLANE
 ## .set CENSUS_WALL
@@ -254,6 +258,7 @@ A side's totals' bytes.
 ## word_census_maps
 ## word_census_planes_below
 ## word_census_of
+## word_census_contexts
 ## word_census_semicolon
 ## word_census_entries
 ## word_census_bytes
