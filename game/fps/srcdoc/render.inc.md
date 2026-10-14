@@ -777,9 +777,19 @@ bound stays within 32.
 ## .set GFX_GUIDELINE
 
 `u32`: the most workers the default draws with, every started worker up
-to it; GFX_SLOTS, so every started worker, until GfxScaling's forced-count
-runs measure a lower useful count, its evidence and workload then
-recorded beside it. A W frame's count is held to the started alone.
+to it: 3, TheUser's cap for the 1K series, Astra agreeing (GfxScaling's
+GuidelineThree). The evidence: GfxScaling's batteries on 985e3ad's release
+export, three, four, and eight harts, Render Zero's settled and factory
+routes. Past three workers the median can still fall while the runs split
+and the tail grows, a median-versus-steadiness tradeoff: on eight harts
+forced 7 drew below forced 3 in all six settled pairs, yet 1.73 and 4.31
+percent of its settled and factory frames reached 15 ms or more against
+forced 3's 0.16 and 0.71. Three is chosen for the steadier frames on the
+1K workload, the 1920 by 1080 screen; a working value, never long-term
+frozen, revisited as the engine is optimized and as heavier loads
+arrive, the 2K workload measured on its own once the screen size is
+runtime. On three harts the default still draws two, the started. A W
+frame's count is held to the started alone.
 
 ## .set GFX_FLOOR
 
@@ -1756,6 +1766,10 @@ A record's bytes, zero to the end.
 
 `u32`: the frame before's harts, HARTS_* fields, beside its clock: the program's masks by hart, so the gauge holds each frame's workers to the grant in force at it.
 
+## .set REPORT_ROUNDS
+
+`u32`: on a debug build while the J frame's cancel stands, the frame before's witness, ROUNDS_* fields, written after its clock records and before the end marker, so a final frame's witness lies inside its measurement; outside the clock kinds and their schema, so the gauge's completeness never counts it and the picture contract's reader (gauge.nu's screen-frame) holds its presence and uniqueness itself.
+
 ## .set REPORT_FRAME_RECORDS
 
 `u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, and harts records, 448 bytes.
@@ -2161,6 +2175,14 @@ frame, the first it governs. 36 to 56 are free.
 ## .set HARTS_REPORTED
 
 `u32`: the harts whose workers completed the frame's jobs, read from each job's JOB_HART.
+
+## .set ROUNDS_ROUNDS
+
+`u32`: the witness's rounds, STAT_ROUNDS, 0 for a frame of the serial backend.
+
+## .set ROUNDS_CANCELLED
+
+`u32`: the witness's cancelled rounds, STAT_CANCELLED, below the rounds when a round's workers finished before the cancel landed.
 
 ## .set DUMP_SLOT
 

@@ -104,6 +104,15 @@ const KIND_TILE = 13
 const KIND_CONFIG = 14
 const KIND_STORAGE = 15
 const KIND_HARTS = 18
+# a debug build's witness of a frame's rounds under the J's cancel, outside
+# the clock kinds and their schema (render.inc's REPORT_ROUNDS)
+const KIND_ROUNDS = 19
+# the HUD's stamp, a frame number's low bits (hud.S's STAMP_BITS), and the
+# picture contract's slack on a bound frame's pose: a metre's thousandth on
+# the eye, a hundredth of a degree on the angles, past a single's rounding
+const STAMP_BITS = 16
+const POSE_SLACK_M = 0.001
+const POSE_SLACK_DEGREES = 0.01
 # the batch source of the first boundary, which consumes none
 const NO_BATCH = 4294967295
 # the console's commands as its records name them: P a placement, R a
@@ -1148,11 +1157,13 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # configuration records, kinds 13, 15, and 14, a configuration's frame
 # the first it governs and its arrival, the state records and the frame
 # records that came before it, the harts records, kind 18, each a frame's
-# masks by hart, and the marker, kind 9, with
-# its frame and schema, null when none came. What follows the marker is
-# outside the measurement: its state records are counted as `past` and
-# nothing else in it is read.
-export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
+# masks by hart, a debug build's witnesses under the J's cancel, kind 19,
+# each a frame's rounds and cancelled rounds, as `rounds`, and the marker,
+# kind 9, with its frame and schema, null when none came. A state carries
+# its pose, the eye's x, y, and z and the yaw, pitch, and roll in degrees.
+# What follows the marker is outside the measurement: its state records
+# are counted as `past` and nothing else in it is read.
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
     mut states = []
     mut events = []
     mut frames = []
@@ -1163,6 +1174,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
     mut storages = []
     mut configs = []
     mut harts = []
+    mut rounds = []
     mut placed = 0
     mut seeded = false
     mut late_seed = false
@@ -1193,6 +1205,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 frame: ($states | length), placed: $placed,
                 sector: ($r | bytes at 4..<8 | into int --endian little --signed),
                 x: (map float-at $r 8), y: (map float-at $r 12), z: (map float-at $r 16), yaw: (map float-at $r 20),
+                pitch: (map float-at $r 24), roll: (map float-at $r 28),
                 draw_us: (u32-at $r 32), game_us: (u32-at $r 36),
             })
         } else if $kind >= 2 and $kind <= 6 {
@@ -1260,6 +1273,8 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
                 claimed: (u32-at $r 20), started: (u32-at $r 24), active: (u32-at $r 28), reported: (u32-at $r 32),
                 schema: (u32-at $r 60),
             })
+        } else if $kind == $KIND_ROUNDS {
+            $rounds = ($rounds | append { frame: (u32-at $r 4), rounds: (u32-at $r 8), cancelled: (u32-at $r 12) })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
@@ -1268,7 +1283,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
         draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
-        harts: $harts, end: $end, past: $past,
+        harts: $harts, rounds: $rounds, end: $end, past: $past,
     }
 }
 
@@ -1389,8 +1404,97 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
         legs: $summaries,
         outliers: (if $clocked { outliers $rows $schema } else { [] }),
         outcomes: (outcomes-of $s.events $rows $last),
+        rounds: $s.rounds,
         rows: $rows,
     }
+}
+
+# The frame a screen shows, bound under FrameCeiling's picture contract:
+# `m` the capture measured, complete and valid or refused; `stamp` the
+# frame number the screen's stamp carries (test.nu's stamp-of), its low
+# STAMP_BITS bits, null refused; the window the rows from `from`, the
+# frame that answered the window's opening command, to the final frame the
+# marker names, the stamp naming one frame N of it before the final, a
+# stamp naming a frame before the opening and one naming the final frame
+# or none each refused; N settled by the pool's rule, its missed blocks,
+# building, admitted, dropped, filtered, and tiles built all 0; N's state
+# at `expect.pose`, x, y, and z within POSE_SLACK_M and the yaw, pitch,
+# and roll within POSE_SLACK_DEGREES, the yaw modulo a turn; N's packet
+# record drawn by `expect.workers` at `expect.grain`; N's harts record
+# holding every mask `expect.masks` names, none when null; and with
+# `expect.witness` "worker" or "serial", the J's cancel standing, exactly
+# one witness naming N, a missing one refused and a repeated one whether
+# its counts agree or conflict, a worker mode's reading rounds above 0 and
+# cancelled equal to rounds, the serial backend's rounds and cancelled 0.
+# N, null when no frame of the window is named, and every refusal, each
+# named.
+export def screen-frame [m: record, stamp: any, from: int, expect: record]: nothing -> record<frame: any, problems: list<string>> {
+    if not ($m.complete and $m.valid) {
+        return { frame: null, problems: [$"the capture is not complete and valid: ($m.problems | append $m.invalid | str join '; ')"] }
+    }
+    if $stamp == null { return { frame: null, problems: ["the screen carries no stamp"] } }
+    let named = ($m.rows | where {|r| ($r.frame mod (1 bit-shl $STAMP_BITS)) == $stamp } | get frame)
+    let inside = ($named | where {|f| $f >= $from and $f < $m.final })
+    if ($inside | is-empty) {
+        let before = ($named | where {|f| $f < $from })
+        let why = (if not ($before | is-empty) {
+            $"the stamp ($stamp) names frame ($before | last), before the window's opening frame ($from)"
+        } else {
+            $"the stamp ($stamp) names the final frame ($m.final) or none of the window"
+        })
+        return { frame: null, problems: [$why] }
+    }
+    let n = ($inside | first)
+    let r = ($m.rows | where frame == $n | first)
+    mut problems = []
+    let unsettled = ([missed_blocks building admitted dropped filtered tiles_built] | where {|f| ($r | get $f) != 0 })
+    if not ($unsettled | is-empty) {
+        $problems = ($problems | append $"frame ($n) unsettled: ($unsettled | each {|f| $'($f) ($r | get $f)' } | str join ', ')")
+    }
+    let p = $expect.pose
+    let turn = {|a: number, b: number| let d = ((($a - $b) mod 360) + 360) mod 360; [$d (360 - $d)] | math min }
+    let off = ([
+        (if (($r.x - $p.x) | math abs) > $POSE_SLACK_M { "x" })
+        (if (($r.y - $p.y) | math abs) > $POSE_SLACK_M { "y" })
+        (if (($r.z - $p.z) | math abs) > $POSE_SLACK_M { "z" })
+        (if (do $turn $r.yaw $p.yaw) > $POSE_SLACK_DEGREES { "yaw" })
+        (if (($r.pitch - $p.pitch) | math abs) > $POSE_SLACK_DEGREES { "pitch" })
+        (if (($r.roll - $p.roll) | math abs) > $POSE_SLACK_DEGREES { "roll" })
+    ] | compact)
+    if not ($off | is-empty) {
+        $problems = ($problems | append $"frame ($n)'s pose differs in ($off | str join ', '): ($off | each {|f| $'($f) ($r | get $f) where ($p | get $f) was expected' } | str join ', ')")
+    }
+    if $r.workers != $expect.workers or $r.grain != $expect.grain {
+        $problems = ($problems | append $"frame ($n) drawn by ($r.workers) workers at grain ($r.grain) where ($expect.workers) at ($expect.grain) was expected")
+    }
+    let masks = ($expect | get -o masks)
+    if $masks != null {
+        let differ = ($masks | columns | where {|k| ($r | get $k) != ($masks | get $k) })
+        if not ($differ | is-empty) {
+            $problems = ($problems | append $"frame ($n)'s harts record: ($differ | each {|k| $'($k) ($r | get $k) where ($masks | get $k) was expected' } | str join ', ')")
+        }
+    }
+    let mode = ($expect | get -o witness)
+    if $mode != null {
+        let ws = ($m.rounds | where frame == $n)
+        let w = (if ($ws | length) == 1 { $ws | first } else { null })
+        if ($ws | is-empty) {
+            $problems = ($problems | append $"no witness for frame ($n)")
+        } else if $w == null {
+            let counts = ($ws | each {|x| $"rounds ($x.rounds) cancelled ($x.cancelled)" } | str join "; ")
+            let detail = (if (($ws | uniq | length) == 1) { "alike" } else { $"conflicting: ($counts)" })
+            $problems = ($problems | append $"($ws | length) witnesses for frame ($n), ($detail)")
+        } else if $mode == "serial" {
+            if $w.rounds != 0 or $w.cancelled != 0 {
+                $problems = ($problems | append $"the serial backend's witness for frame ($n) reads rounds ($w.rounds), cancelled ($w.cancelled)")
+            }
+        } else if $w.rounds == 0 {
+            $problems = ($problems | append $"a worker mode's witness for frame ($n) reads no rounds")
+        } else if $w.cancelled != $w.rounds {
+            $problems = ($problems | append $"a worker mode's witness for frame ($n) reads cancelled ($w.cancelled) of rounds ($w.rounds)")
+        }
+    }
+    { frame: $n, problems: $problems }
 }
 
 # What keeps a window from being complete, read from the records before
@@ -1688,7 +1792,8 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let masks = (if $h == null { hartsless } else { $h | reject frame schema })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
-            x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, draw_us: $st.draw_us, game_us: $st.game_us,
+            x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, pitch: $st.pitch, roll: $st.roll,
+            draw_us: $st.draw_us, game_us: $st.game_us,
         }
         if $f == null or $d == null {
             $rows = ($rows | append ($base | merge (clockless) | merge $pool | merge $masks))

@@ -14,10 +14,14 @@ has its byte 5 set (console.S), a debug build draws the frame's number, as
 its records carry it, over the world's top-left before the crosshair, its
 low STAMP_BITS bits a cell of STAMP_CELL pixels square each, the n-th cell
 from the left the n-th bit, STAMP_WHITE for a one and black for a zero. The
-test's `stamp-of` reads it back from a capture, and the handoff's runs hold
-the frame it names inside their records' window. It is the handoff's own
-knob, so no other fixture's picture changes, and a release build carries
-none of it.
+test's `stamp-of` reads it back from a capture, and a run that binds a
+picture to its frame holds the frame it names inside its records' window
+(the handoff's runs, and the picture contract's: the take fixtures, the
+cancel cases, the workers' parity). hud_stamp_draw draws it: hud_draw
+calls it first, and an OWNER build's frame loop calls it alone, so an
+owner capture is stamped too and still carries no crosshair. Only a run
+that sets the M frame's byte 5 draws a stamp, so no other fixture's
+picture changes, and a release build carries none of it.
 
 ## .set CROSSHAIR_RADIUS
 
@@ -45,9 +49,14 @@ none of it.
 
 ## hud_draw
 
-The stamp first, on a debug build with hud_stamp set: each bit of a0 drawn
-as its cell, row by row. Then the crosshair, a row's half width the greatest
-w with w * w within the radius's square less the row's.
+On a debug build hud_stamp_draw first, a0 handed on. Then the crosshair, a
+row's half width the greatest w with w * w within the radius's square
+less the row's.
+
+## hud_stamp_draw
+
+A debug build's: with hud_stamp set, each bit of a0 drawn as its cell,
+row by row; nothing otherwise.
 
 ## hud_stamp
 

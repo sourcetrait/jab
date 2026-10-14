@@ -12,8 +12,9 @@ change here. Three things are kept apart: the storage, the bound's; the
 harts owned, the reservation's grant; and the workers a frame draws with,
 the lowest W of the harts started. W is the count a W frame asked, held
 to the started at each frame, else every started worker up to
-GFX_GUIDELINE, the grain coming with the count from grain_by_count; the
-started past W get no job and sleep in their mailboxes.
+GFX_GUIDELINE, three (render.inc), the grain coming with the count from
+grain_by_count; the started past W get no job and sleep in their
+mailboxes, so on eight harts the default's three draw and four sleep.
 
 The grant moves at one explicit transition alone, between frames, the
 frame before joined: gfx_take takes the grant's highest harts from the
@@ -102,8 +103,9 @@ take's interrupted line is.
 
 world_draw's, at the frame's start. A W asked (workers_asked at or above
 zero) is held to the workers started and draws at the W's grain; else
-the frame draws with every started worker up to GFX_GUIDELINE at its
-count's row of grain_by_count, none for the serial backend. The count is
+the frame draws with every started worker up to GFX_GUIDELINE, the count
+capped before the row is read, at its count's row of grain_by_count,
+none for the serial backend. The count is
 the frame's round_workers, the grain round_grain; round_harts takes the
 lowest round_workers harts of workers_mask; frame_reported is zeroed for
 the joins to fill; frame_grant is `jab.sys.harts.owned

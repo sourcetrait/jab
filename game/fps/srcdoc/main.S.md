@@ -37,8 +37,10 @@ instructions, is the pacing, a phase.
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
 the ownership alone; the build is debug with owner beside it, `just do
-pose <map> <poses> <out> --set debug,owner`. A debug build hands hud_draw
-the frame's number, s8, in a0, for its stamp (hud.S).
+pose <map> <poses> <out> --set debug,owner`. A debug build hands the
+frame's number, s8, in a0 for its stamp (hud.S): to hud_draw, which stamps
+first, and under OWNER to hud_stamp_draw alone, so an owner capture is
+bound to its frame as a colour one is.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,
@@ -300,9 +302,13 @@ frame before's at this frame's start, since the console's H moves the
 grant only at its read after these records and the latch runs inside the
 next drawing. The seven records go in one write, the API's
 write being the one call besides the await that can wait, and its cost is
-the reporting's. An E the
+the reporting's. On a debug build, while the console's J cancel stands
+(job_cancel), the frame's witness follows its records, REPORT_ROUNDS with
+the stats' rounds and cancelled rounds: a round whose workers finished
+before the cancel landed counts in the rounds and not the cancelled, and a
+serial frame takes no round, so its witness reads 0 and 0. An E the
 console read in the frame just recorded set measure_end, and the end marker
-goes out right after that frame's records, so every record of the
+goes out right after that frame's records and its witness, so every record of the
 measurement precedes it and the frames past it are outside.
 
 ## flip_attempt
@@ -506,6 +512,10 @@ carries none.
 ## end_record
 
 `REPORT_SIZE u8`: the end marker, REPORT_END.
+
+## rounds_record
+
+`REPORT_SIZE u8`: on a debug build, the frame's witness, REPORT_ROUNDS, written while the J's cancel stands.
 
 ## material_record
 

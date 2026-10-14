@@ -215,10 +215,14 @@ frame:
     la t1, frame_clock
     sd s10, CLOCK_DRAW(t1)          # and its ticks, the raster's taken from them once
     rdtime s9
-.ifndef OWNER
 .ifdef DEBUG
     mv a0, s8                       # the frame's number, for the stamp
 .endif
+.ifdef OWNER
+.ifdef DEBUG
+    call hud_stamp_draw             # an owner build's stamp alone, no crosshair
+.endif
+.else
     call hud_draw
 .endif
     rdtime t0
@@ -697,6 +701,23 @@ frame_records:
     la t0, clock_records
     li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
+.ifdef DEBUG
+    la t0, job_cancel
+    lbu t1, 0(t0)
+    beqz t1, 8f
+    la t0, rounds_record            # the J's cancel standing: the frame's witness
+    li t1, REPORT_ROUNDS
+    sw t1, REPORT_KIND(t0)
+    sw t5, REPORT_FRAME_NUMBER(t0)
+    la t2, stats
+    ld t1, STAT_ROUNDS(t2)
+    sw t1, ROUNDS_ROUNDS(t0)
+    ld t1, STAT_CANCELLED(t2)
+    sw t1, ROUNDS_CANCELLED(t0)
+    li t1, REPORT_SIZE
+    jab.sys.api.write t0, t1
+8:
+.endif
     la t0, measure_end
     lbu t1, 0(t0)
     beqz t1, 9f
@@ -1526,6 +1547,10 @@ clock_records:
     .skip (REPORT_SIZE * REPORT_FRAME_RECORDS)
 end_record:
     .skip REPORT_SIZE
+.ifdef DEBUG
+rounds_record:
+    .skip REPORT_SIZE
+.endif
 .balign 8
 material_record:
     .skip (MAX_MATERIALS * 8)
