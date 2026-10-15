@@ -12,15 +12,18 @@
 # first. Each log is read against its own assertion: the shim's own
 # leading frames, one and two, dropped; a flip's upload, the console's
 # own, a switch, a redraw, and a render whose callers resolve nowhere; a
+# log ending in a fragment its run's end cut short, read without it; a
 # return address at a function's end, an address in the gap, a .cold
 # part, and an alias; a modular QEMU's flip, its executable's exception,
-# and its front end read through .dynsym; every refusal in turn, and the
-# first refusal alone when two are held; a valid zero; and the record's
-# fields. Then the shim preloaded into a harness built non-PIE, its
-# premises checked before its reading: an EXEC whose first segment sits
-# above 0, its make_current's frames one or two in the shim's library and
-# the next in the harness, which sdl-resolve must name as the harness's
-# own function. Linux only, as the probe is.
+# and its front end read through .dynsym; lines the shim does not write,
+# among them that fragment given its newline, and the notices the shim
+# writes as it stops a run, each refused ahead of the rest; every refusal
+# in turn, and the first refusal alone when two are held; a valid zero;
+# and the record's fields. Then the shim preloaded into a harness built
+# non-PIE, its premises checked before its reading: an EXEC whose first
+# segment sits above 0, its make_current's frames one or two in the shim's
+# library and the next in the harness, which sdl-resolve must name as the
+# harness's own function. Linux only, as the probe is.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -38,16 +41,30 @@ def object-line [index: int, file: path, --later: int = 0, --named: string = ""]
 
 # A shim log of the test's own: each line stamped 10 ms after the last,
 # a window-size call half a millisecond after its make_current, so the
-# timing rule reads that make_current as a render.
-def write-log [file: path, lines: list<string>]: nothing -> nothing {
+# timing rule reads that make_current as a render. A `written` line goes
+# in as given, its stamp its own, and a closing `fragment` is stamped as
+# the next line and written with no newline after it, a write the run's
+# end cut short.
+def write-log [
+    file: path,
+    lines: list<oneof<string, record<written: string>, record<fragment: string>>>,
+]: nothing -> nothing {
     mut us = 1792000000000000
     mut out: list<string> = []
+    mut tail = ""
     for l in $lines {
-        $us += (if $l == "size" { 500 } else { 10000 })
+        let given = ($l | describe | str starts-with "record")
+        if $given and ($l | get -o written) != null {
+            $out = ($out ++ [$l.written])
+            continue
+        }
+        let event = (if $given { $l.fragment } else { $l })
+        $us += (if $event == "size" { 500 } else { 10000 })
         let fraction = ($us mod 1000000 | into string | fill --alignment right --character "0" --width 6)
-        $out = ($out ++ [$"($us // 1000000).($fraction) ($l)"])
+        let line = $"($us // 1000000).($fraction) ($event)"
+        if $given { $tail = $line } else { $out = ($out ++ [$line]) }
     }
-    ($out | str join "\n") + "\n" | save -f $file
+    ($out | str join "\n") + "\n" + $tail | save -f $file
 }
 
 # A file's defined symbols that carry a size, as nm's POSIX form gives
@@ -150,7 +167,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let registration_chain = (do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])
     let switch_chain = (do $made [$shim (do $inside 0 "sdl2_gl_switch") (do $inside 0 "displaychangelistener_gfx_switch")])
     let render_chain = (do $made [$shim "?+7f0000001000" "?+7f0000002000"])
-    let log = {|name: string, lines: list<string>| let file = ($dir | path join $"($name).log"); write-log $file $lines; $file }
+    let log = {|name: string, lines: list<oneof<string, record<written: string>, record<fragment: string>>>|
+        let file = ($dir | path join $"($name).log")
+        write-log $file $lines
+        $file
+    }
     let none = { flips: 0, console: 0, switches: 0, renders: 0, refused: "" }
     let flip = ($none | update flips 1)
     let console = ($none | update console 1)
@@ -163,6 +184,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "shim_one", what: "the console's own", read: $console, lines: ($exe ++ [$registration_chain]), resolve: { shim_frames: 1, frame: 0, functions: ["sdl2_gl_update"] } }
         { name: "shim_two", what: "the console's own", read: $console, lines: ($exe ++ [(do $made [$shim "1+1100" (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])]), resolve: { shim_frames: 2, frame: 0, functions: ["sdl2_gl_update"] } }
         { name: "flip", what: "a flip's upload", read: $flip, lines: ($exe ++ [$flip_chain]) }
+        { name: "fragment_accepted", what: "a flip's upload, the fragment after it left out", read: $flip, lines: ($exe ++ [$flip_chain { fragment: "make_current 1+" }]) }
         { name: "registration", what: "the console's own", read: $console, lines: ($exe ++ [$registration_chain]) }
         { name: "switch", what: "a switch", read: $switched, lines: ($exe ++ [$switch_chain]) }
         { name: "redraw", what: "the console's own", read: $console, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "displaychangelistener_gfx_switch") (do $inside 0 "virtio_gpu_reset_bh")])]) }
@@ -188,13 +210,24 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         }
     }
 
-    # refused logs, each naming its fault, in the order the probe checks
+    # refused logs, each naming its fault, in the order the probe checks:
+    # the lines the shim writes and its stop notices first, the third line
+    # here stamped 1792000000.030000
     let stripped_exe = [(object-line 0 $stripped) $shim_line (object-line 2 $front) (object-line 3 $module)]
+    let unwritten = "the log has a line the shim does not write: 1 line, among them"
+    let fixture_stat = (ls -l $fixture | first)
+    let mixed_line = $"object 0 ($fixture_stat.inode) - ($fixture_stat.modified | into int) ($fixture)"
     let refusals = [
+        { name: "timestamp_malformed", lines: ($exe ++ [{ written: $"1792000000.03x000 ($flip_chain)" }]), says: $"($unwritten) line 3: 1792000000.03x000 make_current " }
+        { name: "event_unknown", lines: ($exe ++ [($flip_chain | str replace "make_current" "make_currenx")]), says: $"($unwritten) line 3: 1792000000.030000 make_currenx " }
+        { name: "fragment_complete", lines: ($exe ++ [$flip_chain "make_current 1+"]), newline_of: "fragment_accepted", says: $"($unwritten) line 4: 1792000000.040000 make_current 1+" }
+        { name: "object_mixed", lines: [$mixed_line $shim_line $flip_chain], says: $"($unwritten) line 1: 1792000000.010000 object 0 " }
+        { name: "stopped_libsdl", lines: ($exe ++ [$flip_chain "libSDL2 not found"]), says: "the shim stopped the run: libSDL2 not found: 1 line" }
+        { name: "stopped_symbol", lines: ($exe ++ [$flip_chain "symbol not found"]), says: "the shim stopped the run: symbol not found: 1 line" }
         { name: "no_table", lines: [(do $made [$shim (do $inside 0 "sdl2_gl_update")])], says: "the log has no object table: 1 make_current" }
-        { name: "table_line", lines: ["object 0 x y z table.so" $shim_line $registration_chain], says: "the object table has a line the shim does not write" }
+        { name: "table_line", lines: ["object 0 x y z table.so" $shim_line $registration_chain], says: $"($unwritten) line 1: 1792000000.010000 object 0 x y z table.so" }
         { name: "index_twice", lines: ($exe ++ [(object-line 0 $module) $registration_chain]), says: "the object table gives an index twice" }
-        { name: "frame_written", lines: ($exe ++ [(do $made [$shim "0+zz"])]), says: "a make_current carries a frame the shim does not write: 1 make_current, among them 0+zz" }
+        { name: "frame_written", lines: ($exe ++ [(do $made [$shim "0+zz"])]), says: $"($unwritten) line 3: 1792000000.030000 make_current 1+1000 0+zz" }
         { name: "absent_index", lines: ($exe ++ [(do $made [$shim "7+10"])]), says: "a frame names an object the table has no line for ahead of it: 1 make_current, among them 7+10" }
         { name: "outside", lines: ($exe ++ [(do $made [(do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])]), says: "a make_current's frames do not start in the shim's own library" }
         { name: "nm_absent", path: [], lines: ($exe ++ [$flip_chain]), says: "binutils' nm is not on PATH" }
@@ -215,6 +248,12 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ]
     for c in $refusals {
         let file = (do $log $c.name $c.lines)
+        let accepted = ($c | get -o newline_of)
+        if $accepted != null {
+            let completed = (open --raw $file | into binary | decode)
+            let cut = (open --raw ($dir | path join $"($accepted).log") | into binary | decode)
+            assert equal $completed ($cut + "\n") $"($c.name): the log is ($accepted)'s with its last newline added and nothing else"
+        }
         let said = (if ($c | get -o path) == null { reading $file } else { with-env { PATH: $c.path } { reading $file } })
         assert (($said.refused | str starts-with "the sdl probe refuses the log: ") and ($said.refused | str contains $c.says)) $"($c.name): refused, saying ($c.says): ($said | to nuon)"
         let unsaid = ($c | get -o unsaid | default "")

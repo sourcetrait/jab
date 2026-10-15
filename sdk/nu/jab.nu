@@ -107,6 +107,24 @@ const console_updates = [
 # How a virtio-gpu module's file name starts in a modular QEMU's
 # packages: hw-display-virtio-gpu.so and its -gl and -pci kin.
 const device_module = "hw-display-virtio-gpu"
+# Every line the sdl shim writes (shim/crates/sdl), its time first, in
+# seconds to the microsecond: an object-table line, its index, the file's
+# inode, size, and modification time in nanoseconds or `- - -` where there
+# is no file, then its path, the rest of the line, empty allowed; a
+# make_current with its frames, each an object's index or `?` with an
+# address in lowercase hex; a window-size call, a swap, or a poll; or a
+# notice the shim writes as it stops the run.
+const sdl_line = (
+    '^[0-9]+\.[0-9]{6} (?:'
+    + 'object [0-9]+ (?:[0-9]+ [0-9]+ -?[0-9]+|- - -) .*'
+    + '|make_current(?: (?:[0-9]+|\?)\+[0-9a-f]+)*'
+    + '|size|swap|poll'
+    + '|libSDL2 not found|symbol not found'
+    + ')$'
+)
+# The shim's notices, each written as it aborts QEMU when it cannot reach
+# SDL: libSDL2 missing, or a function missing from it.
+const sdl_notices = ["libSDL2 not found" "symbol not found"]
 
 # The QEMU a machine runs on: an extern when there is one, else PATH.
 # `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
@@ -2496,33 +2514,43 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
 # library, object 1, which it counts, a frame by its object's index (null
 # for none) and its address as written and as a number, and whether the
 # timing rule makes it a render: a window-size call the next event,
-# within 2 ms. A last line the run's end cut short is left out. A log the
-# shim could not have written is refused: no object table, a table line
-# the shim does not write, an index given twice, a frame the shim does
-# not write, a frame naming an index with no line ahead of it, or a
-# make_current whose frames do not start in the shim's library.
+# within 2 ms. A last line the run's end cut short is left out. Every
+# complete line is held to the lines the shim writes (sdl_line) before
+# any is read, and a log the shim could not have written is refused, in
+# order: a line outside them, counted in lines with up to four shown by
+# number; a notice the shim wrote as it stopped the run, by name; then no
+# object table, an index given twice, a frame naming an index with no line
+# ahead of it, or a make_current whose frames do not start in the shim's
+# library.
 def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
     let text = (open --raw $log | into binary | decode)
-    let whole = (if ($text | str ends-with "\n") { $text | lines } else { $text | lines | drop 1 })
+    let whole = ($text | split row (char nl) | drop 1)
     if ($whole | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
+    let unwritten = ($whole | enumerate | where {|l| not ($l.item =~ $sdl_line) })
+    if not ($unwritten | is-empty) {
+        let shown = ($unwritten | first 4 | each {|l| $"line ($l.index + 1): ($l.item | str substring --grapheme-clusters 0..<80)" })
+        error make {msg: (sdl-refusal [{ fault: "the log has a line the shim does not write", held: ($unwritten | length), unit: "line", examples: $shown }])}
+    }
+    let notices = ($whole | each {|l| $l | str replace --regex '^[0-9]+\.[0-9]{6} ' '' } | where {|l| $l in $sdl_notices })
+    if not ($notices | is-empty) {
+        let stops = ($notices | uniq --count | each {|n| { fault: $"the shim stopped the run: ($n.value)", held: $n.count, unit: "line", examples: [] } })
+        error make {msg: (sdl-refusal $stops)}
+    }
     let rows = ($whole
         | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+) ?(?P<rest>.*)$'
         | enumerate
         | each {|r| { at: $r.index, ts: ($r.item.ts | into float), name: $r.item.name, rest: $r.item.rest } })
-    let lined = ($rows | where name == "object" | each {|r|
-        let o = ($r.rest | parse --regex '^(?P<index>\d+) (?P<inode>\d+|-) (?P<size>\d+|-) (?P<mtime>-?\d+|-) (?P<path>.*)$' | get -o 0)
-        if $o == null { { at: $r.at, index: null, inode: null, size: null, mtime: null, path: $r.rest } } else {
-            {
-                at: $r.at,
-                index: ($o.index | into int),
-                inode: (if $o.inode == "-" { null } else { $o.inode | into int }),
-                size: (if $o.size == "-" { null } else { $o.size | into int }),
-                mtime: (if $o.mtime == "-" { null } else { $o.mtime | into int }),
-                path: $o.path,
-            }
+    let objects = ($rows | where name == "object" | each {|r|
+        let o = ($r.rest | parse --regex '^(?P<index>\d+) (?P<inode>\d+|-) (?P<size>\d+|-) (?P<mtime>-?\d+|-) (?P<path>.*)$' | first)
+        {
+            at: $r.at,
+            index: ($o.index | into int),
+            inode: (if $o.inode == "-" { null } else { $o.inode | into int }),
+            size: (if $o.size == "-" { null } else { $o.size | into int }),
+            mtime: (if $o.mtime == "-" { null } else { $o.mtime | into int }),
+            path: $o.path,
         }
     })
-    let objects = ($lined | where index != null)
     let first = ($objects | reduce --fold {} {|o, seen|
         let key = ($o.index | into string)
         if ($seen | get -o $key) == null { $seen | insert $key $o.at } else { $seen }
@@ -2533,18 +2561,18 @@ def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
         if $e.name != "make_current" {
             { at: $e.at, ts: $e.ts, name: $e.name, render: false, shim_frames: 0, frames: [], fault: "", example: "" }
         } else {
-            let tokens = ($e.rest | str trim | split row " " | compact --empty)
-            let frames = ($tokens
+            let frames = ($e.rest
+                | str trim
+                | split row " "
+                | compact --empty
                 | parse --regex '^(?P<object>\d+|\?)\+(?P<hex>[0-9a-f]+)$'
                 | each {|f| { object: (if $f.object == "?" { null } else { $f.object | into int }), hex: $f.hex, address: ($f.hex | into int --radix 16) } })
             let shim = ($frames | take while {|f| $f.object == 1 } | length)
             let next = ($happened | get -o ($r.index + 1))
             let render = ($next != null and $next.name == "size" and ($next.ts - $e.ts) < 0.002)
             let unnamed = ($frames | where {|f| $f.object != null and (($first | get -o ($f.object | into string)) == null or ($first | get ($f.object | into string)) > $e.at) })
-            let fault = (if ($frames | length) != ($tokens | length) { "written" } else if not ($unnamed | is-empty) { "unnamed" } else if $shim == 0 { "outside" } else { "" })
-            let example = (if $fault == "written" {
-                $tokens | where {|t| not ($t =~ '^(\d+|\?)\+[0-9a-f]+$') } | first
-            } else if $fault == "unnamed" {
+            let fault = (if not ($unnamed | is-empty) { "unnamed" } else if $shim == 0 { "outside" } else { "" })
+            let example = (if $fault == "unnamed" {
                 let f = ($unnamed | first)
                 $"($f.object)+($f.hex)"
             } else if $fault == "outside" and ($frames | is-empty) {
@@ -2559,18 +2587,15 @@ def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
     })
     let made = ($events | where name == "make_current")
     let total = ($made | length)
-    if ($lined | is-empty) { error make {msg: (sdl-refusal [{ fault: "the log has no object table", held: $total, examples: [] }])} }
-    let malformed = ($lined | where index == null)
-    if not ($malformed | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table has a line the shim does not write", held: $total, examples: ($malformed | each {|l| $"object ($l.path)" }) }])} }
+    if ($objects | is-empty) { error make {msg: (sdl-refusal [{ fault: "the log has no object table", held: $total, unit: "make_current", examples: [] }])} }
     let twice = ($objects | get index | uniq --repeated)
-    if not ($twice | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table gives an index twice", held: $total, examples: ($twice | each {|i| $"object ($i)" }) }])} }
+    if not ($twice | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table gives an index twice", held: $total, unit: "make_current", examples: ($twice | each {|i| $"object ($i)" }) }])} }
     for fault in [
-        ["written" "a make_current carries a frame the shim does not write"]
         ["unnamed" "a frame names an object the table has no line for ahead of it"]
         ["outside" "a make_current's frames do not start in the shim's own library"]
     ] {
         let held = ($made | where fault == $fault.0)
-        if not ($held | is-empty) { error make {msg: (sdl-refusal [{ fault: $fault.1, held: ($held | length), examples: ($held | get example | uniq) }])} }
+        if not ($held | is-empty) { error make {msg: (sdl-refusal [{ fault: $fault.1, held: ($held | length), unit: "make_current", examples: ($held | get example | uniq) }])} }
     }
     { objects: ($objects | reject at), events: ($events | reject fault example) }
 }
@@ -2823,25 +2848,26 @@ def sdl-fault-text [fault: string, at: oneof<record, nothing>, objects: table]: 
 # A refusal's faults (sdl-refusal) from the chains one class refused: one
 # a fault and the object it lies in, how many make_currents hold it by
 # the chains' counts, and the frames at fault.
-def sdl-faults [cases: table, counts: record, objects: table]: nothing -> table<fault: string, held: int, examples: list<string>> {
+def sdl-faults [cases: table, counts: record, objects: table]: nothing -> table<fault: string, held: int, unit: string, examples: list<string>> {
     let described = ($cases | each {|c| $c | insert text (sdl-fault-text $c.fault $c.at $objects) })
     $described | get text | uniq | each {|text|
         let group = ($described | where text == $text)
         {
             fault: $text,
             held: ($group | each {|c| $counts | get $c.key } | math sum),
+            unit: "make_current",
             examples: ($group | each {|c| sdl-frame-text $c.at } | uniq | first 4),
         }
     }
 }
 
-# A refusal's message: each fault it holds, how many make_currents hold
-# it, and up to four of them.
-def sdl-refusal [faults: table<fault: string, held: int, examples: list<string>>]: nothing -> string {
+# A refusal's message: each fault it holds, how many of its unit hold it,
+# make_currents or the log's lines, and up to four of them.
+def sdl-refusal [faults: table<fault: string, held: int, unit: string, examples: list<string>>]: nothing -> string {
     let parts = ($faults | each {|f|
         let plural = (if $f.held == 1 { "" } else { "s" })
         let shown = (if ($f.examples | is-empty) { "" } else { ", among them " + ($f.examples | first 4 | str join ", ") })
-        $"($f.fault): ($f.held) make_current($plural)($shown)"
+        $"($f.fault): ($f.held) ($f.unit)($plural)($shown)"
     })
     $"the sdl probe refuses the log: ($parts | str join '; ')"
 }
@@ -2856,11 +2882,12 @@ def sdl-refusal [faults: table<fault: string, held: int, examples: list<string>>
 # its name, and its `callers` as the record names them (sdl-frame-name),
 # the immediate caller first. The reading comes only when every
 # make_current is decided; otherwise the first refusal in order: the
-# log's structure (sdl-log), nm absent, an object that is no longer the
-# file its line names or a deleted executable, an object nm cannot read,
-# a make_current failing the anchor or unmodelled, and an upload whose
-# second frame does not resolve, each naming its fault, how many
-# make_currents hold it, and up to four of them.
+# log's lines, a stop notice, and its structure (sdl-log), nm absent, an
+# object that is no longer the file its line names or a deleted
+# executable, an object nm cannot read, a make_current failing the anchor
+# or unmodelled, and an upload whose second frame does not resolve, each
+# naming its fault, how many make_currents or lines hold it, and up to
+# four of them.
 export def sdl-classify [log: path]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
     let resolved = (sdl-resolve $log)
     let events = $resolved.events
