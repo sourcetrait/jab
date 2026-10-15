@@ -301,8 +301,10 @@ prints one NUON record on how the program's flips reached the window,
 ready to paste: the uploads per flip and their spacing, the flip
 cadence, the drawn frames and their interval, the switches, and any
 frame drawn inside a flip, which is a half-drawn tick. When it cannot
-read every call, as on a QEMU stripped of its symbol table, it prints no
-record and says why instead. Linux only, since it preloads into QEMU;
+read every call, as on a QEMU stripped of its symbol table, or the log
+holds a line the library never writes, or the library stopped the run
+because it could not reach SDL, it prints no record and says why
+instead. Linux only, since it preloads into QEMU;
 with no display server SDL runs its offscreen driver, drawing nothing
 along the same path.
 
