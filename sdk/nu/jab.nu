@@ -2522,7 +2522,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
 # object table, an index given twice, a frame naming an index with no line
 # ahead of it, or a make_current whose frames do not start in the shim's
 # library.
-def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
+export def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
     let text = (open --raw $log | into binary | decode)
     let whole = ($text | split row (char nl) | drop 1)
     if ($whole | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
