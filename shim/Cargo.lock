@@ -126,6 +126,10 @@ name = "jabshim_sdl"
 version = "0.0.0-1"
 
 [[package]]
+name = "jabshim_sdl_harness"
+version = "0.0.0-1"
+
+[[package]]
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"

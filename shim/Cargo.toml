@@ -7,6 +7,7 @@
 resolver = "3"
 members = [
     "crates/sdl",
+    "crates/sdl_harness",
     "crates/evdev",
     "crates/pad",
 ]

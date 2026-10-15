@@ -1,0 +1,16 @@
+[package]
+name = "jabshim_sdl_harness"
+description = "A non-PIE binary that calls SDL_GL_MakeCurrent from a function of its own, to prove the SDL shim's capture where an object's load bias and lowest mapped address differ."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "jabshim_sdl_harness"
+path = "src/main.rs"
+
+[dependencies]

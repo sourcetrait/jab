@@ -97,6 +97,16 @@ const machine_rest = [
     "-global" "virtio-mmio.force-legacy=false"
     "-parallel" "none"
 ]
+# The console's rectangle update in QEMU's two families, the function a
+# device's flush calls and its whole-surface form: 11.1.2's names, then
+# 10.2.2's, which a modular build exports to its modules.
+const console_updates = [
+    ["qemu_console_update" "qemu_console_update_full"]
+    ["dpy_gfx_update" "dpy_gfx_update_full"]
+]
+# How a virtio-gpu module's file name starts in a modular QEMU's
+# packages: hw-display-virtio-gpu.so and its -gl and -pci kin.
+const device_module = "hw-display-virtio-gpu"
 
 # The QEMU a machine runs on: an extern when there is one, else PATH.
 # `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
@@ -2412,18 +2422,23 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
 # A shim, one package of the workspace's shim/ workspace, built with
 # cargo into the target's shim/ on first use and whenever it changes:
 # the path of its shared library, to preload into QEMU, or with --bin
-# of its binary.
-def shim-build [ws: path, name: string, --bin]: nothing -> string {
+# of its binary; --static builds a binary non-PIE, through `cargo rustc`
+# with the static relocation model.
+export def shim-build [ws: path, name: string, --bin, --static]: nothing -> string {
     let manifest = ($ws | path join "shim" "Cargo.toml")
     let target = (target-root $ws | path join "shim")
-    let built = (^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete)
+    let built = (if $static {
+        ^cargo rustc --release --quiet --manifest-path $manifest -p $name --bin $name --target-dir $target -- -C relocation-model=static | complete
+    } else {
+        ^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete
+    })
     if $built.exit_code != 0 { error make {msg: $"building the shim package ($name) failed:\n($built.stderr)"} }
-    if $bin { $target | path join "release" $name } else { $target | path join "release" $"lib($name).so" }
+    if $bin or $static { $target | path join "release" $name } else { $target | path join "release" $"lib($name).so" }
 }
 
 # Probe a program under a window. `sdl`: run it under SDL with OpenGL
-# for `seconds` with the shim of probe/sdl_shim preloaded into QEMU,
-# then report how its flips reached the window.
+# for `seconds` with shim/crates/sdl preloaded into QEMU, then report how
+# its flips reached the window, read through QEMU's own symbol tables.
 def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing -> nothing {
     match $kind {
         "sdl" => { probe-sdl $dir $names $seconds },
@@ -2433,9 +2448,11 @@ def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing 
 
 # The SDL probe: the shim built with cargo into the target's shim/, the
 # program run under `sdl,gl=on` with the UART off for `seconds`, the
-# shim's log read back, and one NUON record printed. Linux only, since
-# it preloads a library into QEMU. With no display server SDL runs its
-# offscreen driver, which draws nothing but keeps every path the same.
+# shim's log read back through binutils' nm (sdl-report), and one NUON
+# record printed, or the refusal saying why the log cannot be read and
+# no record. Linux only, since it preloads a library into QEMU. With no
+# display server SDL runs its offscreen driver, which draws nothing but
+# keeps every path the same.
 def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing {
     if $nu.os-info.name != "linux" { error make {msg: "the sdl probe preloads a library into QEMU, which is Linux only"} }
     let ws = (context $dir "program" $names | get workspace)
@@ -2460,37 +2477,425 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
             program: $line.context.manifest.name,
             os: $nu.os-info.name,
             qemu: $qemu,
+            binary: $report.run.binary,
             window: "sdl,gl=on",
             driver: (if $driver == "" { "the host's" } else { $driver }),
             symbols: $line.context.symbols,
             seconds: $seconds,
             qemu_said: ($run.stderr | lines | where {|l| not ($l | str contains "terminating on signal") } | first 3),
         },
-    } | merge $report)
+    } | merge ($report | reject run))
     print ($record | to nuon --indent 2)
 }
 
-# The report on a shim log: how the flips reached the window. A
-# make_current followed by a window-size call within 2 ms opens a drawn
-# frame. Any other is an upload: one per rectangle flushed when it comes
-# through the virtio-gpu device, which its callers name, and otherwise
-# one of the console's own, which a timer makes now and then and which
-# is no flip of the program's. Flush uploads within 5 ms of the previous
-# belong to one flip. A drawn frame with a flush upload under 3 ms on
-# each side sits inside a flip, which is the half-drawn tick to look
-# for.
-def sdl-report [log: path]: nothing -> record {
-    let events = (open --raw $log | decode | lines | each {|l| $l | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+)(?P<rest>.*)$' | get -o 0 } | compact | each {|e| { ts: ($e.ts | into float), name: $e.name, callers: ($e.rest | str trim) } })
-    if ($events | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
-    let t0 = ($events | first | get ts)
-    let kinds = ($events | enumerate | each {|e|
-        if $e.item.name != "make_current" { { ts: $e.item.ts, kind: $e.item.name, callers: "" } } else {
-            let next = ($events | get -o ($e.index + 1))
-            if $next != null and $next.name == "size" and (($next.ts - $e.item.ts) < 0.002) { { ts: $e.item.ts, kind: "render", callers: $e.item.callers } } else if ($e.item.callers | str contains "virtio-gpu") or ($e.item.callers | str contains "virtio_gpu") { { ts: $e.item.ts, kind: "upload", callers: $e.item.callers } } else { { ts: $e.item.ts, kind: "other_upload", callers: $e.item.callers } }
+# The shim's log as written (shim/crates/sdl): the object table, each
+# object by index with its path and the inode, size, and modification
+# time in nanoseconds its file had as its line was written, null where it
+# had no file, as the vDSO has none; and the events in order, each
+# make_current with its frames past the leading ones in the shim's own
+# library, object 1, which it counts, a frame by its object's index (null
+# for none) and its address as written and as a number, and whether the
+# timing rule makes it a render: a window-size call the next event,
+# within 2 ms. A last line the run's end cut short is left out. A log the
+# shim could not have written is refused: no object table, a table line
+# the shim does not write, an index given twice, a frame the shim does
+# not write, a frame naming an index with no line ahead of it, or a
+# make_current whose frames do not start in the shim's library.
+def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
+    let text = (open --raw $log | into binary | decode)
+    let whole = (if ($text | str ends-with "\n") { $text | lines } else { $text | lines | drop 1 })
+    if ($whole | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
+    let rows = ($whole
+        | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+) ?(?P<rest>.*)$'
+        | enumerate
+        | each {|r| { at: $r.index, ts: ($r.item.ts | into float), name: $r.item.name, rest: $r.item.rest } })
+    let lined = ($rows | where name == "object" | each {|r|
+        let o = ($r.rest | parse --regex '^(?P<index>\d+) (?P<inode>\d+|-) (?P<size>\d+|-) (?P<mtime>-?\d+|-) (?P<path>.*)$' | get -o 0)
+        if $o == null { { at: $r.at, index: null, inode: null, size: null, mtime: null, path: $r.rest } } else {
+            {
+                at: $r.at,
+                index: ($o.index | into int),
+                inode: (if $o.inode == "-" { null } else { $o.inode | into int }),
+                size: (if $o.size == "-" { null } else { $o.size | into int }),
+                mtime: (if $o.mtime == "-" { null } else { $o.mtime | into int }),
+                path: $o.path,
+            }
         }
     })
+    let objects = ($lined | where index != null)
+    let first = ($objects | reduce --fold {} {|o, seen|
+        let key = ($o.index | into string)
+        if ($seen | get -o $key) == null { $seen | insert $key $o.at } else { $seen }
+    })
+    let happened = ($rows | where name != "object")
+    let events = ($happened | enumerate | each {|r|
+        let e = $r.item
+        if $e.name != "make_current" {
+            { at: $e.at, ts: $e.ts, name: $e.name, render: false, shim_frames: 0, frames: [], fault: "", example: "" }
+        } else {
+            let tokens = ($e.rest | str trim | split row " " | compact --empty)
+            let frames = ($tokens
+                | parse --regex '^(?P<object>\d+|\?)\+(?P<hex>[0-9a-f]+)$'
+                | each {|f| { object: (if $f.object == "?" { null } else { $f.object | into int }), hex: $f.hex, address: ($f.hex | into int --radix 16) } })
+            let shim = ($frames | take while {|f| $f.object == 1 } | length)
+            let next = ($happened | get -o ($r.index + 1))
+            let render = ($next != null and $next.name == "size" and ($next.ts - $e.ts) < 0.002)
+            let unnamed = ($frames | where {|f| $f.object != null and (($first | get -o ($f.object | into string)) == null or ($first | get ($f.object | into string)) > $e.at) })
+            let fault = (if ($frames | length) != ($tokens | length) { "written" } else if not ($unnamed | is-empty) { "unnamed" } else if $shim == 0 { "outside" } else { "" })
+            let example = (if $fault == "written" {
+                $tokens | where {|t| not ($t =~ '^(\d+|\?)\+[0-9a-f]+$') } | first
+            } else if $fault == "unnamed" {
+                let f = ($unnamed | first)
+                $"($f.object)+($f.hex)"
+            } else if $fault == "outside" and ($frames | is-empty) {
+                "no frames"
+            } else if $fault == "outside" {
+                let f = ($frames | first)
+                let file = (if $f.object == null { "?" } else { $objects | where index == $f.object | get -o 0.path | default "" | path basename })
+                $"($file)+($f.hex)"
+            } else { "" })
+            { at: $e.at, ts: $e.ts, name: $e.name, render: $render, shim_frames: $shim, frames: ($frames | skip $shim), fault: $fault, example: $example }
+        }
+    })
+    let made = ($events | where name == "make_current")
+    let total = ($made | length)
+    if ($lined | is-empty) { error make {msg: (sdl-refusal [{ fault: "the log has no object table", held: $total, examples: [] }])} }
+    let malformed = ($lined | where index == null)
+    if not ($malformed | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table has a line the shim does not write", held: $total, examples: ($malformed | each {|l| $"object ($l.path)" }) }])} }
+    let twice = ($objects | get index | uniq --repeated)
+    if not ($twice | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table gives an index twice", held: $total, examples: ($twice | each {|i| $"object ($i)" }) }])} }
+    for fault in [
+        ["written" "a make_current carries a frame the shim does not write"]
+        ["unnamed" "a frame names an object the table has no line for ahead of it"]
+        ["outside" "a make_current's frames do not start in the shim's own library"]
+    ] {
+        let held = ($made | where fault == $fault.0)
+        if not ($held | is-empty) { error make {msg: (sdl-refusal [{ fault: $fault.1, held: ($held | length), examples: ($held | get example | uniq) }])} }
+    }
+    { objects: ($objects | reject at), events: ($events | reject fault example) }
+}
+
+# An object's table left unread, with the state that kept it so.
+def sdl-unread [state: string, why: string]: nothing -> record {
+    { state: $state, why: $why, source: "", starts: [], ends: [], reach: [], names: [], console: false }
+}
+
+# The symbol table of an object a decision needs, as binutils' nm reads
+# it: its full table, else on "no symbols" its dynamic one, keeping the
+# function symbols that carry a size, each name read up to its first `.`
+# so gcc's parts (.cold, .part.N, .isra.N, .constprop.N, .lto_priv.N)
+# read as their function, sorted by start with the furthest end reached
+# so far beside each, which bounds a search back to an enclosing function
+# (sdl-functions-at). The file is read only while it is the one its line
+# names, the inode, size, and modification time `ls -l` gives now the
+# same, and an executable whose path ends ` (deleted)` never is. `state`
+# says which held: read, no_file, nm_absent, deleted, changed, or
+# unreadable, with nm's own words in `why`; `source` which table
+# answered: symtab, dynsym, or none; `console` whether it holds both of
+# the console's update functions of one family.
+def sdl-table [object: record, nm: bool]: nothing -> record {
+    if $object.inode == null or $object.size == null or $object.mtime == null { return (sdl-unread "no_file" "") }
+    if not $nm { return (sdl-unread "nm_absent" "") }
+    if $object.index == 0 and ($object.path | str ends-with " (deleted)") { return (sdl-unread "deleted" "") }
+    let now = (try { ls -l $object.path | get -o 0 } catch { null })
+    if $now == null { return (sdl-unread "changed" "no file is there now") }
+    if $now.inode != $object.inode or ($now.size | into int) != $object.size or ($now.modified | into int) != $object.mtime {
+        return (sdl-unread "changed" "its inode, size, or modification time is not its line's")
+    }
+    let full = (^nm -P -t x --defined-only $object.path | complete)
+    let dynamic = ($full.exit_code == 0 and ($full.stdout | str trim) == "" and ($full.stderr | str contains "no symbols"))
+    let run = (if $dynamic { ^nm -P -t x --defined-only -D $object.path | complete } else { $full })
+    if $run.exit_code != 0 { return (sdl-unread "unreadable" ($run.stderr | str trim | split row $"($object.path): " | last)) }
+    let source = (if not $dynamic { "symtab" } else if ($run.stdout | str trim) == "" { "none" } else { "dynsym" })
+    let functions = ($run.stdout | lines
+        | parse --regex '^(?P<name>\S+) (?P<type>[tTwW]) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$'
+        | into int --radix 16 value size
+        | where size > 0
+        | str replace --regex '^([^.]+)\..*$' '$1' name
+        | sort-by value)
+    let spans = ($functions | generate {|f, most|
+        let end = ($f.value + $f.size)
+        let reach = (if $end > $most { $end } else { $most })
+        { out: { end: $end, reach: $reach }, next: $reach }
+    } 0)
+    let names = ($functions | get name)
+    let console = ($console_updates | any {|family| $family | all {|n| $n in $names } })
+    { state: "read", why: "", source: $source, starts: ($functions | get value), ends: ($spans | get end), reach: ($spans | get reach), names: $names, console: $console }
+}
+
+# The functions of a table (sdl-table) whose [start, end) holds an
+# address, aliases included: a binary search for the last start at or
+# below it, then back while the furthest end reached so far lies past
+# it. None where the address falls between functions.
+def sdl-functions-at [table: record, address: int]: nothing -> list<string> {
+    let starts = $table.starts
+    let ends = $table.ends
+    let reach = $table.reach
+    let names = $table.names
+    mut low = 0
+    mut high = ($starts | length)
+    while $low < $high {
+        let middle = (($low + $high) // 2)
+        if ($starts | get $middle) <= $address { $low = $middle + 1 } else { $high = $middle }
+    }
+    mut at = $low - 1
+    mut found: list<string> = []
+    while $at >= 0 and ($reach | get $at) > $address {
+        if ($ends | get $at) > $address { $found = ($found ++ [($names | get $at)]) }
+        $at -= 1
+    }
+    $found | uniq | sort
+}
+
+# The shim's log at `log` (sdl-log) with its make_currents' frames
+# resolved: the object table, each object with its file name and the
+# state of its symbol table (sdl-table); `virtio_gpu_in`, module or
+# executable; and every event in order, each frame of a make_current
+# with its object's file name, its table's state, and the functions that
+# hold it. A frame is a return address, so it resolves at the address
+# less one: a call that ends its function returns to the first byte past
+# it. It lies in every function of its object's table whose [value,
+# value + size) holds that address, an alias included, and in none where
+# the address falls between functions. The tables read are the ones a
+# decision needs: the objects of the immediate caller and of its caller
+# in every make_current the timing rule leaves, and the executable's
+# where the device's code is there; with --every, every object a
+# make_current's frame lies in. The device's code lives in a module when
+# the table lists one whose file name starts hw-display-virtio-gpu, else
+# in the executable. A log the shim could not have written is refused.
+export def sdl-resolve [log: path, --every]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
+    let read = (sdl-log $log)
+    let modules = ($read.objects | where {|o| $o.path | path basename | str starts-with $device_module } | get index)
+    let device_in = (if ($modules | is-empty) { "executable" } else { "module" })
+    let made = ($read.events | where name == "make_current")
+    let decided = ($made | where render == false)
+    let needed = (if $every {
+        $made | each {|e| $e.frames | each {|f| $f.object } } | flatten | uniq
+    } else {
+        let callers = ($decided | each {|e| $e.frames | first 2 | each {|f| $f.object } } | flatten)
+        let executable = (if $device_in == "executable" and (not ($decided | is-empty)) { [0] } else { [] })
+        $callers ++ $executable | uniq
+    })
+    let nm = (which nm | where type == "external" | is-not-empty)
+    let tables = ($read.objects | reduce --fold {} {|o, all|
+        $all | insert ($o.index | into string) (if $o.index in $needed { sdl-table $o $nm } else { sdl-unread "unread" "" })
+    })
+    let pairs = ($made | each {|e| $e.frames } | flatten | where object != null | uniq-by object hex)
+    let found = ($pairs | reduce --fold {} {|f, all|
+        let table = ($tables | get ($f.object | into string))
+        let functions = (if $table.state == "read" { sdl-functions-at $table ($f.address - 1) } else { [] })
+        $all | insert $"($f.object)+($f.hex)" $functions
+    })
+    let objects = ($read.objects | each {|o|
+        let table = ($tables | get ($o.index | into string))
+        $o | merge { file: ($o.path | path basename), state: $table.state, source: $table.source, functions: ($table.names | length), console: $table.console, why: $table.why }
+    })
+    let places = ($objects | reduce --fold {} {|o, all| $all | insert ($o.index | into string) { file: $o.file, state: $o.state } })
+    let events = ($read.events | each {|e|
+        if $e.name != "make_current" { $e } else {
+            $e | update frames ($e.frames | each {|f|
+                if $f.object == null { $f | merge { file: "", state: "no_object", functions: [] } } else {
+                    let place = ($places | get ($f.object | into string))
+                    $f | merge { file: $place.file, state: $place.state, functions: ($found | get $"($f.object)+($f.hex)") }
+                }
+            })
+        }
+    })
+    { objects: $objects, virtio_gpu_in: $device_in, events: $events }
+}
+
+# The refusal a frame's object holds before its symbols can answer: nm
+# absent, the file changed or the executable deleted, or nm unable to read
+# it; null when its table was read or it has none to read.
+def sdl-held [frame: record]: nothing -> oneof<record, nothing> {
+    match $frame.state {
+        "nm_absent" => ({ kind: "refused", class: 2, fault: "nm_absent", at: $frame }),
+        "deleted" => ({ kind: "refused", class: 3, fault: "deleted", at: $frame }),
+        "changed" => ({ kind: "refused", class: 3, fault: "changed", at: $frame }),
+        "unreadable" => ({ kind: "refused", class: 4, fault: "unreadable", at: $frame }),
+        _ => null,
+    }
+}
+
+# Whether a frame lies in the device's code: in a virtio-gpu module, or,
+# with the device in the executable, in an executable function named
+# virtio_gpu_*.
+def sdl-device [frame: record, device_in: string, modules: list<int>]: nothing -> bool {
+    if $device_in == "module" { $frame.object in $modules } else { $frame.object == 0 and ($frame.functions | any {|n| $n | str starts-with "virtio_gpu_" }) }
+}
+
+# How a make_current the timing rule leaves reached the window, by its
+# frames past the shim's own (sdl-resolve). Its immediate caller must
+# resolve to the SDL front end, the anchor: sdl2_gl_switch makes a
+# `switch`, the window taking a new surface; sdl2_gl_update an upload,
+# read by its second frame, the function that called it. The console's
+# update there makes it a flip's `upload` when a later frame lies in the
+# device's code, and leaves it unresolved however many frames follow
+# otherwise; any other resolved function outside the device's code makes
+# it the `console`'s own, a new surface's redraw or the registration's
+# first update; an unresolved frame of the executable makes it the
+# console's own only beside a device module, with the executable's table
+# read and holding both of the console's update functions of one family,
+# since a module reaches the console through those alone. Anything else
+# is `refused`: `class` says which refusal (sdl-report), `fault` what
+# failed, and `at` the frame at fault.
+def sdl-decide [frames: list, device_in: string, modules: list<int>, executable: oneof<record, nothing>]: nothing -> record<kind: string, class: int, fault: string, at: oneof<record, nothing>> {
+    let caller = ($frames | get -o 0)
+    if $caller == null { return { kind: "refused", class: 5, fault: "anchor", at: null } }
+    let caller_held = (sdl-held $caller)
+    if $caller_held != null { return $caller_held }
+    if not ($caller.functions | any {|n| $n | str starts-with "sdl2_" }) { return { kind: "refused", class: 5, fault: "anchor", at: $caller } }
+    let switch = ("sdl2_gl_switch" in $caller.functions)
+    let update = ("sdl2_gl_update" in $caller.functions)
+    if $switch and (not $update) { return { kind: "switch", class: 0, fault: "", at: null } }
+    if (not $update) or $switch { return { kind: "refused", class: 5, fault: "front_end", at: $caller } }
+    let second = ($frames | get -o 1)
+    if $second == null { return { kind: "refused", class: 6, fault: "absent", at: $caller } }
+    if $second.object == null { return { kind: "refused", class: 6, fault: "nowhere", at: $second } }
+    let second_held = (sdl-held $second)
+    if $second_held != null { return $second_held }
+    if (sdl-device $second $device_in $modules) { return { kind: "refused", class: 5, fault: "device", at: $second } }
+    if not ($second.functions | is-empty) {
+        if not ($console_updates | flatten | any {|n| $n in $second.functions }) { return { kind: "console", class: 0, fault: "", at: null } }
+        let later = ($frames | skip 2)
+        if $device_in == "executable" {
+            let later_held = ($later | where {|f| $f.object == 0 } | each {|f| sdl-held $f } | get -o 0)
+            if $later_held != null { return $later_held }
+        }
+        if ($later | any {|f| sdl-device $f $device_in $modules }) { return { kind: "upload", class: 0, fault: "", at: null } }
+        return { kind: "refused", class: 6, fault: "cut_short", at: $second }
+    }
+    if $second.object == 0 and $device_in == "module" and $executable != null and $executable.state == "read" and $executable.console {
+        return { kind: "console", class: 0, fault: "", at: null }
+    }
+    { kind: "refused", class: 6, fault: "unanswered", at: $second }
+}
+
+# A frame as the record's callers name it: its function where it
+# resolves, aliases joined by `/`, else its object's file name and
+# address, `?` for no object.
+def sdl-frame-name [frame: record]: nothing -> string {
+    if not ($frame.functions | is-empty) { $frame.functions | str join "/" } else if $frame.object == null { $"?+($frame.hex)" } else { $"($frame.file)+($frame.hex)" }
+}
+
+# A frame at fault, for a refusal: its object's file name and address,
+# `?` for no object, with its functions where it resolves.
+def sdl-frame-text [frame: oneof<record, nothing>]: nothing -> string {
+    if $frame == null { return "the shim's own frames alone" }
+    let place = (if $frame.object == null { $"?+($frame.hex)" } else { $"($frame.file)+($frame.hex)" })
+    if ($frame.functions | is-empty) { $place } else { $"($place) \(($frame.functions | str join '/'))" }
+}
+
+# What an object's symbol table holds, for a refusal, the executable
+# named as such.
+def sdl-table-text [object: record]: nothing -> string {
+    let who = (if $object.index == 0 { $"the executable at ($object.path)" } else { $object.path })
+    if $object.state == "no_file" { return $"($who) has no file to read" }
+    if $object.state != "read" { return $"($who) went unread" }
+    match $object.source {
+        "symtab" => $"($who) keeps a symbol table of ($object.functions) sized functions",
+        "dynsym" => $"($who) keeps no symbol table, only dynamic symbols, ($object.functions) sized functions among them",
+        _ => $"($who) keeps no symbol table and no dynamic symbols",
+    }
+}
+
+# A fault's words for a refusal, naming the object it lies in.
+def sdl-fault-text [fault: string, at: oneof<record, nothing>, objects: table]: nothing -> string {
+    let object = (if $at == null or $at.object == null { null } else { $objects | where index == $at.object | get -o 0 })
+    let table = (if $at == null { "its frames end in the shim's own library" } else if $object == null { "it lies in no object" } else { sdl-table-text $object })
+    let path = (if $object == null { "" } else { $object.path | str replace --regex ' \(deleted\)$' '' })
+    match $fault {
+        "nm_absent" => "binutils' nm is not on PATH, and the frames' symbol tables are read with it",
+        "deleted" => $"the executable at ($path) was deleted after it started",
+        "changed" => $"($path) is not the file its line in the object table names, rebuilt or replaced since the run",
+        "unreadable" => (if $object.why == "" { $"nm cannot read ($path)" } else { $"nm cannot read ($path): ($object.why)" }),
+        "anchor" => $"a make_current's immediate caller is not in the SDL front end, and ($table)",
+        "front_end" => "a make_current comes from a front-end function the probe does not model",
+        "device" => "an upload's second frame is the device's own code, which the probe does not model",
+        "absent" => "an upload's chain ends at its immediate caller",
+        "nowhere" => "an upload's second frame lies in no object",
+        "unanswered" => $"an upload's second frame resolves in no table, and ($table)",
+        "cut_short" => "a console update has no device frame after it",
+        _ => $fault,
+    }
+}
+
+# A refusal's faults (sdl-refusal) from the chains one class refused: one
+# a fault and the object it lies in, how many make_currents hold it by
+# the chains' counts, and the frames at fault.
+def sdl-faults [cases: table, counts: record, objects: table]: nothing -> table<fault: string, held: int, examples: list<string>> {
+    let described = ($cases | each {|c| $c | insert text (sdl-fault-text $c.fault $c.at $objects) })
+    $described | get text | uniq | each {|text|
+        let group = ($described | where text == $text)
+        {
+            fault: $text,
+            held: ($group | each {|c| $counts | get $c.key } | math sum),
+            examples: ($group | each {|c| sdl-frame-text $c.at } | uniq | first 4),
+        }
+    }
+}
+
+# A refusal's message: each fault it holds, how many make_currents hold
+# it, and up to four of them.
+def sdl-refusal [faults: table<fault: string, held: int, examples: list<string>>]: nothing -> string {
+    let parts = ($faults | each {|f|
+        let plural = (if $f.held == 1 { "" } else { "s" })
+        let shown = (if ($f.examples | is-empty) { "" } else { ", among them " + ($f.examples | first 4 | str join ", ") })
+        $"($f.fault): ($f.held) make_current($plural)($shown)"
+    })
+    $"the sdl probe refuses the log: ($parts | str join '; ')"
+}
+
+# The report on a shim log (sdl-resolve): how the flips reached the
+# window. A make_current followed by a window-size call within 2 ms opens
+# a drawn frame, a render. Every other is read by where it came from
+# (sdl-decide): a switch, the window taking a new surface; a flip's
+# upload, one per rectangle the device flushed; or one of the console's
+# own, which is no flip of the program's. A flip's uploads within 5 ms
+# of the previous belong to one flip; switches and the console's own
+# never join one. A drawn frame with a flip's upload under 3 ms on each
+# side sits inside a flip, which is the half-drawn tick to look for. The
+# record comes only when every make_current is decided; otherwise the
+# first refusal in order: the log's structure (sdl-log), nm absent, an
+# object that is no longer the file its line names or a deleted
+# executable, an object nm cannot read, a make_current failing the
+# anchor or unmodelled, and an upload whose second frame does not
+# resolve, each naming its fault, how many make_currents hold it, and up
+# to four of them.
+export def sdl-report [log: path]: nothing -> record {
+    let resolved = (sdl-resolve $log)
+    let events = $resolved.events
+    if ($events | is-empty) { error make {msg: "the shim log holds no events; the window made no SDL calls"} }
+    let executable = ($resolved.objects | where index == 0 | get -o 0)
+    let modules = ($resolved.objects | where {|o| $o.file | str starts-with $device_module } | get index)
+    let keyed = ($events | each {|e|
+        let chain = ($e.frames | each {|f| $"(if $f.object == null { '?' } else { $f.object })+($f.hex)" } | str join " ")
+        $e | insert key $"chain:($chain)"
+    })
+    let made = ($keyed | where name == "make_current")
+    let decided = ($made | where render == false)
+    let chains = ($decided | uniq-by key)
+    let decisions = ($chains | reduce --fold {} {|e, all| $all | insert $e.key (sdl-decide $e.frames $resolved.virtio_gpu_in $modules $executable) })
+    let counts = ($decided | get key | uniq --count | reduce --fold {} {|c, all| $all | insert $c.value $c.count })
+    let refused = ($chains | each {|e|
+        let d = ($decisions | get $e.key)
+        if $d.kind == "refused" { $d | insert key $e.key }
+    })
+    for class in [2 3 4 5 6] {
+        let cases = ($refused | where class == $class)
+        if not ($cases | is-empty) { error make {msg: (sdl-refusal (sdl-faults $cases $counts $resolved.objects))} }
+    }
+    let named = ($made | uniq-by key | reduce --fold {} {|e, all| $all | insert $e.key ($e.frames | each {|f| sdl-frame-name $f } | str join " < ") })
+    let kinds = ($keyed | each {|e|
+        if $e.name != "make_current" { { ts: $e.ts, kind: $e.name, callers: "" } } else {
+            let kind = (if $e.render { "render" } else { $decisions | get $e.key | get kind })
+            { ts: $e.ts, kind: $kind, callers: ($named | get $e.key) }
+        }
+    })
+    let t0 = ($events | first | get ts)
     let uploads = ($kinds | where kind == "upload")
-    let others = ($kinds | where kind == "other_upload")
+    let others = ($kinds | where kind == "console")
+    let switches = ($kinds | where kind == "switch")
     let renders = ($kinds | where kind == "render" | get ts)
     let polls = ($kinds | where kind == "poll" | get ts)
     mut flips: list<record<start: float, end: float, size: int, gaps: list<float>>> = []
@@ -2527,6 +2932,7 @@ def sdl-report [log: path]: nothing -> record {
     let hist = {|values: list<float>| $values | each {|v| $v | math round -p 0 } | uniq --count | sort-by count --reverse | first 6 | each {|c| { ms: $c.value, count: $c.count } } }
     let stat = {|values: list<float>| if ($values | is-empty) { { median: 0.0, max: 0.0 } } else { { median: ($values | math median | math round -p 2), max: ($values | math max | math round -p 2) } } }
     let range = {|values: list<float>| if ($values | is-empty) { { median: 0.0, min: 0.0, max: 0.0 } } else { { median: ($values | math median | math round -p 0), min: ($values | math min | math round -p 0), max: ($values | math max | math round -p 0) } } }
+    let top = {|rows: list| $rows | get callers | uniq --count | sort-by count --reverse | first 2 | each {|c| { callers: $c.value, count: $c.count } } }
     # which guest frame each render showed: the flips whose last upload
     # landed since the render before it; none is the frame before shown
     # again, one is that flip shown, more is every one but the last
@@ -2552,6 +2958,8 @@ def sdl-report [log: path]: nothing -> record {
     let repeat_times = ($repeats | get at)
     let between = {|times: list<float>| $times | window 2 | each {|w| ($w.1 - $w.0) * 1000.0 } }
     {
+        run: { binary: (if $executable == null { "" } else { $executable.path }) },
+        virtio_gpu_in: $resolved.virtio_gpu_in,
         seconds_logged: ((($events | last | get ts) - $t0) | math round -p 1),
         flips: ($done | length),
         uploads_per_flip: ($done | get size | uniq --count | sort-by count --reverse | first 6 | each {|c| { uploads: $c.value, count: $c.count } }),
@@ -2568,10 +2976,12 @@ def sdl-report [log: path]: nothing -> record {
         renders_inside_flip: ($inside | length),
         inside_cases: ($inside | first 8),
         polls: ($polls | length),
+        switches: ($switches | length),
         other_uploads: ($others | length),
-        upload_callers: ($uploads | get callers | uniq --count | sort-by count --reverse | first 2 | each {|c| { callers: $c.value, count: $c.count } }),
-        other_upload_callers: ($others | get callers | uniq --count | sort-by count --reverse | first 2 | each {|c| { callers: $c.value, count: $c.count } }),
-        render_callers: ($kinds | where kind == "render" | get callers | uniq --count | sort-by count --reverse | first 2 | each {|c| { callers: $c.value, count: $c.count } }),
+        upload_callers: (do $top $uploads),
+        other_upload_callers: (do $top $others),
+        switch_callers: (do $top $switches),
+        render_callers: (do $top ($kinds | where kind == "render")),
     }
 }
 
