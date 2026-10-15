@@ -4270,6 +4270,15 @@ export def gauge-rules [dir: path]: nothing -> nothing {
         let b = (do $screen $c.items $c.stamp $c.expect)
         assert ($b.problems | any {|p| $p | str contains $c.says }) $"screen-frame refuses ($c.name): ($b.problems)"
     }
+    # the window's bound (StampWindow), its length the final less the
+    # opening: the binding capture's measurement with its final frame moved,
+    # 65,536 frames past the opening refused by the contract's message
+    # alone, and 65,535 binding frame 5
+    let bound_m = (do $measure $bound8)
+    let long = (gauge screen-frame ($bound_m | update final 65540) 5 4 $worker_expect)
+    assert ($long.frame == null and $long.problems == ["the window from frame 4 to the final frame 65540 holds 65536 frames; it must be shorter than 65,536 frames"]) $"screen-frame refuses a window of 65,536 frames by the contract's message alone: ($long)"
+    let edge = (gauge screen-frame ($bound_m | update final 65539) 5 4 $worker_expect)
+    assert ($edge.frame == 5 and ($edge.problems | is-empty)) $"screen-frame binds over a window of 65,535 frames: ($edge)"
 
     # pairing from schema 4: workers asked and unanswered, answered late,
     # or answered and drawn by other workers or at another grain, and below

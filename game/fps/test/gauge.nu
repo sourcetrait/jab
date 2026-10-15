@@ -1410,13 +1410,16 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 }
 
 # The frame a screen shows, bound under FrameCeiling's picture contract:
-# `m` the capture measured, complete and valid or refused; `stamp` the
-# frame number the screen's stamp carries (test.nu's stamp-of), its low
-# STAMP_BITS bits, null refused; the window the rows from `from`, the
-# frame that answered the window's opening command, to the final frame the
-# marker names, the stamp naming one frame N of it before the final, a
-# stamp naming a frame before the opening and one naming the final frame
-# or none each refused; N settled by the pool's rule, its missed blocks,
+# `m` the capture measured, complete and valid or refused; the window the
+# rows from `from`, the frame that answered the window's opening command,
+# to before the final frame the marker names, its length the final less
+# `from`, shorter than 2^STAMP_BITS frames by the contract so its frames'
+# stamps differ, a window of that many frames or more refused before any
+# stamp is read; `stamp` the frame number the screen's stamp carries
+# (test.nu's stamp-of), its low STAMP_BITS bits, null refused; the stamp
+# naming one frame N of the window, a stamp naming a frame before the
+# opening and one naming the final frame or none each refused; N settled
+# by the pool's rule, its missed blocks,
 # building, admitted, dropped, filtered, and tiles built all 0; N's state
 # at `expect.pose`, x, y, and z within POSE_SLACK_M and the yaw, pitch,
 # and roll within POSE_SLACK_DEGREES, the yaw modulo a turn; N's packet
@@ -1431,6 +1434,11 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
 export def screen-frame [m: record, stamp: any, from: int, expect: record]: nothing -> record<frame: any, problems: list<string>> {
     if not ($m.complete and $m.valid) {
         return { frame: null, problems: [$"the capture is not complete and valid: ($m.problems | append $m.invalid | str join '; ')"] }
+    }
+    let length = ($m.final - $from)
+    let bound = (1 bit-shl $STAMP_BITS)
+    if $length >= $bound {
+        return { frame: null, problems: [$"the window from frame ($from) to the final frame ($m.final) holds ($length) frames; it must be shorter than ($bound | into string --group-digits) frames"] }
     }
     if $stamp == null { return { frame: null, problems: ["the screen carries no stamp"] } }
     let named = ($m.rows | where {|r| ($r.frame mod (1 bit-shl $STAMP_BITS)) == $stamp } | get frame)
