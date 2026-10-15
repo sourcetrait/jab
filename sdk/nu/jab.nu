@@ -2846,23 +2846,22 @@ def sdl-refusal [faults: table<fault: string, held: int, examples: list<string>>
     $"the sdl probe refuses the log: ($parts | str join '; ')"
 }
 
-# The report on a shim log (sdl-resolve): how the flips reached the
-# window. A make_current followed by a window-size call within 2 ms opens
-# a drawn frame, a render. Every other is read by where it came from
-# (sdl-decide): a switch, the window taking a new surface; a flip's
-# upload, one per rectangle the device flushed; or one of the console's
-# own, which is no flip of the program's. A flip's uploads within 5 ms
-# of the previous belong to one flip; switches and the console's own
-# never join one. A drawn frame with a flip's upload under 3 ms on each
-# side sits inside a flip, which is the half-drawn tick to look for. The
-# record comes only when every make_current is decided; otherwise the
-# first refusal in order: the log's structure (sdl-log), nm absent, an
-# object that is no longer the file its line names or a deleted
-# executable, an object nm cannot read, a make_current failing the
-# anchor or unmodelled, and an upload whose second frame does not
-# resolve, each naming its fault, how many make_currents hold it, and up
-# to four of them.
-export def sdl-report [log: path]: nothing -> record {
+# The shim's log at `log` (sdl-resolve) with each make_current read by
+# where it came from. A make_current followed by a window-size call
+# within 2 ms opens a drawn frame, a `render`. Every other is read by its
+# frames (sdl-decide): a `switch`, the window taking a new surface; a
+# flip's `upload`, one per rectangle the device flushed; or one of the
+# `console`'s own, which is no flip of the program's. Each event gains
+# its `kind`, a make_current's one of those four and any other event's
+# its name, and its `callers` as the record names them (sdl-frame-name),
+# the immediate caller first. The reading comes only when every
+# make_current is decided; otherwise the first refusal in order: the
+# log's structure (sdl-log), nm absent, an object that is no longer the
+# file its line names or a deleted executable, an object nm cannot read,
+# a make_current failing the anchor or unmodelled, and an upload whose
+# second frame does not resolve, each naming its fault, how many
+# make_currents hold it, and up to four of them.
+export def sdl-classify [log: path]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
     let resolved = (sdl-resolve $log)
     let events = $resolved.events
     if ($events | is-empty) { error make {msg: "the shim log holds no events; the window made no SDL calls"} }
@@ -2886,12 +2885,26 @@ export def sdl-report [log: path]: nothing -> record {
         if not ($cases | is-empty) { error make {msg: (sdl-refusal (sdl-faults $cases $counts $resolved.objects))} }
     }
     let named = ($made | uniq-by key | reduce --fold {} {|e, all| $all | insert $e.key ($e.frames | each {|f| sdl-frame-name $f } | str join " < ") })
-    let kinds = ($keyed | each {|e|
-        if $e.name != "make_current" { { ts: $e.ts, kind: $e.name, callers: "" } } else {
+    let read = ($keyed | each {|e|
+        if $e.name != "make_current" { $e | merge { kind: $e.name, callers: "" } } else {
             let kind = (if $e.render { "render" } else { $decisions | get $e.key | get kind })
-            { ts: $e.ts, kind: $kind, callers: ($named | get $e.key) }
+            $e | merge { kind: $kind, callers: ($named | get $e.key) }
         }
-    })
+    } | reject key)
+    { objects: $resolved.objects, virtio_gpu_in: $resolved.virtio_gpu_in, events: $read }
+}
+
+# The report on a shim log (sdl-classify): how the flips reached the
+# window, one record, or the refusal saying why the log cannot be read.
+# A flip's uploads within 5 ms of the previous belong to one flip;
+# switches and the console's own never join one. A drawn frame with a
+# flip's upload under 3 ms on each side sits inside a flip, which is the
+# half-drawn tick to look for.
+export def sdl-report [log: path]: nothing -> record {
+    let classified = (sdl-classify $log)
+    let events = $classified.events
+    let executable = ($classified.objects | where index == 0 | get -o 0)
+    let kinds = ($events | select ts kind callers)
     let t0 = ($events | first | get ts)
     let uploads = ($kinds | where kind == "upload")
     let others = ($kinds | where kind == "console")
@@ -2959,7 +2972,7 @@ export def sdl-report [log: path]: nothing -> record {
     let between = {|times: list<float>| $times | window 2 | each {|w| ($w.1 - $w.0) * 1000.0 } }
     {
         run: { binary: (if $executable == null { "" } else { $executable.path }) },
-        virtio_gpu_in: $resolved.virtio_gpu_in,
+        virtio_gpu_in: $classified.virtio_gpu_in,
         seconds_logged: ((($events | last | get ts) - $t0) | math round -p 1),
         flips: ($done | length),
         uploads_per_flip: ($done | get size | uniq --count | sort-by count --reverse | first 6 | each {|c| { uploads: $c.value, count: $c.count } }),

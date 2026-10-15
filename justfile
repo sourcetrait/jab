@@ -45,7 +45,7 @@ test *args:
 # debug`; `--api` puts the API's port on the machine; the host's gamepad
 # and sound come along unless `--no-pad` or `--no-sound`, the keyboard
 # and the tablet unless `--no-kbm`; the specification's three harts, or
-# `--harts 1`, `2`, or `4` for a diagnostic machine
+# any other count from 1 to 8 with `--harts` for a diagnostic machine
 # Build, then run one program in its window
 [script("nu")]
 run +args:

@@ -28,7 +28,9 @@ runs only under QEMU's `virt` machine.
   `program.jab.toml`, `src/main.S` and its `srcdoc/`, and its
   integration test at `test/test.nu`.
 - `shim/` the preload shims, a cargo workspace, a crate each under
-  `crates/`: `sdl` for the probe and `evdev` for the pad tests.
+  `crates/`: `sdl` for the probe, `sdl_harness`, a small binary that
+  tests the probe's capture, `evdev` for the pad tests, and `pad`, the
+  bridge that carries a gamepad to QEMU on macOS.
 - `tool/` the host tools, a cargo workspace, a crate each under
   `crates/`: `disco`, the library `jabdisco` and its binary
   `jabdisco`, which find the gamepad a run attaches and the audio
@@ -287,14 +289,22 @@ runs the steps its comma-separated labels name.
 `just do probe sdl example/walk` looks at the window itself: it runs
 the program under SDL with OpenGL for twelve seconds (`--seconds N`)
 with a small library preloaded into QEMU, `shim/crates/sdl`, built with
-cargo into the target's `shim/`, which logs every SDL call the window
-makes with a timestamp and its callers; then it prints one NUON record
-on how the program's flips reached the window, ready to paste: the
-uploads per flip and their spacing, the flip cadence, the drawn frames
-and their interval, and any frame drawn inside a flip, which is a
-half-drawn tick. Linux only, since it preloads into QEMU; with no
-display server SDL runs its offscreen driver, drawing nothing along the
-same path.
+cargo into the target's `shim/`. The library logs every SDL call the
+window makes with a timestamp, and for each time the window takes its
+drawing context, the calls that led there. The log opens with a list of
+the files QEMU has loaded. The probe reads those calls through the
+files' own symbol tables with binutils' `nm`, which must be on PATH,
+and so tells three things apart: a flip's upload, which comes from the
+virtio-gpu device; a switch, the window taking a new surface; and the
+console's own redraws, which are no flip of the program's. Then it
+prints one NUON record on how the program's flips reached the window,
+ready to paste: the uploads per flip and their spacing, the flip
+cadence, the drawn frames and their interval, the switches, and any
+frame drawn inside a flip, which is a half-drawn tick. When it cannot
+read every call, as on a QEMU stripped of its symbol table, it prints no
+record and says why instead. Linux only, since it preloads into QEMU;
+with no display server SDL runs its offscreen driver, drawing nothing
+along the same path.
 
 A gamepad on the host reaches a program two ways, and a program never
 learns which. A run finds the pad through `jabdisco`, built with
