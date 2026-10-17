@@ -401,8 +401,10 @@ const HANDOFF_EARLY = 50ms
 const HANDOFF_OBLIQUE = { along: 1.98, off: 2.5, turn: 45 }
 const HANDOFF_OBLIQUE_SLOTS = 3
 const HANDOFF_OBLIQUE_LEVELS = 3
-# a COUNT build's count line, every count the reported frame's own
+# a COUNT build's count line, every count the reported frame's own; with
+# FOOTPRINT besides, the blocks whose row derivative saturated after it
 const COUNT_LINE = "fps: count {divides} divides, {avoided} avoided; blocks {shifted} shifted, {short} short; negative steps off sixteen {nu} in u, {nv} in v; flat spans {flat}; mismatches {mismatches}; re-entries {two} in two blocks, {four} in four, {cut} cut short"
+const COUNT_SATURATED = "; saturated {saturated}"
 # hud.S's stamp: STAMP_BITS cells of STAMP_CELL pixels square along the
 # screen's top-left, the n-th from the left the frame number's n-th bit
 export const STAMP_BITS = 16
@@ -3092,6 +3094,14 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     { tiles: ($grid | length), levels: $levels, k: $frame.k, w: $frame.w, h: $frame.h, by_level: $by_level }
 }
 
+# A count line's counts: COUNT_LINE's, and with FOOTPRINT's saturations
+# after them `saturated` besides; a line of neither form refused.
+def count-of [line: string]: nothing -> record {
+    let parsed = (if ($line | str contains "; saturated ") { $line | parse ($COUNT_LINE + $COUNT_SATURATED) } else { $line | parse $COUNT_LINE })
+    assert equal ($parsed | length) 1 $"a count line of COUNT_LINE's form, FOOTPRINT's saturations after it or not: ($line)"
+    $parsed | get 0 | update cells {|c| $c | into int }
+}
+
 # The handoff's measurement on the handoff fixture's tree, the wall posed
 # head-on: under each of HANDOFF_LIGHTINGS and at every level of its
 # chain by the M frame, the wall settled on its tiles under the lift, and
@@ -3227,7 +3237,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
             stamp: $stamp, shown: ($stamp != null and ($window | any {|r| ($r.frame mod (1 bit-shl $STAMP_BITS)) == $stamp and $r.frame < $m.final })),
             started: $run.screen_started, completed: $run.screen_completed,
             placed: (do $written $times.second $times.placed), ended: (do $written $times.end $ended),
-            counts: ($counted | last | parse $COUNT_LINE | get 0 | update cells {|c| $c | into int }),
+            counts: (count-of ($counted | last)),
         }
     }
     # a run's window held to its kind on `slots` slots, its screen a frame
