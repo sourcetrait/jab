@@ -22,6 +22,12 @@ one, so the host copies and paints the walkers' own areas and not
 the screen. Over the API, when a run has it, a record per walker
 that enters and per walker that leaves, for the test.
 
+PREPARE, a candidate under measurement, puts the work first in the
+ordinary build as it does in CADENCE's: the frame clears, moves, and
+draws, then waits for the tick every iteration, one with nothing noted
+too, and flips the noted rectangles, waiting again if the flip comes back
+early. Without the symbol the image is the one before it, byte for byte.
+
 CADENCE is the measurement build, a symbol as WHOLE is one, and a
 release build carries none of it. Before the anchor the program reads
 the capture nonce, the 16-byte WNON frame, from the API, and under
@@ -576,6 +582,12 @@ frame's start, the work's end, the call's start, its end; with PREPARE: the
 frame's start, the work's end, the wait's start, its end, the call's start,
 its end. The drawing is the work's end less the frame's start in both.
 Under CADENCE_TEST the quiet frames call no admit.
+
+## present
+
+Under PREPARE without CADENCE: the frame's one wait, then its flip from the
+rectangles noted, or WHOLE's whole flip; the image stays as drawn across a
+second wait after an early answer.
 
 ## bad_sprite
 

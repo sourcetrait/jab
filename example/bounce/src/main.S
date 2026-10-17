@@ -26,7 +26,9 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
+.ifndef PREPARE
     jab.sys.display.await
+.endif
     call elapsed
     srai s4, s0, FIX
     srai s5, s1, FIX
@@ -91,12 +93,40 @@ frame:
 8:
     addi a3, a3, RADIUS + 1
     sub a3, a3, a1
+.ifdef PREPARE
+    call present
+.else
     jab.sys.display.flip.rect
+.endif
     j frame
 
 no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
+
+.ifdef PREPARE
+present:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, flip_rect
+    sw a0, JAB_RECT_X(t0)
+    sw a1, JAB_RECT_Y(t0)
+    sw a2, JAB_RECT_WIDTH(t0)
+    sw a3, JAB_RECT_HEIGHT(t0)
+1:
+    jab.sys.display.await
+    la t0, flip_rect
+    lwu a0, JAB_RECT_X(t0)
+    lwu a1, JAB_RECT_Y(t0)
+    lwu a2, JAB_RECT_WIDTH(t0)
+    lwu a3, JAB_RECT_HEIGHT(t0)
+    jab.sys.display.flip.rect
+    li t0, 1
+    beq a0, t0, 1b              # early: waited for again, the image unchanged
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.endif
 
 elapsed:
     rdtime t0
@@ -178,6 +208,10 @@ last_time:
     .skip 8
 dt:
     .skip 8
+.ifdef PREPARE
+flip_rect:
+    .skip JAB_RECT_SIZE
+.endif
 
 .section .rodata
 msg_no_display:

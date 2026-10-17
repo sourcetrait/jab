@@ -75,18 +75,27 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
+.ifdef PREPARE
+    call read_keys
+    call read_api
+.else
     jab.sys.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API
     mv s0, a0
     call read_keys
     call read_api
     andi t0, s0, JAB_AWAIT_DISPLAY
     beqz t0, frame
+.endif
     call elapsed
     call move_player
     call move_ball
     call collide
     call report
     call render
+.ifdef PREPARE
+    call remember
+    call present
+.endif
     j frame
 
 no_display:
@@ -792,11 +801,38 @@ render:
     sub a3, a3, a1
     mv a0, s2
     mv a2, s3
+.ifdef PREPARE
+    la t0, flip_rect
+    sw a0, JAB_RECT_X(t0)
+    sw a1, JAB_RECT_Y(t0)
+    sw a2, JAB_RECT_WIDTH(t0)
+    sw a3, JAB_RECT_HEIGHT(t0)
+.else
     jab.sys.display.flip.rect
     call remember
+.endif
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
+
+.ifdef PREPARE
+present:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+1:
+    jab.sys.display.await
+    la t0, flip_rect
+    lwu a0, JAB_RECT_X(t0)
+    lwu a1, JAB_RECT_Y(t0)
+    lwu a2, JAB_RECT_WIDTH(t0)
+    lwu a3, JAB_RECT_HEIGHT(t0)
+    jab.sys.display.flip.rect
+    li t0, 1
+    beq a0, t0, 1b              # early: waited for again, the image unchanged
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.endif
 
 least_greatest:
     bge t1, a0, 1f
@@ -898,6 +934,10 @@ last_time:
     .skip 8
 dt:
     .skip 8
+.ifdef PREPARE
+flip_rect:
+    .skip JAB_RECT_SIZE
+.endif
 player_x:
     .skip 8
 player_y:

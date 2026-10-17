@@ -251,7 +251,10 @@ whole flip's transfer and flush as one batch with one wait, as a list's
 are sent, so a refused transfer is followed by the flush, which shows the
 frame before again and counts; `just test test/framecap --set flip_batch`
 holds it, and a kernel built without the symbol is byte for byte the one
-before it.
+before it. bounce, walk, wasd, and pad built with `PREPARE`, the
+candidate loop beside it, draw first and wait for the tick after, then
+flip what they kept; `just test example/<name> --set prepare` holds each,
+and without the symbol each image is the one before it.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`

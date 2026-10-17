@@ -48,6 +48,16 @@ Values are the program's own fixed point. With no API port on the
 machine (`just run example pad` without `--api`) the reads find
 nothing and the writes are refused.
 
+Built with PREPARE, a candidate under measurement, each frame works
+first and waits after: it takes every key event, API record, and pad
+event that has come, then the pad's state once, without waiting for any
+of them, moves, collides, reports, draws, keeps what it will flip in
+`rects` with `flip_count` and the drawn centres for the next erase, then
+waits for the display's tick alone and flips, waiting again if the flip
+comes back early. Input that arrives during the wait takes effect the
+frame after. Without the symbol the image is the one before it, byte for
+byte.
+
 A command in: code u16, value u16. A report out: kind u8, sphere u8,
 against u8 (a hit's other party), a pad byte, then x i32 and y i32 in
 fixed point.
@@ -338,7 +348,15 @@ it on a hit, and the bottom one otherwise.
 
 The rectangle runs from the least of the four centres less the radius to the
 greatest plus it, on each axis. A button to announce puts its name into the
-strip, and both rectangles are flipped as one.
+strip, and both rectangles are flipped as one. Under PREPARE the spheres'
+rectangle goes to `rects`' first entry, the strip's beside it when it
+changed, and flip_count says which the loop's flip takes, one or both.
+
+## present
+
+Under PREPARE: the wait for the display's tick, then the flip flip_count
+names, the rectangle read back from `rects`' first entry after the wait,
+whose answer lands in a0, or the list of two.
 
 ## draw_label
 
@@ -468,6 +486,11 @@ the strip clear.
 ## dt
 
 `u64`: the frame's time in ticks, at most DT_MAX.
+
+## flip_count
+
+`u64`: under PREPARE, how many of `rects` the frame flips once its wait is
+over: 1 the spheres' rectangle, 2 the list with the strip.
 
 ## report_buffer
 
