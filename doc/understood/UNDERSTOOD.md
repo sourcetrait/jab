@@ -339,7 +339,10 @@ machine among them. `game/fps/bench/qual_1ka1.nuon` and
 `qual_1kb1.nuon` are the qualification's, each launching every run by
 its spec's name: the factory route in two batches of three seeded runs,
 the second's seeds reversed, a free play, the presentation's probed
-batches beside their shim control, and the worker scaling control. A
+batches beside their shim control, and the worker scaling control. The
+automatic workers' batches, the route's two among them, are one build,
+so they carry one name, `auto_1` to `auto_6`, since the report's
+comparison takes a label less its `_<n>` as the build's one name. A
 step passes a list, its seeds, as NUON in one word, `"[3 2 1]"`, since a
 script's command line carries strings alone. Each
 run of a bench is a stamped directory in the program's `bench/` shard

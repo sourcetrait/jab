@@ -95,7 +95,7 @@ const WORKSPACE = (path self | path dirname | path join ".." ".." ".." | path ex
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
 const SCHEMAS = [1 2 3 4 5 6 7]
-const CEILING_US = 15000
+export const CEILING_US = 15000
 const KIND_STATE = 1
 const KIND_FRAME = 7
 const KIND_DRAW = 8
@@ -604,7 +604,9 @@ def workers-sends [asked: record]: nothing -> list<any> {
 # harts and RAM, diagnostic; -machine, the CPU, and the accelerator with
 # its thread mode, and the words beside them),
 # the QEMU words of the launch's own (`overrides`), the host, the
-# toolchain, and the mode: the window, the sound, the pad, the seed, the
+# toolchain with its as, ld, and objcopy, each the file its prefix resolves
+# to with its SHA-256 (resolved-file), and the mode: the window, the
+# sound, the pad, the seed, the
 # cadence asked for, the workers and grain asked for, null for none, and
 # when the measurement closes. The build's flags are null, unknown, with
 # no `flags` beside the image, and its provenance the `provenance.nuon`
@@ -659,15 +661,24 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
             prefix: $prefix,
             assembler: (if $prefix == null { null } else { try { ^$"($prefix)as" --version | complete | get stdout | lines | get -o 0 } catch { null } }),
             link: (try { ls -l ($at.workspace | path join "extern") | where {|e| ($e.name | path basename) == "riscv" } | get -o 0.target } catch { null }),
+            tools: (if $prefix == null { null } else { { as: (resolved-file $"($prefix)as"), ld: (resolved-file $"($prefix)ld"), objcopy: (resolved-file $"($prefix)objcopy") } }),
         },
         mode: $mode,
     }
 }
 
-# The QEMU a launch ran, the binary it resolved, and that binary's
-# version.
-def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<string, nothing>> {
-    { binary: $binary, version: (try { ^$binary --version | complete | get stdout | lines | get -o 0 } catch { null }) }
+# The QEMU a launch ran, the binary it resolved, that binary's version,
+# and the SHA-256 of the file it resolves to (resolved-file).
+def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>> {
+    { binary: $binary, version: (try { ^$binary --version | complete | get stdout | lines | get -o 0 } catch { null }), sha256: (resolved-file $binary | get sha256) }
+}
+
+# The file a command resolves to, the path given where it names one, else
+# the one the path finds, and that file's SHA-256, both null where it
+# resolves to none.
+export def resolved-file [command: string]: nothing -> record<path: oneof<string, nothing>, sha256: oneof<string, nothing>> {
+    let file = (if ($command | path exists) { $command | path expand } else { which $command | where type == "external" | get -o 0.path })
+    { path: $file, sha256: (if $file == null { null } else { open --raw $file | hash sha256 }) }
 }
 
 # A run's identity once its launch returns: the QEMU it ran (qemu-of),
@@ -1117,7 +1128,7 @@ def digest [file: path]: nothing -> oneof<string, nothing> {
 
 # A tree's digest: every file's path under it and its SHA-256, one a
 # line in path order, hashed.
-def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
+export def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
     if not ($tree | path exists) { return null }
     jab paths-of ($tree | path join "**" "*") | where {|f| ($f | path type) == "file" } | sort | each {|f| $"($f | path relative-to $tree) (open --raw $f | into binary | hash sha256)" } | str join (char nl) | hash sha256
 }
@@ -2266,7 +2277,7 @@ export def report-doc [label: string, id: record, runs: list<any>]: nothing -> r
 
 # A critical path's median under the ceiling, the rule a measurement's
 # `under`, a leg's line, and a bench's pool are judged by.
-def under-ceiling [median: number]: nothing -> bool {
+export def under-ceiling [median: number]: nothing -> bool {
     $median < $CEILING_US
 }
 

@@ -104,7 +104,7 @@ const CLOCK_END_AT = 13500ms
 export const CLOCK_SCHEMA = 7
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
-const FX_PERIOD = 20000
+export const FX_PERIOD = 20000
 # the capture nonce a synthetic capture at schema 7 echoes, and the one
 # the Render One launch sends in its I
 const FX_NONCE = 0x1234_5678_9abc_def0
@@ -5454,7 +5454,7 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 # the frame's state, two frames' states past the window; from schema 7 an
 # I's answer beside the others and the load record (fx-load) before frame
 # 0's state.
-def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
+export def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
         [(fx-frame ($n - 1) $schema) (fx-draw ($n - 1) $schema)]
         | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
@@ -5609,7 +5609,7 @@ def fx-packet [frame: int, schema: int = 3, workers: int = 2]: nothing -> record
 }
 
 # A synthetic capture with the item of a kind and frame changed.
-def fx-set [items: list<any>, kind: string, frame: int, changes: record]: nothing -> list<any> {
+export def fx-set [items: list<any>, kind: string, frame: int, changes: record]: nothing -> list<any> {
     $items | each {|i| if $i.kind == $kind and ($i.frame? == $frame) { $i | merge $changes } else { $i } }
 }
 
@@ -5619,7 +5619,7 @@ def fx-set-config [items: list<any>, changes: record]: nothing -> list<any> {
 }
 
 # A synthetic capture with every item of a kind changed.
-def fx-set-all [items: list<any>, kind: string, changes: record]: nothing -> list<any> {
+export def fx-set-all [items: list<any>, kind: string, changes: record]: nothing -> list<any> {
     $items | each {|i| if $i.kind == $kind { $i | merge $changes } else { $i } }
 }
 
@@ -5758,7 +5758,7 @@ def fx-report [home: path, label: string, id: any, runs: list<any>]: nothing -> 
 # presentation; a packet record, its workers' words from schema 4; the
 # tile pool's tile, storage, and configuration records; and the end
 # marker's frame and schema.
-def fx-bytes [items: list<any>]: nothing -> binary {
+export def fx-bytes [items: list<any>]: nothing -> binary {
     $items | each {|i|
         match $i.kind {
             "ack" => (fx-pad ([0x[0b 00 00 00] 0x[52]] | bytes collect)),

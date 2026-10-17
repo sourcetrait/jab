@@ -2,22 +2,26 @@
 # window with live audio, launched as 1KB1 by name: the factory route in
 # two batches, your own play, the presentation's probed batches beside
 # their shim control, and the worker scaling control, each batch three
-# seeded runs. `just bench game/fps/qual_1kb1` runs it, `just watch bench
-# game/fps/qual_1kb1` in a second terminal records every run of it.
+# seeded runs. The automatic workers' batches are one build and carry one
+# name, auto, as the bench's comparison reads a build: auto_1 and auto_2
+# the factory route, auto_3 and auto_4 the shim control's unprobed arm,
+# auto_5 and auto_6 the scaling control's automatic arm. `just bench
+# game/fps/qual_1kb1` runs it, `just watch bench game/fps/qual_1kb1` in a
+# second terminal records every run of it.
 {
   summary: "the qualification on 1KB1: the factory route twice, your play, the probed batches and their shim control, two workers against the automatic choice"
   tree: "release"
   steps: [
-    { label: "normal_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--seeds" "[1 2 3]" "--host" "--spec" "1kb1" "--cpu"] }
-    { label: "normal_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--seeds" "[3 2 1]" "--host" "--spec" "1kb1" "--cpu"] }
+    { label: "auto_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--seeds" "[1 2 3]" "--host" "--spec" "1kb1" "--cpu"] }
+    { label: "auto_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--seeds" "[3 2 1]" "--host" "--spec" "1kb1" "--cpu"] }
     { label: "free", attend: "your turn: play Render Zero with your pad for 60 seconds", run: ["test/gauge.nu" "play" "--tree" "release" "--seconds" "60" "--spec" "1kb1"] }
     { label: "probed_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--sdl-probe"] }
-    { label: "plain_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1"] }
-    { label: "plain_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1"] }
+    { label: "auto_3", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1"] }
+    { label: "auto_4", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1"] }
     { label: "probed_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--sdl-probe"] }
     { label: "forced2_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--workers" "2" "--cpu"] }
-    { label: "auto_1", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
-    { label: "auto_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
+    { label: "auto_5", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
+    { label: "auto_6", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
     { label: "forced2_2", run: ["test/gauge.nu" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--workers" "2" "--cpu"] }
   ]
   report: ["test/gauge.nu" "bench-report"]
