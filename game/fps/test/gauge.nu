@@ -871,8 +871,9 @@ export def identity-of [report: path, run: record, legacy: any]: nothing -> reco
 # resolves, with its provenance as identity-of gives it, the report's
 # summary only that identity's fallback, and the fields read from it: the
 # selection, AUTOMATIC when it asks no workers and FORCED when it asks a
-# count, the cadence, the workers, the grain, the machine, the QEMU's
-# version, the pad, and the cap.
+# count, the cadence, the workers, the grain, the machine, the kernel's
+# SHA-256 (null for an identity recording none), the QEMU's version, the
+# pad, and the cap.
 export def run-request [report: path, run: record, legacy: any]: nothing -> record {
     let effective = (identity-of $report $run $legacy)
     let id = $effective.identity
@@ -883,6 +884,7 @@ export def run-request [report: path, run: record, legacy: any]: nothing -> reco
         workers: $workers,
         grain: ($id | get -o mode.grain),
         machine: ($id | get -o machine),
+        kernel: ($id | get -o build.kernel_sha256),
         qemu: ($id | get -o qemu.version),
         pad: ($id | get -o mode.pad),
         cap: ($id | get -o cap),
@@ -2213,7 +2215,8 @@ def route-of [report: path, run: record, effective: record]: nothing -> record<s
 }
 
 # Set builds' captures side by side: each run of each gauge.nuon a
-# measurement, a build an image at the cadence its runs played
+# measurement, a build an image on its kernel, none for an identity
+# recording no kernel, at the cadence its runs played
 # (effective-cadence) by the workers at the grain they played
 # (effective-workers) on the machine and the route their identities
 # record under their selection, automatic or forced, its runs its
@@ -2281,7 +2284,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let schema = ($measured | get -o schema | default 1)
             let played = (effective-workers $measured $asked)
             {
-                file: $file, label: $g.label, build: $build, image: $image, machine: $machine,
+                file: $file, label: $g.label, build: $build, image: $image, kernel: $effective.kernel, machine: $machine,
                 requested_cadence: $requested, effective_cadence: (effective-cadence $measured $requested), run: $r.run,
                 selection: $effective.selection, requested_workers: $asked.workers, requested_grain: $asked.grain,
                 effective_workers: $played.workers, effective_grain: $played.grain,
@@ -2360,10 +2363,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         $r | reject rows held route_legs | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
-    let made_of = {|r| { image: $r.image, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r), selection: $r.selection } }
+    let made_of = {|r| { image: $r.image, kernel: $r.kernel, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r), selection: $r.selection } }
     for b in $builds {
         let made = ($runs | where build == $b | each {|r| do $made_of $r } | uniq)
-        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image at a cadence by its workers on a machine and a route under a selection each: ($made | to nuon); a build's batches are one build" } }
+        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image on a kernel at a cadence by its workers on a machine and a route under a selection each: ($made | to nuon); a build's batches are one build" } }
     }
     for made in ($runs | each {|r| do $made_of $r } | uniq) {
         let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
@@ -2430,8 +2433,9 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             leg_value: "a walked leg's value is the mean of its bin values over the bins every run in the comparison reached; a standing leg's is its frames' median by nearest rank",
             stationary_tail: "no frame is cut: frames standing at a walked leg's end fall in its last bin and count as that one bin",
             grouping: ([
-                "a build is an image's SHA-256 at the cadence its runs played by the workers at the grain they"
-                "played on the machine their identities record: the cadence the one asked from schema 2, and 0"
+                "a build is an image's SHA-256 on its kernel's, none for an identity recording no kernel, at the"
+                "cadence its runs played by the workers at the grain they played on the machine their identities"
+                "record: the cadence the one asked from schema 2, and 0"
                 "below it, where a request other than 0 leaves the run unpaired; the workers and grain its frames"
                 "were drawn by from schema 4; below it the serial backend, 0 at grain 0, for a run with a W 0"
                 "answered before its first frame and no W after it, and unknown for any other, which leaves the run"

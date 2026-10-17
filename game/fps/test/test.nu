@@ -3539,7 +3539,9 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 # asking none over a forced run and one asking workers over an automatic
 # run, and from the report's one identity for a legacy report; compare
 # takes a run's from it; an automatic run and a forced one played alike
-# are two builds under two labels and refused under one; a bench of one
+# are two builds under two labels and refused under one, and so are one
+# image's runs on two kernels (KernelKey), one kernel's runs one build; a
+# bench of one
 # report's three runs, each its own identity's, under a summary naming
 # none of their settings, stands, groups, and names each run as its own
 # identity asks, once; and beside a play run the bench groups and names it
@@ -4581,6 +4583,22 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let pair_automatic = (fx-request-report ($requests | path join "pair_2") "pair_2" $forced_summary [{ run: 1, id: $automatic_id, items: $automatic_items }])
     let one_label = (try { gauge compare [$pair_forced $pair_automatic] "draw_us" 50; "" } catch {|e| $e.msg })
     assert ($one_label | str contains "the captures labelled pair come from 2 builds") $"an automatic run and a forced one under one label are refused as two builds: ($one_label)"
+    # the kernel in the build (KernelKey): one image's runs on two kernels
+    # are two builds under two labels and refused under one; one kernel's
+    # runs under one label stay one build
+    let kernel_id = {|kernel: string| { build: { image_sha256: "kernel_image", kernel_sha256: $kernel }, mode: { cadence: 0, workers: 2, grain: 0, pad: "route" } } }
+    let kernel_a = (fx-request-report ($requests | path join "kernel_a") "kernel_a" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_one"), items: $forced_items }])
+    let kernel_b = (fx-request-report ($requests | path join "kernel_b") "kernel_b" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_two"), items: $forced_items }])
+    let two_kernels = (try { gauge compare [$kernel_a $kernel_b] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert equal ($two_kernels | get -o table | default [] | get build | uniq) [kernel_a kernel_b] $"one image's runs on two kernels under two labels are two builds: ($two_kernels | get -o refusal)"
+    let kernels_one = (fx-request-report ($requests | path join "kernels_1") "kernels_1" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_one"), items: $forced_items }])
+    let kernels_two = (fx-request-report ($requests | path join "kernels_2") "kernels_2" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_two"), items: $forced_items }])
+    let kernel_label = (try { gauge compare [$kernels_one $kernels_two] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($kernel_label | str contains "the captures labelled kernels come from 2 builds") $"one image's runs on two kernels under one label are refused as two builds: ($kernel_label)"
+    let same_one = (fx-request-report ($requests | path join "same_1") "same_1" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_one"), items: $forced_items }])
+    let same_two = (fx-request-report ($requests | path join "same_2") "same_2" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_one"), items: $forced_items }])
+    let one_kernel = (try { gauge compare [$same_one $same_two] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert equal ($one_kernel | get -o table | default [] | get build | uniq) [same] $"one kernel's runs under one label are one build: ($one_kernel | get -o refusal)"
 
     # a bench of one report's three runs, each bound by its own identity
     # file and differing, under a summary naming none of their settings:
