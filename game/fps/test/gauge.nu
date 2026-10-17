@@ -21,11 +21,14 @@
 # at schema 6 its harts record (kind 18), masks by hart: the online
 # secondaries, the count reserved, the grant at the frame's latch, the
 # harts under the program's claims, those holding a raster worker, those
-# the frame dispatched to, and those whose workers completed its jobs.
-# After the console's E
+# the frame dispatched to, and those whose workers completed its jobs; and
+# at schema 7 its receipt record (kind 20), its flips as the kernel
+# answered them, beside one load record (kind 21) before the first state,
+# the load's two presents and the run's capture nonce, which the console's
+# I hands the program. After the console's E
 # the end marker (kind 9) names the final frame of the measurement, which
 # the frames from 0 to it make up. render.inc lays the records out; this
-# reader takes schemas 1 to 6. `run` plays a route on a build `--runs`
+# reader takes schemas 1 to 7. `run` plays a route on a build `--runs`
 # times, headless or with `--host` in the host's window and audio, each
 # run seeded by the console's R, asking its cadence by the console's C and
 # with `--workers` its workers and grain by the console's W before its
@@ -91,7 +94,7 @@ use ./pose.nu
 const WORKSPACE = (path self | path dirname | path join ".." ".." ".." | path expand)
 const RECORD = 64
 # the clock records' layouts this reader takes; a capture's sit at one
-const SCHEMAS = [1 2 3 4 5 6]
+const SCHEMAS = [1 2 3 4 5 6 7]
 const CEILING_US = 15000
 const KIND_STATE = 1
 const KIND_FRAME = 7
@@ -107,6 +110,11 @@ const KIND_HARTS = 18
 # a debug build's witness of a frame's rounds under the J's cancel, outside
 # the clock kinds and their schema (render.inc's REPORT_ROUNDS)
 const KIND_ROUNDS = 19
+# from schema 7 each frame's receipt, its flips as the kernel answered
+# them, and once before the first state the load's two presents with the
+# run's capture nonce (render.inc's REPORT_RECEIPT and REPORT_LOAD)
+const KIND_RECEIPT = 20
+const KIND_LOAD = 21
 # the HUD's stamp, a frame number's low bits (hud.S's STAMP_BITS), and the
 # picture contract's slack on a bound frame's pose: a metre's thousandth on
 # the eye, a hundredth of a degree on the angles, past a single's rounding
@@ -116,11 +124,13 @@ const POSE_SLACK_DEGREES = 0.01
 # the batch source of the first boundary, which consumes none
 const NO_BATCH = 4294967295
 # the console's commands as its records name them: P a placement, R a
-# seed, C a cadence, W the raster's workers and grain
+# seed, C a cadence, W the raster's workers and grain, I the run's capture
+# nonce
 const CONSOLE_P = 80
 const CONSOLE_R = 82
 const CONSOLE_C = 67
 const CONSOLE_W = 87
+const CONSOLE_I = 73
 # the raster's workers a frame may have through schema 5, render.inc's
 # bound then; from schema 6 a frame's workers are its active harts, a
 # slot a secondary (GFX_SLOTS, the ABI's JAB_HARTS_MAX less hart 0); the
@@ -146,7 +156,7 @@ const SPAN_RECORDS = 65536
 # a command's bytes in a packet by schema, the polygon's record copied
 # whole, 312 while it carried its tile bindings and 232 from the pool on,
 # and a span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
-const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232, "6": 232 }
+const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232, "6": 232, "7": 232 }
 const SPAN_BYTES = 16
 # a frame's drawing less its preparation and its raster: the microsecond
 # the three conversions drop, at most this
@@ -163,6 +173,7 @@ const PHASES = {
     "4": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "5": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "6": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+    "7": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
 }
 const PARTS = {
     "1": [clear_us portals_us planes_us walls_us sprites_us],
@@ -171,6 +182,7 @@ const PARTS = {
     "4": [clear_us portals_us planes_us walls_us sprites_us raster_us],
     "5": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
     "6": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
+    "7": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
 }
 # the drawing's parts whose meaning moved with the packets (compare): the
 # phases, holding their rendering before the packets and preparation
@@ -275,7 +287,7 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
@@ -295,7 +307,13 @@ def main [] {
 # tree asked is refused before any launch (flags-contradiction). With
 # `--cpu`, every QEMU thread's CPU is read at the times cpu-requests
 # names, the readings kept whole in run.nuon and each run's windows
-# (cpu-windows) in the report.
+# (cpu-windows) in the report. Each run mints its capture nonce before its
+# sends and its identity, sends it in an I beside the R and the C, and
+# launches paired with it (CaptureBundle); with `--sdl-probe` the sdl shim
+# logs each run to its sdl.log under sdl,gl=on and the run is bundled as
+# its last step (jab sdl-bundle) into its bundle/, and with `--trace`
+# QEMU's flush and set_scanout trace goes to its trace.log through the
+# launch's own words, which makes the run diagnostic, the oracle set.
 def "main run" [
     --tree: string = "release"   # the build tree the kernel and the image come from, release or debug
     --kernel: string = ""        # the kernel's ELF, the tree's own unless given
@@ -313,6 +331,8 @@ def "main run" [
     --harts: int = $HARTS        # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
     --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
+    --sdl-probe                  # the sdl shim on each run under sdl,gl=on, each run bundled last
+    --trace                      # QEMU's flush and set_scanout trace to each run's trace.log, the runs then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
@@ -336,29 +356,33 @@ def "main run" [
         let run_out = ($at.out | path join $"run_($n)")
         mkdir $run_out
         $route_bytes | save --raw -f ($run_out | path join "route.nuon")
-        let sends = ([{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }]
-            | append (workers-sends $asked)
+        # the run's capture nonce, minted here, the outermost layer, once
+        let nonce = (jab launch-nonce 0 true)
+        let probe_log = (if $sdl_probe { $run_out | path join "sdl.log" } else { "" })
+        let words = (if $trace { $qemu ++ ["-msg" "timestamp=on" "-trace" "virtio_gpu_cmd_res_flush" "-trace" "virtio_gpu_cmd_set_scanout" "-D" ($run_out | path join "trace.log")] } else { $qemu })
+        let sends = (run-sends $seed $cadence $nonce $asked
             | append ($r.legs | each {|l| $l.places | each {|p| { at: $p.at, bytes: (pose pose-frame $p) } } } | flatten)
             | append ($r.legs | each {|l| $l | get -o sends | default [] | each {|s| { at: $s.at, bytes: (pose command-frame $s.kind) } } } | flatten)
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, workers: $asked.workers, grain: $asked.grain, end: $r.end, capture: $capture }
-        let id = (identity $at $set $map_name $route_file $mode $harts $qemu)
+        let id = (identity $at $set $map_name $route_file $mode $harts $words | merge { profile: "paired", capture_nonce: $nonce })
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads-at $requests
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $qemu --threads-at $requests
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
         let ran_id = (launched-identity $id $launched)
         let id_sha = (write-identity $ran_id $run_out)
+        let bundle = (if $sdl_probe { jab sdl-bundle $run_out ($run_out | path join "bundle") --profile paired | ignore; $run_out | path join "bundle" } else { null })
         let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP))
         print (run-line $label $n $measured $ran)
         print (outcome-line $n $measured $ran)
         let windows = (if $cpu { cpu-windows $ran.thread_readings $r.legs $r.end } else { null })
-        { run: $n, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: $windows }
+        { run: $n, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: $windows, bundle: $bundle }
     })
     report $label (open ($at.out | path join "run_1" "identity.nuon")) $runs $at.out
 }
@@ -517,6 +541,21 @@ export def cadence-frame [cadence: int]: nothing -> binary {
     [("C" | into binary), 0x[00 00 00], ($cadence | into binary --endian little | bytes at 0..<1), (0..<59 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
+# The console's I frame: the run's capture nonce as 64 bits in bytes 4 to
+# 11, which the program echoes in its load record (CaptureBundle).
+export def nonce-frame [nonce: int]: nothing -> binary {
+    [("I" | into binary), 0x[00 00 00], ($nonce | into binary --endian little | bytes at 0..<8), (0..<52 | each {|i| 0x[00] } | bytes collect)] | bytes collect
+}
+
+# A run's sends before its route's: an R with its seed, a C with its
+# cadence, and an I with its capture nonce at SEED_AT, then the W its
+# asked workers send (workers-sends); every run's alike, probed or not, so
+# the shim is a probed run's one difference.
+export def run-sends [seed: int, cadence: int, nonce: int, asked: record]: nothing -> list<any> {
+    [{ at: $SEED_AT, bytes: (seed-frame $seed) }, { at: $SEED_AT, bytes: (cadence-frame $cadence) }, { at: $SEED_AT, bytes: (nonce-frame $nonce) }]
+    | append (workers-sends $asked)
+}
+
 # The console's W frame: the raster's workers in byte 4, 0 for the serial
 # backend, and the rows a band in bytes 8 to 11, 0 for a band a worker.
 export def workers-frame [workers: int, grain: int]: nothing -> binary {
@@ -614,9 +653,12 @@ def qemu-of [binary: string]: nothing -> record<binary: string, version: oneof<s
 
 # A run's identity once its launch returns: the QEMU it ran (qemu-of),
 # and the machine and the words the launch's result carries in place of
-# the ones asked for.
+# the ones asked for, and the capture's fields as the launch recorded them
+# (jab capture-identity): the profile, the capture nonce, QEMU's pid read
+# while it lived, the shim's log and library, the window, the API's port,
+# and the sends.
 def launched-identity [id: record, launched: record]: nothing -> record {
-    $id | upsert qemu (qemu-of $launched.qemu_binary) | upsert machine $launched.machine | upsert overrides $launched.overrides
+    $id | upsert qemu (qemu-of $launched.qemu_binary) | upsert machine $launched.machine | upsert overrides $launched.overrides | merge ($launched | get -o capture | default {})
 }
 
 # An image's build flags, the first line of the `flags` its build wrote
@@ -888,6 +930,7 @@ export def run-request [report: path, run: record, legacy: any]: nothing -> reco
         qemu: ($id | get -o qemu.version),
         pad: ($id | get -o mode.pad),
         cap: ($id | get -o cap),
+        probed: (($id | get -o shim | default "") != ""),
     }
 }
 
@@ -1161,11 +1204,18 @@ def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) 
 # records that came before it, the harts records, kind 18, each a frame's
 # masks by hart, a debug build's witnesses under the J's cancel, kind 19,
 # each a frame's rounds and cancelled rounds, as `rounds`, and the marker,
-# kind 9, with its frame and schema, null when none came. A state carries
-# its pose, the eye's x, y, and z and the yaw, pitch, and roll in degrees.
-# What follows the marker is outside the measurement: its state records
-# are counted as `past` and nothing else in it is read.
-export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int> {
+# kind 9, with its frame and schema, null when none came. From schema 7 the
+# receipt records, kind 20, a frame's final attempt's decision stamp and
+# eligibility tick in ticks, its present ordinal, and the ordinal its first
+# attempt found, and the load's records, kind 21, each the title's and the
+# cleared screen's acceptance in ticks and flip end in microseconds, their
+# ordinals, and the run's capture nonce, with the state records before it;
+# an I's answer before the first state sets `nonce_set`, a later one
+# `late_nonce`. A state carries its pose, the eye's x, y, and z and the
+# yaw, pitch, and roll in degrees. What follows the marker is outside the
+# measurement: its state records are counted as `past` and nothing else in
+# it is read.
+export def stream [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int, receipts: list<any>, loads: list<any>, nonce_set: bool, late_nonce: bool> {
     mut states = []
     mut events = []
     mut frames = []
@@ -1184,6 +1234,10 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
     mut late_cadence = false
     mut workers_set = false
     mut late_workers = false
+    mut receipts = []
+    mut loads = []
+    mut nonce_set = false
+    mut late_nonce = false
     mut end: any = null
     mut past = 0
     for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
@@ -1201,6 +1255,9 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
             }
             if $command == $CONSOLE_W {
                 if ($states | is-empty) { $workers_set = true } else { $late_workers = true }
+            }
+            if $command == $CONSOLE_I {
+                if ($states | is-empty) { $nonce_set = true } else { $late_nonce = true }
             }
         } else if $kind == $KIND_STATE {
             $states = ($states | append {
@@ -1277,6 +1334,17 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
             })
         } else if $kind == $KIND_ROUNDS {
             $rounds = ($rounds | append { frame: (u32-at $r 4), rounds: (u32-at $r 8), cancelled: (u32-at $r 12) })
+        } else if $kind == $KIND_RECEIPT {
+            $receipts = ($receipts | append {
+                frame: (u32-at $r 4), stamp: (u64-at $r 8), tick: (u64-at $r 16), ordinal: (u64-at $r 24),
+                first_ordinal: (u64-at $r 32), schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_LOAD {
+            $loads = ($loads | append {
+                title_stamp: (u64-at $r 8), title_end_us: (u64-at $r 16), clear_stamp: (u64-at $r 24), clear_end_us: (u64-at $r 32),
+                title_ordinal: (u32-at $r 40), clear_ordinal: (u32-at $r 44), nonce: (u64-at $r 48), schema: (u32-at $r 60),
+                arrival_states: ($states | length),
+            })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
@@ -1285,7 +1353,8 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
         draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
-        harts: $harts, rounds: $rounds, end: $end, past: $past,
+        harts: $harts, rounds: $rounds, end: $end, past: $past, receipts: $receipts, loads: $loads,
+        nonce_set: $nonce_set, late_nonce: $late_nonce,
     }
 }
 
@@ -1293,7 +1362,7 @@ export def stream [api: binary]: nothing -> record<states: list<any>, events: li
 # first clock record's; null for a capture with none.
 def schema-of [s: record]: nothing -> oneof<int, nothing> {
     if $s.end != null { return $s.end.schema }
-    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | get -o 0)
+    let first = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | append $s.receipts | get -o 0)
     if $first == null { null } else { $first.schema }
 }
 
@@ -1319,13 +1388,13 @@ def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
 # identity's commit or dirty flag says, since the commit is the
 # checkout's at launch and never the image's; any other run unknown. The
 # tiles were built inside the plane and wall phases at every schema below
-# 5, whatever the image, and at the pool's boundary from 5, schema 6
-# holding the parts as 5 does. A measurement written before schema 2 was
+# 5, whatever the image, and at the pool's boundary from 5, schemas 6
+# and 7 holding the parts as 5 does. A measurement written before schema 2 was
 # read is at schema 1, as compare hands it here.
 def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, tiles: string, evidence: string> {
-    let tiles = (if $schema in [5 6] { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
+    let tiles = (if $schema in [5 6 7] { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
     if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, tiles: $tiles, evidence: "schema 1" } }
-    if $schema in [3 4 5 6] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
+    if $schema in [3 4 5 6 7] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
     let listed = (if $schema == 2 and $image != null { $PHASE_IMAGES | transpose image entry | where image == $image | get -o 0.entry } else { null })
     if $listed != null {
         return { phases: $listed.phases, remainder: $listed.remainder, tiles: $tiles, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }
@@ -1353,7 +1422,10 @@ export def phase-images []: nothing -> record {
 # as its cadence requires, a phase or a part sums past its whole, a
 # frame's clock disagrees with its state, or from schema 2 a frame's
 # presentation, from schema 3 its packets, from schema 4 its workers, or
-# at schema 5 its tile pool break their rules (invalidity). A valid
+# at schema 5 its tile pool break their rules (invalidity), or from schema
+# 7 its receipts break the receipt stage (receipt-invalidity). The
+# measurement carries `nonce_set` and `late_nonce`, an I answered before
+# the first state or after it, and `load`, the load record. A valid
 # window is under the ceiling when its critical path's median is under
 # CEILING_US, `under` null for one not valid; its frames at or over the
 # ceiling, each row's `over`, are its tail, counted in any clocked
@@ -1365,14 +1437,16 @@ export def phase-images []: nothing -> record {
 # carries the grants and the active masks its frames hold.
 export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
     let s = (stream $api)
-    let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs $s.harts] | any {|k| not ($k | is-empty) }) or $s.end != null)
+    let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs $s.harts $s.receipts] | any {|k| not ($k | is-empty) }) or $s.end != null)
     let schema = (if $clocked { schema-of $s } else { null })
     let final = (if $s.end == null { null } else { $s.end.frame })
     let problems = (if not $clocked { [] } else { window-problems $s $schema })
     let complete = ($clocked and ($problems | is-empty))
     let last = (if not $clocked { ($s.states | length) - 1 } else if $final == null { ($s.frames | length) - 1 } else { $final })
     let rows = (rows-of $s $legs $last $schema)
-    let invalid = (if $complete { invalidity $rows $schema } else { [] })
+    let anchor = ($s.loads | get -o 0.clear_ordinal)
+    let receipted = (if $complete and ($schema | default 1) >= 7 { receipt-invalidity $rows $anchor } else { [] })
+    let invalid = (if $complete { (invalidity $rows $schema) ++ $receipted } else { [] })
     let valid = ($complete and ($invalid | is-empty))
     let period_us = (1000000 / $cap)
     let names = ($legs | get name)
@@ -1393,6 +1467,9 @@ export def measure [api: binary, legs: list<any>, --cap: int = 60]: nothing -> r
         cadences: ($rows | get -o cadence | compact | uniq | sort),
         workers_set: $s.workers_set,
         late_workers: $s.late_workers,
+        nonce_set: $s.nonce_set,
+        late_nonce: $s.late_nonce,
+        load: ($s.loads | get -o 0),
         workers: ($rows | get -o workers | compact | uniq | sort),
         grains: ($rows | get -o grain | compact | uniq | sort),
         grants: ($rows | get -o grant | compact | uniq | sort),
@@ -1513,8 +1590,9 @@ export def screen-frame [m: record, stamp: any, from: int, expect: record]: noth
 # record numbered out of order or twice, and a frame short of a record or
 # one too many, the presentation records counted from schema 2, the
 # packet records from schema 3, the tile and storage records from schema
-# 5, and the harts records at schema 6; from 5 a frame with no
-# configuration in force, none from it
+# 5, the harts records from schema 6, and the receipt records from schema
+# 7, beside which a load record, one and before the first state, is held;
+# from 5 a frame with no configuration in force, none from it
 # or before, leaves the window incomplete too, as does a configuration
 # arriving other than after exactly `from` state records and `from` frame
 # records: the program writes one at the boundary of the first frame it
@@ -1535,7 +1613,8 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
         | append (if $at >= 2 { [[name items]; [presentation $s.presents]] } else { [] })
         | append (if $at >= 3 { [[name items]; [packet $s.packets]] } else { [] })
         | append (if $at >= 5 { [[name items]; [tile $s.tiles] [storage $s.storages]] } else { [] })
-        | append (if $at >= 6 { [[name items]; [harts $s.harts]] } else { [] }))
+        | append (if $at >= 6 { [[name items]; [harts $s.harts]] } else { [] })
+        | append (if $at >= 7 { [[name items]; [receipt $s.receipts]] } else { [] }))
     for kind in $records {
         let order = ($kind.items | enumerate | where {|e| $e.item.frame != $e.index } | length)
         if $order > 0 { $problems = ($problems | append $"($order) ($kind.name) records out of order or repeated") }
@@ -1552,8 +1631,14 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
             $problems = ($problems | append $"($arriving | length) configurations of the tile pool arriving other than at the first frame they govern: ($named)")
         }
     }
+    if $at >= 7 {
+        let before = ($s.loads | where arrival_states == 0)
+        if ($s.loads | is-empty) { $problems = ($problems | append "no load record: the load's presents and the nonce never came") }
+        if ($s.loads | length) > 1 { $problems = ($problems | append $"($s.loads | length) load records, where the program writes one") }
+        if ($before | length) != ($s.loads | length) { $problems = ($problems | append "a load record after the first state, where the program writes it before") }
+    }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
-    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
+    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | append $s.receipts | append $s.loads | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
     if not ($others | is-empty) { $problems = ($problems | append $"clock records at schemas ($others | str join ', ') in a capture at schema ($schema)") }
     $problems
 }
@@ -1652,6 +1737,36 @@ def invalidity [rows: list<any>, schema: oneof<int, nothing>]: nothing -> list<s
     if $at < 5 { return ($base | append $presented | append $packets | append $workers | compact) }
     if $at < 6 { return ($base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | compact) }
     $base | append $presented | append $packets | append $workers | append (pool-invalidity $every) | append (harts-invalidity $every) | compact
+}
+
+# What makes a complete window at schema 7 invalid in its receipts, the
+# receipt stage (ProbeRuns), past the cadence's status, attempt, and
+# refusal rules from schema 2, which stand: a frame without its receipt
+# record; the present sequence broken (jab ordinal-violations) from
+# `anchor`, the load record's cleared screen's ordinal, over every frame, a
+# presented one, status 0, one past the last and every other the last, so
+# frame 0's first present reads the anchor plus one; a presented frame
+# whose first attempt's ordinal is not its own where it presented at once,
+# its one attempt, nor the last before it where a refusal came first; and
+# a presented frame whose decision's stamp comes before its eligibility
+# tick. Each broken sequence a present the records do not hold. With no
+# anchor, no load record before the frames, the sequence is named
+# unanchored and read no further; the window's completeness refuses such
+# a capture first.
+def receipt-invalidity [rows: list<any>, anchor: oneof<int, nothing>]: nothing -> list<string> {
+    if $anchor == null { return ["the present sequence unanchored: no load record's cleared screen to start it"] }
+    let unreceipted = ($rows | where {|r| $r.ordinal == null })
+    let receipted = ($rows | where {|r| $r.ordinal != null })
+    let violations = (jab ordinal-violations $anchor ($receipted | each {|r| { presented: ($r.flip_status == $FLIP_PRESENTED), ordinal: $r.ordinal } }))
+    let lasts = ([$anchor] ++ ($receipted | get ordinal | drop 1))
+    let firsts = ($receipted | zip $lasts | where {|p| $p.0.flip_status == $FLIP_PRESENTED and $p.0.first_ordinal != (if $p.0.flip_attempts == 1 { $p.0.ordinal } else { $p.1 }) })
+    let early = ($receipted | where {|r| $r.flip_status == $FLIP_PRESENTED and $r.receipt_stamp < $r.receipt_tick })
+    [
+        (if ($unreceipted | is-empty) { null } else { $"($unreceipted | length) frames without a receipt record" }),
+        (if ($violations | is-empty) { null } else { $"($violations | length) frames whose present ordinal breaks the sequence: ($violations | first 4 | each {|v| $'frame ($v.index) ($v.rule), ($v.ordinal) where ($v.wanted)' } | str join '; ')" }),
+        (if ($firsts | is-empty) { null } else { $"($firsts | length) presented frames whose first attempt's ordinal is neither their own presented at once nor the last before a refusal" }),
+        (if ($early | is-empty) { null } else { $"($early | length) presented frames whose decision's stamp comes before their eligibility tick" }),
+    ] | compact
 }
 
 # The harts a mask holds.
@@ -1800,13 +1915,15 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
             | merge (if ($governing | is-empty) { configless } else { $governing | last | reject schema arrival_states arrival_frames }))
         let h = (if $at >= 6 { $s.harts | get -o $st.frame } else { null })
         let masks = (if $h == null { hartsless } else { $h | reject frame schema })
+        let rc = (if $at >= 7 { $s.receipts | get -o $st.frame } else { null })
+        let receipt = (if $rc == null { receiptless } else { { receipt_stamp: $rc.stamp, receipt_tick: $rc.tick, ordinal: $rc.ordinal, first_ordinal: $rc.first_ordinal } })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, pitch: $st.pitch, roll: $st.roll,
             draw_us: $st.draw_us, game_us: $st.game_us,
         }
         if $f == null or $d == null {
-            $rows = ($rows | append ($base | merge (clockless) | merge $pool | merge $masks))
+            $rows = ($rows | append ($base | merge (clockless) | merge $pool | merge $masks | merge $receipt))
         } else {
             let presented = ($f.flip_status == $FLIP_PRESENTED)
             let interval = (if $presented and $previous_flip != null { $f.flip_done_us - $previous_flip } else { null })
@@ -1840,10 +1957,17 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 tile_bytes: $d.tile_bytes, tile_peak: $d.tile_peak, spans: $d.spans, spans_over: ($d.spans > $SPAN_RECORDS),
                 over: ($f.critical_us >= $CEILING_US),
                 aligned: ($f.draw_us == $st.draw_us and $f.game_us == $st.game_us),
-            } | merge $shown | merge $packed | merge $pool | merge $masks))
+            } | merge $shown | merge $packed | merge $pool | merge $masks | merge $receipt))
         }
     }
     $rows
+}
+
+# The receipt record's columns of a row below schema 7 or without its
+# record, all null.
+def receiptless []: nothing -> record {
+    [receipt_stamp receipt_tick ordinal first_ordinal]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
 # The harts record's masks of a row below schema 6 or without its record,
@@ -2295,6 +2419,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 route: (if $route.sha256 == null { null } else { { file: $route.file, sha256: $route.sha256 } }),
                 route_legs: $route.legs,
                 standing: $standing.standing, reasons: $standing.reasons, rows: $rows, held: $held,
+                probed: ($effective | get -o probed | default false),
             }
         }
     } | flatten)
@@ -2363,10 +2488,10 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
         $r | reject rows held route_legs | insert legs ($legs | append $absent)
     })
     let builds = ($runs | get build | uniq)
-    let made_of = {|r| { image: $r.image, kernel: $r.kernel, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r), selection: $r.selection } }
+    let made_of = {|r| { image: $r.image, kernel: $r.kernel, cadence: $r.effective_cadence, machine: $r.machine, workers: $r.effective_workers, grain: $r.effective_grain, route: (do $route_key $r), selection: $r.selection, probed: ($r | get -o probed | default false) } }
     for b in $builds {
         let made = ($runs | where build == $b | each {|r| do $made_of $r } | uniq)
-        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image on a kernel at a cadence by its workers on a machine and a route under a selection each: ($made | to nuon); a build's batches are one build" } }
+        if ($made | length) > 1 { error make { msg: $"the captures labelled ($b) come from ($made | length) builds, an image on a kernel at a cadence by its workers on a machine and a route under a selection, probed or not, each: ($made | to nuon); a build's batches are one build" } }
     }
     for made in ($runs | each {|r| do $made_of $r } | uniq) {
         let names = ($runs | where {|r| (do $made_of $r) == $made } | get build | uniq)
@@ -2417,6 +2542,7 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
             let whole = ($missing == 0 and (not ($values | is-empty)))
             {
                 build: $b, leg: $leg, route: $rk, selection: ($batches | get 0.selection), machine: ($batches | get 0.machine),
+                probed: ($batches | get 0.probed),
                 value_us: (if $whole { $values | math avg } else { null }),
                 half_spread_us: (if $whole { (($values | math max) - ($values | math min)) / 2 } else { null }),
                 batches: ($batches | length), missing: $missing, standings: ($batches | get standing | uniq),
@@ -2442,7 +2568,9 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "unpaired and under --diagnostic a build of its own, never one with a known configuration, workers"
                 "asked above 0 leaving it unpaired too; under its selection, automatic when its identity asks no"
                 "workers and forced when it asks a count, so an automatic run and a forced one are two builds"
-                "whatever they played; a capture's label less a trailing _<n> names it, one name a build and one"
+                "whatever they played; observed by the sdl shim or not, its identity naming the shim, so a probed"
+                "run and a plain one are two builds too; a capture's label less a trailing _<n> names it, one name"
+                "a build and one"
                 "build a name, and its runs are its batches, whose identities hold one build's flags and ELF; each"
                 "run keeps its selection and the cadence, workers, and grain asked beside those played, all read"
                 "from its own identity (run-request), never the report's summary unless that is its identity"

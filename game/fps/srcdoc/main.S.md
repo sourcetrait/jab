@@ -18,11 +18,12 @@ the camera, the actors, and the ambient; the drawing's cover world_draw alone.
 The frame's whole time is measured too, its critical path from its start to
 the end of its reporting less any wait before the flip, with the crosshair,
 the mix, the flip, and the reporting timed apart and the await after the path
-alone; the frame before's seven records go over the API at a frame's start,
+alone; the frame before's eight records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
 frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW,
-REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, REPORT_STORAGE, and
-REPORT_HARTS, read by test/gauge.nu). A frame presents under one of
+REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, REPORT_STORAGE, REPORT_HARTS,
+and REPORT_RECEIPT, read by test/gauge.nu), and the load's presents go once
+in frame 0, before its state record (REPORT_LOAD). A frame presents under one of
 three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
 a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits
 the display's tick or the pad after its reporting, the loop as it first
@@ -212,6 +213,22 @@ The time ticks a microsecond.
 
 `u64`: the frame whose simulation the drawing was given, the loop's frame count at its simulation's end.
 
+## .set CLOCK_FLIP_STAMP
+
+`u64`: the final attempt's decision stamp, the `rdtime` the kernel read deciding, in ticks; 0 for a frame that made no attempt, or whose call ended before any decision.
+
+## .set CLOCK_FLIP_TICK
+
+`u64`: the eligibility tick the final attempt's decision was held against, in ticks; 0 beside a zero stamp.
+
+## .set CLOCK_FLIP_ORDINAL
+
+`u64`: the present ordinal the final attempt returned, the flushes the device has answered OK since boot; for a frame with no attempt the last the program knows.
+
+## .set CLOCK_FIRST_ORDINAL
+
+`u64`: the present ordinal the frame's first attempt returned, so a present landing between two frames' flips shows; for a frame with no attempt the last the program knows.
+
 ## .set CLOCK_SIZE
 
 frame_clock's bytes.
@@ -232,7 +249,12 @@ way from /map/title and drawn centred on the black screen, the name in its
 place when the tree carries no title; the map is read whole, then held to its
 format; loaded, the screen is cleared and a debug build reports the load;
 then the raster's workers start (workers.S), asleep until the first frame's
-round.
+round. The load makes two presents after the display's open, the title's
+flip and the cleared screen's, and each keeps its receipt in load_record as
+its flip returns: the decision's stamp and the present ordinal as the kernel
+answers them and the flip's end in microseconds from the program's start,
+the frame records' origin; the ordinal goes to known_ordinal too, so frame
+0's receipt starts from the cleared screen's. Their gap is the load itself.
 
 ## frame
 
@@ -253,9 +275,12 @@ phase holds: the record's unattributed time, a few microseconds a frame
 before's records are out, a frame zeroes its accumulators, the wait, the
 pacing, the flip's ticks, the wakes, the presses, the attempts, and the
 refusals, and presets the flip's status to FLIP_NONE, so a frame that
-reached no flip says so; each flip attempt adds its call's ticks and counts
+reached no flip says so, and its receipt to no decision, the stamp and the
+tick 0 and both ordinals known_ordinal, the last the program knows, never a
+register its code left; each flip attempt adds its call's ticks and counts
 itself, a refusal when it came early, and the ticks convert to microseconds
-once, in frame_records.
+once, in frame_records. Frame 0 sends the load record after its console
+read and before its state record (load_send).
 
 After the mix the frame takes the cadence in force into CLOCK_CADENCE, so a
 C read in its console takes effect at its own flip: under 0 one flip_attempt
@@ -300,7 +325,11 @@ program's claim read at the frame's latch, the harts started, the frame's
 round harts as its active, and the harts its jobs reported, all still the
 frame before's at this frame's start, since the console's H moves the
 grant only at its read after these records and the latch runs inside the
-next drawing. The seven records go in one write, the API's
+next drawing. The receipt record takes the frame's flips as the kernel
+answered them, from the frame's clock: the final attempt's decision stamp,
+its eligibility tick, and its present ordinal, and the ordinal its first
+attempt found, the frame before's at this frame's start, since this frame's
+reset follows the records. The eight records go in one write, the API's
 write being the one call besides the await that can wait, and its cost is
 the reporting's. On a debug build, while the console's J cancel stands
 (job_cancel), the frame's witness follows its records, REPORT_ROUNDS with
@@ -311,12 +340,25 @@ console read in the frame just recorded set measure_end, and the end marker
 goes out right after that frame's records and its witness, so every record of the
 measurement precedes it and the frames past it are outside.
 
+## load_send
+
+Frame 0 alone, after its console read and before its state record, so the
+load record precedes every state record and every frame record: the load's
+two presents as load_record kept them, and the capture's nonce as the
+console's I left it (console.S's capture_nonce), 0 when no I was read by
+then. A gauge run sends its I at 200 ms beside R and C, so the I's answer
+before the first state record is the proof the record carries its nonce.
+
 ## flip_attempt
 
 The flip's phase is the call alone, from the tick before it to the tick
 after, so a pacing step's own work around its attempts stays pacing. A
 presented flip clears tick_reported, as the kernel's frame_flipped clears
-its own; a refusal or a failure leaves it.
+its own; a refusal or a failure leaves it. Each attempt keeps the kernel's
+receipt into the frame's clock before a1 is handed the flip's end, a1 the
+decision's stamp, a2 the eligibility tick, and a3 the present ordinal, the
+final attempt's standing; the frame's first attempt keeps its ordinal apart,
+and every attempt's ordinal goes to known_ordinal.
 
 ## pacing_step
 
@@ -503,15 +545,23 @@ carries none.
 
 ## frame_clock
 
-`19 u64`: the frame's marks, phases, and accumulators in ticks or counts, CLOCK_* fields.
+`23 u64`: the frame's marks, phases, accumulators, and receipt in ticks or counts, CLOCK_* fields.
 
 ## clock_records
 
-`REPORT_SIZE*REPORT_FRAME_RECORDS u8`: the frame's clock, drawing, presentation, packet, tile, storage, and harts records, written as one.
+`REPORT_SIZE*REPORT_FRAME_RECORDS u8`: the frame's clock, drawing, presentation, packet, tile, storage, harts, and receipt records, written as one.
 
 ## end_record
 
 `REPORT_SIZE u8`: the end marker, REPORT_END.
+
+## load_record
+
+`REPORT_SIZE u8`: the load record, REPORT_LOAD: its presents' fields kept as each load flip returns, its kind, nonce, and schema written by load_send.
+
+## known_ordinal
+
+`u64`: the last present ordinal a flip returned, the load's or a frame's, from which each frame's receipt starts.
 
 ## rounds_record
 

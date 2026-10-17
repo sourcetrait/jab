@@ -46,7 +46,11 @@
 .set CLOCK_CADENCE, 128
 .set CLOCK_DRAW, 136
 .set CLOCK_SNAPSHOT, 144
-.set CLOCK_SIZE, 152
+.set CLOCK_FLIP_STAMP, 152
+.set CLOCK_FLIP_TICK, 160
+.set CLOCK_FLIP_ORDINAL, 168
+.set CLOCK_FIRST_ORDINAL, 176
+.set CLOCK_SIZE, 184
 .set FLIP_EARLY, 1
 .set FLIP_NONE, 255
 
@@ -104,6 +108,16 @@ _start:
     ecall
     jab.sys.display.await
     jab.sys.display.flip
+    rdtime t1                       # the title's flip end
+    la t0, load_record
+    sd a1, LOAD_TITLE_STAMP(t0)     # its receipt: the decision's stamp
+    sw a3, LOAD_TITLE_ORDINAL(t0)   # and the present ordinal
+    la t2, known_ordinal
+    sd a3, 0(t2)
+    sub t1, t1, s11
+    li t2, US_TICKS
+    divu t1, t1, t2
+    sd t1, LOAD_TITLE_END(t0)       # microseconds from the start, the frame records' origin
     la a0, map
     li a1, MAP_BYTES
     mv a2, s0
@@ -133,6 +147,16 @@ _start:
     call clear_screen
     jab.sys.display.await
     jab.sys.display.flip
+    rdtime t1                       # the cleared screen's flip end
+    la t0, load_record
+    sd a1, LOAD_CLEAR_STAMP(t0)
+    sw a3, LOAD_CLEAR_ORDINAL(t0)
+    la t2, known_ordinal
+    sd a3, 0(t2)
+    sub t1, t1, s11
+    li t2, US_TICKS
+    divu t1, t1, t2
+    sd t1, LOAD_CLEAR_END(t0)
 .ifdef DEBUG
     rdtime t0
     sub t0, t0, s11
@@ -172,6 +196,12 @@ frame:
     sd zero, CLOCK_REFUSALS(t1)
     li t2, FLIP_NONE
     sd t2, CLOCK_FLIP_STATUS(t1)    # kept by a frame that reaches no flip
+    sd zero, CLOCK_FLIP_STAMP(t1)   # and its receipt: no decision observed
+    sd zero, CLOCK_FLIP_TICK(t1)
+    la t2, known_ordinal
+    ld t2, 0(t2)
+    sd t2, CLOCK_FLIP_ORDINAL(t1)   # the last ordinal the program knows, in both
+    sd t2, CLOCK_FIRST_ORDINAL(t1)
     sub t1, t0, s7
     mv s7, t0
     fcvt.s.l fa0, t1
@@ -186,6 +216,7 @@ frame:
     rdtime s9
     call camera_look
     call console_read
+    call load_send                  # frame 0 alone: the load's presents and the nonce
     call camera_locate
     call camera_basis
     call actors_tick
@@ -698,6 +729,24 @@ frame_records:
     la t2, frame_reported
     ld t2, 0(t2)
     sw t2, HARTS_REPORTED(t1)       # the harts whose workers completed its jobs
+    addi t1, t1, REPORT_SIZE        # the receipt record, the frame's flips as the kernel answered them
+    li t2, REPORT_RECEIPT
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, REPORT_SCHEMA_VERSION
+    sw t2, REPORT_SCHEMA(t1)
+    la t0, frame_clock
+    ld t2, CLOCK_FLIP_STAMP(t0)
+    sd t2, RECEIPT_STAMP(t1)        # the final attempt's decision stamp
+    ld t2, CLOCK_FLIP_TICK(t0)
+    sd t2, RECEIPT_TICK(t1)         # the eligibility tick it read
+    ld t2, CLOCK_FLIP_ORDINAL(t0)
+    sd t2, RECEIPT_ORDINAL(t1)      # the present ordinal the final attempt returned
+    ld t2, CLOCK_FIRST_ORDINAL(t0)
+    sd t2, RECEIPT_FIRST(t1)        # the ordinal the first attempt found
+    sd zero, 40(t1)                 # zeros to the schema
+    sd zero, 48(t1)
+    sw zero, 56(t1)
     la t0, clock_records
     li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
@@ -733,18 +782,41 @@ frame_records:
 9:
     ret
 
+load_send:
+    bnez s8, 9f                     # frame 0 alone
+    la t0, load_record
+    li t1, REPORT_LOAD
+    sw t1, REPORT_KIND(t0)
+    la t1, capture_nonce
+    ld t1, 0(t1)
+    sd t1, LOAD_NONCE(t0)           # the I's nonce, 0 where none came before this frame's state
+    li t1, REPORT_SCHEMA_VERSION
+    sw t1, REPORT_SCHEMA(t0)
+    li t1, REPORT_SIZE
+    jab.sys.api.write t0, t1
+9:
+    ret
+
 flip_attempt:
     rdtime t0
     jab.sys.display.flip
     rdtime t1
     la t2, frame_clock
     sd a0, CLOCK_FLIP_STATUS(t2)
+    sd a1, CLOCK_FLIP_STAMP(t2)     # the kernel's receipt: the decision's stamp
+    sd a2, CLOCK_FLIP_TICK(t2)      # the eligibility tick it read
+    sd a3, CLOCK_FLIP_ORDINAL(t2)   # the present ordinal as the call returned
+    la t3, known_ordinal
+    sd a3, 0(t3)
     sub t3, t1, t0
     ld t4, CLOCK_FLIP(t2)
     add t4, t4, t3
     sd t4, CLOCK_FLIP(t2)           # every attempt's call
     sd t1, CLOCK_FLIP_DONE(t2)
     ld t4, CLOCK_ATTEMPTS(t2)
+    bnez t4, 3f
+    sd a3, CLOCK_FIRST_ORDINAL(t2)  # the ordinal the frame's first attempt found
+3:
     addi t4, t4, 1
     sd t4, CLOCK_ATTEMPTS(t2)
     li t3, FLIP_EARLY
@@ -1547,6 +1619,10 @@ clock_records:
     .skip (REPORT_SIZE * REPORT_FRAME_RECORDS)
 end_record:
     .skip REPORT_SIZE
+load_record:
+    .skip REPORT_SIZE
+known_ordinal:
+    .skip 8
 .ifdef DEBUG
 rounds_record:
     .skip REPORT_SIZE

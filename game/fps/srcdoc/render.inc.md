@@ -1770,13 +1770,21 @@ A record's bytes, zero to the end.
 
 `u32`: on a debug build while the J frame's cancel stands, the frame before's witness, ROUNDS_* fields, written after its clock records and before the end marker, so a final frame's witness lies inside its measurement; outside the clock kinds and their schema, so the gauge's completeness never counts it and the picture contract's reader (gauge.nu's screen-frame) holds its presence and uniqueness itself.
 
+## .set REPORT_RECEIPT
+
+`u32`: the frame before's receipt, RECEIPT_* fields, beside its clock: its flips as the kernel answered them, so the gauge holds the present ordinals to the frames that presented and each presented flip's stamp to its eligibility tick.
+
+## .set REPORT_LOAD
+
+`u32`: the load's presents and the capture's nonce, LOAD_* fields, once in frame 0 before its state record: the title's flip and the cleared screen's, each its decision's stamp, its end, and its present ordinal, so the frames' ordinals run on from the cleared screen's and the gap between the two is the load's; at the clock records' schema, outside a frame's records.
+
 ## .set REPORT_FRAME_RECORDS
 
-`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, and harts records, 448 bytes.
+`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, harts, and receipt records, 512 bytes.
 
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out, 6 with the harts record, every record at it; 5 added the tile pool's records.
+`u32`: the clock records' layout as this source lays them out, 7 with the receipt and load records, every record at it; 6 added the harts record, 5 the tile pool's records.
 
 ## .set TIME_START
 
@@ -2183,6 +2191,50 @@ frame, the first it governs. 36 to 56 are free.
 ## .set ROUNDS_CANCELLED
 
 `u32`: the witness's cancelled rounds, STAT_CANCELLED, below the rounds when a round's workers finished before the cancel landed.
+
+## .set RECEIPT_STAMP
+
+`u64`: the final attempt's decision stamp in ticks, main.S's CLOCK_FLIP_STAMP, 0 for a frame that made no attempt.
+
+## .set RECEIPT_TICK
+
+`u64`: the eligibility tick that decision was held against, in ticks, CLOCK_FLIP_TICK.
+
+## .set RECEIPT_ORDINAL
+
+`u64`: the present ordinal the final attempt returned, CLOCK_FLIP_ORDINAL; for a frame with no attempt the last the program knows.
+
+## .set RECEIPT_FIRST
+
+`u64`: the present ordinal the frame's first attempt returned, CLOCK_FIRST_ORDINAL; for a frame with no attempt the last the program knows.
+
+## .set LOAD_TITLE_STAMP
+
+`u64`: the title flip's decision stamp, in ticks.
+
+## .set LOAD_TITLE_END
+
+`u64`: the title flip's end, microseconds since the program's start, the frame records' origin.
+
+## .set LOAD_CLEAR_STAMP
+
+`u64`: the cleared screen's flip's decision stamp, in ticks.
+
+## .set LOAD_CLEAR_END
+
+`u64`: the cleared screen's flip's end, microseconds since the program's start.
+
+## .set LOAD_TITLE_ORDINAL
+
+`u32`: the title flip's present ordinal, 2 after the display's open.
+
+## .set LOAD_CLEAR_ORDINAL
+
+`u32`: the cleared screen's present ordinal, the one frame 0's first present follows.
+
+## .set LOAD_NONCE
+
+`u64`: the capture's nonce the console's I sent, 0 when no I was read before frame 0's state.
 
 ## .set DUMP_SLOT
 

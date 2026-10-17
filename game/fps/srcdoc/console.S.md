@@ -4,7 +4,8 @@ The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles
 forgotten with the lumels bright or set by parity and construction lifted or
 frozen, R the generator seeded, E the gauge's measurement closed, C the
-cadence chosen, W the raster's workers and grain chosen, S on a debug build the
+cadence chosen, W the raster's workers and grain chosen, I the capture's nonce
+kept, S on a debug build the
 cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
 build the tile pool's knobs, B on a debug build every tile of a surface built
 at the next boundary, D on a debug build a surface's tiles read back over the
@@ -116,6 +117,12 @@ time. E closes the measurement on the frame that reads it: that frame's
 records go out at the next frame's start and the end marker right after
 them (main.S's frame_records), the game going on.
 
+I takes the 64 bits in bytes 4 to 11 as the capture's nonce, kept in
+capture_nonce for the load record frame 0 sends (main.S's load_send), so a
+run's records name the capture its host minted; its answer before the first
+state record is the proof the record carries it. Release and debug alike:
+the gauge sends one beside R and C on every run, observed or not.
+
 A frame is 64 bytes: a kind byte, three of padding, the rest by the kind, zero
 to the end; a partial frame is kept until the rest arrives. P carries six
 floats from byte 4, the eye's x, y, z then the yaw, pitch, and roll in
@@ -174,7 +181,8 @@ marked changed, the trace set or cleared, and a cold start asked when byte
 6 is set. B: the surface plus one pending for the next boundary's build. D:
 the dump written before the answer. M: byte 4 into raster.S's level_raise
 and byte 5 into hud.S's hud_stamp at once, the frame's drawing after the
-read taking them. Q: the census's
+read taking them. I: bytes 4 to 11 into capture_nonce, two words joined
+low first. Q: the census's
 chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
 it, where a build without the symbol falls through to the answer.
@@ -190,6 +198,10 @@ it, where a build without the symbol falls through to the answer.
 ## console_record
 
 `REPORT_SIZE u8`: the console's answer.
+
+## capture_nonce
+
+`u64`: the capture's nonce, the I's bytes 4 to 11, 0 until one is read.
 
 ## console_pending
 

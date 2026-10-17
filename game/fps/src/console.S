@@ -170,7 +170,7 @@ console_frame:
     j 8f
 12:
     li t1, 'W'
-    bne t0, t1, 13f
+    bne t0, t1, 121f
     lbu t1, 4(s2)
     la t2, workers_asked
     sw t1, 0(t2)                    # from the next frame's drawing on, held to the started at each latch
@@ -181,6 +181,16 @@ console_frame:
 122:
     la t2, band_grain
     sw t1, 0(t2)                    # rows a band, 0 for a band a worker
+    j 8f
+121:
+    li t1, 'I'
+    bne t0, t1, 13f
+    lwu t1, 4(s2)
+    lwu t2, 8(s2)
+    slli t2, t2, 32
+    or t1, t1, t2                   # the capture nonce, bytes 4 to 11
+    la t2, capture_nonce
+    sd t1, 0(t2)
     j 8f
 13:
 .ifdef DEBUG
@@ -407,6 +417,8 @@ console_buf:
     .skip CONSOLE_CAPACITY
 console_record:
     .skip REPORT_SIZE
+capture_nonce:
+    .skip 8
 console_pending:
     .skip 4
 report_pending:

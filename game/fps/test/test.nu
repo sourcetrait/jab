@@ -101,10 +101,14 @@ const CLOCK_SEED = 7
 const CLOCK_CADENCE = 0
 const CLOCK_SEED_AT = 200ms
 const CLOCK_END_AT = 13500ms
-export const CLOCK_SCHEMA = 6
+export const CLOCK_SCHEMA = 7
 const CLOCK_RESIDUAL = 4
 # A synthetic capture's frames start this many microseconds apart
 const FX_PERIOD = 20000
+# the capture nonce a synthetic capture at schema 7 echoes, and the one
+# the Render One launch sends in its I
+const FX_NONCE = 0x1234_5678_9abc_def0
+const RECEIPT_NONCE = 0x0fed_cba9_8765_4321
 # A synthetic capture's tile pool at schema 5: the first boundary's
 # batch, none, all ones; a tile's bytes; the slots; the tables' bytes in
 # use; and TILE_MEMORY's bytes
@@ -877,10 +881,33 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let servo_recipe = (open ($game | path join "content" "sound" "servo.nuon"))
     let servo = (open --raw ($render_1_tree | path join "sound" "servo.pcm") | into binary)
     assert equal ($servo | bytes length) (((($servo_recipe.seconds | into float) * 48000) | math round | into int) * 2) "the servo is its seconds of 16-bit samples"
-    let render_1_sends = ($render_1_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } })
+    let render_1_sends = ([{ at: 200ms, bytes: (gauge nonce-frame $RECEIPT_NONCE) }] | append ($render_1_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } }))
     let render_1_disk = (romfs $render_1_tree ($out | path join "render_1.romfs"))
     let render_1_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_1") --set $set --sound --api --disk $render_1_disk --serial "fps" --send $render_1_sends --capture 5500ms --seconds 6)
     assert equal (open --raw $render_1_run.qemu_log) "" "QEMU has no complaint about the guest on render_1"
+    # the receipts on Render One (ProbeRuns): the load record before the
+    # first state with the title's ordinal 2, the cleared screen's 3, and
+    # the nonce the I sent; a receipt a frame, the presented frames'
+    # ordinals one past the last from 4 (jab ordinal-violations); each
+    # presented frame's decision at or past its tick and inside its flip
+    # call's bracket, one offset from the guest's ticks to the records'
+    # microseconds fitting every presented frame's calls
+    let r1 = (gauge stream $render_1_run.api)
+    assert equal ($r1.loads | length) 1 $"render_1_receipts: one load record: ($r1.loads | length)"
+    let r1_load = ($r1.loads | first)
+    assert equal [$r1_load.arrival_states $r1_load.title_ordinal $r1_load.clear_ordinal $r1_load.nonce] [0 2 3 $RECEIPT_NONCE] $"render_1_receipts: the load record before the first state, ordinals 2 and 3, the I's nonce: ($r1_load)"
+    let r1_frames = ($r1.frames | length)
+    assert (($r1.receipts | length) == $r1_frames and $r1_frames > 10) $"render_1_receipts: a receipt a frame: ($r1.receipts | length) for ($r1_frames)"
+    let r1_rows = ($r1.frames | zip $r1.receipts | each {|p| { presented: ($p.0.flip_status == 0), ordinal: $p.1.ordinal, stamp: $p.1.stamp, tick: $p.1.tick, done: $p.0.flip_done_us, call: $p.0.flip_us } })
+    let r1_broken = (jab ordinal-violations 3 ($r1_rows | select presented ordinal))
+    assert equal $r1_broken [] $"render_1_receipts: the presented frames' ordinals consecutive from 4: ($r1_broken | first 3)"
+    let r1_presented = ($r1_rows | where presented)
+    assert ($r1_presented | all {|r| $r.stamp >= $r.tick }) "render_1_receipts: each presented frame's decision at or past its tick"
+    let time_hz = (open --raw ($env.FILE_PWD | path join ".." ".." ".." "sdk" "src" "jab.inc") | into binary | decode | parse --regex '\.set JAB_TIME_HZ, (?P<hz>\d+)' | get 0.hz | into int)
+    let tick_us = ($time_hz // 1000000)
+    let lows = ($r1_presented | each {|r| ($r.stamp // $tick_us) - $r.done })
+    let highs = ($r1_presented | each {|r| ($r.stamp // $tick_us) - $r.done + $r.call })
+    assert (($lows | math max) <= (($highs | math min) + 2)) $"render_1_receipts: one offset fits every presented frame's flip call: ($lows | math max) to ($highs | math min)"
     assert (not ($render_1_run.serial | str contains "fps: tile pool changed in flight")) $"the tile pool held unchanged through every frame's renders on render_1: ($render_1_run.serial | lines | last 2)"
     let render_1_lines = ($render_1_run.serial | lines)
     let render_1_reports = ($render_1_lines | where {|l| $l starts-with "fps: render_1 loaded" })
@@ -942,7 +969,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let spawn_floor = (map plane-z ($render_1_read.sectors | get $spawned.sector | get floor) $spawned.x $spawned.y)
     assert ((($spawned.z - ($spawn_floor + $EYE_HEIGHT)) | math abs) < 0.01) $"the eye its height over the floor at the spawn: ($spawned.z) over a floor at ($spawn_floor)"
     assert ((($spawned.yaw - $spawn.yaw) | math abs) < 0.01 and (($spawned.pitch - $spawn.pitch) | math abs) < 0.01 and $spawned.roll == 0.0) $"the camera faces the spawn's way: ($spawned.yaw), ($spawned.pitch), ($spawned.roll) against ($spawn.yaw), ($spawn.pitch)"
-    let render_1_consoles = ($render_1_records | enumerate | where {|r| $r.item.kind == 11 })
+    let render_1_consoles = ($render_1_records | enumerate | where {|r| $r.item.kind == 11 and $r.item.sector == $CONSOLE_P })
     assert equal ($render_1_consoles | length) ($render_1_poses | length) $"a console record a pose on render_1: ($render_1_consoles | length)"
     for e in ($render_1_consoles | enumerate) {
         let landed = ($render_1_records | slice ($e.item.index + 1).. | where kind == 1 | get -o 0)
@@ -4223,6 +4250,63 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let mr = (do $measure $released)
     assert ($mr.complete and $mr.valid) $"a release restoring the grant, the frames after it drawn on the restored harts, is valid: ($mr.problems) ($mr.invalid)"
 
+    # schema 7 (ProbeRuns): every frame's receipt and one load record
+    # before the first state, read at their offsets ahead of the validity
+    # they feed, frame 0's present the load's cleared screen's ordinal plus
+    # one; a frame without its receipt, no load record, two, and one after
+    # the first state each incomplete; a frame presented after a refusal, a
+    # frame refused as early keeping the last ordinal, and a decision at its
+    # tick each valid; the receipt stage, each of its rules broken by one
+    # change, invalid for that alone, one fault one violation; an I answered
+    # after the first state late; and a run's sends holding its I with its
+    # nonce, probed or not, since the sends take no probe
+    let good7 = (fx-items 3 --schema 7)
+    let m7 = (do $measure $good7)
+    assert equal ($m7.load | reject arrival_states) { title_stamp: 1000, title_end_us: 100, clear_stamp: 15000, clear_end_us: 1500, title_ordinal: 2, clear_ordinal: 3, nonce: $FX_NONCE, schema: 7 } "the load record read at its offsets"
+    assert equal ($m7.rows | each {|r| [$r.receipt_stamp $r.receipt_tick $r.ordinal $r.first_ordinal] }) [[100005 100000 4 4] [300005 300000 5 5] [500005 500000 6 6]] "each frame's receipt read at its offsets, its stamp, tick, ordinal, and first attempt's"
+    assert ($m7.complete and $m7.valid and $m7.schema == 7 and $m7.nonce_set and (not $m7.late_nonce)) $"a well-formed capture at schema 7: ($m7.problems) ($m7.invalid)"
+    let window7 = [
+        { name: "a frame without its receipt record", items: ($good7 | where {|i| not ($i.kind == "receipt" and $i.frame == 1) }), says: "2 receipt records before the end marker for 3 frames" }
+        { name: "no load record", items: ($good7 | where {|i| $i.kind != "load" }), says: "no load record: the load's presents and the nonce never came" }
+        { name: "two load records", items: (fx-early $good7 (fx-load)), says: "2 load records, where the program writes one" }
+        { name: "a load record after the first state", items: (fx-late ($good7 | where {|i| $i.kind != "load" }) (fx-load)), says: "a load record after the first state, where the program writes it before" }
+    ]
+    for c in $window7 {
+        let mc = (do $measure $c.items)
+        assert ((not $mc.complete) and ($c.says in $mc.problems)) $"($c.name) leaves the window incomplete: ($mc.problems)"
+    }
+    let good7c1 = (fx-items 3 --schema 7 --cadence 1)
+    let refused_first = (fx-set (fx-set $good7c1 "present" 1 { attempts: 2, refusals: 1 }) "receipt" 1 { first: 4 })
+    let mf = (do $measure $refused_first)
+    assert equal ($mf.rows | get -o 1 | default {} | select -o receipt_stamp receipt_tick ordinal first_ordinal) { receipt_stamp: 300005, receipt_tick: 300000, ordinal: 5, first_ordinal: 4 } "frame 1's receipt read at its offsets, its ordinal and its first attempt's apart"
+    assert ($mf.complete and $mf.valid) $"a frame presented after a refusal, its first attempt's ordinal the last before it, is valid: ($mf.problems) ($mf.invalid)"
+    let kept = (fx-set (fx-set (fx-set (fx-set $good7 "frame" 1 { status: 1 }) "present" 1 { refusals: 1 }) "receipt" 1 { ordinal: 4, first: 4, stamp: 299990 }) "receipt" 2 { ordinal: 5, first: 5 })
+    let mk = (do $measure $kept)
+    assert ($mk.complete and $mk.valid) $"a frame refused as early keeping the last ordinal, its decision before its tick, is valid: ($mk.problems) ($mk.invalid)"
+    let at_tick = (do $measure (fx-set $good7 "receipt" 1 { stamp: 300000 }))
+    assert ($at_tick.complete and $at_tick.valid) $"a presented frame's decision at its tick is valid: ($at_tick.problems) ($at_tick.invalid)"
+    let receipt_cases = [
+        { name: "an ordinal gap", items: (fx-set (fx-set $good7 "receipt" 1 { ordinal: 6, first: 6 }) "receipt" 2 { ordinal: 7, first: 7 }), says: "1 frames whose present ordinal breaks the sequence: frame 1 skip, 6 where 5" }
+        { name: "a repeated ordinal", items: (fx-set (fx-set $good7 "receipt" 1 { ordinal: 4, first: 4 }) "receipt" 2 { ordinal: 5, first: 5 }), says: "1 frames whose present ordinal breaks the sequence: frame 1 repeat, 4 where 5" }
+        { name: "a backward ordinal", items: (fx-set (fx-set $good7 "receipt" 1 { ordinal: 3, first: 3 }) "receipt" 2 { ordinal: 4, first: 4 }), says: "1 frames whose present ordinal breaks the sequence: frame 1 backward, 3 where 5" }
+        { name: "frame 0's present at the cleared screen's ordinal plus two", items: (fx-set (fx-set (fx-set $good7 "receipt" 0 { ordinal: 5, first: 5 }) "receipt" 1 { ordinal: 6, first: 6 }) "receipt" 2 { ordinal: 7, first: 7 }), says: "1 frames whose present ordinal breaks the sequence: frame 0 skip, 5 where 4" }
+        { name: "a refused frame advancing its ordinal", items: (fx-set (fx-set $good7 "frame" 1 { status: 1 }) "present" 1 { refusals: 1 }), says: "1 frames whose present ordinal breaks the sequence: frame 1 advance, 5 where 4" }
+        { name: "a first attempt's ordinal past the last on a frame refused first", items: (fx-set $refused_first "receipt" 1 { first: 5 }), says: "1 presented frames whose first attempt's ordinal is neither their own presented at once nor the last before a refusal" }
+        { name: "a decision's stamp before its tick", items: (fx-set $good7 "receipt" 1 { stamp: 299999 }), says: "1 presented frames whose decision's stamp comes before their eligibility tick" }
+    ]
+    for c in $receipt_cases {
+        let mc = (do $measure $c.items)
+        assert ($mc.complete and $mc.invalid == [$c.says]) $"($c.name) is invalid at the receipt stage for that alone: ($mc.problems) ($mc.invalid)"
+    }
+    let late7 = (do $measure (fx-late ($good7 | where {|i| $i.kind != "iack" }) { kind: "iack" }))
+    assert ((not $late7.nonce_set) and $late7.late_nonce) $"an I answered after the first state is late: ($late7.nonce_set) ($late7.late_nonce)"
+    let sends7 = (gauge run-sends 7 1 $FX_NONCE { workers: null, grain: null })
+    let nonce_sends = ($sends7 | where {|s| ($s.bytes | bytes at 0..<1) == ("I" | into binary) })
+    let nonce_send = ($nonce_sends | get -o 0 | default { at: null, bytes: 0x[] })
+    let nonce_read = (if ($nonce_send.bytes | bytes length) >= 12 { $nonce_send.bytes | bytes at 4..<12 | into int --endian little } else { null })
+    assert equal [($nonce_sends | length) $nonce_send.at $nonce_read ($nonce_send.bytes | bytes length)] [1 200ms $FX_NONCE 64] "a run's sends hold one I at 200 ms beside the R and the C, its nonce in bytes 4 to 11"
+    assert ((jab launch-nonce 0 true) >= 1) "a run's nonce is minted nonzero"
+
     # the picture contract (screen-frame): a capture of eight frames at
     # schema 6, the window opening at frame 4, the final frame 7, every frame
     # from 3 settled; a stamp of 5 binds frame 5 at its pose, workers,
@@ -4333,6 +4417,13 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     for field in [tiles_us critical_us] {
         let compared56 = (try { gauge compare $five_six $field 50 | get table | get build | uniq } catch {|e| [$e.msg] })
         assert equal $compared56 [schema_five schema_six] $"schemas 5 and 6 compare on ($field)"
+    }
+    # schemas 6 and 7 the same, on a phase field too, since the receipt and
+    # the load record leave the drawing's parts where 6 held them
+    let six_seven = [(fx-gauge $dir "six_beside_seven" "six_beside_seven" "six_image_b" 0 $good6) (fx-gauge $dir "schema_seven" "schema_seven" "seven_image" 0 $good7)]
+    for field in [tiles_us planes_us critical_us] {
+        let compared67 = (try { gauge compare $six_seven $field 50 | get table | get build | uniq } catch {|e| [$e.msg] })
+        assert equal $compared67 [six_beside_seven schema_seven] $"schemas 6 and 7 compare on ($field)"
     }
 
     # below schema 4 the records hold no workers: a run asking W 0,
@@ -4599,6 +4690,18 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let same_two = (fx-request-report ($requests | path join "same_2") "same_2" $forced_summary [{ run: 1, id: (do $kernel_id "kernel_one"), items: $forced_items }])
     let one_kernel = (try { gauge compare [$same_one $same_two] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
     assert equal ($one_kernel | get -o table | default [] | get build | uniq) [same] $"one kernel's runs under one label are one build: ($one_kernel | get -o refusal)"
+    # the probe in the build (ProbeRuns): one image's run under the sdl
+    # shim and its plain run are two builds under two labels, each row
+    # naming its own, and refused under one
+    let probe_id = {|shim: string| { build: { image_sha256: "probe_image", kernel_sha256: "probe_kernel" }, shim: $shim, mode: { cadence: 0, workers: 2, grain: 0, pad: "route" } } }
+    let probed_a = (fx-request-report ($requests | path join "probed_a") "probed_a" $forced_summary [{ run: 1, id: (do $probe_id "jabshim_sdl"), items: $forced_items }])
+    let plain_b = (fx-request-report ($requests | path join "plain_b") "plain_b" $forced_summary [{ run: 1, id: (do $probe_id ""), items: $forced_items }])
+    let two_probes = (try { gauge compare [$probed_a $plain_b] "draw_us" 50 } catch {|e| { refusal: $e.msg } })
+    assert equal ($two_probes | get -o table | default [] | each {|t| [$t.build ($t | get -o probed)] } | uniq) [[probed_a true] [plain_b false]] $"one image's probed run and its plain one under two labels are two builds, each row its own: ($two_probes | get -o refusal)"
+    let probes_one = (fx-request-report ($requests | path join "probes_1") "probes_1" $forced_summary [{ run: 1, id: (do $probe_id "jabshim_sdl"), items: $forced_items }])
+    let probes_two = (fx-request-report ($requests | path join "probes_2") "probes_2" $forced_summary [{ run: 1, id: (do $probe_id ""), items: $forced_items }])
+    let probe_label = (try { gauge compare [$probes_one $probes_two] "draw_us" 50; "" } catch {|e| $e.msg })
+    assert ($probe_label | str contains "the captures labelled probes come from 2 builds") $"one image's probed run and its plain one under one label are refused as two builds: ($probe_label)"
 
     # a bench of one report's three runs, each bound by its own identity
     # file and differing, under a summary naming none of their settings:
@@ -5311,23 +5414,43 @@ def wall-clearance [m: record, sector: int, x: float, y: float]: nothing -> floa
 # 0, frame 0's state, then at each frame's top the frame before's clock,
 # drawing, from schema 2 presentation, from schema 3 packets, drawn from
 # schema 4 by `workers`, from schema 5 its tile pool's activity and
-# storage (fx-pool), and at schema 6 its harts (fx-harts), the end marker
-# after the final frame's, and the frame's state, two frames' states past
-# the window.
+# storage (fx-pool), from schema 6 its harts (fx-harts), and from schema
+# 7 its receipt (fx-receipt), the end marker after the final frame's, and
+# the frame's state, two frames' states past the window; from schema 7 an
+# I's answer beside the others and the load record (fx-load) before frame
+# 0's state.
 def fx-items [frames: int, --schema: int = 1, --cadence: int = 0, --workers: int = 2, --asked]: nothing -> list<any> {
     let tops = (1..$frames | each {|n|
         [(fx-frame ($n - 1) $schema) (fx-draw ($n - 1) $schema)]
         | append (if $schema >= 2 { [(fx-present ($n - 1) $cadence $schema)] } else { [] })
         | append (if $schema >= 3 { [(fx-packet ($n - 1) $schema $workers)] } else { [] })
         | append (if $schema >= 5 { [(fx-tile ($n - 1) $schema) (fx-storage ($n - 1) $schema)] } else { [] })
-        | append (if $schema >= 6 { [(fx-harts ($n - 1) $workers)] } else { [] })
+        | append (if $schema >= 6 { [(fx-harts ($n - 1) $workers $schema)] } else { [] })
+        | append (if $schema >= 7 { [(fx-receipt ($n - 1))] } else { [] })
         | append (if $n == $frames { [{ kind: "end", frame: ($n - 1), schema: $schema }] } else { [] })
         | append [{ kind: "state", frame: $n }]
     } | flatten)
     let answers = (if $schema >= 2 { [{ kind: "ack" } { kind: "cack" }] } else { [{ kind: "ack" }] })
-    let worked = (if $asked { $answers | append { kind: "wack" } } else { $answers })
+    let nonced = (if $schema >= 7 { $answers | append { kind: "iack" } } else { $answers })
+    let worked = (if $asked { $nonced | append { kind: "wack" } } else { $nonced })
     let configured = (if $schema >= 5 { $worked | append (fx-config 0 $schema) } else { $worked })
-    $configured | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+    let loaded = (if $schema >= 7 { $configured | append (fx-load) } else { $configured })
+    $loaded | append [{ kind: "state", frame: 0 }] | append $tops | append [{ kind: "state", frame: ($frames + 1) }]
+}
+
+# A receipt record's fields for a synthetic capture at schema 7: each
+# frame presented at once, its ordinal one past the frame before's from
+# the load's cleared screen's 3, so 4 at frame 0, its first attempt's its
+# own, its decision 5 ticks past its eligibility tick.
+def fx-receipt [frame: int]: nothing -> record {
+    { kind: "receipt", frame: $frame, stamp: (100005 + $frame * 200000), tick: (100000 + $frame * 200000), ordinal: (4 + $frame), first: (4 + $frame), schema: 7 }
+}
+
+# A load record's fields for a synthetic capture at schema 7: the title's
+# present ordinal 2 and the cleared screen's 3, after the display's open,
+# and the run's capture nonce FX_NONCE.
+def fx-load []: nothing -> record {
+    { kind: "load", title_stamp: 1000, title_end: 100, clear_stamp: 15000, clear_end: 1500, title_ordinal: 2, clear_ordinal: 3, nonce: $FX_NONCE, schema: 7 }
 }
 
 # A drawing record's fields for a synthetic capture: below schema 5 its
@@ -5405,11 +5528,11 @@ def fx-config [from: int, schema: int = 5]: nothing -> record {
 # two online secondaries, harts 1 and 2, both reserved, granted, and
 # holding a raster worker: the frame dispatched to the lowest `workers` of
 # them, each reporting its job.
-def fx-harts [frame: int, workers: int = 2]: nothing -> record {
+def fx-harts [frame: int, workers: int = 2, schema: int = 6]: nothing -> record {
     let active = (if $workers >= 2 { 6 } else if $workers == 1 { 2 } else { 0 })
     {
         kind: "harts", frame: $frame, online: 6, floor: 2, grant: 6, claimed: 0, started: 6,
-        active: $active, reported: $active, schema: 6,
+        active: $active, reported: $active, schema: $schema,
     }
 }
 
@@ -5606,6 +5729,15 @@ def fx-bytes [items: list<any>]: nothing -> binary {
             "ack" => (fx-pad ([0x[0b 00 00 00] 0x[52]] | bytes collect)),
             "cack" => (fx-pad ([0x[0b 00 00 00] 0x[43]] | bytes collect)),
             "wack" => (fx-pad ([0x[0b 00 00 00] 0x[57]] | bytes collect)),
+            "iack" => (fx-pad ([0x[0b 00 00 00] 0x[49]] | bytes collect)),
+            "receipt" => ([
+                0x[14 00 00 00] (fx-u32 $i.frame) (fx-u64 $i.stamp) (fx-u64 $i.tick) (fx-u64 $i.ordinal) (fx-u64 $i.first)
+                (fx-zeros 20) (fx-u32 $i.schema)
+            ] | bytes collect),
+            "load" => ([
+                0x[15 00 00 00] (fx-zeros 4) (fx-u64 $i.title_stamp) (fx-u64 $i.title_end) (fx-u64 $i.clear_stamp) (fx-u64 $i.clear_end)
+                (fx-u32 $i.title_ordinal) (fx-u32 $i.clear_ordinal) (fx-u64 $i.nonce) (fx-zeros 4) (fx-u32 $i.schema)
+            ] | bytes collect),
             "state" => (fx-pad ([
                 0x[01 00 00 00] (fx-u32 ($i.sector? | default 0))
                 ([x y z yaw pitch roll] | each {|f| map float-bytes ($i | get -o $f | default 0.0 | into float) } | bytes collect)
