@@ -23,7 +23,10 @@
 # read apart, and each refused by name given twice, malformed, or out of
 # its place; a probing launch's machine as plan makes it, no QEMU run: its
 # port and its sends as its caller asks, the nonce handed in reaching the
-# shim and the identity, plan minting none and a launch alone one. A
+# shim and the identity, plan minting none and a launch alone one; the
+# probe's own plan in each profile, the nonce's frame, and a QEMU without
+# the flush trace refused; the present sequence's rules and K's, K held
+# to the all-pairs check over a generated set. A
 # paired capture bundled, the fixture relinked at its path so the raw log
 # is refused as changed, and the bundle admitted by its check's replay;
 # then each stage's negatives, copies of the bundle altered and rehashed
@@ -393,6 +396,29 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal (jab launch-nonce $nonce true) $nonce "plumbing_given: a probing launch given one mints none"
     assert equal (jab launch-nonce 0 false) 0 "plumbing_unprobed: a launch neither probing nor given one claims none"
 
+    # the probe's own plan, its profile, its port, and its sends: generic
+    # with nothing asked, with --api, and with --send; paired where the
+    # build sets the manifest's `paired`, the nonce's frame first; a
+    # manifest naming `paired` with a build that does not set it generic
+    let pairing = { name: "walk", paired: "cadence" }
+    let wnon = (0x[57 4e 4f 4e 00 00 00 00] ++ ($nonce | into binary --endian little))
+    assert equal (jab nonce-frame $nonce) $wnon "probe_frame: WNON, a zero word, the nonce as a le64"
+    let zero_frame = (try { jab nonce-frame 0 | ignore; "" } catch {|e| $e.msg })
+    assert ($zero_frame | str contains "a capture nonce is 1 to 2^63 - 1") $"probe_frame_zero: a nonce of 0 has no frame: ($zero_frame)"
+    let plans = [
+        { name: "probe_generic", manifest: {}, names: [], api: false, send: 0x[], wanted: { profile: "generic", api: false, sends: [] } }
+        { name: "probe_api", manifest: {}, names: [], api: true, send: 0x[], wanted: { profile: "generic", api: true, sends: [] } }
+        { name: "probe_send", manifest: {}, names: [], api: false, send: $frame, wanted: { profile: "generic", api: true, sends: [{ at: 200ms, bytes: $frame }] } }
+        { name: "probe_paired", manifest: $pairing, names: ["CADENCE" "TIMING"], api: false, send: 0x[], wanted: { profile: "paired", api: true, sends: [{ at: 200ms, bytes: $wnon }] } }
+        { name: "probe_paired_send", manifest: $pairing, names: ["CADENCE" "REPLAY"], api: false, send: $frame, wanted: { profile: "paired", api: true, sends: [{ at: 200ms, bytes: $wnon } { at: 200ms, bytes: $frame }] } }
+        { name: "probe_unset", manifest: $pairing, names: [], api: false, send: 0x[], wanted: { profile: "generic", api: false, sends: [] } }
+    ]
+    for p in $plans {
+        assert equal (jab probe-plan $p.manifest $p.names $nonce --api=$p.api --send $p.send) $p.wanted $"($p.name): the probe's profile, port, and sends"
+    }
+    let untraced = (try { jab trace-args "true" ($plumbing | path join "trace.log") | ignore; "" } catch {|e| $e.msg })
+    assert ($untraced | str contains "lists no trace event virtio_gpu_cmd_res_flush or virtio_gpu_cmd_set_scanout") $"probe_untraced: a QEMU listing neither trace event is refused: ($untraced)"
+
     # the bundle: a paired capture bundled where it was taken, the fixture
     # then relinked at its path, a new inode, so the raw log is refused as
     # changed while the bundle's check admits it by replay; each negative a
@@ -474,6 +500,37 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ]
     for v in $violations {
         assert equal (jab ordinal-violations 3 $v.frames) $v.wanted $"($v.name): the violations as the rules name them"
+    }
+
+    # K over presented acceptances: a zero-delay sequence, every flip
+    # exactly a period on, passes at eps 100 and fails every pair at eps 0;
+    # and over a generated set, jitter, stalls, and catch-ups from a fixed
+    # seed, the linear check names exactly the flips the all-pairs one does
+    let period = 166666
+    let exact = (0..<10 | each {|i| 5000000 + $i * $period })
+    assert equal (jab k-violations $exact $period 100) [] "k_zero_delay: exact periods pass at eps 100"
+    assert equal (jab k-violations $exact $period 0) (1..<10 | each {|j| { index: $j, witness: 0, gap: ($j * $period), bound: ($j * $period) } }) "k_zero_delay_strict: every pair fails at eps 0, each against the first"
+    let draws = (generate {|x|
+        let a = ($x bit-xor (($x bit-shl 13) bit-and 0xffffffff))
+        let b = ($a bit-xor ($a bit-shr 17))
+        let c = ($b bit-xor (($b bit-shl 5) bit-and 0xffffffff))
+        { out: $c, next: $c }
+    } 2463534242 | take 6000)
+    let sequences = (0..<100 | each {|k|
+        let d = ($draws | skip ($k * 60) | take 60)
+        $d | take 30 | enumerate | reduce --fold [] {|r, acc|
+            let roll = ($r.item mod 100)
+            let step = (if $roll < 6 { 3 * $period } else if $roll < 12 { $period // 4 } else { $period + (($d | get ($r.index + 30)) mod 6001) - 3000 })
+            $acc | append (if ($acc | is-empty) { 1000000 } else { ($acc | last) + $step })
+        }
+    })
+    for eps in [100 10000] {
+        let found = ($sequences | each {|s| jab k-violations $s $period $eps | length } | math sum)
+        assert ($found > 100) $"k_all_pairs: the generated set breaks K at eps ($eps), so the comparison holds something: ($found) violations"
+        for s in ($sequences | enumerate) {
+            let pairs = (1..<($s.item | length) | each {|j| $j } | where {|j| 0..<$j | each {|i| $i } | any {|i| (($s.item | get $j) - ($s.item | get $i)) <= (($j - $i) * $period - $eps) } })
+            assert equal (jab k-violations $s.item $period $eps | get index) $pairs $"k_all_pairs: sequence ($s.index) at eps ($eps), the linear check's flips the all-pairs check's"
+        }
     }
 
     # the pairing over synthetic runs: the load's two presents, ordinals 2

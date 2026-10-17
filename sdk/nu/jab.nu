@@ -2556,10 +2556,11 @@ export def shim-build [ws: path, name: string, --bin, --static]: nothing -> stri
 
 # Probe a program under a window. `sdl`: run it under SDL with OpenGL
 # for `seconds` with shim/crates/sdl preloaded into QEMU, then report how
-# its flips reached the window, read through QEMU's own symbol tables.
-def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing -> nothing {
+# its flips reached the window, read through QEMU's own symbol tables;
+# `api`, `send`, and `trace` are probe-sdl's.
+def probe [dir: path, kind: string, names: list<string>, seconds: int, --api, --send: string = "", --trace]: nothing -> nothing {
     match $kind {
-        "sdl" => { probe-sdl $dir $names $seconds },
+        "sdl" => { probe-sdl $dir $names $seconds --api=$api --send $send --trace=$trace },
         _ => { error make {msg: $"no probe called ($kind); there is `sdl`"} },
     }
 }
@@ -2571,32 +2572,51 @@ def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing 
 # no record. Linux only, since it preloads a library into QEMU. With no
 # display server SDL runs its offscreen driver, which draws nothing but
 # keeps every path the same. Each run mints its capture nonce for the
-# shim (launch-nonce) and writes the run's identity beside the log,
-# `identity.nuon`, of the generic profile, no API on the machine and
-# nothing sent; the run is bundled last (sdl-bundle) into `bundle` there,
-# a previous bundle and identity retired first.
-def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing {
+# shim (launch-nonce), keeps QEMU's pid while it lives (probe-launch),
+# and writes the run's identity beside the log, `identity.nuon`. Its
+# profile, its port, and its sends are probe-plan's: paired where the
+# build sets the manifest's `paired`, the nonce's frame sent first;
+# `--api` puts the port on with nothing sent for it; `--send <file>`
+# writes the file's bytes. With the port on, the program's bytes are kept
+# beside the log as `api.out`.
+# `--trace` has QEMU trace the device's flushes and set_scanouts into
+# `trace.log` there, its messages stamped (trace-args). The run is
+# bundled last (sdl-bundle) into `bundle` there, a previous bundle and
+# every file the probe writes retired first.
+def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: string = "", --trace]: nothing -> nothing {
     if $nu.os-info.name != "linux" { error make {msg: "the sdl probe preloads a library into QEMU, which is Linux only"} }
-    let ws = (context $dir "program" $names | get workspace)
-    if $ws == null { error make {msg: "the sdl probe needs the program's workspace, above it or named by its manifest, which holds shim/crates/sdl"} }
-    let shim = (shim-build $ws "jabshim_sdl")
-    let line = (run-line $dir $names false "sdl,gl=on" "none" true false false)
+    let c = (context $dir "program" $names)
+    if $c.workspace == null { error make {msg: "the sdl probe needs the program's workspace, above it or named by its manifest, which holds shim/crates/sdl"} }
+    if $send != "" and not ($send | path exists) { error make {msg: $"--send ($send): no such file"} }
+    let shim = (shim-build $c.workspace "jabshim_sdl")
+    let nonce = (launch-nonce 0 true)
+    let planned = (probe-plan $c.manifest $names $nonce --api=$api --send (if $send == "" { 0x[] } else { open --raw $send | into binary }))
+    let sends = $planned.sends
+    let api_on = $planned.api
+    let line = (run-line $dir $names $api_on "sdl,gl=on" "none" true false false)
     let out = ($line.context.out | path join "probe")
     mkdir $out
     let log = ($out | path join "sdl.log")
     let identity_file = ($out | path join "identity.nuon")
     let bundle = ($out | path join "bundle")
-    for f in [$log $identity_file $bundle] { retire $f $line.context.root }
-    let nonce = (launch-nonce 0 true)
+    let kept = ($out | path join "api.out")
+    let trace_log = ($out | path join "trace.log")
+    let pidfile = ($out | path join "qemu.pid")
+    for f in [$log $identity_file $bundle $kept $trace_log $pidfile] { retire $f $line.context.root }
+    let traced = (if $trace { trace-args $line.qemu_binary $trace_log } else { [] })
     let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
     let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log, SDL_SHIM_NONCE: (nonce-hex $nonce) }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
     let binary = $line.qemu_binary
-    let run = (with-env $extra { ^timeout --signal=TERM ($seconds | into string) $binary ...$line.args | complete })
+    let api_in = (if $api_on { $line.context.out | path join "api.in" } else { "" })
+    let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends)
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
+    if $api_on { cp ($line.context.out | path join "api.out") $kept }
     let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
-    { profile: "generic", capture_nonce: $nonce, qemu_pid: null, sdl_log: $log, shim: $shim, window: "sdl,gl=on", api: false, sends: [] } | to nuon --indent 2 | save --raw $identity_file
+    let profile = $planned.profile
+    let sent = ($sends | each {|s| { at: ($s.at / 1sec), length: ($s.bytes | bytes length), sha256: ($s.bytes | hash sha256) } })
+    { profile: $profile, capture_nonce: $nonce, qemu_pid: $run.qemu_pid, sdl_log: $log, shim: $shim, window: "sdl,gl=on", api: $api_on, sends: $sent } | to nuon --indent 2 | save --raw $identity_file
     let report = (sdl-report $log)
     sdl-bundle $out $bundle | ignore
     let record = ({
@@ -2610,11 +2630,88 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
             symbols: $line.context.symbols,
             seconds: $seconds,
             qemu_said: ($run.stderr | lines | where {|l| not ($l | str contains "terminating on signal") } | first 3),
+            exit: $run.exit,
             capture_nonce: $nonce,
+            qemu_pid: $run.qemu_pid,
+            profile: $profile,
+            api: (if $api_on { $kept } else { "" }),
+            sends: ($sent | zip $run.send_seconds | each {|p| $p.0 | insert written $p.1 }),
+            trace: (if $trace { $trace_log } else { "" }),
             bundle: $bundle,
         },
     } | merge ($report | reject run))
     print ($record | to nuon --indent 2)
+}
+
+# What a probe of a program's build puts on the machine and sends
+# (CaptureBundle's profiles): paired where the build sets the manifest's
+# `paired` (probe-paired), the port on and the nonce's frame (nonce-frame)
+# at 200 ms, then `send`'s bytes at 200 ms where there are any; generic
+# otherwise, the port on with `api` or bytes to send, and only those
+# bytes sent, never a frame of the probe's own.
+export def probe-plan [manifest: record, names: list<string>, nonce: int, --api, --send: binary = 0x[]]: nothing -> record<profile: string, api: bool, sends: list<record<at: duration, bytes: binary>>> {
+    let paired = (probe-paired $manifest $names)
+    let framed = (if $paired { [{ at: 200ms, bytes: (nonce-frame $nonce) }] } else { [] })
+    let sends = ($framed ++ (if ($send | bytes length) == 0 { [] } else { [{ at: 200ms, bytes: $send }] }))
+    { profile: (if $paired { "paired" } else { "generic" }), api: ($api or not ($sends | is-empty)), sends: $sends }
+}
+
+# Whether a probe of a program's build is paired (CaptureBundle): the
+# manifest's `paired` names the build symbol under which the program
+# reads the capture nonce's frame from the API before it starts, and the
+# build sets it. Any other probe is generic.
+def probe-paired [manifest: record, names: list<string>]: nothing -> bool {
+    let symbol = ($manifest | get -o paired | default "")
+    $symbol != "" and (($symbol | str screaming-snake-case) in $names)
+}
+
+# The capture nonce's frame, what a paired program reads from the API
+# before it starts (CaptureBundle): `WNON` as a le32, a zero word, and
+# the nonce as a le64, 16 bytes; the nonce 1 to 2^63 - 1.
+export def nonce-frame [nonce: int]: nothing -> binary {
+    if $nonce < 1 { error make {msg: $"a capture nonce is 1 to 2^63 - 1, not ($nonce)"} }
+    0x[57 4e 4f 4e 00 00 00 00] ++ ($nonce | into binary --endian little)
+}
+
+# The QEMU words that trace the GPU device's flushes and set_scanouts into
+# `log`, each message stamped with the host's wall clock (-msg
+# timestamp=on), which sdl-bundle-check pairs with the shim's uploads;
+# refused on a QEMU whose trace events do not list both.
+export def trace-args [qemu: string, log: path]: nothing -> list<string> {
+    let events = (^$qemu -trace help | complete | get stdout | lines | each {|l| $l | str trim })
+    let missing = (["virtio_gpu_cmd_res_flush" "virtio_gpu_cmd_set_scanout"] | where {|e| $e not-in $events })
+    if not ($missing | is-empty) { error make {msg: $"($qemu) lists no trace event ($missing | str join ' or '), which --trace needs"} }
+    ["-msg" "timestamp=on" "-trace" "virtio_gpu_cmd_res_flush" "-trace" "virtio_gpu_cmd_set_scanout" "-D" $log]
+}
+
+# A probe's QEMU run to its exit or its bound, `seconds`, polled as a
+# launch polls (launch): QEMU's pid kept from `pidfile` at the first poll
+# that finds it alive, since QEMU unlinks the file as it exits, and each
+# entry of `sends` written into `api_in` once its time has come, in
+# order, through fifo-write. The exit, QEMU's stderr, the pid, null where
+# QEMU never came up, and each entry's write in seconds from the start,
+# null where it never went in.
+def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
+    let started = (date now)
+    job spawn { with-env $environment { ^timeout --signal=TERM ($seconds | into string) $binary ...$args | complete } | job send 0 }
+    mut result: any = null
+    mut qemu_pid: any = null
+    mut written = ($sends | each --keep-empty {|_| null })
+    mut taken = 0
+    while $result == null {
+        $result = (try { job recv --timeout 100ms } catch { null })
+        let pid = (try { open --raw $pidfile | str trim } catch { "" })
+        let alive = ($result == null and (process-alive $pid))
+        if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
+        let elapsed = ((date now) - $started)
+        while $alive and $taken < ($sends | length) and ($sends | get $taken | get at) <= $elapsed {
+            if $api_in != "" and (fifo-write $api_in ($sends | get $taken | get bytes)) {
+                $written = ($written | update $taken (((date now) - $started) / 1sec))
+            }
+            $taken += 1
+        }
+    }
+    { exit: $result.exit_code, stderr: $result.stderr, qemu_pid: $qemu_pid, send_seconds: $written }
 }
 
 # The shim's log as written (shim/crates/sdl): the object table, each
@@ -3481,6 +3578,33 @@ export def ordinal-violations [anchor: int, frames: list<record<presented: bool,
     $found
 }
 
+# The presentation contract's K over a run's presented acceptances in
+# order, the receipts' stamps in ticks: every pair i < j stands more than
+# (j - i) periods less `eps` apart. With q the acceptance less its index
+# times the period, K holds for every pair exactly when each q exceeds
+# the largest earlier q less eps, so the running maximum and its index
+# are kept and the check is linear. Every violation by its flip's index,
+# its witness the index of that maximum, the two flips' gap, and the
+# bound it did not pass. Read only on a present sequence that held
+# (ordinal-violations), so no present is missing from the flips.
+export def k-violations [accepted: list<int>, period: int, eps: int]: nothing -> list<record<index: int, witness: int, gap: int, bound: int>> {
+    mut found = []
+    mut top = 0
+    mut witness = -1
+    for a in ($accepted | enumerate) {
+        let q = ($a.item - $a.index * $period)
+        if $witness >= 0 and $q <= ($top - $eps) {
+            let before = ($accepted | get $witness)
+            $found = ($found | append { index: $a.index, witness: $witness, gap: ($a.item - $before), bound: (($a.index - $witness) * $period - $eps) })
+        }
+        if $witness < 0 or $q > $top {
+            $top = $q
+            $witness = $a.index
+        }
+    }
+    $found
+}
+
 # The pairing's limits, printed with every reading (sdl-pair).
 const pair_limits = "the pairing assumes the run binding, which ties the guest's records to the log, and that the log records every upload once and that every flush the device accepted makes one upload; under those assumptions it is exact, and the oracle's flush trace rechecks them run by run on the box. The residual is a consistency check: it proves no absence of a loss and an addition that compensate inside the window, and it catches a uniform shift only where the paired intervals are irregular past half a period. The fit gives intervals and jitter, and no absolute guest-to-SDL latency."
 
@@ -3744,7 +3868,7 @@ def do-usage [params: string]: nothing -> string {
 # owner, and its description up to its first example or full stop.
 def do-list [commands: table]: nothing -> string {
     let sdk = [
-        { command: "probe", usage: "<kind> <program> [--seconds 12] [--set names]", owner: "sdk", summary: "Probe one program under a window and print one NUON record on how its flips reached it, `sdl` the one kind, Linux only" }
+        { command: "probe", usage: "<kind> <program> [--seconds 12] [--set names] [--api] [--send <file>] [--trace]", owner: "sdk", summary: "Probe one program under a window and print one NUON record on how its flips reached it, `sdl` the one kind, Linux only" }
         { command: "clean", usage: "[path] [--tree release|debug]", owner: "sdk", summary: "Retire the build outputs of the programs at or under a path, or the kernel's with `kernel`, in both trees or the one --tree names; with no path the whole target, as `just clean` does" }
     ]
     let all = ($sdk ++ ($commands | select command usage owner summary))
@@ -4223,11 +4347,13 @@ def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, -
 # Probe one program under a window for --seconds and print one NUON
 # record on how its flips reached the window, at a workspace's root the
 # program at a path, at a program's directory that program; release
-# unless --set says otherwise. `sdl` is the one probe.
-def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = ""] {
+# unless --set says otherwise. `sdl` is the one probe; `--api`, `--send
+# <file>`, and `--trace` are probe-sdl's.
+def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = "", --api, --send: string = "", --trace] {
     let program = (if (is-workspace $dir) { program-at $dir $words } else { $dir | path expand })
+    let send = (if $send == "" { "" } else { $send | path expand })
     prepare $program "run"
-    probe $program $kind (symbols $set) $seconds
+    probe $program $kind (symbols $set) $seconds --api=$api --send $send --trace=$trace
 }
 
 # Retire the workspace's whole target (clean-target): `just clean`.

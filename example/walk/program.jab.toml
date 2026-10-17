@@ -3,3 +3,4 @@ sdk = '../../sdk'
 includes = ['../../sdk/src']
 link = '../../sdk/src/program.ld'
 assets = '../../asset/img'
+paired = 'cadence'

@@ -92,8 +92,9 @@ workspace in its manifest, `workspace = '../../../..'` relative to the
 manifest. A manifest may also name `target_assets`, a tree its content
 compiles to in its asset shard of the target, which becomes its disk;
 `prepare`, a nushell script the tool runs before building, testing, or
-running it; and `do`, a nushell script whose `main <command>`
-definitions are its commands for development.
+running it; `do`, a nushell script whose `main <command>` definitions
+are its commands for development; and `paired`, the build symbol under
+which a probe of it is paired (below).
 
 A program names the system specifications it supports with `specs`, a
 list of the names `asset/spec.nuon` gives them, in any case. Beside it
@@ -326,6 +327,20 @@ on one host is admitted on another where the files the log names are
 not there, and a bundle altered anywhere is refused at the stage that
 finds it. `jab launch --sdl-probe <log>` puts the same library into a
 test's own launch, its window SDL with OpenGL.
+
+The probe puts the API's port on the machine with `--api`, and
+`--send <file>` writes the file's bytes into it at 200 ms; the
+program's own bytes are then kept beside the log as `api.out`.
+`--trace` has QEMU trace the device's flushes and its scanout changes
+into `trace.log` there, each line stamped by the host's clock, which
+the bundle's check pairs with the uploads; a QEMU whose trace events
+lack them is refused. A manifest's `paired` names a build symbol under
+which the program reads the capture nonce's frame from the API before it
+starts: 16 bytes, `WNON` as a little-endian word, a zero word, and the
+nonce. A probe of a build that sets it is paired: the port goes on, the
+frame goes in at 200 ms ahead of any `--send`, and the bundle binds the
+program's own records to the run by the nonce they carry. Every other
+probe is generic and sends nothing of its own.
 
 A gamepad on the host reaches a program two ways, and a program never
 learns which. A run finds the pad through `jabdisco`, built with
