@@ -599,7 +599,14 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # QEMU reads as the pad, which the driver writes 24-byte input_event
 # records into, else (and with `--pad-port`) the pad port's `pad_pipe_in`
 # pipe, whose header, `pad_header` as hex, the driver writes first, the
-# pipes made. The machine is headless unless `--window` puts it in the
+# pipes made. On Windows, where QEMU makes each pipe chardev one named
+# pipe and waits for its client before it starts (pipe-path), each pipe's
+# in-file is a plain file a writer appends to (pipe-write), and `relays`
+# names the relay each pipe with no client of its own takes, the
+# monitor's, the API's, and a scripted pad's port (relays-of), its
+# binary `relay_binary` (relay-build), none and "" elsewhere;
+# `bridge_pipe` is the pipe the pad bridge writes, "" with no pad port
+# (bridge-pipe). The machine is headless unless `--window` puts it in the
 # window a run of the program would open (`window`, `none` without); the sound device
 # records to `sound` with `--sound`, or plays through the host's audio as
 # a run's does with `--live-sound` (`audio`, the backend); and
@@ -658,7 +665,7 @@ export def plan [
     --sdl-probe: path = ""
     --capture-nonce: int = 0
     --profile: string = ""
-]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
     let ws = (launch-workspace $kernel $image $out)
     # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
@@ -684,15 +691,29 @@ export def plan [
     let pidfile = ($out | path join "qemu.pid")
     let monitor = ($out | path join "monitor")
     for f in [$log $qemu_log $screen $pidfile] { retire $f $root }
-    fifo-at ($monitor + ".in") $root
-    fifo-at ($monitor + ".out") $root
+    # a Windows run's pipes are named pipes, named by a nonce of its own
+    let windows = ($nu.os-info.name == "windows")
+    let nonce = (if $windows { random int 1.. } else { 0 })
+    let watch = (if $windows { pipe-pair $out "monitor" $nonce "windows" $root } else {
+        fifo-at ($monitor + ".in") $root
+        fifo-at ($monitor + ".out") $root
+        { name: $monitor, inward: ($monitor + ".in"), outward: ($monitor + ".out") }
+    })
     let qemu = (qemu-binary (image-home $image) $ws)
     let bound = (timeout-binary)
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws $root)
     let api_on = ($api or (not ($send | is-empty)))
-    let ports = (ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root)
+    let ports = (ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
+    # Windows' relays, one a pipe with no client of its own: the monitor's,
+    # the API's, and a scripted pad's port, the host's pad's client being
+    # the bridge
+    let piped = (if not $windows { [] } else {
+        [{ endpoint: "monitor", pipe: $watch } { endpoint: "api", pipe: $ports.api }] ++ (if $hosted.port { [] } else { [{ endpoint: "padport", pipe: $ports.pad }] })
+    })
+    let relays = (relays-of $out $piped)
+    let relay_binary = (relay-build $relays $ws)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" { retire $wav $root }
@@ -715,7 +736,7 @@ export def plan [
     let args = ((machine-args $qemu $machine) ++ (name-args ($image | path parse | get stem)) ++ (memory-args $machine) ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
-        "-display" $shown "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
+        "-display" $shown "-monitor" $"pipe:($watch.name)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
     ] ++ $append ++ (disks-args (machine-disks $disk $serial true $ws)))
     let planned = {
@@ -731,10 +752,10 @@ export def plan [
         pidfile: $pidfile,
         monitor: $monitor,
         debug_log: $ports.debug_log,
-        api_in: (if $ports.api_pipe == "" { "" } else { $ports.api_pipe + ".in" }),
-        api_out: (if $ports.api_pipe == "" { "" } else { $ports.api_pipe + ".out" }),
+        api_in: (if $ports.api == null { "" } else { $ports.api.inward }),
+        api_out: (if $ports.api == null { "" } else { $ports.api.outward }),
         pad_fifo: $pad.fifo,
-        pad_pipe_in: (if $ports.pad_pipe == "" { "" } else { $ports.pad_pipe + ".in" }),
+        pad_pipe_in: (if $ports.pad == null { "" } else { $ports.pad.inward }),
         pad_port: $pad.port,
         pad_header: ($pad.header | encode hex),
         sound: $wav,
@@ -743,6 +764,9 @@ export def plan [
         window: $shown,
         audio: $backend,
         bridge: $hosted.bridge,
+        bridge_pipe: (bridge-pipe $ports.pad),
+        relays: $relays,
+        relay_binary: $relay_binary,
         machine: $machine,
         bootargs: $line,
         demand: $demand,
@@ -875,7 +899,13 @@ def image-manifest [image: path]: nothing -> record {
 # console, or below its program's minimum (plan's `below_minimum`). `--sdl-probe`,
 # `--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
 # minted here only for a probing launch given none (launch-nonce); the
-# launch writes the API only what its caller sends, never for itself.
+# launch writes the API only what its caller sends, never for itself. On
+# Windows, where QEMU waits for a client of each of its pipes before it
+# starts, the relays plan names start beside QEMU, a job each
+# (relays-start), every write goes into a pipe's in-file (pipe-write), and
+# once QEMU has ended each relay is given a second to end with its pipe,
+# any left stopped, and one that ended in failure fails the launch,
+# naming its pipe (relays-held).
 # `qemu_pid` is QEMU's pid as the loop read it while QEMU lived, since
 # QEMU removes its pid file as it exits, null where it never came up; the
 # result carries `sdl_log`, `shim`, `capture_nonce`, and `profile` as
@@ -937,7 +967,7 @@ export def launch [
         let b = $machine.bridge
         let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
         let product = (if $b.product == null { "" } else { $b.product | into string })
-        let pipe = $pad_in
+        let pipe = $machine.bridge_pipe
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
     # the timed actions in the order a poll takes them (due-order): by
@@ -951,6 +981,7 @@ export def launch [
     let started = (date now)
     let bound = $machine.timeout_binary
     job spawn { with-env $gamepad.env { ^$bound ...$disked | complete } | job send 0 }
+    let relays = (relays-start $machine.relays $machine.relay_binary $machine.target)
     mut result: any = null
     mut cpu = 0.0
     mut events_taken = 0
@@ -979,10 +1010,10 @@ export def launch [
         let elapsed = ((date now) - $started)
         # the pad port's header goes in as soon as QEMU is up, before any
         # event, since the kernel waits for the whole of it
-        # every write into QEMU's pipes is bounded (fifo-write), since QEMU
+        # every write into QEMU's pipes is bounded (pipe-write), since QEMU
         # can end between the check that it runs and the write
         if (not $header_sent) and $alive {
-            fifo-write $pad_in $gamepad.header $bound | ignore
+            pipe-write $pad_in $gamepad.header $bound | ignore
             $header_sent = true
         }
         # every due action in due-order's order: a screen that fails holds
@@ -1009,10 +1040,10 @@ export def launch [
                         let k = ($keys | get $action.index)
                         monitor-send $monitor $"sendkey ($k.key) ($k.hold)" $bound
                     } else if $action.kind == "send" {
-                        if $api_in == "" { false } else { fifo-write $api_in ($send | get $action.index | get bytes) $bound }
+                        if $api_in == "" { false } else { pipe-write $api_in ($send | get $action.index | get bytes) $bound }
                     } else {
                         let g = ($gamepad.groups | get $action.index)
-                        if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
+                        if $gamepad.port { pipe-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
                     })
                     if $written and $action.kind == "send" {
                         $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
@@ -1043,7 +1074,9 @@ export def launch [
         }
     }
     let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
+    let relayed = (relays-stop $relays)
     if $bridge != null { try { job kill $bridge } }
+    relays-held $relayed $result
     let ran_on = ($machine.machine | update overrides $qemu)
     {
         status: $result.exit_code,
@@ -1349,46 +1382,154 @@ def fetched [target: path, url: string, sha256: string]: nothing -> string {
 # The ports, each of one virtio-serial-device: DEBUG in the build puts
 # the kernel's debug channel on port 1 with the host's end a file,
 # debug.log in `out`; `api` puts the API on port 2 with the host's end
-# QEMU's pipe chardev over api.in, a named pipe the host writes into,
-# and api.out, a plain file the program's bytes land in as they are
-# sent, both made here. A file rather than a second pipe, so nothing
-# has to hold a pipe open for the run and a program is never held by a
-# host that stopped reading. `pad_port` puts the pad's port on port 3
-# the same way, over padport.in, which the host writes the pad's header
-# and events into (doc/padport.md). Nothing at all with none, so the
-# machine carries no serial device. The console keeps the UART in
-# every build, since a fault line has to reach the host when a port has
-# not come up. A previous run's debug.log is retired into `root`'s
-# retire home (retire).
-def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path]: nothing -> record<args: list<string>, debug_log: string, api_pipe: string, pad_pipe: string> {
+# QEMU's pipe chardev over the pipe pair api.in and api.out (pipe-pair),
+# api.in what the host writes into and api.out a plain file the
+# program's bytes land in as they are sent, both made here. A file
+# rather than a second pipe, so nothing has to hold a pipe open for the
+# run and a program is never held by a host that stopped reading.
+# `pad_port` puts the pad's port on port 3 the same way, over padport.in,
+# which the host writes the pad's header and events into
+# (doc/padport.md). Nothing at all with none, so the machine carries no
+# serial device. The console keeps the UART in every build, since a fault
+# line has to reach the host when a port has not come up. A previous
+# run's debug.log is retired into `root`'s retire home (retire). `nonce`
+# names a Windows run's pipes (pipe-path). Each port's pipe comes back as
+# pipe-pair made it, null for a port the machine lacks.
+def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path, nonce: int]: nothing -> record<args: list<string>, debug_log: string, api: oneof<record<name: string, inward: string, outward: string>, nothing>, pad: oneof<record<name: string, inward: string, outward: string>, nothing>> {
     mkdir $out
     let debug = (if "DEBUG" in $names {
         let log = ($out | path join "debug.log")
         retire $log $root
         { args: ["-chardev" $"file,id=jabdebug,path=($log)" "-device" "virtserialport,chardev=jabdebug,nr=1,name=jab.debug"], log: $log }
     } else { { args: [], log: "" } })
-    let port = (if $api {
-        let pipe = (pipe-pair ($out | path join "api") $root)
-        { args: ["-chardev" $"pipe,id=jabapi,path=($pipe)" "-device" "virtserialport,chardev=jabapi,nr=2,name=jab.api"], pipe: $pipe }
-    } else { { args: [], pipe: "" } })
-    let pad = (if $pad_port {
-        let pipe = (pipe-pair ($out | path join "padport") $root)
-        { args: ["-chardev" $"pipe,id=jabpad,path=($pipe)" "-device" "virtserialport,chardev=jabpad,nr=3,name=jab.pad"], pipe: $pipe }
-    } else { { args: [], pipe: "" } })
-    let device = (if ($debug.args | is-empty) and ($port.args | is-empty) and ($pad.args | is-empty) { [] } else { ["-device" "virtio-serial-device"] })
-    { args: ($device ++ $debug.args ++ $port.args ++ $pad.args), debug_log: $debug.log, api_pipe: $port.pipe, pad_pipe: $pad.pipe }
+    let port = (if $api { pipe-pair $out "api" $nonce $nu.os-info.name $root } else { null })
+    let pad = (if $pad_port { pipe-pair $out "padport" $nonce $nu.os-info.name $root } else { null })
+    let port_args = (if $port == null { [] } else { ["-chardev" $"pipe,id=jabapi,path=($port.name)" "-device" "virtserialport,chardev=jabapi,nr=2,name=jab.api"] })
+    let pad_args = (if $pad == null { [] } else { ["-chardev" $"pipe,id=jabpad,path=($pad.name)" "-device" "virtserialport,chardev=jabpad,nr=3,name=jab.pad"] })
+    let device = (if ($debug.args | is-empty) and ($port_args | is-empty) and ($pad_args | is-empty) { [] } else { ["-device" "virtio-serial-device"] })
+    { args: ($device ++ $debug.args ++ $port_args ++ $pad_args), debug_log: $debug.log, api: $port, pad: $pad }
 }
 
-# What QEMU's pipe chardev opens at `pipe`: `<pipe>.in`, a named pipe
-# the host writes into (fifo-at), and `<pipe>.out`, a plain file made
-# empty, where the guest's bytes land, a previous run's retired first
-# into `root`'s retire home (retire).
-def pipe-pair [pipe: path, root: path]: nothing -> string {
-    fifo-at ($pipe + ".in") $root
-    let outward = ($pipe + ".out")
+# The path QEMU's pipe chardev takes for a pipe of `endpoint` beside a
+# run's other files in `out`, on the host `os` names as $nu.os-info.name
+# does (PipeShape): on every host but Windows `<out>/<endpoint>`, whose
+# `<endpoint>.in` and `<endpoint>.out` QEMU opens itself; on Windows a
+# bare name, `jab-<nonce>-<endpoint>`, the run's nonce in sixteen hex
+# digits (nonce-hex), since QEMU makes one duplex named pipe of the option
+# there, `\\.\pipe\` and the option as given, a filesystem path being no
+# pipe's name, and the nonce keeps one run's pipes apart from another's. A
+# Windows pipe with no nonce, under 1, is refused.
+export def pipe-path [out: path, endpoint: string, nonce: int, os: string]: nothing -> string {
+    if $os != "windows" { return ($out | path join $endpoint) }
+    if $nonce < 1 { error make {msg: $"a Windows run's pipes are named by its nonce, 1 to 2^63 - 1, not ($nonce)"} }
+    $"jab-(nonce-hex $nonce)-($endpoint)"
+}
+
+# A pipe of `endpoint` for QEMU's pipe chardev, made in `out` as the host
+# `os` names takes it (pipe-path): `name`, the chardev's path, with
+# `inward`, `<endpoint>.in`, what the host writes into, and `outward`,
+# `<endpoint>.out`, a plain file made empty, where the guest's bytes land.
+# On every host but Windows QEMU opens the two itself, inward a named pipe
+# (fifo-at); on Windows, where the pipe is one named pipe and a relay or
+# the pad bridge its client (relays-start), inward is a plain file made
+# empty too, which a writer appends to (pipe-write) and the relay forwards
+# into the pipe, as outward takes what the relay reads from it. A previous
+# run's files are retired first into `root`'s retire home (retire).
+export def pipe-pair [out: path, endpoint: string, nonce: int, os: string, root: path]: nothing -> record<name: string, inward: string, outward: string> {
+    let name = (pipe-path $out $endpoint $nonce $os)
+    let inward = ($out | path join $"($endpoint).in")
+    let outward = ($out | path join $"($endpoint).out")
+    if $os == "windows" {
+        retire $inward $root
+        "" | save $inward
+    } else {
+        fifo-at $inward $root
+    }
     retire $outward $root
     "" | save $outward
-    $pipe
+    { name: $name, inward: $inward, outward: $outward }
+}
+
+# The relays a Windows machine's pipes take (PipeShape), one for each of
+# `pipes`, its endpoint with its pipe as pipe-pair made it, null for a
+# port the machine lacks, which takes none: the pipe's name, its in-file
+# and its out-file, and `done`, `<endpoint>.relay.nuon` in `out`, where
+# the relay's job saves how it ended (relays-start).
+export def relays-of [out: path, pipes: list<record<endpoint: string, pipe: any>>]: nothing -> list<record<endpoint: string, name: string, inward: string, outward: string, done: string>> {
+    $pipes | where {|p| $p.pipe != null } | each {|p|
+        { endpoint: $p.endpoint, name: $p.pipe.name, inward: $p.pipe.inward, outward: $p.pipe.outward, done: ($out | path join $"($p.endpoint).relay.nuon") }
+    }
+}
+
+# The relay's binary for a machine with relays (relays-of), built from
+# the workspace's shim/crates/pipe (shim-build), "" for one with none; a
+# machine with relays and no workspace to build it in is refused.
+def relay-build [relays: list<any>, ws: oneof<string, nothing>]: nothing -> string {
+    if ($relays | is-empty) { return "" }
+    if $ws == null { error make {msg: "a Windows run's pipes need their relay, which the workspace builds from shim/crates/pipe, and this run has no workspace"} }
+    shim-build $ws "jabpipe" --bin
+}
+
+# The pipe the pad bridge writes, from the pad port's pipe as pipe-pair
+# made it, "" for none: its in-file, a fifo QEMU holds open, on every host
+# but Windows, where the bridge is the pipe's client and takes its name.
+def bridge-pipe [pad: oneof<record<name: string, inward: string, outward: string>, nothing>]: nothing -> string {
+    if $pad == null { "" } else if $nu.os-info.name == "windows" { $pad.name } else { $pad.inward }
+}
+
+# A Windows machine's relays started beside its QEMU, one job each
+# (PipeShape): `jabpipe <name> <inward> <outward>`, each connecting to its
+# pipe as soon as QEMU makes it and holding the run's one connection,
+# then forwarding what is appended to the in-file into the pipe and
+# writing what the pipe gives into the out-file, until QEMU closes it.
+# Each saves its exit and what it said to its `done` file as it ends,
+# through a file beside it moved over it, so a read never takes half of
+# one; a `done` file already there, an earlier start's, is retired first
+# into `root`'s retire home (retire), so the record read back is this
+# start's own. Each relay started with its job's id; none for a machine
+# with none.
+export def relays-start [relays: list<any>, binary: string, root: path]: nothing -> list<record<job: int, relay: record>> {
+    mut started = []
+    for r in $relays {
+        retire $r.done $root
+        retire $"($r.done).next" $root
+        let id = (job spawn {
+            let next = $"($r.done).next"
+            ^$binary $r.name $r.inward $r.outward | complete | to nuon | save -f $next
+            mv -f $next $r.done
+        })
+        $started = ($started | append { job: $id, relay: $r })
+    }
+    $started
+}
+
+# A machine's relays once its QEMU has ended (relays-start): each given a
+# second to end on its own, its pipe closed with QEMU, then any still
+# running stopped (job kill). How each ended: its endpoint, its pipe's
+# name, its exit, null for one stopped, and what it said.
+export def relays-stop [started: list<record<job: int, relay: record>>]: nothing -> list<record<endpoint: string, name: string, exit: oneof<int, nothing>, said: string>> {
+    if ($started | is-empty) { return [] }
+    let deadline = ((date now) + 1sec)
+    while ((date now) < $deadline) and ($started | any {|s| not ($s.relay.done | path exists) }) { sleep 50ms }
+    $started | each {|s|
+        let done = (if ($s.relay.done | path exists) { try { open --raw $s.relay.done | decode | from nuon } catch { null } } else { null })
+        if $done == null { try { job kill $s.job } }
+        { endpoint: $s.relay.endpoint, name: $s.relay.name, exit: (if $done == null { null } else { $done.exit_code }), said: (if $done == null { "" } else { $done.stderr }) }
+    }
+}
+
+# A launch's relays held to how they ended (relays-stop): one that ended
+# on its own in failure, a pipe it never connected to or a pipe or a file
+# that failed it, fails the launch once QEMU has ended, naming its pipe
+# and what it said, beside QEMU's exit and its stderr; one stopped after
+# QEMU ended, its pipe never made, leaves QEMU's own record to say why.
+# Untyped because it ends in an error.
+export def relays-held [relayed: list<any>, qemu: record] {
+    let failed = ($relayed | where {|r| $r.exit != null and $r.exit != 0 })
+    if ($failed | is-empty) { return }
+    let told = ($failed | each {|r| $"the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)" } | str join "; ")
+    let said = ($qemu.stderr | str trim)
+    error make {msg: $"($told); QEMU ended with ($qemu.exit_code)(if $said == '' { '' } else { $', saying: ($said)' })"}
 }
 
 # A named pipe at `path`: one already there is kept, since a pipe holds
@@ -1599,13 +1740,24 @@ def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
     (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
 }
 
-# Give the QEMU monitor a command through its pipe (fifo-write) under
+# Give the QEMU monitor a command through its pipe (pipe-write) under
 # `bound`, the run's timeout (timeout-binary); true when it went in.
 def monitor-send [monitor: path, command: string, bound: string]: nothing -> bool {
-    fifo-write ($monitor + ".in") $"($command)\n" $bound
+    pipe-write ($monitor + ".in") $"($command)\n" $bound
 }
 
-# Bytes into one of QEMU's pipes without waiting on a reader that is
+# Bytes into one of QEMU's pipes as this host's pipes take them, `inward`
+# the pipe's in-file (pipe-pair): on Windows appended to the file, which
+# never waits and which the pipe's relay forwards (relays-start); on every
+# other host into the named pipe itself under `bound` (fifo-write). True
+# when they went in.
+def pipe-write [inward: path, data: any, bound: string]: nothing -> bool {
+    if $nu.os-info.name != "windows" { return (fifo-write $inward $data $bound) }
+    $data | save --raw --append $inward
+    true
+}
+
+# Bytes into one of QEMU's named pipes without waiting on a reader that is
 # gone: opening a pipe to write waits until some process reads it, and
 # QEMU can end between any check that it runs and the open, so `tee`
 # appends the bytes under a one-second bound, `bound` the run's timeout
@@ -2719,8 +2871,11 @@ def test-args [ready: record]: nothing -> list<string> {
 # `spec` names, a custom one of `harts` harts, or the configured default
 # (machine-for), a named spec the program does not list refused before
 # QEMU starts (spec-listed). The ports' files sit beside the build
-# output, named in the README.
-def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string, machine: record> {
+# output, named in the README. With a pad on the port, `bridge` is the
+# pad's identity and `bridge_pipe` the pipe the bridge writes
+# (bridge-pipe); on Windows the API's pipe takes a relay, `relays` and
+# `relay_binary` as plan names them, none and "" elsewhere.
+def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record> {
     let ready = (prepared $dir $names)
     let c = $ready.context
     let m = (machine-for $c.workspace $spec $harts)
@@ -2738,7 +2893,13 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let shown = (if $window == null { display $c.manifest } else { $window })
     let found = (if (discovery-wanted $pad $sound) { discover $c.workspace } else { { gamepad: null, audio: null } })
     let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
-    let ports = (ports $c.symbols $c.out $api $gamepad.port $c.root)
+    # a Windows run's pipes are named pipes, named by a nonce of its own,
+    # the API's taking a relay and the pad port's client the bridge
+    let windows = ($nu.os-info.name == "windows")
+    let nonce = (if $windows { random int 1.. } else { 0 })
+    let ports = (ports $c.symbols $c.out $api $gamepad.port $c.root $nonce)
+    let relays = (if $windows { relays-of $c.out [{ endpoint: "api", pipe: $ports.api }] } else { [] })
+    let relay_binary = (relay-build $relays $c.workspace)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { sound-args (audio-plan ($found | get -o audio)) } else { [] })
     let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
@@ -2750,7 +2911,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
-    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, pad_pipe: $ports.pad_pipe, machine: $m }
+    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (bridge-pipe $ports.pad), relays: $relays, relay_binary: $relay_binary, machine: $m }
 }
 
 # A named spec held to the program's demand: refused naming both when the
@@ -2830,11 +2991,12 @@ def transports [args: list<string>]: nothing -> int {
 # The gamepad on the line, when there is one, from jabdisco's record.
 # On Linux the pad is passed through: JAB_PAD names its evdev path
 # outright, else the expected pad's path from the record, and nothing
-# goes on the line with none. On macOS QEMU cannot pass a pad through,
-# so with a pad in the record the pad port goes on the line and the
-# bridge, jabshim_pad, is to be started beside QEMU with the pad's
-# identity, which is what `bridge` carries (doc/padport.md); Linux
-# never takes that route. Any other host gets no pad.
+# goes on the line with none. On macOS and Windows QEMU cannot pass a pad
+# through, so with a pad in the record the pad port goes on the line and
+# the bridge, jabshim_pad, is to be started beside QEMU with the pad's
+# identity, which is what `bridge` carries (doc/padport.md), on Windows
+# as the pad pipe's own client (PadWindows); Linux never takes that
+# route. Any other host gets no pad.
 def gamepad-plan [found: record]: nothing -> record<args: list<string>, port: bool, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
     let none = { args: [], port: false, bridge: null }
     let pad = ($found | get -o gamepad)
@@ -2844,7 +3006,7 @@ def gamepad-plan [found: record]: nothing -> record<args: list<string>, port: bo
             let path = (if $forced != "" { $forced } else if $pad == null { "" } else { $pad | get -o path | default "" })
             if $path == "" { $none } else { { args: ["-device" $"virtio-input-host-device,evdev=($path)"], port: false, bridge: null } }
         },
-        "macos" => {
+        "macos" | "windows" => {
             if $pad == null { $none } else { { args: [], port: true, bridge: { name: $pad.name, vendor: ($pad | get -o vendor), product: ($pad | get -o product) } } }
         },
         _ => $none,
@@ -2856,7 +3018,7 @@ def gamepad-plan [found: record]: nothing -> record<args: list<string>, port: bo
 # JAB_AUDIO names the backend. Nothing is discovered that an
 # override already decides.
 def discovery-wanted [pad: bool, sound: bool]: nothing -> bool {
-    let pad_wanted = ($pad and ($env.JAB_PAD? | default "") == "" and ($nu.os-info.name in ["linux" "macos"]))
+    let pad_wanted = ($pad and ($env.JAB_PAD? | default "") == "" and ($nu.os-info.name in ["linux" "macos" "windows"]))
     let sound_wanted = ($sound and ($env.JAB_AUDIO? | default "") == "")
     $pad_wanted or $sound_wanted
 }
@@ -2901,7 +3063,11 @@ def tool-build [ws: path, package: string, without: string]: nothing -> string {
 # code is the program's exit status. A run says nothing of its own.
 # With a pad on the port, the bridge runs beside QEMU, started first
 # so it is writing the header as the kernel comes up, and ended with
-# it; the bridge ends itself as well once its pipe has no reader.
+# it; the bridge ends itself as well once its pipe has no reader. On
+# Windows the relays run-line names start ahead of QEMU too, which waits
+# for each pipe's client as it makes the pipe, and once QEMU has ended
+# each is given a second to end with its pipe, any left stopped, and one
+# that ended in failure said on stderr, naming its pipe.
 def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> nothing {
     let line = (run-line $dir $names $api null "stdio" $kbm $pad $sound --spec $spec --harts $harts)
     if ($line.window | str starts-with "vnc=") {
@@ -2909,22 +3075,28 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
     }
     let bridge = (if $line.bridge == null { null } else {
         let bin = (shim-build $line.context.workspace "jabshim_pad" --bin)
-        let pipe = ($line.pad_pipe + ".in")
+        let pipe = $line.bridge_pipe
         let b = $line.bridge
         let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
         let product = (if $b.product == null { "" } else { $b.product | into string })
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
+    let relays = (relays-start $line.relays $line.relay_binary $line.context.root)
     let qemu = $line.qemu_binary
     ^$qemu ...$line.args
+    let relayed = (relays-stop $relays)
     if $bridge != null { try { job kill $bridge } }
+    for r in ($relayed | where {|r| $r.exit != null and $r.exit != 0 }) {
+        print -e $"jab: the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)"
+    }
 }
 
 # A shim, one package of the workspace's shim/ workspace, built with
 # cargo into the target's shim/ on first use and whenever it changes:
 # the path of its shared library, to preload into QEMU, or with --bin
-# of its binary; --static builds a binary non-PIE, through `cargo rustc`
-# with the static relocation model.
+# of its binary, named as the host names an executable (exe-name);
+# --static builds a binary non-PIE, through `cargo rustc` with the
+# static relocation model.
 export def shim-build [ws: path, name: string, --bin, --static]: nothing -> string {
     let manifest = ($ws | path join "shim" "Cargo.toml")
     let target = (target-root $ws | path join "shim")
@@ -2934,7 +3106,7 @@ export def shim-build [ws: path, name: string, --bin, --static]: nothing -> stri
         ^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete
     })
     if $built.exit_code != 0 { error make {msg: $"building the shim package ($name) failed:\n($built.stderr)"} }
-    if $bin or $static { $target | path join "release" $name } else { $target | path join "release" $"lib($name).so" }
+    if $bin or $static { $target | path join "release" (exe-name $name) } else { $target | path join "release" $"lib($name).so" }
 }
 
 # Probe a program under a window. `sdl`: run it under SDL with OpenGL

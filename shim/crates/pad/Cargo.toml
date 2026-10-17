@@ -15,3 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 gilrs = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+jabpipe = { workspace = true }

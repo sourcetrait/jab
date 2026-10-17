@@ -21,7 +21,10 @@
 # the check running a new image through its jump. Then the launch's bound
 # (LaunchBound): the one GNU timeout a run resolves, a stand-in refused or
 # passed over, its bound on a child, a fifo nobody reads, and a program
-# that never exits ending at its bound. Last the default, in a
+# that never exits ending at its bound. Then Windows' pipes (PipeShape):
+# the chardev's path on each host, the pipe pairs, a plan's relays, and
+# the relays a Windows launch starts, held to how they end with stand-ins
+# for the relay. Last the default, in a
 # scratch XDG config home: `jab/config.toml` seeded from
 # asset/default/config.toml byte for byte, one there never written over,
 # JAB_SPEC ahead of it, one naming no spec refused, a home that is not
@@ -258,6 +261,61 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let bound_run = (jab launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
     assert equal [$bound_run.status $bound_run.timeout_binary] [124 $real.path] $"a program that never exits ends at its bound, the resolved timeout in its record: ($bound_run.status), ($bound_run.timeout_binary)"
 
+    # Windows' pipes (PipeShape): the chardev's path on each host, a POSIX
+    # host's `<out>/<endpoint>` and Windows' bare name by the run's nonce,
+    # none without one; Windows' pair of two plain files and, elsewhere,
+    # this host's, a fifo in and a plain file out, each made empty with a
+    # previous run's retired; a plan's relays, the monitor's and the API's
+    # on Windows and none elsewhere, the monitor and the API on fifos as
+    # before; and the relays a Windows launch starts, held here with
+    # stand-ins for the relay on every host but Windows: one ending on its
+    # own, one ending in failure, which fails the launch naming its pipe,
+    # and one still running a second after QEMU's end, stopped
+    let pipes = ($out | path join "pipes")
+    let root = (jab target-root $ws)
+    jab retire $pipes
+    mkdir $pipes
+    for os in ["linux" "macos"] {
+        assert equal (jab pipe-path $pipes "api" 42 $os) ($pipes | path join "api") $"($os): the chardev's path the pair's base"
+    }
+    assert equal (jab pipe-path $pipes "monitor" 42 "windows") "jab-000000000000002a-monitor" "windows: the pipe's bare name by the run's nonce"
+    let nameless = (refusal { jab pipe-path $pipes "api" 0 "windows" })
+    assert ($nameless | str contains "named by its nonce") $"windows: a pipe with no nonce refused: ($nameless)"
+    let windows = (jab pipe-pair $pipes "padport" 42 "windows" $root)
+    assert equal [$windows.name ($windows.inward | path type) ($windows.outward | path type)] ["jab-000000000000002a-padport" "file" "file"] $"Windows' pair, two plain files: ($windows)"
+    "header" | save --raw --append $windows.inward
+    "guest" | save --raw --append $windows.outward
+    let renewed = (jab pipe-pair $pipes "padport" 42 "windows" $root)
+    assert equal [(ls $renewed.inward | get 0.size) (ls $renewed.outward | get 0.size)] [0B 0B] "a previous run's pair retired, the new one empty"
+    let piped = (jab plan --kernel $kernel --image $image --out ($pipes | path join "plan") --spec 1ka1 --api)
+    if $nu.os-info.name == "windows" {
+        assert equal ($piped.relays | each {|r| $r.endpoint }) ["monitor" "api"] $"the monitor's relay and the API's: ($piped.relays)"
+        assert ((after $piped.qemu "-monitor") | str starts-with "pipe:jab-") $"the monitor on a named pipe: ($piped.qemu)"
+        assert equal [($piped.api_in | path type) ($piped.relay_binary | path type)] ["file" "file"] $"the API's in-file a plain file, the relay built: ($piped.api_in), ($piped.relay_binary)"
+    } else {
+        let here = (jab pipe-pair $pipes "api" 0 $nu.os-info.name $root)
+        assert equal [$here.name ($here.inward | path type) ($here.outward | path type) (ls $here.outward | get 0.size)] [($pipes | path join "api") "pipe" "file" 0B] $"this host's pair, a fifo in and an empty file out: ($here)"
+        assert equal [$piped.relays $piped.relay_binary $piped.bridge_pipe] [[] "" ""] $"no relay and no bridge's pipe: ($piped.relays), ($piped.relay_binary), ($piped.bridge_pipe)"
+        assert equal [(after $piped.qemu "-monitor") ($piped.api_in | path type)] [$"pipe:($piped.monitor)" "pipe"] $"the monitor's pair and the API's fifo as before: ($piped.qemu)"
+        let watched = (jab pipe-pair $pipes "monitor" 42 "windows" $root)
+        let relays = (jab relays-of $pipes [{ endpoint: "monitor", pipe: $watched } { endpoint: "padport", pipe: null }])
+        assert equal ($relays | each {|r| [$r.endpoint $r.name $r.done] }) [["monitor" "jab-000000000000002a-monitor" ($pipes | path join "monitor.relay.nuon")]] $"a relay for each pipe the machine has: ($relays)"
+        let stands = ($pipes | path join "stands")
+        mkdir $stands
+        let ended = (jab relays-stop (jab relays-start $relays (stand-in $stands "ending" "exit 0") $root))
+        assert equal ($ended | each {|r| [$r.endpoint $r.exit $r.said] }) [["monitor" 0 ""]] $"a relay ending on its own: ($ended)"
+        jab relays-held $ended { exit_code: 0, stderr: "" }
+        let failed = (jab relays-stop (jab relays-start $relays (stand-in $stands "failing" "echo 'no connection within 10 s' >&2\nexit 1") $root))
+        let held = (refusal { jab relays-held $failed { exit_code: 124, stderr: "" } })
+        assert ($held | str contains "the monitor pipe's relay, for jab-000000000000002a-monitor, ended with 1: no connection within 10 s; QEMU ended with 124") $"a relay ending in failure fails the launch, naming its pipe: ($held)"
+        let s0 = (date now)
+        let stopped = (jab relays-stop (jab relays-start $relays (stand-in $stands "staying" "exec sleep 31.4159") $root))
+        let took = (((date now) - $s0) / 1sec)
+        assert ($stopped.0.exit == null and $took < 3) $"a relay still running a second after QEMU's end stopped: ($stopped) in ($took) s"
+        sleep 200ms
+        assert (ps -l | where {|p| $p.command | str contains "31.4159" } | is-empty) "the stopped relay's process gone"
+    }
+
     # the default, in a scratch XDG config home
     let xdg = ($out | path join "xdg")
     jab retire $xdg
@@ -282,7 +340,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { jab spec-default $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
-    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path)"
+    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path); Windows' pipes and their relays"
     print "spec: ok"
 }
 
@@ -364,6 +422,15 @@ def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -
     let elf = ($dir | path join "jab.elf")
     ^$"($prefix)ld" -T ($dir | path join "src" "link.ld") -nostdlib ...$objects -o $elf
     $elf
+}
+
+# A stand-in for the relay's binary in `dir`, a shell script named `name`
+# taking the relay's arguments and doing only what `body` says. Its path.
+def stand-in [dir: path, name: string, body: string]: nothing -> string {
+    let file = ($dir | path join $name)
+    $"#!/bin/sh\n($body)\n" | save -f $file
+    ^chmod +x $file
+    $file
 }
 
 # The message a call raises, "" when it raises none.

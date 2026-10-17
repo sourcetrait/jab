@@ -1,21 +1,7 @@
-//! The pad bridge for a host where QEMU cannot pass a gamepad through:
-//! opens the gamepad discovery named, through gilrs, and writes the
-//! jab.pad port's header and then every event into the port's pipe,
-//! in evdev's shapes as doc/padport.md lays them out. Run beside QEMU
-//! by the SDK's tool: `jabshim_pad <pipe> <name> [vendor] [product]`,
-//! the identity as jabdisco printed it. Ends when the pipe has no
-//! reader left, QEMU gone, or the pad disconnects.
-//!
-//! gilrs's standard gamepad maps onto Linux's layout: the sticks as
-//! ABS_X, ABS_Y, ABS_RX, ABS_RY at full scale, the triggers as the
-//! one-sided ABS_BRAKE and ABS_GAS, the dpad as the hat, and the
-//! buttons as BTN_SOUTH on. gilrs reports a stick's Y up-positive on
-//! every host, so it is turned to evdev's down-positive here. gilrs's
-//! default filters are off, so the pad's own values reach the kernel
-//! and its dead zone rides the wire as each stick's flat band.
+//! The pad bridge: a gamepad through gilrs into the jab.pad port's pipe.
 
 use std::env;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
@@ -68,6 +54,9 @@ const STICKS: [(Axis, u16); 4] = [
     (Axis::RightStickY, ABS_RY),
 ];
 
+/// Whether QEMU waits for the pipe's client before it starts, as on Windows.
+const WAITS_FOR_CLIENT: bool = cfg!(windows);
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.len() < 2 {
@@ -78,6 +67,17 @@ fn main() -> ExitCode {
     let name = &args[1];
     let vendor = args.get(2).and_then(|s| s.parse::<u16>().ok());
     let product = args.get(3).and_then(|s| s.parse::<u16>().ok());
+    let early = if WAITS_FOR_CLIENT {
+        match open_pipe(pipe) {
+            Ok(file) => Some(file),
+            Err(error) => {
+                eprintln!("jabshim_pad: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        None
+    };
     let mut gilrs = match GilrsBuilder::new().with_default_filters(false).build() {
         Ok(gilrs) => gilrs,
         Err(gilrs::Error::NotImplemented(gilrs)) => gilrs,
@@ -91,12 +91,15 @@ fn main() -> ExitCode {
         eprintln!("jabshim_pad: no connected gamepad named {name}");
         return ExitCode::from(1);
     };
-    let mut out = match OpenOptions::new().write(true).open(pipe) {
-        Ok(file) => file,
-        Err(error) => {
-            eprintln!("jabshim_pad: {pipe}: {error}");
-            return ExitCode::from(1);
-        }
+    let mut out = match early {
+        Some(file) => file,
+        None => match open_pipe(pipe) {
+            Ok(file) => file,
+            Err(error) => {
+                eprintln!("jabshim_pad: {error}");
+                return ExitCode::from(1);
+            }
+        },
     };
     if out.write_all(&header(&gilrs.gamepad(id))).is_err() {
         return ExitCode::SUCCESS;
@@ -121,16 +124,12 @@ fn main() -> ExitCode {
     }
 }
 
-/// How long gilrs's events may go quiet before its list is taken as
-/// complete, and the most the wait lasts in all.
+/// How long gilrs's events may go quiet before its list is taken as complete.
 const QUIET: Duration = Duration::from_millis(100);
+/// The most the settle waits in all.
 const LONGEST: Duration = Duration::from_secs(1);
 
-/// Pump gilrs's events until they go quiet for `QUIET`, at most
-/// `LONGEST`: on macOS gilrs lists pads from a thread of its own after
-/// it has started, so a lookup made at once finds nothing. What is
-/// pumped here is the pad's state before the run, which the kernel
-/// starts at rest anyway.
+/// Pump gilrs's events until they go quiet for `QUIET`, `LONGEST` at most.
 fn settle(gilrs: &mut Gilrs) {
     let started = Instant::now();
     while gilrs.next_event_blocking(Some(QUIET)).is_some() {
@@ -154,8 +153,7 @@ fn find(gilrs: &Gilrs, name: &str, vendor: Option<u16>, product: Option<u16>) ->
         .map(|(id, _)| id)
 }
 
-/// The header for this pad: its name, the buttons it maps, and the
-/// axes it maps with each one's range on the wire.
+/// The port's header for this pad: its name, its buttons, and its axes.
 fn header(pad: &Gamepad<'_>) -> Vec<u8> {
     let mut out = Vec::with_capacity(152 + AXES * 20);
     out.extend_from_slice(MAGIC);
@@ -207,10 +205,7 @@ fn header(pad: &Gamepad<'_>) -> Vec<u8> {
     out
 }
 
-/// The wire's events for one of gilrs's: a button as its key, pressed
-/// or released, the dpad's buttons as the hat, a stick's axis at full
-/// scale with Y turned down-positive, and the triggers as the
-/// one-sided BRAKE and GAS; anything else is nothing.
+/// The wire's events for one of gilrs's, none for one the wire does not carry.
 fn translate(event: &EventType) -> Vec<[u8; 8]> {
     match event {
         EventType::ButtonPressed(button, _) => pressed(*button, true),
@@ -230,8 +225,7 @@ fn translate(event: &EventType) -> Vec<[u8; 8]> {
     }
 }
 
-/// A button's event, the dpad's as the hat's axes: up and left -1,
-/// down and right 1, 0 released.
+/// A button's event, the dpad's as the hat's axes.
 fn pressed(button: Button, down: bool) -> Vec<[u8; 8]> {
     let value = if down { 1 } else { 0 };
     match button {
@@ -263,4 +257,16 @@ fn frame(kind: u16, code: u16, value: i32) -> [u8; 8] {
     out[2..4].copy_from_slice(&code.to_le_bytes());
     out[4..].copy_from_slice(&value.to_le_bytes());
     out
+}
+
+/// The port's pipe opened to write, the client QEMU waits for on Windows.
+#[cfg(windows)]
+fn open_pipe(pipe: &str) -> Result<File, String> {
+    jabpipe::connect(pipe, |path| OpenOptions::new().write(true).open(path)).map_err(|error| error.to_string())
+}
+
+/// The port's pipe, a fifo QEMU holds open, opened to write.
+#[cfg(not(windows))]
+fn open_pipe(pipe: &str) -> Result<File, String> {
+    OpenOptions::new().write(true).open(pipe).map_err(|error| format!("{pipe}: {error}"))
 }

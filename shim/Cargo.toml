@@ -1,15 +1,17 @@
 # The shims: what the SDK's tool puts between QEMU and the host, one
 # crate each under crates/, built into the jab target's shim/:
 # libraries preloaded into QEMU with LD_PRELOAD, the pad bridge, a
-# binary run beside it, and the SDL shim's harness, a binary its test
-# runs. A crate declares only its name and description; everything else
-# is the workspace's.
+# binary run beside it, the pipe relay, a binary a Windows launch runs
+# beside it for each of its pipes, and the SDL shim's harness, a binary
+# its test runs. A crate declares only its name and description;
+# everything else is the workspace's.
 [workspace]
 resolver = "3"
 members = [
     "crates/sdl",
     "crates/sdl_harness",
     "crates/evdev",
+    "crates/pipe",
     "crates/pad",
 ]
 
@@ -24,3 +26,5 @@ publish = false
 
 [workspace.dependencies]
 gilrs = "0.11"
+jabpipe = { path = "crates/pipe" }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "time"] }

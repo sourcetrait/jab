@@ -29,8 +29,9 @@ runs only under QEMU's `virt` machine.
   integration test at `test/test.nu`.
 - `shim/` the preload shims, a cargo workspace, a crate each under
   `crates/`: `sdl` for the probe, `sdl_harness`, a small binary that
-  tests the probe's capture, `evdev` for the pad tests, and `pad`, the
-  bridge that carries a gamepad to QEMU on macOS.
+  tests the probe's capture, `evdev` for the pad tests, `pipe`, the
+  relay `jabpipe` a Windows launch runs for each of QEMU's pipes, and
+  `pad`, the bridge that carries a gamepad to QEMU on macOS and Windows.
 - `tool/` the host tools, a cargo workspace, a crate each under
   `crates/`: `disco`, the library `jabdisco` and its binary
   `jabdisco`, which find the gamepad a run attaches and the audio
@@ -83,7 +84,7 @@ or program, else the workspace's `extern/riscv`, else the tools on
 `.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
 a test alike; an `extern/qemu` with no binary in it is an error, never a
 fall to `PATH`. Every bound a run keeps, a launch's QEMU, a probe's, and
-the one second a write into one of QEMU's pipes may take, runs the one
+the one second a write into one of QEMU's fifos may take, runs the one
 GNU coreutils `timeout` the run resolves: `JAB_TIMEOUT` when it is set,
 refused when it is not GNU's, else on Windows MSYS2's, which Windows' own
 `timeout`, a pause, comes ahead of on `PATH`, else the first GNU
@@ -96,7 +97,16 @@ the project page links for Windows; MSYS2 installed separately, with its
 pacman packages for the riscv64 toolchain and genromfs; and MSYS2's
 `usr/bin` and the toolchain's bin directory added to the user's `PATH`.
 The tool picks the window there, `sdl,gl=on`, and the sound, `dsound`.
-A gamepad does not yet reach a program there. A program the workspace does not list, `game/fps`
+Each of QEMU's pipes there, the monitor's, the API's, and the pad port's,
+is one named pipe that QEMU waits for a client of before it starts, so
+the tool names each by the run, `jab-<nonce>-<endpoint>`, and puts its
+client beside QEMU: `jabpipe`, built with cargo from `shim/crates/pipe`,
+holds a pipe's one connection for the run, forwarding what the tool
+appends to `<endpoint>.in` into the pipe and writing what the pipe gives
+to `<endpoint>.out`, and the pad bridge is the pad port's own client, so
+a gamepad takes the route it takes on macOS. That route is built and
+held by its tests here on Linux, its Windows half untried on Windows
+yet. A program the workspace does not list, `game/fps`
 the first, builds against it: its kernel is built here with the same
 symbols, and the generic disk, the toolchain link, the shims, and
 discovery are this workspace's, and its output lands in the one target
@@ -248,9 +258,10 @@ host through `jab.sys.api.write`, `jab.sys.api.read`, and `jab.sys.api.await`.
 Every kernel carries it and any build runs with or without it: `just
 run example wasd --api` puts the port on the machine, and without the
 flag the calls report that there is none. The host's end sits beside
-the build output: `api.in`, a named pipe the host writes into, and
-`api.out`, a file the program's bytes land in, which a test drives
-through `jab launch --api --send`. `example/wasd` speaks a small binary
+the build output: `api.in`, a named pipe the host writes into, on
+Windows a plain file the pipe's relay forwards, and `api.out`, a file
+the program's bytes land in, which a test drives through `jab launch
+--api --send`. `example/wasd` speaks a small binary
 API over it, its records at the top of its `main.S`.
 
 A test takes the screen with `jab launch --capture <at>`, which ends the
@@ -389,13 +400,15 @@ and eight buttons; the same record carries the audio output, and
 host and output the host shows, for a report when a run finds nothing
 or the wrong thing. On Linux the run passes the pad through
 as `virtio-input-host-device`, QEMU holding it for the run;
-`JAB_PAD=/dev/input/eventN` names one outright. On macOS QEMU cannot
-carry a gamepad by any device of its own, so the run puts a port on
-the machine's serial device, `jab.pad`, and starts `jabshim_pad`
+`JAB_PAD=/dev/input/eventN` names one outright. On macOS and Windows
+QEMU cannot carry a gamepad by any device of its own, so the run puts a
+port on the machine's serial device, `jab.pad`, and starts `jabshim_pad`
 beside QEMU, a bridge built with cargo from `shim/crates/pad` that
 reads the pad through gilrs and writes its name, its ranges, and every
 event into the port in evdev's shapes (`doc/padport.md`); the kernel
-takes the port as the pad. `--no-pad` leaves the pad off either way.
+takes the port as the pad. On Windows the bridge connects to the port's
+pipe before it looks for the pad, so QEMU, which waits for that client,
+goes on without a pad when none is found. `--no-pad` leaves the pad off either way.
 A program reads it with `jab.sys.pad.read`, the
 keys as a mask and every axis by its evdev code normalised to signed
 16 bits, `jab.sys.pad.input` for the events as evdev sends them, and
