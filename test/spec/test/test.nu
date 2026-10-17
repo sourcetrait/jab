@@ -199,14 +199,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "count_past", count: 17, why: "spec count 17" }
         { name: "count_off", count: 3, why: "length 68 for 3 specs" }
     ]
-    let copies = ($malformed | each {|m|
+    # a loop rather than each, so an assertion raises alone, its own title
+    mut copies = []
+    for m in $malformed {
         let copy = (patched $bytes $m ($out | path join "malformed" $m.name) ($env.FILE_PWD | path join ".." | path expand))
         let checked = (refusal { jab check-image $copy })
         assert ($checked | str contains $"declaration refused: ($m.why)") $"($m.name): check-image refuses it, ($m.why): ($checked)"
         let run = (jab launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [1 [$"jab: declaration refused: ($m.why)"]] $"($m.name): the kernel refuses it, ($m.why): ($run.serial)"
-        { name: $m.name, image: $copy }
-    })
+        $copies = ($copies | append { name: $m.name, image: $copy })
+    }
 
     # a kernel without the check, from a copy of the kernel's sources with
     # its one call taken out, as every kernel before it entered an image at
