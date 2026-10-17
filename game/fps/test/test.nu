@@ -4579,8 +4579,11 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert ($five_five == "") $"two runs at schema 5 compare on tiles_us: ($five_five)"
 
     # machines: 1KA1's, a custom machine of two harts, diagnostic, and
-    # 1KA1's on another -machine, the PLIC's line before the AIA
-    let spec_one = (jab spec-row ($env.FILE_PWD | path join ".." ".." ".." | path expand) "1ka1")
+    # 1KA1's on another -machine, the PLIC's line before the AIA; 1KA1's row
+    # as the spec data defines it, written here, so the rules read the same
+    # from the suite, a recipe, and the gauge mutants' mirror, which carries
+    # no spec data
+    let spec_one = { name: "1KA1", cores: 3, ram: 4GiB, display: { width: 1920, height: 1080 } }
     let three = (jab machine-of --spec $spec_one)
     let two = (jab machine-of 2)
     let plic = ($three | update machine "virt")

@@ -335,7 +335,13 @@ all of it is recorded. The cadence bench's report, `gauge.nu
 bench-report`, names the machine and the QEMU each step ran on, pools
 only the runs a comparison would take as valid, and lists every other
 run apart, as a diagnostic with its reasons, a run on a diagnostic
-machine among them. Each
+machine among them. `game/fps/bench/qual_1ka1.nuon` and
+`qual_1kb1.nuon` are the qualification's, each launching every run by
+its spec's name: the factory route in two batches of three seeded runs,
+the second's seeds reversed, a free play, the presentation's probed
+batches beside their shim control, and the worker scaling control. A
+step passes a list, its seeds, as NUON in one word, `"[3 2 1]"`, since a
+script's command line carries strings alone. Each
 run of a bench is a stamped directory in the program's `bench/` shard
 of the target, with `bench.nuon` recording each step's outcome, and a
 state file beside the stamps says what runs. At its end the run is

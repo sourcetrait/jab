@@ -287,11 +287,23 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--spec name | --harts 1..8] [--qemu [<word>..]] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--spec name | --harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds \"[..]\"] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--spec name | --harts 1..8] [--qemu \"[<word>..]\"] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--spec name | --harts 1..8] [--qemu \"[<word>..]\"] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
+}
+
+# A script flag's NUON list, as a command line carries one, every item of
+# the kind named: a flag typed as a list cannot be reached from a command
+# line, since nu passes each word of a script's command line as a string.
+def nuon-list [text: string, flag: string, kind: string]: nothing -> list<any> {
+    let v = (try { $text | from nuon } catch { null })
+    let d = ($v | describe)
+    if $v == null or not (($d == "list<any>" and ($v | is-empty)) or $d == $"list<($kind)>") {
+        error make { msg: $"($flag) takes a NUON list of ($kind) values, such as \"[...]\", not ($text)" }
+    }
+    $v
 }
 
 # Play the route on the build `runs` times and read every frame: the
@@ -321,7 +333,7 @@ def "main run" [
     --route: string = ""         # the route, route_render_0.nuon unless given
     --map: string = ""           # the map tree the route plays on, the route's unless given
     --runs: int = 3              # the route's runs
-    --seeds: list<int> = []      # each run's seed, run n's n unless given
+    --seeds: string = "[]"       # each run's seed, a NUON list such as "[3 2 1]", run n's n unless given
     --cadence: int = 1           # the cadence each run asks for, the program's own 1 unless given
     --workers: int = -1          # the raster's workers each run asks for, 0 the serial backend; none asked, no W, unless given
     --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
@@ -330,11 +342,13 @@ def "main run" [
     --label: string = ""         # a name for the build in the summary
     --spec (-s): string = ""     # the named spec the machine is, the configured default unless given
     --harts: int = 0             # a custom machine of 1 to 8 harts in place of a named spec, the runs then diagnostic
-    --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
+    --qemu: string = "[]"        # words on each launch's line after its own, a NUON list, the runs then diagnostic
     --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
     --sdl-probe                  # the sdl shim on each run under sdl,gl=on, each run bundled last
     --trace                      # QEMU's flush and set_scanout trace to each run's trace.log, the runs then diagnostic
 ] {
+    let seeds = (nuon-list $seeds "--seeds" "int")
+    let qemu = (nuon-list $qemu "--qemu" "string")
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
@@ -407,8 +421,9 @@ def "main play" [
     --label: string = ""         # a name for the build in the summary
     --spec (-s): string = ""     # the named spec the machine is, the configured default unless given
     --harts: int = 0             # a custom machine of 1 to 8 harts in place of a named spec, the run then diagnostic
-    --qemu: list<string> = []    # words on the launch's line after its own, the run then diagnostic
+    --qemu: string = "[]"        # words on the launch's line after its own, a NUON list, the run then diagnostic
 ] {
+    let qemu = (nuon-list $qemu "--qemu" "string")
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
