@@ -164,7 +164,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let tool = ($ws | path join "sdk" "nu" "jab.nu")
 
     # the device ordering, read off the sources before anything is built
-    let sources = (glob ($kernel_dir | path join "src" "*.S") | sort)
+    let sources = (jab paths-of ($kernel_dir | path join "src" "*.S") | sort)
     let sites = ($sources | each {|f| order-sites $f } | flatten)
     let doorbells = ($sites | where kind == "doorbell" | length)
     let enabling = ($sites | where kind == "enabling" | length)

@@ -290,6 +290,26 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let listed_plan = (jab plan --kernel $kernel --image $legacy_image --out ($out | path join "legacy_listed"))
     assert equal $listed_plan.demand null $"a legacy image given `specs` without a rebuild plans none: ($listed_plan.demand | to nuon)"
 
+    # paths-of names what glob names, the build's walks taking it since
+    # nu's glob breaks on a Windows drive letter (WindowsHost): a tree of
+    # the test's own with a hidden file and a nested directory, each
+    # pattern the tool walks read against glob's own, with and without
+    # --no-dir, a relative one from inside the tree, and a pattern matching
+    # nothing empty; glob the oracle where it works, every host but Windows
+    let tree = ($out | path join "paths_of")
+    jab retire $tree
+    mkdir ($tree | path join "a" "b")
+    for f in [["a" "x.S"] ["a" ".hidden"] ["a" "b" "y.S"] ["top.nuon"]] { "x" | save -f ($tree | path join ...$f) }
+    if $nu.os-info.name != "windows" {
+        for p in [($tree | path join "**" "*") ($tree | path join "**" "*.S") ($tree | path join "*.nuon")] {
+            assert equal (jab paths-of $p | sort) (glob $p | sort) $"paths-of names what glob names for ($p)"
+            assert equal (jab paths-of $p --no-dir | sort) (glob $p --no-dir | sort) $"paths-of names what glob names for ($p) with --no-dir"
+        }
+        let relative = (do { cd $tree; [(jab paths-of ("a" | path join "*.S") | sort) (glob ("a" | path join "*.S") | sort)] })
+        assert equal $relative.0 $relative.1 "a relative pattern joined to the working directory as glob joins it"
+    }
+    assert equal (jab paths-of ($tree | path join "*.none")) [] "a pattern matching nothing names nothing"
+
     # the declaration's build key (ProgramMinimums): a program declaring a
     # spec of a workspace of the test's own, its spec data a copy of this
     # one's; the spec's cores changed there build it again with the new
@@ -341,7 +361,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let undeclared_record = (recorded $declared_image)
     assert equal $undeclared_record { image: (sha $declared_image), demand: null } $"a build with the declaration dropped records a null demand: ($undeclared_record | to nuon)"
 
-    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside an include its generator no longer writes, a record of another demand, an unreadable one, an altered image, or none built again whole; a listed spec's cores changed and undone each building again with the image's declaration following, and nothing changed building nothing"
+    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside an include its generator no longer writes, a record of another demand, an unreadable one, an altered image, or none built again whole; a listed spec's cores changed and undone each building again with the image's declaration following, and nothing changed building nothing; paths-of naming what glob names"
     print "demand: ok"
 }
 

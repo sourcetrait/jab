@@ -141,7 +141,7 @@ def "main run" [--tree: string = "release", --out: string = "", --label: string 
 # done twice, after writing both.
 def "main report" [dir: path] {
     let dir = ($dir | path expand)
-    let docs = (glob ($dir | path join "*" "scaling.nuon") | each {|f| open $f } | sort-by workers)
+    let docs = (jab paths-of ($dir | path join "*" "scaling.nuon") | each {|f| open $f } | sort-by workers)
     if ($docs | is-empty) { error make { msg: $"no scaling.nuon under ($dir)" } }
     let base = ($docs | where workers == 1 | get -o 0.fps)
     let hashes = ($docs | get hash | uniq)

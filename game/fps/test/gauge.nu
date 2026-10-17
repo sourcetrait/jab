@@ -1104,7 +1104,7 @@ def digest [file: path]: nothing -> oneof<string, nothing> {
 # line in path order, hashed.
 def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
     if not ($tree | path exists) { return null }
-    glob ($tree | path join "**" "*") | where {|f| ($f | path type) == "file" } | sort | each {|f| $"($f | path relative-to $tree) (open --raw $f | into binary | hash sha256)" } | str join (char nl) | hash sha256
+    jab paths-of ($tree | path join "**" "*") | where {|f| ($f | path type) == "file" } | sort | each {|f| $"($f | path relative-to $tree) (open --raw $f | into binary | hash sha256)" } | str join (char nl) | hash sha256
 }
 
 # What a launch came to: its status, a fault line on the UART, the CPU

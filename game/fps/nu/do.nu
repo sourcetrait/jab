@@ -33,9 +33,9 @@ def "main render" [] {
     let p = (places)
     let tool = ($p.game | path join "rust" "target" "release" "svg2png")
     if not ($tool | path exists) { ^cargo build --release --manifest-path ($p.game | path join "rust" "Cargo.toml") }
-    for svg in (glob ($p.game | path join "content" "**" "*.svg")) { ^$tool $svg ($svg | str replace --regex '\.svg$' '.png') }
-    for list in (glob ($p.game | path join "content" "ambient" "*.nuon")) { ^nu ($here | path join "ambient.nu") render $list ($list | str replace --regex '\.nuon$' '.mid') }
-    for recipe in (glob ($p.game | path join "content" "sound" "*.nuon")) { ^nu ($here | path join "sound.nu") render $recipe ($recipe | str replace --regex '\.nuon$' '.pcm') }
+    for svg in (jab paths-of ($p.game | path join "content" "**" "*.svg")) { ^$tool $svg ($svg | str replace --regex '\.svg$' '.png') }
+    for list in (jab paths-of ($p.game | path join "content" "ambient" "*.nuon")) { ^nu ($here | path join "ambient.nu") render $list ($list | str replace --regex '\.nuon$' '.mid') }
+    for recipe in (jab paths-of ($p.game | path join "content" "sound" "*.nuon")) { ^nu ($here | path join "sound.nu") render $recipe ($recipe | str replace --regex '\.nuon$' '.pcm') }
 }
 
 # Every map source under content/map compiled into the game's asset shard

@@ -7,7 +7,7 @@ use ../../../sdk/nu/jab.nu
 def main [phase: string] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
     let trees = (jab program-shard $game "asset")
-    for src in (glob ($game | path join "content" "map" "*.nuon")) {
+    for src in (jab paths-of ($game | path join "content" "map" "*.nuon")) {
         ^nu ($env.FILE_PWD | path join "map.nu") compile $src $trees
     }
 }

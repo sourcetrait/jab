@@ -658,7 +658,7 @@ export def plan [
     --sdl-probe: path = ""
     --capture-nonce: int = 0
     --profile: string = ""
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
     let ws = (launch-workspace $kernel $image $out)
     # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
@@ -687,6 +687,7 @@ export def plan [
     fifo-at ($monitor + ".in") $root
     fifo-at ($monitor + ".out") $root
     let qemu = (qemu-binary (image-home $image) $ws)
+    let bound = (timeout-binary)
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws $root)
@@ -719,6 +720,8 @@ export def plan [
     ] ++ $append ++ (disks-args (machine-disks $disk $serial true $ws)))
     let planned = {
         qemu_binary: $qemu,
+        timeout_binary: $bound.path,
+        timeout_version: $bound.version,
         qemu: $args,
         env: $run_env,
         out: $out,
@@ -908,7 +911,7 @@ export def launch [
     --sdl-probe: path = ""     # the sdl shim's log: QEMU under sdl,gl=on with the shim preloaded, Linux only
     --capture-nonce: int = 0   # the run's capture nonce from the caller making the request; minted here for a probe given none
     --profile: string = ""     # the capture's profile, paired or generic (plan)
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
@@ -946,7 +949,8 @@ export def launch [
         ($gamepad.groups | enumerate | each {|e| { kind: "pad", index: $e.index, at: $e.item.at } })
     ] | flatten | enumerate | each {|e| $e.item | insert order $e.index } | sort-by at order | reject -o order)
     let started = (date now)
-    job spawn { with-env $gamepad.env { ^timeout ...$disked | complete } | job send 0 }
+    let bound = $machine.timeout_binary
+    job spawn { with-env $gamepad.env { ^$bound ...$disked | complete } | job send 0 }
     mut result: any = null
     mut cpu = 0.0
     mut events_taken = 0
@@ -978,7 +982,7 @@ export def launch [
         # every write into QEMU's pipes is bounded (fifo-write), since QEMU
         # can end between the check that it runs and the write
         if (not $header_sent) and $alive {
-            fifo-write $pad_in $gamepad.header | ignore
+            fifo-write $pad_in $gamepad.header $bound | ignore
             $header_sent = true
         }
         # every due action in due-order's order: a screen that fails holds
@@ -988,7 +992,7 @@ export def launch [
             for action in (due-order ($events | skip $events_taken) $screen_due $elapsed) {
                 if $action.kind == "screen" {
                     $screen_started = (((date now) - $started) / 1sec)
-                    let asked = (if $alive { monitor-send $monitor $"screendump (hmp-quoted $screen_file)" } else { false })
+                    let asked = (if $alive { monitor-send $monitor $"screendump (hmp-quoted $screen_file)" $bound } else { false })
                     if not ($asked and (screen-whole $screen_file)) {
                         $held = true
                         break
@@ -996,19 +1000,19 @@ export def launch [
                     $screen_completed = (((date now) - $started) / 1sec)
                     $screen_due = null
                     if $capture != 0sec {
-                        if (process-alive $pid) { monitor-send $monitor "quit" | ignore }
+                        if (process-alive $pid) { monitor-send $monitor "quit" $bound | ignore }
                         $held = true
                         break
                     }
                 } else {
                     let written = (if not $alive { false } else if $action.kind == "key" {
                         let k = ($keys | get $action.index)
-                        monitor-send $monitor $"sendkey ($k.key) ($k.hold)"
+                        monitor-send $monitor $"sendkey ($k.key) ($k.hold)" $bound
                     } else if $action.kind == "send" {
-                        if $api_in == "" { false } else { fifo-write $api_in ($send | get $action.index | get bytes) }
+                        if $api_in == "" { false } else { fifo-write $api_in ($send | get $action.index | get bytes) $bound }
                     } else {
                         let g = ($gamepad.groups | get $action.index)
-                        if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) } else { false }
+                        if $gamepad.port { fifo-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
                     })
                     if $written and $action.kind == "send" {
                         $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
@@ -1053,6 +1057,8 @@ export def launch [
         wall_seconds: (((date now) - $started) / 1sec),
         sound: (if $wav != "" and ($wav | path exists) { $wav } else { "" }),
         qemu_binary: $machine.qemu_binary,
+        timeout_binary: $machine.timeout_binary,
+        timeout_version: $machine.timeout_version,
         qemu: $line,
         overrides: $qemu,
         window: $machine.window,
@@ -1548,7 +1554,7 @@ def assets-image [c: record]: nothing -> string {
 # image Jab builds never has one. `str length` counts bytes, which is
 # the measure the record and the driver use.
 def assets-names [dir: path]: nothing -> nothing {
-    let long = (glob ($dir | path join "**" "*") | each {|p| $p | path basename } | where {|n| ($n | str length) > 127 })
+    let long = (paths-of ($dir | path join "**" "*") | each {|p| $p | path basename } | where {|n| ($n | str length) > 127 })
     if not ($long | is-empty) {
         error make {msg: $"romfs names are 127 bytes at most, which is what a linux mount can read; too long: ($long | first)"}
     }
@@ -1593,20 +1599,59 @@ def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
     (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
 }
 
-# Give the QEMU monitor a command through its pipe (fifo-write); true
-# when it went in.
-def monitor-send [monitor: path, command: string]: nothing -> bool {
-    fifo-write ($monitor + ".in") $"($command)\n"
+# Give the QEMU monitor a command through its pipe (fifo-write) under
+# `bound`, the run's timeout (timeout-binary); true when it went in.
+def monitor-send [monitor: path, command: string, bound: string]: nothing -> bool {
+    fifo-write ($monitor + ".in") $"($command)\n" $bound
 }
 
 # Bytes into one of QEMU's pipes without waiting on a reader that is
 # gone: opening a pipe to write waits until some process reads it, and
 # QEMU can end between any check that it runs and the open, so `tee`
-# appends the bytes under a one-second bound. True when they went in;
-# false when no reader came within the second.
-def fifo-write [fifo: path, data: any]: nothing -> bool {
-    let r = ($data | ^timeout 1 tee -a $fifo | complete)
+# appends the bytes under a one-second bound, `bound` the run's timeout
+# (timeout-binary). True when they went in; false when no reader came
+# within the second.
+export def fifo-write [fifo: path, data: any, bound: string]: nothing -> bool {
+    let r = ($data | ^$bound 1 tee -a $fifo | complete)
     $r.exit_code == 0
+}
+
+# The GNU coreutils `timeout` every bound of a run takes (LaunchBound),
+# resolved once a run: JAB_TIMEOUT when it is set, the one candidate, the
+# launch refused naming it when its `--version` line names no GNU
+# coreutils, never a fall to discovery; else, on Windows, MSYS2's
+# /usr/bin/timeout.exe by its Windows path first, since Windows' own
+# `timeout`, a pause, comes ahead of it on PATH, then every `timeout` on
+# PATH in order, the first whose line names GNU coreutils taken, the
+# launch refused naming every candidate tried when none does. Its path,
+# run as a value wherever a bound runs, and its version line. Untyped
+# because it ends in an error.
+export def timeout-binary [] {
+    let forced = ($env.JAB_TIMEOUT? | default "")
+    if $forced != "" {
+        let line = (timeout-version $forced)
+        if not (gnu-timeout $line) { error make {msg: $"JAB_TIMEOUT names ($forced), whose --version reads ($line | to nuon), no GNU coreutils timeout, which every bound of a run takes"} }
+        return { path: $forced, version: $line }
+    }
+    let msys = (if $nu.os-info.name == "windows" { try { [(^cygpath -w /usr/bin/timeout.exe | str trim)] } catch { [] } } else { [] })
+    let listed = (which -a timeout | where type == "external" | get path)
+    let candidates = ($msys ++ $listed | uniq)
+    for c in $candidates {
+        let line = (timeout-version $c)
+        if (gnu-timeout $line) { return { path: $c, version: $line } }
+    }
+    error make {msg: $"no GNU coreutils timeout, which every bound of a run takes: tried (if ($candidates | is-empty) { 'none on PATH' } else { $candidates | str join ', ' }); install coreutils, or name one with JAB_TIMEOUT"}
+}
+
+# The first line a `timeout` prints for --version, "" when it prints none
+# or will not run.
+def timeout-version [path: string]: nothing -> string {
+    try { ^$path --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" }
+}
+
+# Whether a version line is GNU coreutils' `timeout`'s.
+def gnu-timeout [line: string]: nothing -> bool {
+    $line =~ '^timeout \(GNU coreutils\) '
 }
 
 # A word for the QEMU monitor's command line, which splits on spaces: in
@@ -2007,16 +2052,34 @@ def march-check [asm: string, march: string, dir: path] {
     }
 }
 
+# The paths a glob pattern names, exactly as `glob` names them, but
+# through `ls` over the pattern as a glob, since nu's `glob` breaks on a
+# Windows drive letter (WindowsHost): each joined to the working directory
+# as written, never normalized, hidden entries among them; none when
+# nothing matches, where `ls` refuses, any other refusal raised;
+# `--no-dir` leaving the directories out. A pattern ending `**/*` names its
+# root first, as `glob` does.
+export def paths-of [pattern: string, --no-dir]: nothing -> list<string> {
+    let found = (try { ls -a ($pattern | into glob) } catch {|e|
+        if ($e.msg | str starts-with "No matches found") { [] } else { error make {msg: $e.msg} }
+    })
+    let kept = (if $no_dir { $found | where type != "dir" } else { $found })
+    let parts = ($pattern | path split)
+    let root = (if ($parts | length) > 2 and ($parts | last 2) == ["**" "*"] { $parts | drop 2 | path join } else { "" })
+    let rooted = (if $root != "" and (not $no_dir) and ($root | path type) == "dir" { [$root] } else { [] })
+    $rooted ++ ($kept | get name) | each {|p| $env.PWD | path join $p }
+}
+
 # Every file under the directories, for the staleness check.
 def files-under [dirs: list<string>]: nothing -> list<string> {
-    $dirs | each {|d| glob ($d | path join "**" "*") } | flatten | where {|p| ($p | path type) == "file" }
+    $dirs | each {|d| paths-of ($d | path join "**" "*") } | flatten | where {|p| ($p | path type) == "file" }
 }
 
 # Every file and directory under the directories, the directories
 # included since a deletion inside one moves its time and nothing
 # else's.
 def tree-under [dirs: list<string>]: nothing -> list<string> {
-    $dirs | each {|d| [$d] ++ (glob ($d | path join "**" "*")) } | flatten | where {|p| ($p | path type) in ["file" "dir"] }
+    $dirs | each {|d| [$d] ++ (paths-of ($d | path join "**" "*")) } | flatten | where {|p| ($p | path type) in ["file" "dir"] }
 }
 
 # What a build was made from, for its stamp: the flags, then every
@@ -2157,12 +2220,12 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     march-check $asm $march_kernel $c.out
     # only the objects of the sources there are go into the link, so an
     # object left by a source since deleted or renamed never rides along
-    let objects = (glob src/*.S | sort | each {|f|
+    let objects = (paths-of ("src" | path join "*.S") | sort | each {|f|
         let obj = ($c.out | path join (($f | path parse | get stem) + ".o"))
         ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
         $obj
     })
-    for stray in (glob ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray $c.root }
+    for stray in (paths-of ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray $c.root }
     ^$ld -T $m.link -nostdlib ...$objects -o $elf
     ^$objdump -d $elf | save -f ($c.out | path join "jab.disas")
     $id | save -f $stamp
@@ -2930,7 +2993,8 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
     let binary = $line.qemu_binary
     let api_in = (if $api_on { $line.context.out | path join "api.in" } else { "" })
-    let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends)
+    let bound = (timeout-binary)
+    let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends $bound.path)
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
     if $api_on { cp ($line.context.out | path join "api.out") $kept }
     let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
@@ -3011,9 +3075,9 @@ export def trace-args [qemu: string, log: path]: nothing -> list<string> {
 # order, through fifo-write. The exit, QEMU's stderr, the pid, null where
 # QEMU never came up, and each entry's write in seconds from the start,
 # null where it never went in.
-def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
+def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>, bound: string]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
     let started = (date now)
-    job spawn { with-env $environment { ^timeout --signal=TERM ($seconds | into string) $binary ...$args | complete } | job send 0 }
+    job spawn { with-env $environment { ^$bound --signal=TERM ($seconds | into string) $binary ...$args | complete } | job send 0 }
     mut result: any = null
     mut qemu_pid: any = null
     mut written = ($sends | each --keep-empty {|_| null })
@@ -3025,7 +3089,7 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
         if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
         let elapsed = ((date now) - $started)
         while $alive and $taken < ($sends | length) and ($sends | get $taken | get at) <= $elapsed {
-            if $api_in != "" and (fifo-write $api_in ($sends | get $taken | get bytes)) {
+            if $api_in != "" and (fifo-write $api_in ($sends | get $taken | get bytes) $bound) {
                 $written = ($written | update $taken (((date now) - $started) / 1sec))
             }
             $taken += 1
@@ -3721,7 +3785,7 @@ export def sdl-bundle [probe: path, bundle: path, --profile: string = "", --extr
         mkdir ($bundle | path join $f | path dirname)
         cp ($probe | path join $f) ($bundle | path join $f)
     }
-    let files = (glob ($bundle | path join "**" "*") --no-dir | each {|p| { path: ($p | path relative-to $bundle), sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) } } | sort-by path)
+    let files = (paths-of ($bundle | path join "**" "*") --no-dir | each {|p| { path: ($p | path relative-to $bundle), sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) } } | sort-by path)
     let field = {|name: string| if $identity == null { null } else { $identity | get -o $name } }
     let manifest = {
         bundle_schema: 1,
@@ -3798,7 +3862,7 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     let profile = ($m | get -o profile | default "")
     let listed = ($m | get -o files | default [])
     let names = ($listed | get -o path | default [])
-    let present = (glob ($dir | path join "**" "*") --no-dir | each {|p| $p | path relative-to $dir } | where {|p| $p != "bundle.nuon" } | sort)
+    let present = (paths-of ($dir | path join "**" "*") --no-dir | each {|p| $p | path relative-to $dir } | where {|p| $p != "bundle.nuon" } | sort)
     let unlisted = ($present | where {|p| $p not-in $names })
     if not ($unlisted | is-empty) { do $refuse 1 "the inventory" $"files the manifest does not list: ($unlisted | str join ', ')" }
     for f in $listed {
@@ -4011,7 +4075,9 @@ def programs-of [ws: path]: nothing -> list<string> {
     let ws = ($ws | path expand)
     let listed = (open ($ws | path join "workspace.jab.toml") | get programs)
     let root = (target-root $ws)
-    let found = (glob ($ws | path join "**" "program.jab.toml") --exclude ["**/.git/**" "**/.target/**" "**/target/**" "**/extern/**"]
+    # glob's exclusions as a filter on each path's words below the workspace
+    let found = (paths-of ($ws | path join "**" "program.jab.toml")
+        | where {|f| not ($f | path relative-to $ws | path split | any {|w| $w in [".git" ".target" "target" "extern"] }) }
         | each {|f| $f | path dirname }
         | where {|d| not (under $d $root) }
         | each {|d| $d | path relative-to $ws | str replace --all "\\" "/" }
@@ -4266,7 +4332,7 @@ def retire-all [ws: path]: nothing -> nothing {
 # NUON files under a program's bench/ directory.
 def benches-of [ws: path]: nothing -> list<string> {
     programs-of $ws | each {|p|
-        glob ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
+        paths-of ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
     } | flatten
 }
 

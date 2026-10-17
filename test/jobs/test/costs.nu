@@ -94,7 +94,7 @@ def "main run" [--tree: string = "release", --out: string = "", --label: string 
 # in the run's directory.
 def "main report" [dir: path] {
     let dir = ($dir | path expand)
-    let docs = (glob ($dir | path join "*" "costs.nuon") | sort | each {|f| open $f })
+    let docs = (jab paths-of ($dir | path join "*" "costs.nuon") | sort | each {|f| open $f })
     if ($docs | is-empty) { error make { msg: $"no costs.nuon under ($dir)" } }
     let text = ($docs | each {|d| text $d } | str join "\n")
     $docs | to nuon --indent 1 | save --raw -f ($dir | path join "report.nuon")

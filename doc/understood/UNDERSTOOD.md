@@ -82,7 +82,21 @@ or program, else the workspace's `extern/riscv`, else the tools on
 `extern/qemu`, its `qemu-system-riscv64` under `bin/` or at its top,
 `.exe` on Windows, else `qemu-system-riscv64` on `PATH`, for a run and
 a test alike; an `extern/qemu` with no binary in it is an error, never a
-fall to `PATH`. A program the workspace does not list, `game/fps`
+fall to `PATH`. Every bound a run keeps, a launch's QEMU, a probe's, and
+the one second a write into one of QEMU's pipes may take, runs the one
+GNU coreutils `timeout` the run resolves: `JAB_TIMEOUT` when it is set,
+refused when it is not GNU's, else on Windows MSYS2's, which Windows' own
+`timeout`, a pause, comes ahead of on `PATH`, else the first GNU
+`timeout` on `PATH`. A launch's record names it. The tool walks the tree
+through `ls` over a glob pattern rather than nu's `glob`, which breaks on
+a Windows drive letter.
+
+Windows 11 runs Jab as the setup on TheUser's host did it: the QEMU build
+the project page links for Windows; MSYS2 installed separately, with its
+pacman packages for the riscv64 toolchain and genromfs; and MSYS2's
+`usr/bin` and the toolchain's bin directory added to the user's `PATH`.
+The tool picks the window there, `sdl,gl=on`, and the sound, `dsound`.
+A gamepad does not yet reach a program there. A program the workspace does not list, `game/fps`
 the first, builds against it: its kernel is built here with the same
 symbols, and the generic disk, the toolchain link, the shims, and
 discovery are this workspace's, and its output lands in the one target

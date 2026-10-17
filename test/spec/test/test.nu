@@ -18,7 +18,10 @@
 # kernel refusing it still; a program declaring nothing and one built
 # before the header each on the legacy path; malformed first pages each
 # refused by name, by the kernel and by check-image; and a kernel without
-# the check running a new image through its jump. Last the default, in a
+# the check running a new image through its jump. Then the launch's bound
+# (LaunchBound): the one GNU timeout a run resolves, a stand-in refused or
+# passed over, its bound on a child, a fifo nobody reads, and a program
+# that never exits ending at its bound. Last the default, in a
 # scratch XDG config home: `jab/config.toml` seeded from
 # asset/default/config.toml byte for byte, one there never written over,
 # JAB_SPEC ahead of it, one naming no spec refused, a home that is not
@@ -219,6 +222,42 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal [$run.status ($run.serial | lines)] [0 ["spec: up"]] $"a kernel without the check runs the ($c.name) image through its jump: ($run.serial)"
     }
 
+    # the launch's bound (LaunchBound): one GNU coreutils timeout resolved a
+    # run, GNU's on PATH here; JAB_TIMEOUT naming a stand-in whose --version
+    # is not GNU's refused naming it; with no override a stand-in first on
+    # PATH passed over for the real one; the real one bounding a child of
+    # 30 s at a second, 124 within two; fifo-write into a fifo nobody reads
+    # giving up within two; the stand-ins and the fifo on every host but
+    # Windows; and a launch of a program that never exits ending at its
+    # --seconds 2 with 124 and the resolved timeout in its result
+    let real = (with-env { JAB_TIMEOUT: "" } { jab timeout-binary })
+    assert ($real.version | str starts-with "timeout (GNU coreutils) ") $"the timeout resolved GNU's: ($real)"
+    if $nu.os-info.name != "windows" {
+        let stand = ($out | path join "timeout_stand")
+        jab retire $stand
+        mkdir $stand
+        let fake = ($stand | path join "timeout")
+        "#!/bin/sh\necho 'timeout (not coreutils) 0.1'\n" | save -f $fake
+        ^chmod +x $fake
+        let forced = (refusal { with-env { JAB_TIMEOUT: $fake } { jab timeout-binary } })
+        assert ($forced | str contains $"JAB_TIMEOUT names ($fake)") $"a JAB_TIMEOUT not GNU's refused naming it, GNU's on PATH: ($forced)"
+        let shadowed = (with-env { JAB_TIMEOUT: "", PATH: ([$stand] ++ $env.PATH) } { jab timeout-binary })
+        assert equal $shadowed.path $real.path $"a stand-in first on PATH passed over for GNU's: ($shadowed)"
+        let fifo = ($stand | path join "nobody")
+        ^mkfifo $fifo
+        let w0 = (date now)
+        let wrote = (jab fifo-write $fifo "x" $real.path)
+        let waited = (((date now) - $w0) / 1sec)
+        assert ((not $wrote) and $waited < 2) $"fifo-write into a fifo nobody reads gives up within two seconds: ($wrote) in ($waited) s"
+    }
+    let t0 = (date now)
+    let bounded = (^$real.path 1 sleep 30 | complete)
+    let took = (((date now) - $t0) / 1sec)
+    assert ($bounded.exit_code == 124 and $took < 2) $"sleep 30 under a one-second bound: ($bounded.exit_code) in ($took) s"
+    let forever = (fixture $ws ($out | path join "fixtures" "forever") "forever" "" --forever)
+    let bound_run = (jab launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
+    assert equal [$bound_run.status $bound_run.timeout_binary] [124 $real.path] $"a program that never exits ends at its bound, the resolved timeout in its record: ($bound_run.status), ($bound_run.timeout_binary)"
+
     # the default, in a scratch XDG config home
     let xdg = ($out | path join "xdg")
     jab retire $xdg
@@ -243,7 +282,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { jab spec-default $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
-    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check"
+    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path)"
     print "spec: ok"
 }
 
@@ -317,7 +356,7 @@ def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -
     ($kept | str join "\n") + "\n" | save -f $main
     let prefix = (open --raw ($kernel | path dirname | path join "flags") | decode | lines | first | split row " " | last)
     let symbols = ($set | split row "," | where {|s| $s != "" } | each {|s| ["--defsym" $"($s)=1"] } | flatten)
-    let objects = (glob ($dir | path join "src" "*.S") | sort | each {|f|
+    let objects = (jab paths-of ($dir | path join "src" "*.S") | sort | each {|f|
         let o = ($dir | path join (($f | path parse | get stem) + ".o"))
         ^$"($prefix)as" -march=rva23s64 -I ($dir | path join "src" "include") -I ($ws | path join "sdk" "src") ...$symbols $f -o $o
         $o
@@ -344,13 +383,15 @@ def after [words: list<string>, key: string]: nothing -> string {
 
 # A fixture program of the test's own, built through the tool: its
 # manifest naming the workspace and `body` after it, a program that exits
-# 0. Its image.
-def fixture [ws: path, dir: path, name: string, body: string]: nothing -> string {
+# 0, or with `--forever` one that awaits the display's tick forever. Its
+# image.
+def fixture [ws: path, dir: path, name: string, body: string, --forever]: nothing -> string {
     jab retire $dir
     mkdir ($dir | path join "src")
     let sdk = ($ws | path join "sdk")
     $"name = '($name)'\nsdk = '($sdk)'\nworkspace = '($ws)'\nincludes = ['($sdk | path join src)']\nlink = '($sdk | path join src program.ld)'\ndisplay = 'none'\n($body)" | save -f ($dir | path join "program.jab.toml")
-    ".include \"jab.inc\"\n\n.section .text\n.global _start\n_start:\n    jab.sys.exit 0\n" | save -f ($dir | path join "src" "main.S")
+    let code = (if $forever { "1:\n    jab.sys.display.await\n    j 1b\n" } else { "    jab.sys.exit 0\n" })
+    $".include \"jab.inc\"\n\n.section .text\n.global _start\n_start:\n($code)" | save -f ($dir | path join "src" "main.S")
     let made = (^nu ($ws | path join "sdk" "nu" "jab.nu") build $dir | complete)
     if $made.exit_code != 0 { error make { msg: $"the fixture ($name) did not build: ($made.stderr)" } }
     jab program-out $dir release | path join $"($name).jab"

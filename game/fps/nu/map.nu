@@ -606,13 +606,13 @@ def lay-out [src: record, m: record, content: string, out: string]: nothing -> s
     # every sound the content holds, since the game's tables name them
     # rather than the map, and every sprite image likewise, the
     # androids' frames and the gun's among them
-    let sounds = (glob ($content | path join "sound" "*.pcm"))
+    let sounds = (jab paths-of ($content | path join "sound" "*.pcm"))
     if not ($sounds | is-empty) { mkdir ($dest | path join "sound") }
     for p in $sounds {
         cp $p ($dest | path join "sound" ($p | path basename))
     }
     let sprite_root = ($content | path join "sprite")
-    let sprites = (glob ($sprite_root | path join "**" "*.png"))
+    let sprites = (jab paths-of ($sprite_root | path join "**" "*.png"))
     for p in $sprites {
         let file = ($dest | path join "sprite" ($p | path relative-to $sprite_root))
         mkdir ($file | path dirname)

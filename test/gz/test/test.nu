@@ -55,7 +55,7 @@ def build-fixture [repo: path, stage: path, img: path]: nothing -> table<name: s
     "hello" | save -f ($src | path join "tiny.txt")
     "" | save -f ($src | path join "empty")
     cp ($repo | path join "asset" "img" "logo" "lowkick.480x640.png") ($src | path join "logo.png")
-    let font = (glob ($repo | path join "**" "*.S")
+    let font = (jab paths-of ($repo | path join "**" "*.S")
         | where {|p| ($p | path type) == "file" }
         | each {|p| { path: $p, bytes: (ls -D $p | get 0.size | into int) } }
         | sort-by bytes

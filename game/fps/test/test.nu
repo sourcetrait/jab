@@ -877,7 +877,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the rendered assets the tree carries: the hum a Standard MIDI File
     # of one track, the servo the recipe's seconds of 16-bit samples
     assert equal $render_1_expected.ambients 1 "render_1 names one ambient"
-    let recipes = (glob ($game | path join "content" "sound" "*.nuon") | length)
+    let recipes = (jab paths-of ($game | path join "content" "sound" "*.nuon") | length)
     assert equal $render_1_expected.sounds $recipes $"render_1's tree carries every sound the content holds: ($render_1_expected.sounds) against ($recipes) recipes"
     let hum = (open --raw ($render_1_tree | path join "ambient" "hum.mid") | into binary)
     assert equal ($hum | bytes at 0..<4) ("MThd" | into binary) "the hum is a Standard MIDI File"
