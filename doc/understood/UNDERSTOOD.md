@@ -574,6 +574,21 @@ exit halfway, for 200 ms at most, while the worker's argument names a word
 of the program's in which the kernel records what the next start or stop
 saw there. `test/workers` and `test/workerfault` prove each rule.
 
+Every device belongs to hart 0. A driver's state is touched only by hart 0's
+calls and by the interrupt drain on hart 0. A worker's calls never reach a
+driver, and every device interrupt goes to hart 0's interrupt file. A
+secondary's file enables only the wake, so a drain there claims nothing
+else. `test/owners` checks this on the built kernels. It follows every path
+a worker can take from the trap vector, the drain, and the calls a worker
+may make. It fails when a path reaches a driver's routine or a driver's
+data, or calls through a register anywhere but the call table. Two reads
+are allowed by instruction: the drain's read of the sound's base address,
+which only orders the sound first, and the worker wait's read of the
+sound's live flag, on hart 0's side of its branch. A debug kernel also ends
+the run when a hart other than 0 claims a device's interrupt, `jab: hart N
+claimed a device identity M`, or when a secondary's file enables one, `jab:
+hart N enabled a device identity M`.
+
 A program that declares its harts owns them. `jab.sys.harts.reserve count`
 reserves every online hart past hart 0 for the program's graphics, once a
 run. The count is the program's declared `JAB_RESERVED_GFX_HARTS`, the
