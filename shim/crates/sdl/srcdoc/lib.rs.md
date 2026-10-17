@@ -1,10 +1,10 @@
 # lib.rs
 
-Preloaded into QEMU with LD_PRELOAD for `just do probe sdl`, it logs to the
-file `SDL_SHIM_LOG` names. The log opens with an object table and then
-carries one line an event; the SDK's `jab sdl-resolve` and `jab sdl-report`
-read it. Every line starts with the time since the epoch in seconds and
-microseconds.
+Preloaded into QEMU with LD_PRELOAD for `just do probe sdl` and a probing
+launch, it logs to the file `SDL_SHIM_LOG` names. The log opens with an
+object table, then the run's lines, and then carries one line an event; the
+SDK's `jab sdl-resolve` and `jab sdl-report` read it. Every line starts with
+the time since the epoch in seconds and microseconds.
 
 The real SDL functions are found in libSDL2 itself, opened by name: QEMU's
 SDL front end can be a module loaded into a scope of its own, where
@@ -55,6 +55,17 @@ which is how the report knows which leading frames are the shim's. The rest
 are the loader's chain from the main program on, as loaded when the log
 opens: QEMU creates its devices before its displays, so a modular build's
 virtio-gpu module is already in the table.
+
+## fn run
+
+The log's first two events bind it to the run that made it. `process` is
+the pid of the process the library lives in, QEMU's, the one the launch
+reads from QEMU's pid file while QEMU lives, since QEMU unlinks that file
+as it exits and a bundle is made after. `nonce` is `SDL_SHIM_NONCE` as
+given, the launch's sixteen lowercase hex digits, and it is written only
+where that is set. The value is not checked here: the SDK's reader holds
+it to its form, so a malformed one reaches the log and is refused by name
+there rather than dropped.
 
 ## fn frames
 

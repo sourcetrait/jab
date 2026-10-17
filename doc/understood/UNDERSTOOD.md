@@ -314,6 +314,19 @@ instead. Linux only, since it preloads into QEMU;
 with no display server SDL runs its offscreen driver, drawing nothing
 along the same path.
 
+The library's log opens with QEMU's process id and the run's capture
+nonce, a number made fresh for each run, so a capture names the run that
+made it. As its last step the probe bundles the run into `probe/bundle`
+beside the log, so the reading can be checked on another machine: the
+log as it was written, the symbol tables the reading used, the reading
+itself, and a manifest of every file's SHA-256 beside the host and its
+QEMU. `jab sdl-bundle-check` holds a bundle to its manifest stage by
+stage and reads the log again from the bundled tables, so a bundle made
+on one host is admitted on another where the files the log names are
+not there, and a bundle altered anywhere is refused at the stage that
+finds it. `jab launch --sdl-probe <log>` puts the same library into a
+test's own launch, its window SDL with OpenGL.
+
 A gamepad on the host reaches a program two ways, and a program never
 learns which. A run finds the pad through `jabdisco`, built with
 cargo into `tool/target` on first use (it needs libudev's and

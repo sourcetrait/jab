@@ -110,13 +110,16 @@ const device_module = "hw-display-virtio-gpu"
 # Every line the sdl shim writes (shim/crates/sdl), its time first, in
 # seconds to the microsecond: an object-table line, its index, the file's
 # inode, size, and modification time in nanoseconds or `- - -` where there
-# is no file, then its path, the rest of the line, empty allowed; a
+# is no file, then its path, the rest of the line, empty allowed; a run's
+# line, `process` or `nonce` with whatever follows, held to its own form
+# apart so a malformed one is refused by name (sdl-run-lines); a
 # make_current with its frames, each an object's index or `?` with an
 # address in lowercase hex; a window-size call, a swap, or a poll; or a
 # notice the shim writes as it stops the run.
 const sdl_line = (
     '^[0-9]+\.[0-9]{6} (?:'
     + 'object [0-9]+ (?:[0-9]+ [0-9]+ -?[0-9]+|- - -) .*'
+    + '|process(?: .*)?|nonce(?: .*)?'
     + '|make_current(?: (?:[0-9]+|\?)\+[0-9a-f]+)*'
     + '|size|swap|poll'
     + '|libSDL2 not found|symbol not found'
@@ -504,6 +507,17 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # header before any hart runs. `demand` is the demand recorded with the
 # image at its build (image-demand), null for a program on the legacy path
 # and for an image with no record; a record that does not hold is refused.
+# `send` is what a launch writes into the API at its times, kept as given
+# in `sends`, and anything to send puts the port on as `--api` does. With
+# `--sdl-probe`, a probing launch, Linux only: the window `sdl,gl=on`, the
+# sdl shim built and preloaded beside any other (`shim`), logging to that
+# file (`sdl_log`, a stale one retired), SDL's offscreen driver where no
+# display server is. `capture_nonce` is the caller's, never minted here,
+# 1 to 2^63 - 1 or none, handed to the shim as `SDL_SHIM_NONCE` in its
+# sixteen hex digits (nonce-hex); `profile` the capture's, `paired` only
+# with a nonce, `generic` for a probe that names none, "" for a run that
+# claims none; `capture` the run's capture identity as it stands before
+# QEMU starts (capture-identity).
 export def plan [
     --kernel: path
     --image: path
@@ -522,10 +536,21 @@ export def plan [
     --harts: int = $harts_default
     --bootargs: string = ""
     --dtb: path = ""
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string, demand: oneof<record, nothing>> {
+    --send: table<at: duration, bytes: binary> = []
+    --sdl-probe: path = ""
+    --capture-nonce: int = 0
+    --profile: string = ""
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let machine = (machine-of $harts)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
+    let probed = ($sdl_probe != "")
+    if $probed and $nu.os-info.name != "linux" { error make {msg: "--sdl-probe preloads the sdl shim into QEMU, which is Linux only"} }
+    if $capture_nonce < 0 { error make {msg: $"--capture-nonce ($capture_nonce): a capture nonce is 1 to 2^63 - 1, or 0 for none"} }
+    let profile = (if $profile == "" and $probed { "generic" } else { $profile })
+    if $profile not-in ["" "generic" "paired"] { error make {msg: $"--profile ($profile): a capture's profile is paired or generic"} }
+    if $profile == "generic" and not $probed { error make {msg: "--profile generic is a probing launch's, classification alone; it needs --sdl-probe"} }
+    if $profile == "paired" and $capture_nonce == 0 { error make {msg: "--profile paired needs the run's --capture-nonce, minted by the caller that makes the request"} }
     let out = ($out | path expand)
     mkdir $out
     let ws = (launch-workspace $kernel $image $out)
@@ -543,13 +568,25 @@ export def plan [
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws $root)
-    let ports = (ports (symbols $set) $out $api ($pad.port or $hosted.port) $root)
+    let api_on = ($api or (not ($send | is-empty)))
+    let ports = (ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" { retire $wav $root }
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
-    let shown = (if $window { display (image-manifest $image) } else { "none" })
+    if $probed and $ws == null { error make {msg: "--sdl-probe needs the program's workspace, which holds shim/crates/sdl"} }
+    let shim = (if $probed { shim-build $ws "jabshim_sdl" } else { "" })
+    let sdl_log = (if $probed { $sdl_probe | path expand } else { "" })
+    if $probed { retire $sdl_log $root }
+    let shown = (if $probed { "sdl,gl=on" } else if $window { display (image-manifest $image) } else { "none" })
+    let run_env = (if not $probed { $pad.env } else {
+        let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
+        let preload = ([($pad.env | get -o LD_PRELOAD | default "") $shim] | where {|p| $p != "" } | str join " ")
+        let nonce = (if $capture_nonce == 0 { {} } else { { SDL_SHIM_NONCE: (nonce-hex $capture_nonce) } })
+        let driver = (if $server { {} } else { { SDL_VIDEODRIVER: "offscreen" } })
+        $pad.env | merge { LD_PRELOAD: $preload, SDL_SHIM_LOG: $sdl_log } | merge $nonce | merge $driver
+    })
     let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
     let args = ((machine-args $qemu $harts) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
@@ -557,10 +594,10 @@ export def plan [
         "-display" $shown "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
     ] ++ $append ++ (disks-args (machine-disks $disk $serial true $ws)))
-    {
+    let planned = {
         qemu_binary: $qemu,
         qemu: $args,
-        env: $pad.env,
+        env: $run_env,
         out: $out,
         serial_log: $log,
         qemu_log: $qemu_log,
@@ -583,7 +620,47 @@ export def plan [
         machine: $machine,
         bootargs: $bootargs,
         demand: $demand,
+        sends: $send,
+        sdl_log: $sdl_log,
+        shim: $shim,
+        capture_nonce: (if $capture_nonce == 0 { null } else { $capture_nonce }),
+        profile: $profile,
     }
+    $planned | insert capture (capture-identity $planned null)
+}
+
+# A run's capture identity, what its identity records of the capture
+# (CaptureBundle), from a machine as plan prepared it and the pid of the
+# QEMU that ran it, read while it lived (null before or without one): the
+# profile; `capture_nonce`; `qemu_pid`; the shim's log and library, ""
+# for a run unprobed; the window; `api`, whether the API's port was on the
+# machine; and `sends`, each entry to write into it by its time in
+# seconds, its bytes' length, and their SHA-256.
+export def capture-identity [machine: record, pid: oneof<int, nothing>]: nothing -> record<profile: string, capture_nonce: oneof<int, nothing>, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, window: string, api: bool, sends: list<record<at: float, length: int, sha256: string>>> {
+    {
+        profile: $machine.profile,
+        capture_nonce: $machine.capture_nonce,
+        qemu_pid: $pid,
+        sdl_log: $machine.sdl_log,
+        shim: $machine.shim,
+        window: $machine.window,
+        api: ($machine.api_in != ""),
+        sends: ($machine.sends | each {|s| { at: ($s.at / 1sec), length: ($s.bytes | bytes length), sha256: ($s.bytes | hash sha256) } }),
+    }
+}
+
+# A launch's capture nonce: the one its caller gives, else for a probing
+# launch one minted here, 1 to 2^63 - 1, so 0 names none and a launch
+# never mints a second; plan never mints (CaptureBundle).
+export def launch-nonce [given: int, probed: bool]: nothing -> int {
+    if $given != 0 or not $probed { return $given }
+    random int 1..
+}
+
+# A capture nonce as the shim's log writes it: sixteen lowercase hex
+# digits.
+export def nonce-hex [nonce: int]: nothing -> string {
+    $nonce | into binary --endian big | encode hex | str lowercase
 }
 
 # The workspace a launch belongs to, whose generic disk rides along and
@@ -668,7 +745,14 @@ def image-manifest [image: path]: nothing -> record {
 # says whether the demand recorded with the image at its build declares
 # one (image-demand), and `diagnostic` is the run's standing: on a
 # diagnostic machine, or of an image built on the legacy path or with no
-# record beside it, undeclared and claiming no console.
+# record beside it, undeclared and claiming no console. `--sdl-probe`,
+# `--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
+# minted here only for a probing launch given none (launch-nonce); the
+# launch writes the API only what its caller sends, never for itself.
+# `qemu_pid` is QEMU's pid as the loop read it while QEMU lived, since
+# QEMU removes its pid file as it exits, null where it never came up; the
+# result carries `sdl_log`, `shim`, `capture_nonce`, and `profile` as
+# planned, and `capture`, the run's capture identity (capture-identity).
 export def launch [
     --kernel: path             # the kernel ELF
     --image: path              # the program's .jab
@@ -696,11 +780,16 @@ export def launch [
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
     --threads-at: list<duration> = [] # each time to read every QEMU thread's CPU, kept whole in the result's `thread_readings`; none unless given
     --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool> {
+    --sdl-probe: path = ""     # the sdl shim's log: QEMU under sdl,gl=on with the shim preloaded, Linux only
+    --capture-nonce: int = 0   # the run's capture nonce from the caller making the request; minted here for a probe given none
+    --profile: string = ""     # the capture's profile, paired or generic (plan)
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
-    let machine = (plan --kernel $kernel --image $image --out $out --api=($api or (not ($send | is-empty))) --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb)
+    let nonce = (launch-nonce $capture_nonce ($sdl_probe != ""))
+    let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile)
+    let send = $machine.sends
     let out = $machine.out
     let log = $machine.serial_log
     let qemu_log = $machine.qemu_log
@@ -747,12 +836,15 @@ export def launch [
     let thread_requests = ($threads_at | sort)
     mut readings = []
     mut taken = 0
+    mut qemu_pid: any = null
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
         # QEMU deletes its pid file as it exits, so the read is tried, never
         # checked first: an exit between a check and the open is no pid
         let pid = (try { open --raw $pidfile | str trim } catch { "" })
         let alive = ($result == null and (process-alive $pid))
+        # the pid kept while QEMU lives, its pid file gone once it ends
+        if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
         let sample = (if $pid == "" { null } else { cpu-seconds $pid })
         if $sample != null { $cpu = $sample }
         let elapsed = ((date now) - $started)
@@ -849,6 +941,12 @@ export def launch [
         send_seconds: $send_seconds,
         declared: ($machine.demand != null),
         diagnostic: ($ran_on.diagnostic or $machine.demand == null),
+        qemu_pid: $qemu_pid,
+        sdl_log: $machine.sdl_log,
+        shim: $machine.shim,
+        capture_nonce: $machine.capture_nonce,
+        profile: $machine.profile,
+        capture: (capture-identity $machine $qemu_pid),
     }
 }
 
@@ -2472,7 +2570,11 @@ def probe [dir: path, kind: string, names: list<string>, seconds: int]: nothing 
 # record printed, or the refusal saying why the log cannot be read and
 # no record. Linux only, since it preloads a library into QEMU. With no
 # display server SDL runs its offscreen driver, which draws nothing but
-# keeps every path the same.
+# keeps every path the same. Each run mints its capture nonce for the
+# shim (launch-nonce) and writes the run's identity beside the log,
+# `identity.nuon`, of the generic profile, no API on the machine and
+# nothing sent; the run is bundled last (sdl-bundle) into `bundle` there,
+# a previous bundle and identity retired first.
 def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing {
     if $nu.os-info.name != "linux" { error make {msg: "the sdl probe preloads a library into QEMU, which is Linux only"} }
     let ws = (context $dir "program" $names | get workspace)
@@ -2482,16 +2584,21 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
     let out = ($line.context.out | path join "probe")
     mkdir $out
     let log = ($out | path join "sdl.log")
-    retire $log $line.context.root
+    let identity_file = ($out | path join "identity.nuon")
+    let bundle = ($out | path join "bundle")
+    for f in [$log $identity_file $bundle] { retire $f $line.context.root }
+    let nonce = (launch-nonce 0 true)
     let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
-    let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log }
+    let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log, SDL_SHIM_NONCE: (nonce-hex $nonce) }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
     let binary = $line.qemu_binary
     let run = (with-env $extra { ^timeout --signal=TERM ($seconds | into string) $binary ...$line.args | complete })
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
     let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
+    { profile: "generic", capture_nonce: $nonce, qemu_pid: null, sdl_log: $log, shim: $shim, window: "sdl,gl=on", api: false, sends: [] } | to nuon --indent 2 | save --raw $identity_file
     let report = (sdl-report $log)
+    sdl-bundle $out $bundle | ignore
     let record = ({
         run: {
             program: $line.context.manifest.name,
@@ -2503,6 +2610,8 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
             symbols: $line.context.symbols,
             seconds: $seconds,
             qemu_said: ($run.stderr | lines | where {|l| not ($l | str contains "terminating on signal") } | first 3),
+            capture_nonce: $nonce,
+            bundle: $bundle,
         },
     } | merge ($report | reject run))
     print ($record | to nuon --indent 2)
@@ -2516,15 +2625,19 @@ def probe-sdl [dir: path, names: list<string>, seconds: int]: nothing -> nothing
 # library, object 1, which it counts, a frame by its object's index (null
 # for none) and its address as written and as a number, and whether the
 # timing rule makes it a render: a window-size call the next event,
-# within 2 ms. A last line the run's end cut short is left out. Every
-# complete line is held to the lines the shim writes (sdl_line) before
-# any is read, and a log the shim could not have written is refused, in
-# order: a line outside them, counted in lines with up to four shown by
-# number; a notice the shim wrote as it stopped the run, by name; then no
-# object table, an index given twice, a frame naming an index with no line
-# ahead of it, or a make_current whose frames do not start in the shim's
-# library.
-export def sdl-log [log: path]: nothing -> record<objects: table, events: table> {
+# within 2 ms; every event with its stamp as the log wrote it. A last line
+# the run's end cut short is left out. The run's lines are events too, and
+# their values come back apart: `process`, QEMU's pid, and `nonce`, the
+# capture nonce as its sixteen hex digits, each null where the log has
+# none, as a log written before them has neither. Every complete line is
+# held to the lines the shim writes (sdl_line) before any is read, and a
+# log the shim could not have written is refused, in order: a line outside
+# them, counted in lines with up to four shown by number; a notice the
+# shim wrote as it stopped the run, by name; a run's line given twice,
+# malformed, or out of its place (sdl-run-lines); then no object table,
+# an index given twice, a frame naming an index with no line ahead of it,
+# or a make_current whose frames do not start in the shim's library.
+export def sdl-log [log: path]: nothing -> record<objects: table, events: table, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
     let text = (open --raw $log | into binary | decode)
     let whole = ($text | split row (char nl) | drop 1)
     if ($whole | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
@@ -2538,10 +2651,12 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table>
         let stops = ($notices | uniq --count | each {|n| { fault: $"the shim stopped the run: ($n.value)", held: $n.count, unit: "line", examples: [] } })
         error make {msg: (sdl-refusal $stops)}
     }
+    let run = (sdl-run-lines ($whole | enumerate | each {|l| { line: ($l.index + 1), text: ($l.item | str replace --regex '^[0-9]+\.[0-9]{6} ' '') } } | where {|l| not ($l.text | str starts-with "object ") }))
+    if $run.fault != "" { error make {msg: (sdl-refusal [{ fault: $run.fault, held: $run.held, unit: "line", examples: $run.examples }])} }
     let rows = ($whole
         | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+) ?(?P<rest>.*)$'
         | enumerate
-        | each {|r| { at: $r.index, ts: ($r.item.ts | into float), name: $r.item.name, rest: $r.item.rest } })
+        | each {|r| { at: $r.index, stamp: $r.item.ts, ts: ($r.item.ts | into float), name: $r.item.name, rest: $r.item.rest } })
     let objects = ($rows | where name == "object" | each {|r|
         let o = ($r.rest | parse --regex '^(?P<index>\d+) (?P<inode>\d+|-) (?P<size>\d+|-) (?P<mtime>-?\d+|-) (?P<path>.*)$' | first)
         {
@@ -2561,7 +2676,7 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table>
     let events = ($happened | enumerate | each {|r|
         let e = $r.item
         if $e.name != "make_current" {
-            { at: $e.at, ts: $e.ts, name: $e.name, render: false, shim_frames: 0, frames: [], fault: "", example: "" }
+            { at: $e.at, stamp: $e.stamp, ts: $e.ts, name: $e.name, render: false, shim_frames: 0, frames: [], fault: "", example: "" }
         } else {
             let frames = ($e.rest
                 | str trim
@@ -2584,7 +2699,7 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table>
                 let file = (if $f.object == null { "?" } else { $objects | where index == $f.object | get -o 0.path | default "" | path basename })
                 $"($file)+($f.hex)"
             } else { "" })
-            { at: $e.at, ts: $e.ts, name: $e.name, render: $render, shim_frames: $shim, frames: ($frames | skip $shim), fault: $fault, example: $example }
+            { at: $e.at, stamp: $e.stamp, ts: $e.ts, name: $e.name, render: $render, shim_frames: $shim, frames: ($frames | skip $shim), fault: $fault, example: $example }
         }
     })
     let made = ($events | where name == "make_current")
@@ -2599,12 +2714,56 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table>
         let held = ($made | where fault == $fault.0)
         if not ($held | is-empty) { error make {msg: (sdl-refusal [{ fault: $fault.1, held: ($held | length), unit: "make_current", examples: ($held | get example | uniq) }])} }
     }
-    { objects: ($objects | reject at), events: ($events | reject fault example) }
+    { objects: ($objects | reject at), events: ($events | reject fault example), process: $run.process, nonce: $run.nonce }
+}
+
+# A shim log's run lines (sdl-log), from its events in order, each its
+# line number and its text past the stamp: the process as the first event,
+# `process` and QEMU's pid in ASCII digits, and the capture nonce as the
+# second, `nonce` and sixteen lowercase hex digits, not all zero, a run's
+# line at most once each. The pid and the nonce, null where the log has
+# none; or the first fault, a process line before a nonce line: one given
+# twice, one malformed, a nonce with no process line ahead of it, then one
+# out of its place, with how many lines hold it and up to four.
+def sdl-run-lines [events: list<record<line: int, text: string>>]: nothing -> record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, fault: string, held: int, examples: list<string>> {
+    let process = ($events | enumerate | where {|e| $e.item.text =~ '^process(?: |$)' })
+    let nonce = ($events | enumerate | where {|e| $e.item.text =~ '^nonce(?: |$)' })
+    let refused = {|fault: string, rows: list<any>|
+        { process: null, nonce: null, fault: $fault, held: ($rows | length), examples: ($rows | first 4 | each {|r| $"line ($r.item.line): ($r.item.text | str substring --grapheme-clusters 0..<80)" }) }
+    }
+    if ($process | length) > 1 { return (do $refused "the log gives its process line twice" $process) }
+    if ($nonce | length) > 1 { return (do $refused "the log gives its nonce line twice" $nonce) }
+    let bad_process = ($process | where {|e| not ($e.item.text =~ '^process [1-9][0-9]{0,9}$') })
+    if not ($bad_process | is-empty) { return (do $refused "the log's process line is malformed, where `process` and a pid in ASCII digits are wanted" $bad_process) }
+    let bad_nonce = ($nonce | where {|e| not ($e.item.text =~ '^nonce [0-9a-f]{16}$') or $e.item.text == "nonce 0000000000000000" })
+    if not ($bad_nonce | is-empty) { return (do $refused "the log's nonce line is malformed, where `nonce` and sixteen lowercase hex digits, not all zero, are wanted" $bad_nonce) }
+    let ahead = ($nonce | where {|e| ($process | is-empty) or $e.index < ($process | first | get index) })
+    if not ($ahead | is-empty) { return (do $refused "the log's nonce line comes with no process line ahead of it" $ahead) }
+    let early = ($process | where {|e| $e.index != 0 })
+    if not ($early | is-empty) { return (do $refused "the log's process line is out of its place, the first event" $early) }
+    let astray = ($nonce | where {|e| $e.index != 1 })
+    if not ($astray | is-empty) { return (do $refused "the log's nonce line is out of its place, the second event after the process line" $astray) }
+    {
+        process: (if ($process | is-empty) { null } else { $process | first | get item.text | str substring 8.. | into int }),
+        nonce: (if ($nonce | is-empty) { null } else { $nonce | first | get item.text | str substring 6.. }),
+        fault: "",
+        held: 0,
+        examples: [],
+    }
 }
 
 # An object's table left unread, with the state that kept it so.
 def sdl-unread [state: string, why: string]: nothing -> record {
-    { state: $state, why: $why, source: "", starts: [], ends: [], reach: [], names: [], console: false }
+    { state: $state, why: $why, source: "", starts: [], ends: [], reach: [], names: [], console: false, nm: "" }
+}
+
+# A file's inode, size, and modification time in nanoseconds as `ls -l`
+# gives them now, the three an object's line records; null where no file
+# is there.
+def sdl-stat [path: string]: nothing -> oneof<record<inode: int, size: int, mtime: int>, nothing> {
+    let now = (try { ls -l $path | get -o 0 } catch { null })
+    if $now == null { return null }
+    { inode: $now.inode, size: ($now.size | into int), mtime: ($now.modified | into int) }
 }
 
 # The symbol table of an object a decision needs, as binutils' nm reads
@@ -2619,7 +2778,8 @@ def sdl-unread [state: string, why: string]: nothing -> record {
 # says which held: read, no_file, nm_absent, deleted, changed, or
 # unreadable, with nm's own words in `why`; `source` which table
 # answered: symtab, dynsym, or none; `console` whether it holds both of
-# the console's update functions of one family.
+# the console's update functions of one family; and `nm`, nm's text as it
+# was read, which a bundle keeps (sdl-bundle).
 def sdl-table [object: record, nm: bool]: nothing -> record {
     if $object.inode == null or $object.size == null or $object.mtime == null { return (sdl-unread "no_file" "") }
     if not $nm { return (sdl-unread "nm_absent" "") }
@@ -2634,7 +2794,13 @@ def sdl-table [object: record, nm: bool]: nothing -> record {
     let run = (if $dynamic { ^nm -P -t x --defined-only -D $object.path | complete } else { $full })
     if $run.exit_code != 0 { return (sdl-unread "unreadable" ($run.stderr | str trim | split row $"($object.path): " | last)) }
     let source = (if not $dynamic { "symtab" } else if ($run.stdout | str trim) == "" { "none" } else { "dynsym" })
-    let functions = ($run.stdout | lines
+    sdl-table-from $run.stdout $source
+}
+
+# A symbol table read from nm's POSIX text as sdl-table reads it, `source`
+# the table the text came from, the text kept whole as `nm`.
+def sdl-table-from [text: string, source: string]: nothing -> record {
+    let functions = ($text | lines
         | parse --regex '^(?P<name>\S+) (?P<type>[tTwW]) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$'
         | into int --radix 16 value size
         | where size > 0
@@ -2647,7 +2813,24 @@ def sdl-table [object: record, nm: bool]: nothing -> record {
     } 0)
     let names = ($functions | get name)
     let console = ($console_updates | any {|family| $family | all {|n| $n in $names } })
-    { state: "read", why: "", source: $source, starts: ($functions | get value), ends: ($spans | get end), reach: ($spans | get reach), names: $names, console: $console }
+    { state: "read", why: "", source: $source, starts: ($functions | get value), ends: ($spans | get end), reach: ($spans | get reach), names: $names, console: $console, nm: $text }
+}
+
+# A needed object's table out of a bundle (sdl-bundle) in place of nm on
+# its path, the replay's source (sdl-bundle-check): the state its
+# manifest entry records where that is not `read`, else its table file,
+# taken only when the file's raw bytes have the SHA-256 the entry names;
+# `unbundled` where the manifest holds no entry, no table, or another
+# table's bytes.
+def sdl-bundled-table [object: record, manifest: record, bundle: path]: nothing -> record {
+    let entry = ($manifest.objects | where index == $object.index | get -o 0)
+    if $entry == null { return (sdl-unread "unbundled" "the manifest has no entry for it") }
+    if $entry.state != "read" { return (sdl-unread $entry.state $entry.why) }
+    let file = ($bundle | path join $entry.table)
+    if not ($file | path exists) { return (sdl-unread "unbundled" "its table is not in the bundle") }
+    let bytes = (open --raw $file | into binary)
+    if ($bytes | hash sha256) != $entry.table_sha256 { return (sdl-unread "unbundled" "its table's bytes are not those the manifest names") }
+    sdl-table-from ($bytes | decode) $entry.source
 }
 
 # The functions of a table (sdl-table) whose [start, end) holds an
@@ -2689,8 +2872,18 @@ def sdl-functions-at [table: record, address: int]: nothing -> list<string> {
 # where the device's code is there; with --every, every object a
 # make_current's frame lies in. The device's code lives in a module when
 # the table lists one whose file name starts hw-display-virtio-gpu, else
-# in the executable. A log the shim could not have written is refused.
-export def sdl-resolve [log: path, --every]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
+# in the executable. With --tables, a bundle's directory (sdl-bundle),
+# each table comes out of the bundle in place of nm on its object's path,
+# as a bundle's check replays it (sdl-bundled-table). A log the shim could
+# not have written is refused.
+export def sdl-resolve [log: path, --every, --tables: string = ""]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
+    sdl-resolved $log $every $tables | reject tables process nonce
+}
+
+# sdl-resolve's reading, beside it each object's table whole as read
+# (sdl-table), by index, and the run's lines (sdl-log); `bundle` the
+# tables' bundle, "" for nm.
+def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
     let read = (sdl-log $log)
     let modules = ($read.objects | where {|o| $o.path | path basename | str starts-with $device_module } | get index)
     let device_in = (if ($modules | is-empty) { "executable" } else { "module" })
@@ -2703,9 +2896,11 @@ export def sdl-resolve [log: path, --every]: nothing -> record<objects: table, v
         let executable = (if $device_in == "executable" and (not ($decided | is-empty)) { [0] } else { [] })
         $callers ++ $executable | uniq
     })
-    let nm = (which nm | where type == "external" | is-not-empty)
+    let manifest = (if $bundle == "" { null } else { open --raw ($bundle | path join "bundle.nuon") | into binary | decode | from nuon })
+    let nm = ($manifest == null and (which nm | where type == "external" | is-not-empty))
     let tables = ($read.objects | reduce --fold {} {|o, all|
-        $all | insert ($o.index | into string) (if $o.index in $needed { sdl-table $o $nm } else { sdl-unread "unread" "" })
+        let table = (if $o.index not-in $needed { sdl-unread "unread" "" } else if $manifest == null { sdl-table $o $nm } else { sdl-bundled-table $o $manifest $bundle })
+        $all | insert ($o.index | into string) $table
     })
     let pairs = ($made | each {|e| $e.frames } | flatten | where object != null | uniq-by object hex)
     let found = ($pairs | reduce --fold {} {|f, all|
@@ -2728,17 +2923,19 @@ export def sdl-resolve [log: path, --every]: nothing -> record<objects: table, v
             })
         }
     })
-    { objects: $objects, virtio_gpu_in: $device_in, events: $events }
+    { objects: $objects, virtio_gpu_in: $device_in, events: $events, tables: $tables, process: $read.process, nonce: $read.nonce }
 }
 
 # The refusal a frame's object holds before its symbols can answer: nm
-# absent, the file changed or the executable deleted, or nm unable to read
-# it; null when its table was read or it has none to read.
+# absent, the file changed or the executable deleted, a replay's table
+# not in its bundle, or nm unable to read it; null when its table was
+# read or it has none to read.
 def sdl-held [frame: record]: nothing -> oneof<record, nothing> {
     match $frame.state {
         "nm_absent" => ({ kind: "refused", class: 2, fault: "nm_absent", at: $frame }),
         "deleted" => ({ kind: "refused", class: 3, fault: "deleted", at: $frame }),
         "changed" => ({ kind: "refused", class: 3, fault: "changed", at: $frame }),
+        "unbundled" => ({ kind: "refused", class: 3, fault: "unbundled", at: $frame }),
         "unreadable" => ({ kind: "refused", class: 4, fault: "unreadable", at: $frame }),
         _ => null,
     }
@@ -2835,6 +3032,7 @@ def sdl-fault-text [fault: string, at: oneof<record, nothing>, objects: table]: 
         "nm_absent" => "binutils' nm is not on PATH, and the frames' symbol tables are read with it",
         "deleted" => $"the executable at ($path) was deleted after it started",
         "changed" => $"($path) is not the file its line in the object table names, rebuilt or replaced since the run",
+        "unbundled" => (if $object.why == "" { $"the bundle holds no table for ($path)" } else { $"the bundle holds no table for ($path): ($object.why)" }),
         "unreadable" => (if $object.why == "" { $"nm cannot read ($path)" } else { $"nm cannot read ($path): ($object.why)" }),
         "anchor" => $"a make_current's immediate caller is not in the SDL front end, and ($table)",
         "front_end" => "a make_current comes from a front-end function the probe does not model",
@@ -2889,17 +3087,31 @@ def sdl-refusal [faults: table<fault: string, held: int, unit: string, examples:
 # executable, an object nm cannot read, a make_current failing the anchor
 # or unmodelled, and an upload whose second frame does not resolve, each
 # naming its fault, how many make_currents or lines hold it, and up to
-# four of them.
-export def sdl-classify [log: path]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
-    let resolved = (sdl-resolve $log)
+# four of them. With --tables, a bundle's directory, the tables come out
+# of the bundle (sdl-resolve).
+export def sdl-classify [log: path, --tables: string = ""]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
+    let c = (sdl-classified $log $tables)
+    { objects: $c.objects, virtio_gpu_in: $c.virtio_gpu_in, events: ($c.events | reject key) }
+}
+
+# A make_current's chain as the reading keys it: its frames past the
+# shim's own, each an object's index or `?` with its address in hex; an
+# event with no frames keys the empty chain.
+def sdl-chain-key [frames: list<any>]: nothing -> string {
+    let chain = ($frames | each {|f| $"(if $f.object == null { '?' } else { $f.object })+($f.hex)" } | str join " ")
+    $"chain:($chain)"
+}
+
+# sdl-classify's reading with each event's chain key kept, each chain's
+# decision by key, every object's table whole (sdl-resolved), and the
+# run's lines; `bundle` the tables' bundle, "" for nm.
+def sdl-classified [log: path, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, decisions: list<any>, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
+    let resolved = (sdl-resolved $log false $bundle)
     let events = $resolved.events
     if ($events | is-empty) { error make {msg: "the shim log holds no events; the window made no SDL calls"} }
     let executable = ($resolved.objects | where index == 0 | get -o 0)
     let modules = ($resolved.objects | where {|o| $o.file | str starts-with $device_module } | get index)
-    let keyed = ($events | each {|e|
-        let chain = ($e.frames | each {|f| $"(if $f.object == null { '?' } else { $f.object })+($f.hex)" } | str join " ")
-        $e | insert key $"chain:($chain)"
-    })
+    let keyed = ($events | each {|e| $e | insert key (sdl-chain-key $e.frames) })
     let made = ($keyed | where name == "make_current")
     let decided = ($made | where render == false)
     let chains = ($decided | uniq-by key)
@@ -2919,8 +3131,9 @@ export def sdl-classify [log: path]: nothing -> record<objects: table, virtio_gp
             let kind = (if $e.render { "render" } else { $decisions | get $e.key | get kind })
             $e | merge { kind: $kind, callers: ($named | get $e.key) }
         }
-    } | reject key)
-    { objects: $resolved.objects, virtio_gpu_in: $resolved.virtio_gpu_in, events: $read }
+    })
+    let decided_chains = ($chains | each {|e| { key: $e.key } | merge ($decisions | get $e.key | reject at) })
+    { objects: $resolved.objects, virtio_gpu_in: $resolved.virtio_gpu_in, events: $read, decisions: $decided_chains, tables: $resolved.tables, process: $resolved.process, nonce: $resolved.nonce }
 }
 
 # The report on a shim log (sdl-classify): how the flips reached the
@@ -3025,6 +3238,222 @@ export def sdl-report [log: path]: nothing -> record {
         switch_callers: (do $top $switches),
         render_callers: (do $top ($kinds | where kind == "render")),
     }
+}
+
+# A probed run's capture made portable, `jab sdl-bundle <probe dir>
+# <bundle dir>`, on the host that took it as the run's last step, while
+# the objects its log names are still the files their lines name. The log
+# in the probe directory, `sdl.log`, is classified as the probe reads it
+# (sdl-classify), a refusal ending the bundle with nothing written; then
+# into `bundle`, a directory not yet there, go the log as it was written;
+# for each object whose table the reading read, nm's text as it was
+# parsed, `tables/<index>.nm`, the file's own SHA-256 taken with its
+# inode, size, and modification time its line's before the hash and
+# unchanged after it, a change refusing the bundle as changed while
+# bundling; `classified.nuon`, every event with its line, stamp, name,
+# render flag, chain key, kind, and callers, each chain's decision, and
+# the counts by kind; the probe directory's `api.out`, `identity.nuon`,
+# `trace.log`, and each file `extra` names, where it has them, copied
+# whole; and last `bundle.nuon`, the manifest, bundle_schema 1: the
+# profile; the reader (sdl-reader); the host, its OS, kernel release,
+# hostname, and QEMU (sdl-qemu-of); every object of the log's table with
+# its line's fields, its state, and for a read one its SHA-256 and its
+# table with that file's SHA-256 and its source; every other file with
+# its SHA-256 and size; the events counted; and the run, the identity's
+# capture fields beside the log's process and nonce. The profile is
+# `--profile`, else the identity's, else generic, and historical for a
+# log written before the run's lines; a paired bundle needs the log's
+# nonce, `api.out`, and `identity.nuon`. The manifest. Untyped because it
+# ends in an error.
+export def sdl-bundle [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []] {
+    let probe = ($probe | path expand)
+    let bundle = ($bundle | path expand)
+    let log = ($probe | path join "sdl.log")
+    if not ($log | path exists) { error make {msg: $"($probe) holds no sdl.log to bundle"} }
+    if ($bundle | path type) != null { error make {msg: $"($bundle) is already there; a bundle is written once"} }
+    let identity_file = ($probe | path join "identity.nuon")
+    let identity = (if ($identity_file | path exists) { open --raw $identity_file | into binary | decode | from nuon } else { null })
+    let c = (sdl-classified $log "")
+    let lined = ($c.process != null)
+    let given = (if $identity == null { "" } else { $identity | get -o profile | default "" })
+    let named = (if $profile != "" { $profile } else if $given != "" { $given } else if $lined { "generic" } else { "historical" })
+    if $named not-in [paired generic historical] { error make {msg: $"a bundle's profile is paired, generic, or historical, not ($named)"} }
+    if $lined and $named == "historical" { error make {msg: "the log carries the run's lines, so its bundle is paired or generic, never historical"} }
+    if (not $lined) and $named != "historical" { error make {msg: $"the log has no process line, so it was written before the run's lines and its bundle is historical, not ($named)"} }
+    if $named == "paired" {
+        if $c.nonce == null { error make {msg: "a paired bundle needs the log's nonce line, and this log has none"} }
+        let missing = (["api.out" "identity.nuon"] | where {|f| not ($probe | path join $f | path exists) })
+        if not ($missing | is-empty) { error make {msg: $"a paired bundle needs ($missing | str join ' and ') beside the log in ($probe)"} }
+    }
+    let carried = (["api.out" "identity.nuon" "trace.log"] ++ $extra | uniq | where {|f| $probe | path join $f | path exists })
+    let read = ($c.objects | where {|o| ($c.tables | get ($o.index | into string) | get state) == "read" })
+    let hashed = ($read | each {|o|
+        let before = (sdl-stat $o.path)
+        if $before != { inode: $o.inode, size: $o.size, mtime: $o.mtime } { error make {msg: $"($o.path) changed while bundling: it is no longer the file its line names"} }
+        let sha256 = (open --raw $o.path | hash sha256)
+        if (sdl-stat $o.path) != $before { error make {msg: $"($o.path) changed while bundling, during its hash"} }
+        { index: $o.index, sha256: $sha256 }
+    })
+    mkdir ($bundle | path join "tables")
+    cp $log ($bundle | path join "sdl.log")
+    for x in $hashed { $c.tables | get ($x.index | into string) | get nm | save --raw ($bundle | path join "tables" $"($x.index).nm") }
+    let events = ($c.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: $e.key, kind: $e.kind, callers: $e.callers } })
+    let counts = ($events | get kind | uniq --count | reduce --fold {} {|k, acc| $acc | insert $k.value $k.count })
+    { events: $events, decisions: $c.decisions, counts: $counts } | to nuon --indent 1 | save --raw ($bundle | path join "classified.nuon")
+    for f in $carried {
+        mkdir ($bundle | path join $f | path dirname)
+        cp ($probe | path join $f) ($bundle | path join $f)
+    }
+    let files = (glob ($bundle | path join "**" "*") --no-dir | each {|p| { path: ($p | path relative-to $bundle), sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) } } | sort-by path)
+    let field = {|name: string| if $identity == null { null } else { $identity | get -o $name } }
+    let manifest = {
+        bundle_schema: 1,
+        profile: $named,
+        reader: (sdl-reader),
+        host: { os: $nu.os-info.name, kernel: $nu.os-info.kernel_version, hostname: (sys host | get hostname), qemu: (sdl-qemu-of ($c.objects | where index == 0 | get -o 0) ($hashed | where index == 0 | get -o 0.sha256)) },
+        objects: ($c.objects | each {|o|
+            let t = ($c.tables | get ($o.index | into string))
+            let h = ($hashed | where index == $o.index | get -o 0)
+            let table = (if $h == null { null } else { $"tables/($o.index).nm" })
+            {
+                index: $o.index, path: $o.path, inode: $o.inode, size: $o.size, mtime: $o.mtime,
+                state: $t.state, why: $t.why, sha256: (if $h == null { null } else { $h.sha256 }),
+                table: $table, table_sha256: (if $table == null { null } else { $files | where path == $table | get 0.sha256 }), source: $t.source,
+            }
+        }),
+        files: $files,
+        events: ($events | length),
+        run: { process: $c.process, nonce: $c.nonce, capture_nonce: (do $field "capture_nonce"), qemu_pid: (do $field "qemu_pid"), api: (do $field "api"), sends: (do $field "sends") },
+    }
+    $manifest | to nuon --indent 1 | save --raw ($bundle | path join "bundle.nuon")
+    $manifest
+}
+
+# The reader a bundle records and its check sets beside its own: the jab
+# commit this tool runs from, null outside a git checkout, and this
+# file's SHA-256.
+def sdl-reader []: nothing -> record<jab: oneof<string, nothing>, jab_nu_sha256: string> {
+    let at = (try { ^git -C ($self | path dirname) rev-parse HEAD | complete } catch { { exit_code: 1, stdout: "" } })
+    { jab: (if $at.exit_code == 0 { $at.stdout | str trim } else { null }), jab_nu_sha256: (open --raw $self | hash sha256) }
+}
+
+# The QEMU a log names, object 0 of its table (sdl-log): its path, and
+# while the file is the one its line names, its version and its SHA-256,
+# `sha256` where it was taken already; null fields otherwise.
+def sdl-qemu-of [exe: oneof<record, nothing>, sha256: oneof<string, nothing>]: nothing -> record<path: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>> {
+    if $exe == null { return { path: "", version: null, sha256: null } }
+    if (sdl-stat $exe.path) != { inode: $exe.inode, size: $exe.size, mtime: $exe.mtime } { return { path: $exe.path, version: null, sha256: null } }
+    let version = (try { ^$exe.path --version | complete | get stdout | lines | get -o 0 } catch { null })
+    { path: $exe.path, version: $version, sha256: (if $sha256 != null { $sha256 } else { open --raw $exe.path | hash sha256 }) }
+}
+
+# A bundle (sdl-bundle) held to its manifest wherever it is read, `jab
+# sdl-bundle-check <bundle dir>`, stage by stage, the first that fails
+# refusing it by its stage and name with nothing read from it: 1, the
+# inventory, every file the manifest lists there with its SHA-256 and size
+# and none it does not but bundle.nuon, sdl.log and classified.nuon among
+# them and a paired bundle's api.out and identity.nuon; 2, the
+# correspondence, the manifest's objects one for one with the log's table
+# lines, index, path, inode, size, and modification time alike, a read
+# object's table listed and no other's; 3, the sequence, the log's events
+# as sdl-log reads them, which reads no object file, classified.nuon's in
+# count and line by line in line, stamp, name, render flag, and chain key;
+# 4, the replay, the log classified again from the bundle's tables
+# (sdl-classify --tables), every event's kind and callers classified.nuon's;
+# 5, the run by its profile: paired, the log's process the identity's
+# qemu_pid, the log's nonce the identity's capture_nonce, and the nonce
+# the guest echoed, read from the bundle's api.out by `guest`, the
+# program's reader, equal to both, a 0 or a missing value refused; generic
+# and historical, nothing bound and nothing paired; and with trace.log,
+# QEMU's flushes paired in order one for one with the log's flip uploads,
+# each upload within 5 ms after its flush on the one host clock; 6, the
+# reader, the host's set beside this one, the replay's equality being what
+# admits another revision. The profile, the run, both readers, the trace's
+# pairing, and classified.nuon's events. Untyped because it ends in an
+# error.
+export def sdl-bundle-check [bundle: path, --guest: closure] {
+    let dir = ($bundle | path expand)
+    let refuse = {|stage: int, name: string, why: string| error make {msg: $"the bundle is refused at stage ($stage), ($name): ($why)"} }
+    let manifest_file = ($dir | path join "bundle.nuon")
+    if not ($manifest_file | path exists) { do $refuse 1 "the inventory" $"($dir) holds no bundle.nuon" }
+    let m = (try { open --raw $manifest_file | into binary | decode | from nuon } catch {|e| do $refuse 1 "the inventory" $"bundle.nuon is no NUON the check reads: ($e.msg)" })
+    if ($m | get -o bundle_schema) != 1 { do $refuse 1 "the inventory" $"bundle.nuon's bundle_schema is ($m | get -o bundle_schema | to nuon), where 1 is read" }
+    let profile = ($m | get -o profile | default "")
+    let listed = ($m | get -o files | default [])
+    let names = ($listed | get -o path | default [])
+    let present = (glob ($dir | path join "**" "*") --no-dir | each {|p| $p | path relative-to $dir } | where {|p| $p != "bundle.nuon" } | sort)
+    let unlisted = ($present | where {|p| $p not-in $names })
+    if not ($unlisted | is-empty) { do $refuse 1 "the inventory" $"files the manifest does not list: ($unlisted | str join ', ')" }
+    for f in $listed {
+        let file = ($dir | path join $f.path)
+        if not ($file | path exists) { do $refuse 1 "the inventory" $"($f.path), listed, is not there" }
+        let size = (ls -D $file | get 0.size | into int)
+        let sha256 = (open --raw $file | hash sha256)
+        if $size != $f.size or $sha256 != $f.sha256 { do $refuse 1 "the inventory" $"($f.path) is not the file the manifest lists: ($size) bytes of ($sha256), where it lists ($f.size) of ($f.sha256)" }
+    }
+    let required = (["sdl.log" "classified.nuon"] ++ (if $profile == "paired" { ["api.out" "identity.nuon"] } else { [] }))
+    for r in $required { if $r not-in $names { do $refuse 1 "the inventory" $"the manifest lists no ($r), which a ($profile) bundle holds" } }
+    let read = (try { sdl-log ($dir | path join "sdl.log") } catch {|e| do $refuse 2 "the correspondence" $"the reader refuses the log: ($e.msg)" })
+    let objects = ($m | get -o objects | default [])
+    if ($objects | length) != ($read.objects | length) { do $refuse 2 "the correspondence" $"the manifest lists ($objects | length) objects and the log's table ($read.objects | length)" }
+    for pair in ($read.objects | zip $objects) {
+        let o = $pair.0
+        let e = $pair.1
+        for k in [index path inode size mtime] {
+            if ($o | get $k) != ($e | get -o $k) { do $refuse 2 "the correspondence" $"object ($o.index)'s ($k) is ($e | get -o $k | to nuon) in the manifest and ($o | get $k | to nuon) in the log's table" }
+        }
+        let table = ($e | get -o table)
+        if ($e | get -o state) == "read" {
+            if $table == null or $table not-in $names { do $refuse 2 "the correspondence" $"object ($o.index)'s table was read, and the manifest lists none for it" }
+        } else if $table != null { do $refuse 2 "the correspondence" $"object ($o.index)'s table went unread, and the manifest lists one for it" }
+    }
+    let cls = (try { open --raw ($dir | path join "classified.nuon") | into binary | decode | from nuon } catch {|e| do $refuse 3 "the sequence" $"classified.nuon is no NUON the check reads: ($e.msg)" })
+    let logged = ($read.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: (sdl-chain-key $e.frames) } })
+    let held = ($cls.events | each {|e| { line: $e.line, stamp: $e.stamp, name: $e.name, render: $e.render, key: $e.key } })
+    if ($logged | length) != ($held | length) { do $refuse 3 "the sequence" $"the log holds ($logged | length) events and classified.nuon ($held | length)" }
+    for pair in ($logged | zip $held) {
+        if $pair.0 != $pair.1 { do $refuse 3 "the sequence" $"the log's event at line ($pair.0.line) is ($pair.0 | to nuon), classified.nuon's ($pair.1 | to nuon)" }
+    }
+    let replay = (try { sdl-classified ($dir | path join "sdl.log") $dir } catch {|e| do $refuse 4 "the replay" $"the log classified from the bundle's tables is refused: ($e.msg)" })
+    for pair in ($replay.events | zip $cls.events) {
+        let got = { kind: $pair.0.kind, callers: $pair.0.callers }
+        let want = { kind: $pair.1.kind, callers: $pair.1.callers }
+        if $got != $want { do $refuse 4 "the replay" $"the event at line ($pair.1.line) replays as ($got | to nuon), where classified.nuon holds ($want | to nuon)" }
+    }
+    let run = (match $profile {
+        "paired" => {
+            let id = (open --raw ($dir | path join "identity.nuon") | into binary | decode | from nuon)
+            let pid = ($id | get -o qemu_pid)
+            let nonce = ($id | get -o capture_nonce)
+            if $read.process == null { do $refuse 5 "the run" "the log has no process line" }
+            if $pid == null or $pid == 0 { do $refuse 5 "the run" "the identity records no qemu_pid" }
+            if $read.process != $pid { do $refuse 5 "the run" $"the log's process ($read.process) is not the identity's qemu_pid ($pid)" }
+            if $read.nonce == null { do $refuse 5 "the run" "the log has no nonce line" }
+            if $nonce == null or $nonce == 0 { do $refuse 5 "the run" "the identity records no capture_nonce" }
+            if $read.nonce != (nonce-hex $nonce) { do $refuse 5 "the run" $"the log's nonce ($read.nonce) is not the identity's capture_nonce, (nonce-hex $nonce)" }
+            if $guest == null { do $refuse 5 "the run" "the guest's echoed nonce goes unread: a paired bundle is checked with its program's reader of api.out, --guest" }
+            let echoed = (do $guest ($dir | path join "api.out"))
+            if $echoed == null or $echoed == 0 { do $refuse 5 "the run" "the guest echoed no nonce, its records reading 0" }
+            if $echoed != $nonce { do $refuse 5 "the run" $"the guest echoed (nonce-hex $echoed), where the run's nonce is (nonce-hex $nonce)" }
+            { process: $read.process, nonce: $read.nonce, capture_nonce: $nonce, qemu_pid: $pid, guest_nonce: $echoed }
+        },
+        "generic" | "historical" => { { process: $read.process, nonce: $read.nonce, capture_nonce: null, qemu_pid: null, guest_nonce: null } },
+        _ => { do $refuse 5 "the run" $"the manifest's profile is ($profile | to nuon), where paired, generic, or historical is read" },
+    })
+    let trace = (if "trace.log" not-in $names { null } else {
+        let flushes = (open --raw ($dir | path join "trace.log") | into binary | decode | lines
+            | parse --regex '^(?P<at>\S+) virtio_gpu_cmd_res_flush\b'
+            | each {|c| ($c.at | into datetime | into int) / 1e9 })
+        let uploads = ($replay.events | where kind == "upload" | get ts)
+        if ($flushes | length) != ($uploads | length) { do $refuse 5 "the run" $"the trace holds ($flushes | length) flushes and the log ($uploads | length) flip uploads" }
+        let lags = ($flushes | zip $uploads | each {|p| ($p.1 - $p.0) * 1000.0 })
+        let off = ($lags | enumerate | where {|l| $l.item < 0.0 or $l.item >= 5.0 })
+        if not ($off | is-empty) { do $refuse 5 "the run" $"flip upload ($off | first | get index | $in + 1) lies ($off | first | get item | math round -p 3) ms after its flush, outside the 5 ms after it" }
+        { flushes: ($flushes | length), uploads: ($uploads | length), max_lag_ms: (if ($lags | is-empty) { null } else { $lags | math max | math round -p 3 }) }
+    })
+    let host = ($m | get -o reader)
+    let box = (sdl-reader)
+    { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($host == $box) }, trace: $trace, events: $cls.events }
 }
 
 # Whether `dir` is a workspace's root, holding workspace.jab.toml.

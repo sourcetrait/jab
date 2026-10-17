@@ -131,13 +131,22 @@ fn table(log: &mut Log) {
     }
 }
 
-/// The log, opened with its object table on first use; none when unset.
+/// The run's lines, the log's first two events: the process, then the nonce.
+fn run(log: &mut Log) {
+    line(log, &format!("process {}", std::process::id()));
+    if let Some(nonce) = std::env::var_os("SDL_SHIM_NONCE") {
+        line(log, &format!("nonce {}", nonce.to_string_lossy()));
+    }
+}
+
+/// The log, opened with its object table and the run's lines on first use.
 fn opened(slot: &mut Option<Log>) -> Option<&mut Log> {
     if slot.is_none() {
         let path = std::env::var_os("SDL_SHIM_LOG")?;
         let file = std::fs::OpenOptions::new().create(true).append(true).open(path).ok()?;
         let mut log = Log { file, named: Vec::new() };
         table(&mut log);
+        run(&mut log);
         *slot = Some(log);
     }
     slot.as_mut()
