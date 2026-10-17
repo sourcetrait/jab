@@ -61,8 +61,10 @@ A cpu is every child of /cpus whose device_type is "cpu" and whose status
 is absent or "okay"; a disabled one is passed over, which is no problem.
 Its id is its reg in #address-cells cells; its interrupt controller is its
 child named interrupt-controller, whose phandle is kept by the id for the
-AIA's interrupts-extended, 0 for a cpu with none. Under DEBUG, /chosen's
-bootargs, QEMU's -append, are copied for the knobs a debug build reads.
+AIA's interrupts-extended, 0 for a cpu with none. /chosen's bootargs,
+QEMU's -append, are copied in every build: the spec a launch names,
+jab.spec, which start.S holds an image's declaration to, and under DEBUG
+the knobs a debug build reads.
 
 ## hart_self_check
 
@@ -135,6 +137,15 @@ A knob is a token of /chosen's bootargs, its name, an '=', and digits,
 read by a debug kernel alone; a token that only begins with the name, or a
 value with more than digits, is none.
 
+## spec_name
+
+The spec a launch names, read in every build, a release one too: the
+first token of /chosen's bootargs that starts jab.spec=, its value from
+the byte after the '=' to the next space or the end, handed back where it
+lies in boot_args with its length. A launch puts it after its caller's
+bootargs, so a caller's own jab.spec comes first. Never a code path:
+start.S holds the image's declaration to the spec it names.
+
 ## sys_harts
 
 The discovered mask as the tree gave it, and the online and failed read
@@ -199,7 +210,11 @@ harts_release.
 ## path_chosen
 ## word_bootargs
 
-`u8`: under DEBUG only, where the bootargs are.
+`u8`: where the bootargs are, in every build.
+
+## word_spec
+
+`10 u8`: the token spec_name looks for, its '=' with it.
 
 ## hart_release
 
@@ -240,8 +255,8 @@ kernel_trap matches stval against.
 
 ## boot_args
 
-`BOOT_ARGS_BYTES u8`: under DEBUG, /chosen's bootargs, NUL-terminated,
-empty when the tree has none.
+`BOOT_ARGS_BYTES u8`: /chosen's bootargs, NUL-terminated, empty when the
+tree has none, in every build.
 
 ## hart_areas
 

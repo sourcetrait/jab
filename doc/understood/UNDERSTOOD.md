@@ -131,6 +131,23 @@ writes. The build reuses an image only when its record holds and names
 the demand the build reads; otherwise it builds the image again and
 writes a new record.
 
+Every image begins with a page the build writes ahead of the program's
+code. Its first word is a jump to the code, which starts at the second
+page, so a kernel that enters the image at its base still reaches the
+program's first instruction, and every page-aligned function stays
+page-aligned. The header follows the jump: the magic `JABD`, a version,
+flags, and the offset, length, and CRC-32 of the declaration. A program
+that lists `specs` has its declaration after the header: its base
+demand, then an entry for each spec it lists with that spec's name,
+cores, RAM, display, frame rate, and ISA, taken from `asset/spec.nuon`.
+A program without `specs` gets the header with its flags and every field
+after them at 0. The build generates the page as `jab_header.S` beside
+the image, rewrites the file only when its text changes, and counts it
+among the build's inputs, so a change to a listed spec's row builds the
+program again. The build refuses a listed spec whose display is not the
+ABI's 1920 by 1080 or whose profile is not RVA23. `jab check-image
+<image>` reads the page back and holds it to the kernel's rules.
+
 A build is described by its symbols: `just build --set debug,stats`
 names them, in any case, and each reaches the assembler as a defined
 symbol, `DEBUG` and `STATS`, for `.ifdef` to read in the kernel and in
@@ -452,6 +469,23 @@ kernel reads two more settings there for `test/harts`: `jab.late=<hart>`
 holds that hart back until it has been failed, and `jab.stray=1` makes a
 kernel fault. A fault in the kernel, on any hart, prints its line on the
 console, naming the hart, and ends the run with status 1.
+
+Before the program starts, the kernel holds the machine to the image's
+declaration. Every kernel reads `jab.spec` from its command line, a
+release one too. When a spec is named, it must be one the image lists,
+in any case, and the machine must have exactly that spec's cores, every
+one online, and exactly its RAM. Otherwise the run ends with a line that
+names the spec, what it wants, and what the machine has. With a spec
+named or not, the harts online must reach the image's base demand, or
+the run ends with `jab: harts short of the program's demand: <online>
+for <base>`. A header the kernel cannot accept ends the run with `jab:
+declaration refused: ` and the reason. Each of these lines goes to the
+console with status 1. An image built before the header, and one that
+declares nothing, run as they always have. A debug kernel skips the base
+demand under `jab.nominimum=1`, so a program's own answer to a short
+machine can be tested; a launch with that setting records
+`below_minimum` in its machine and is diagnostic, and a release kernel
+ignores the setting. So below a program's minimum nothing is measured.
 
 A program puts work on the other harts through workers. `jab.sys.worker.start
 hart, entry, argument, stack, size` starts one on an online hart, and only

@@ -35,6 +35,97 @@ device places the .jab file at JAB_PROGRAM_BASE.
 
 `addr`: sp at the program's start, the end of RAM and of the window.
 
+## .set JAB_IMAGE_CODE
+
+`u64`: the offset in an image of its code's first byte, the second page.
+
+An image's first page: the build writes it ahead of the program's code
+(the tool's header-source, program.ld), and the kernel reads it before the
+program starts (start.S). At offset 0 one uncompressed `jal x0` to the
+code, so every kernel, entering at the base, takes it first; the code then
+starts with the instruction it would have started with, a page on, every
+page-aligned function staying page-aligned. At JAB_IMAGE_MAGIC_AT the
+header's fields, each a little-endian u32; at JAB_DECL_OFFSET the
+declaration of a program listing specs, never executed. A program declares
+nothing by hand: its manifest's `specs` and `[reserved]` are its
+declaration, and the spec data is each entry's.
+
+## .set JAB_IMAGE_MAGIC
+
+`u32`: `JABD` as a little-endian word, the header's mark.
+
+## .set JAB_IMAGE_VERSION
+
+`u32`: the header's version, 1.
+
+## .set JAB_IMAGE_DECLARED
+
+`u32`: the flags' one bit, a declaration present; 0 for a program listing
+no specs.
+
+## .set JAB_IMAGE_HEADER_SIZE
+
+`u64`: the jump and the header, zeros past the fields to it.
+
+## .set JAB_IMAGE_MAGIC_AT
+## .set JAB_IMAGE_VERSION_AT
+## .set JAB_IMAGE_FLAGS_AT
+## .set JAB_IMAGE_OFFSET_AT
+## .set JAB_IMAGE_LENGTH_AT
+## .set JAB_IMAGE_CRC_AT
+
+`u64`: the header's fields' offsets in the image: the magic, the version,
+the flags, the declaration's offset, its length, and its CRC-32, the
+gzip CRC over its bytes. Undeclared, the last three are 0.
+
+## .set JAB_DECL_OFFSET
+
+`u64`: where a declaration starts in its image, past the header.
+
+## .set JAB_DECL_MAX
+
+`u64`: the most bytes a declaration takes, the first page's rest.
+
+## .set JAB_DECL_BASE
+## .set JAB_DECL_COUNT
+## .set JAB_DECL_SPECS
+
+`u64`: a declaration's fields' offsets: the base demand (u16), the main
+hart and every hart the program reserves; the count of specs listed (u8),
+a zero byte after it; and the first spec's entry.
+
+## .set JAB_DECL_SPEC_BYTES
+
+`u64`: a spec's entry.
+
+## .set JAB_DECL_SPECS_MAX
+
+`u64`: the most specs a declaration lists.
+
+## .set JAB_DECL_LEAST
+
+`u64`: the shortest declaration, its fields and one spec's entry.
+
+## .set JAB_SPEC_NAME
+## .set JAB_SPEC_CORES
+## .set JAB_SPEC_RAM_GIB
+## .set JAB_SPEC_WIDTH
+## .set JAB_SPEC_HEIGHT
+## .set JAB_SPEC_FPS
+## .set JAB_SPEC_ISA
+
+`u64`: an entry's fields' offsets: its name, lowercase ASCII zero padded;
+then each u16, its cores, its RAM in GiB, its display's width and height,
+its frame rate, and its ISA; zeros to JAB_DECL_SPEC_BYTES.
+
+## .set JAB_SPEC_NAME_BYTES
+
+`u64`: a spec's name's room in its entry.
+
+## .set JAB_ISA_RVA23
+
+`u16`: an entry's ISA for the RVA23 profile, the one a spec names today.
+
 ## .set JAB_DISPLAY_BASE
 
 `addr`: the framebuffer, a pixel the little-endian word 0x00RRGGBB.

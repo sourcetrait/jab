@@ -33,7 +33,11 @@
 # them, with the harts it reserves, `[reserved]`, and those each of its
 # optional features demands, `[feature.<name>]`, which the build checks,
 # hands the program as constants (program-demand), and records beside
-# its image, where a launch reads it (image-demand). `test`
+# its image, where a launch reads it (image-demand). Every image begins
+# with a page the build writes ahead of its code, the jump to it, a
+# header, and for a program listing specs its declaration, each spec's
+# definition and the base demand (header-source), which the kernel holds
+# the machine to before the program starts and check-image reads. `test`
 # always sets DEBUG, so a program's own debug reporting is there for its
 # test; `run` and `build` are release unless asked otherwise. The API,
 # a port between the program and the host, is not a build symbol: every
@@ -64,6 +68,27 @@ const qemu_name = "qemu-system-riscv64"
 # The display's size, jab.inc's JAB_DISPLAY_WIDTH by JAB_DISPLAY_HEIGHT:
 # every screen a launch takes is this many pixels.
 const display_size = { width: 1920, height: 1080 }
+# The image's first page (jab.inc's JAB_IMAGE_* and JAB_DECL_*), which the
+# kernel reads before the program starts (start_check): at the window's
+# base one uncompressed `jal x0` to the code at the second page,
+# image_jump; the header after it, image_header bytes from the base, the
+# magic `JABD` as a little-endian word, the version, the flags, bit 0
+# declared, and the declaration's offset, length, and CRC-32; the
+# declaration at decl_offset, never executed: the base demand, the count
+# of the specs listed, at most decl_specs_max, and an entry of
+# decl_spec_bytes a spec, its name zero padded to decl_name_bytes.
+const image_code = 4096
+const image_header = 64
+const image_magic = 0x4442414a
+const image_version = 1
+const image_declared = 1
+const image_jump = 0x0000106f
+const decl_offset = 64
+const decl_specs_max = 16
+const decl_spec_bytes = 32
+const decl_name_bytes = 8
+# The ISAs a declaration names, by the spec data's profile: RVA23 is 1.
+const decl_isas = { RVA23: 1 }
 # RVA23 is the profile Jab pins, so everything it mandates is on whether
 # or not Jab itself uses it; the supervisor profile is the one carrying
 # an MMU mode and the supervisor timer the frame clock needs. RVA23 says
@@ -271,6 +296,17 @@ export def spec-default [ws: path]: nothing -> string {
 def spec-bootargs [m: record, bootargs: string]: nothing -> string {
     if $m.spec == null { return $bootargs }
     [$bootargs $"jab.spec=($m.spec.name)"] | where {|w| $w != "" } | str join " "
+}
+
+# A debug kernel's knob as it reads one from its command line
+# (knob_value): the first word of `line` that starts `<name>=`, its value
+# when the rest is digits alone; null with no such word, or with anything
+# else after its `=`.
+def knob-of [line: string, name: string]: nothing -> oneof<int, nothing> {
+    let word = ($line | split row " " | where {|w| $w starts-with $"($name)=" } | get -o 0)
+    if $word == null { return null }
+    let value = ($word | str substring (($name | str length) + 1)..)
+    if ($value =~ '^[0-9]+$') { $value | into int } else { null }
 }
 
 # The machine on `qemu` as `m` (machine-of) provisions it: virt with
@@ -576,7 +612,9 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # handed back for a harness that clears away files of its own. The
 # machine is the one `--spec` names, or with `--harts` a custom one of 1
 # to 8 harts, or with neither the configured default (machine-for), and
-# `machine` is its record (machine-of); a named spec the image's demand
+# `machine` is its record (machine-of), `below_minimum` true beside it
+# where `bootargs` carries a debug kernel's jab.nominimum=1, which skips
+# the program's minimum (knob-of); a named spec the image's demand
 # does not list is refused before anything is made, a legacy image's run
 # taking the named machine. `bootargs` goes to the kernel through QEMU's
 # -append, into the device tree's /chosen, a named spec's
@@ -623,7 +661,10 @@ export def plan [
 ]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
     let ws = (launch-workspace $kernel $image $out)
-    let machine = (machine-for $ws $spec $harts)
+    # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
+    # is recorded below it, where a release kernel reads no knob and refuses
+    let asked = (machine-for $ws $spec $harts)
+    let machine = (if (knob-of $bootargs "jab.nominimum") == 1 { $asked | insert below_minimum true } else { $asked })
     let demand = (image-demand $image)
     spec-listed $machine $demand ($image | path parse | get stem)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
@@ -826,9 +867,9 @@ def image-manifest [image: path]: nothing -> record {
 # custom command stay distinct; `qemu` is the line as it ran. `declared`
 # says whether the demand recorded with the image at its build declares
 # one (image-demand), and `diagnostic` is the run's standing: on a
-# custom machine, with QEMU words of its own, or of an image built on the
+# custom machine, with QEMU words of its own, of an image built on the
 # legacy path or with no record beside it, undeclared and claiming no
-# console. `--sdl-probe`,
+# console, or below its program's minimum (plan's `below_minimum`). `--sdl-probe`,
 # `--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
 # minted here only for a probing launch given none (launch-nonce); the
 # launch writes the API only what its caller sends, never for itself.
@@ -1024,7 +1065,7 @@ export def launch [
         screen_completed: $screen_completed,
         send_seconds: $send_seconds,
         declared: ($machine.demand != null),
-        diagnostic: ($ran_on.diagnostic != null or (not ($qemu | is-empty)) or $machine.demand == null),
+        diagnostic: ($ran_on.diagnostic != null or (not ($qemu | is-empty)) or $machine.demand == null or ($ran_on | get -o below_minimum | default false)),
         qemu_pid: $qemu_pid,
         sdl_log: $machine.sdl_log,
         shim: $machine.shim,
@@ -2229,6 +2270,173 @@ def demand-include [d: record, out: path]: nothing -> string {
     $file
 }
 
+# A program's declaration, the bytes its image's first page carries at
+# decl_offset for the kernel to hold the machine to before the program
+# starts (start_check), from its declared demand (program-demand) and its
+# workspace's spec data: the base demand (u16), the count of the specs it
+# lists (u8), a zero byte, then each spec's entry, decl_spec_bytes long, in
+# the demand's order: its name in lowercase ASCII, zero padded to
+# decl_name_bytes, then its cores, its RAM in GiB, its display's width and
+# height, its frame rate, and its ISA (decl_isas), each u16, the rest zero;
+# little-endian throughout. A listed spec an image cannot declare is
+# refused naming the program, the spec, and why: a display other than the
+# ABI's, display_size, the one every image renders at; an ISA profile
+# decl_isas gives no number; RAM in no whole number of GiB; a name past
+# decl_name_bytes or of other than letters and digits; a count past a u16.
+# More specs than decl_specs_max are refused too. Beside the bytes the
+# header's flags, offset, length, and CRC-32 (crc32): 1, decl_offset, the
+# bytes' length, and their CRC for a declared program; every one 0 and no
+# bytes for one declaring no demand. Untyped because it ends in an error.
+def image-declaration [d: any, ws: any, program: string] {
+    if $d == null { return { flags: 0, offset: 0, length: 0, crc: 0, bytes: 0x[] } }
+    let count = ($d.specs | length)
+    if $count > $decl_specs_max { error make {msg: $"($program) lists ($count) specs, and an image declares ($decl_specs_max) at most"} }
+    let table = (specs-of $ws)
+    let entries = ($d.specs | each {|listed|
+        let r = ($table | where {|row| ($row.name | str lowercase) == ($listed | str lowercase) } | first)
+        let name = ($r.name | str lowercase)
+        if not ($name =~ '^[a-z0-9]+$') or ($name | str length) > $decl_name_bytes { error make {msg: $"($program) lists ($r.name), whose name an image declares in ($decl_name_bytes) letters and digits at most"} }
+        if $r.display != $display_size { error make {msg: $"($program) lists ($r.name), whose display is ($r.display.width) by ($r.display.height), and an image renders at the ABI's ($display_size.width) by ($display_size.height)"} }
+        let isa = ($decl_isas | get -o $r.isa_profile)
+        if $isa == null { error make {msg: $"($program) lists ($r.name), whose ISA profile ($r.isa_profile) an image cannot declare; it declares ($decl_isas | columns | str join ', ')"} }
+        if ($r.ram mod 1GiB) != 0B { error make {msg: $"($program) lists ($r.name), whose RAM, ($r.ram), is no whole number of GiB"} }
+        let fields = [$r.cores ($r.ram / 1GiB | into int) $r.display.width $r.display.height $r.fps $isa]
+        if ($fields | any {|f| $f < 0 or $f > 0xffff }) { error make {msg: $"($program) lists ($r.name), a count of which an image's u16 cannot hold: ($fields | str join ', ')"} }
+        let named = ($name | into binary)
+        $named ++ (zeros ($decl_name_bytes - ($named | bytes length))) ++ ($fields | each {|f| le $f 2 } | bytes collect) ++ (zeros ($decl_spec_bytes - $decl_name_bytes - 2 * ($fields | length)))
+    })
+    let bytes = ((le $d.base 2) ++ (le $count 1) ++ 0x[00] ++ ($entries | bytes collect))
+    { flags: $image_declared, offset: $decl_offset, length: ($bytes | bytes length), crc: (crc32 $bytes), bytes: $bytes }
+}
+
+# The CRC-32 gzip and PNG carry, as the kernel's gz.S computes it over an
+# image's declaration: the reflected polynomial 0xedb88320 through a
+# table, the register starting all ones and inverted at the end.
+export def crc32 [bytes: binary]: nothing -> int {
+    let table = (0..255 | each {|n|
+        mut c = $n
+        for _ in 1..8 {
+            $c = (if ($c bit-and 1) == 1 { ($c bit-shr 1) bit-xor 0xedb88320 } else { $c bit-shr 1 })
+        }
+        $c
+    })
+    mut crc = 0xffffffff
+    for b in ($bytes | chunks 1) {
+        let i = (($crc bit-xor ($b | into int)) bit-and 0xff)
+        $crc = (($table | get $i) bit-xor ($crc bit-shr 8))
+    }
+    $crc bit-xor 0xffffffff
+}
+
+# The image's first page as the assembly takes it: `jab_header.S` in the
+# build's output directory, generated at every build of a program ahead of
+# its staleness check and counted among its inputs, its sections placed by
+# program.ld, `.jab.header` at the window's base and `.jab.decl`
+# decl_offset bytes on: the jump to `__jab_code`, the code's first byte at
+# the second page, assembled uncompressed and unrelaxed so it is the four
+# bytes of image_jump; the magic, the version, and the declaration's
+# flags, offset, length, and CRC (image-declaration), then zeros to
+# image_header bytes; then the declaration's bytes, none for a program
+# declaring no demand. The file is written only when its text differs from
+# what is there, so its time moves with its text alone. Its path.
+def header-source [decl: record, out: path]: nothing -> string {
+    let hex = {|v: int| $v | format number | get lowerhex }
+    let rows = ($decl.bytes | chunks 16 | each {|row| "    .byte " + ($row | chunks 1 | each {|b| $"0x($b | encode hex | str lowercase)" } | str join ", ") })
+    # the jump and six words, then zeros to the header's end
+    let text = (([
+        ".section .jab.header, \"ax\""
+        ".option push"
+        ".option norvc"
+        ".option norelax"
+        "    jal x0, __jab_code"
+        ".option pop"
+        $"    .4byte (do $hex $image_magic), ($image_version), ($decl.flags), ($decl.offset), ($decl.length), (do $hex $decl.crc)"
+        $"    .zero ($image_header - 7 * 4)"
+        ".section .jab.decl, \"a\""
+    ] ++ $rows | str join "\n") + "\n")
+    let file = ($out | path join "jab_header.S")
+    let there = (if ($file | path exists) { open --raw $file | into binary | decode } else { "" })
+    if $there != $text { $text | save -f $file }
+    $file
+}
+
+# An image's first page, read as the kernel reads it before the program
+# starts (start_check) and held to the rules the build writes it by
+# (header-source): `legacy`, no magic at offset 4, an image built before
+# the header, its first page its own code; `undeclared`, the header with
+# flags 0 and the offset, the length, and the CRC 0, a program declaring no
+# demand; `declared`, flags 1, the declaration at decl_offset, its length
+# from one spec's to the first page's end and exactly its list's, its CRC
+# holding. Where the kernel refuses an image, so does this, by the kernel's
+# own reason (`declaration refused: <reason>`); past the kernel's rules, the
+# jump at offset 0 is image_jump, the image holds its whole first page and
+# code after it, and each entry is a name of lowercase letters and digits
+# zero padded, an ISA decl_isas numbers, and zeros past its fields. The
+# record: `kind`; `header`, the magic, version, flags, offset, length, and
+# CRC, null for a legacy image; and `declaration`, the base demand and each
+# spec with its cores, RAM in GiB, display, frame rate, and ISA, null but
+# for a declared image. Each refusal names the image. Untyped because it
+# ends in an error.
+export def check-image [image: path] {
+    let image = ($image | path expand)
+    let b = (open --raw $image | into binary)
+    let size = ($b | bytes length)
+    let word = {|at: int| $b | bytes at $at..<($at + 4) | into int --endian little }
+    let half = {|at: int| $b | bytes at $at..<($at + 2) | into int --endian little }
+    let hex = {|v: int| $"0x($v | into binary --endian big | encode hex | str lowercase)" }
+    if $size < 8 or (do $word 4) != $image_magic { return { kind: "legacy", header: null, declaration: null } }
+    if $size < $image_header { error make {msg: $"($image): its header ends at ($size) bytes, short of ($image_header)"} }
+    let header = { magic: (do $word 4), version: (do $word 8), flags: (do $word 12), offset: (do $word 16), length: (do $word 20), crc: (do $word 24) }
+    let refused = {|why: string| $"($image): declaration refused: ($why)" }
+    if $header.version != $image_version { error make {msg: (do $refused $"version ($header.version)")} }
+    if ($header.flags bit-and (bit-not-of $image_declared)) != 0 { error make {msg: (do $refused $"flags (do $hex $header.flags)")} }
+    if $header.flags == 0 {
+        if $header.length != 0 { error make {msg: (do $refused "flags 0 with a length")} }
+        if $header.offset != 0 { error make {msg: (do $refused "flags 0 with an offset")} }
+        if $header.crc != 0 { error make {msg: (do $refused "flags 0 with a CRC")} }
+    } else {
+        if $header.length == 0 { error make {msg: (do $refused "flags 1 with length 0")} }
+        if $header.offset != $decl_offset { error make {msg: (do $refused $"offset ($header.offset)")} }
+        let least = (4 + $decl_spec_bytes)
+        if $header.length < $least or $header.length > ($image_code - $decl_offset) { error make {msg: (do $refused $"length ($header.length)")} }
+        if $size < ($decl_offset + $header.length) { error make {msg: $"($image): its declaration ends at ($decl_offset + $header.length) bytes, past the image's ($size)"} }
+        let computed = (crc32 ($b | bytes at $decl_offset..<($decl_offset + $header.length)))
+        if $computed != $header.crc { error make {msg: (do $refused $"CRC (do $hex $computed) computed, the header's (do $hex $header.crc)")} }
+        let count = ($b | bytes at ($decl_offset + 2)..<($decl_offset + 3) | into int)
+        if $count == 0 or $count > $decl_specs_max { error make {msg: (do $refused $"spec count ($count)")} }
+        if $header.length != (4 + $count * $decl_spec_bytes) { error make {msg: (do $refused $"length ($header.length) for ($count) specs")} }
+    }
+    let jump = (do $word 0)
+    if $jump != $image_jump { error make {msg: $"($image): the jump at offset 0 is (do $hex $jump), where jal x0 to the code, (do $hex $image_jump), belongs"} }
+    if $size <= $image_code { error make {msg: $"($image): it ends at ($size) bytes, where its code begins at ($image_code)"} }
+    let zeroed = {|from: int, to: int| ($b | bytes at $from..<$to | bytes index-of --all 0x[00] | length) == ($to - $from) }
+    if not (do $zeroed 28 $image_header) { error make {msg: $"($image): its header past the CRC is not zero"} }
+    if $header.flags == 0 { return { kind: "undeclared", header: $header, declaration: null } }
+    let count = ($b | bytes at ($decl_offset + 2)..<($decl_offset + 3) | into int)
+    if ($b | bytes at ($decl_offset + 3)..<($decl_offset + 4) | into int) != 0 { error make {msg: $"($image): the declaration's byte after its count is not zero"} }
+    let isas = ($decl_isas | transpose name code)
+    let specs = (0..<$count | each {|k|
+        let at = ($decl_offset + 4 + $k * $decl_spec_bytes)
+        let raw = ($b | bytes at $at..<($at + $decl_name_bytes))
+        let end = ($raw | bytes index-of 0x[00])
+        let used = (if $end < 0 { $decl_name_bytes } else { $end })
+        let name = ($raw | bytes at 0..<$used | decode)
+        if not ($name =~ '^[a-z0-9]+$') { error make {msg: $"($image): spec ($k)'s name, ($name | to nuon), is no lowercase letters and digits"} }
+        if not (do $zeroed ($at + $used) ($at + $decl_name_bytes)) { error make {msg: $"($image): spec ($k)'s name, ($name), is not zero padded"} }
+        let f = ($at + $decl_name_bytes)
+        let isa = (do $half ($f + 10))
+        if ($isas | where code == $isa | is-empty) { error make {msg: $"($image): spec ($name)'s ISA, ($isa), is none a declaration names"} }
+        if not (do $zeroed ($f + 12) ($at + $decl_spec_bytes)) { error make {msg: $"($image): spec ($name)'s entry past its fields is not zero"} }
+        { name: $name, cores: (do $half $f), ram_gib: (do $half ($f + 2)), display: { width: (do $half ($f + 4)), height: (do $half ($f + 6)) }, fps: (do $half ($f + 8)), isa: ($isas | where code == $isa | first | get name) }
+    })
+    { kind: "declared", header: $header, declaration: { base: (do $half $decl_offset), specs: $specs } }
+}
+
+# Every bit of a 32-bit word but those of `mask`.
+def bit-not-of [mask: int]: nothing -> int {
+    0xffffffff bit-xor $mask
+}
+
 # The demand recorded with an image at its build, `demand.nuon` beside it,
 # read and held to its rules (demand-record-problems): exactly `image`, the
 # image's SHA-256, and `demand`, null on the legacy path, else a demand in
@@ -2362,15 +2570,21 @@ def spec-inputs [c: record]: nothing -> list<string> {
 # of the staleness check and counted among the build's inputs, so a
 # change in the text the SDK generates builds the image again; a build of
 # one declaring none retires the constants an earlier declaration left.
-# Every build writes `demand.nuon` beside the image, the demand recorded
-# with it (image-demand), and a cached image is taken only beside a record
-# that holds and names the build's demand, any other building again whole,
-# the image and its record together.
+# Every image begins with its first page (header-source), the jump to its
+# code, the header, and its declaration (image-declaration), generated and
+# counted among the inputs the same way and linked ahead of the program's
+# own object, so a change to a listed spec's row builds the image again
+# with the new declaration, and a build with nothing changed builds
+# nothing. Every build writes `demand.nuon` beside the image, the demand
+# recorded with it (image-demand), and a cached image is taken only beside
+# a record that holds and names the build's demand, any other building
+# again whole, the image and its record together.
 def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
     let specs = (spec-inputs $c)
     let demand = (program-demand $m $c.workspace)
+    let declaration = (image-declaration $demand $c.workspace $m.name)
     let includes = ($m | get -o includes | default [])
     let generated = (if $demand == null { [] } else { [$c.out] })
     let include_flags = (($includes ++ $generated) | each {|i| ["-I" $i] } | flatten)
@@ -2382,8 +2596,9 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let home = ($c.out | path join "home")
     if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
     let constants = (if $demand == null { [] } else { [(demand-include $demand $c.out)] })
+    let header = (header-source $declaration $c.out)
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants)
+    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants ++ [$header])
     let id = (build-id $flags $inputs)
     if (not (stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
     mkdir $c.out
@@ -2393,9 +2608,11 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let objcopy = ($c.prefix + "objcopy")
     march-check $asm $march_program $c.out
     let obj = ($c.out | path join $"($m.name).o")
+    let header_obj = ($c.out | path join "jab_header.o")
     let elf = ($c.out | path join $"($m.name).elf")
+    ^$asm $march_program $header -o $header_obj
     ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
-    ^$ld -T $m.link -nostdlib $obj -o $elf
+    ^$ld -T $m.link -nostdlib $header_obj $obj -o $elf
     ^$objcopy -O binary $elf $image
     { image: (open --raw $image | hash sha256), demand: $demand } | to nuon | save -f (demand-record-of $image)
     $id | save -f $stamp

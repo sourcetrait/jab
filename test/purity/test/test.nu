@@ -76,6 +76,9 @@ const fault_text = [
     "jab: ram missing for "
     "jab: interrupt source "
     "jab: device reset refused: source "
+    "jab: declaration refused: "
+    "jab: spec "
+    "jab: harts short of the program's demand: "
 ]
 
 # What may sit between a device store and its fence: value and address

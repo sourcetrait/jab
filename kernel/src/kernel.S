@@ -42,6 +42,7 @@ msg_banner:
     call harts_report
     call ram_report
 .endif
+    call start_check                        # the image's declaration held to the machine
     csrw sscratch, tp                       # its record while the program runs
     li t0, JAB_PROGRAM_BASE
     csrw sepc, t0

@@ -3,8 +3,9 @@
 Supervisor-mode entry on hart 0, bss already cleared and the device tree
 and the RAM read in machine mode (boot.S). Builds the page tables and turns on paging,
 starts the frame clock, installs the trap vector, releases the secondary
-harts (harts.S), and enters the program at JAB_PROGRAM_BASE in user mode
-with its stack at JAB_STACK_TOP and every other register cleared. The
+harts (harts.S), holds the image's declaration to the machine (start.S),
+and enters the program at JAB_PROGRAM_BASE in user mode with its stack at
+JAB_STACK_TOP and every other register cleared. The
 display comes up when the program asks for it. The ports come up before the
 program, the API when the run put its port on the machine (serial.S). The
 UART carries only the program's output and the fault lines; with DEBUG set
@@ -34,7 +35,13 @@ the debug channel, first, so the banner and everything after it go there,
 the serial device's transport right after the banner (serial.S's
 serial_report), every hart's line after the release (harts.S's
 harts_report), and the RAM's free ranges after them (ram.S's
-ram_report). sscratch holds the hart's record while the program runs.
+ram_report). Then the startup check (start.S's start_check), once every
+hart has checked in and the RAM is known, so a machine off the spec the
+launch names, or short of the program's base demand, ends the run before
+the program starts. sscratch holds the hart's record while the program
+runs. The program is entered at the window's base whatever its image: a
+declared or undeclared one jumps from there to its code at the second
+page, an image from before the header begins there.
 
 ## msg_banner
 

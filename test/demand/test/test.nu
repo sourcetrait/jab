@@ -37,9 +37,12 @@
 # builds again whole, writing the record afresh, and a launch with the
 # record retired runs undeclared and diagnostic. A legacy program built
 # records a null demand, builds again with its record retired, and given
-# `specs` without a rebuild plans none. Then the declared program's
-# declaration dropped, its next build retiring the constants, including
-# none, and recording a null demand.
+# `specs` without a rebuild plans none. Then the image's declaration keyed
+# to its spec data: a listed spec's cores changed in a workspace of the
+# test's own build its program again with the new number in its first
+# page, the change undone builds it back, and nothing changed builds
+# nothing. Then the declared program's declaration dropped, its next build
+# retiring the constants, including none, and recording a null demand.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -287,6 +290,47 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let listed_plan = (jab plan --kernel $kernel --image $legacy_image --out ($out | path join "legacy_listed"))
     assert equal $listed_plan.demand null $"a legacy image given `specs` without a rebuild plans none: ($listed_plan.demand | to nuon)"
 
+    # the declaration's build key (ProgramMinimums): a program declaring a
+    # spec of a workspace of the test's own, its spec data a copy of this
+    # one's; the spec's cores changed there build it again with the new
+    # number in its image's declaration (check-image), the change undone
+    # builds it back, and a build with nothing changed builds nothing
+    let keyed = ($fixtures | path join "keyed")
+    mkdir ($keyed | path join "asset")
+    "kernel = 'kernel'\nprograms = ['program']\n" | save -f ($keyed | path join "workspace.jab.toml")
+    let data = ($keyed | path join "asset" "spec.nuon")
+    cp ($ws | path join "asset" "spec.nuon") $data
+    cp ($ws | path join "asset" "spec.nutype") ($keyed | path join "asset" "spec.nutype")
+    let program = ($keyed | path join "program")
+    mkdir ($program | path join "src")
+    $head + $listed | save -f ($program | path join "program.jab.toml")
+    $exit_zero | save -f ($program | path join "src" "main.S")
+    let keyed_made = (^nu $tool build $program | complete)
+    assert equal $keyed_made.exit_code 0 $"the keyed program builds: ($keyed_made.stderr)"
+    let keyed_image = (jab program-out $program release | path join "fixture.jab")
+    let first = ($specs | first)
+    let declared_cores = {|| jab check-image $keyed_image | get declaration.specs.0.cores }
+    assert equal (do $declared_cores) $first.cores $"its image declares ($first.name)'s cores"
+    let original = (open --raw $data | decode)
+    let edited = ($original | str replace $"cores: ($first.cores)," $"cores: ($first.cores + 1),")
+    assert ($edited != $original) $"the copy's ($first.name) given ($first.cores + 1) cores"
+    $edited | save -f $data
+    let key_at = (written $keyed_image)
+    let changed = (^nu $tool build $program | complete)
+    assert equal $changed.exit_code 0 $"the keyed program builds with its spec changed: ($changed.stderr)"
+    assert ((written $keyed_image) > $key_at) "a listed spec's cores changed build the program again"
+    assert equal (do $declared_cores) ($first.cores + 1) "its image declares the new cores"
+    $original | save -f $data
+    let changed_at = (written $keyed_image)
+    let undone = (^nu $tool build $program | complete)
+    assert equal $undone.exit_code 0 $"the keyed program builds with the change undone: ($undone.stderr)"
+    assert ((written $keyed_image) > $changed_at) "the change undone builds it back"
+    assert equal (do $declared_cores) $first.cores "its image declares the spec's cores again"
+    let undone_at = (written $keyed_image)
+    let unchanged = (^nu $tool build $program | complete)
+    assert equal $unchanged.exit_code 0 $"the keyed program builds with nothing changed: ($unchanged.stderr)"
+    assert equal (written $keyed_image) $undone_at "a build with nothing changed builds nothing"
+
     # the declaration dropped: the constants it left are retired
     do $manifest "declared" "" | ignore
     $exit_zero | save -f ($declared | path join "src" "main.S")
@@ -297,7 +341,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let undeclared_record = (recorded $declared_image)
     assert equal $undeclared_record { image: (sha $declared_image), demand: null } $"a build with the declaration dropped records a null demand: ($undeclared_record | to nuon)"
 
-    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside an include its generator no longer writes, a record of another demand, an unreadable one, an altered image, or none built again whole"
+    print $"demand: a legacy program read, built, and run undeclared and diagnostic; ($refusals | length) manifests and a spec with no harts refused, each naming its fault; a spec in another case and a feature past every spec held; built afresh, a base demand past its spec refused, and a declared program's constants generated, reaching its assembly, its runs declared, diagnostic on four harts alone, and retired once its declaration was dropped; each image's demand recorded with it and read from there, an edited manifest unread, ($faults | length) faults of a record and one beside no image refused, a record kept to the shape passing, and a build beside an include its generator no longer writes, a record of another demand, an unreadable one, an altered image, or none built again whole; a listed spec's cores changed and undone each building again with the image's declaration following, and nothing changed building nothing"
     print "demand: ok"
 }
 

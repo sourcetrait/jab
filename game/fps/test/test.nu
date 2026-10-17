@@ -561,8 +561,11 @@ const HART_THREE = 8
 # with hart 2 failed by the kernel's jab.late knob, the sparse grant 1 3;
 # each machine's reserved and workers lines, and a W asking GFX_SLOTS held
 # to those started, a band a worker and at the default grain. Two harts
-# and one hold fewer secondaries than the reservation: each refused at
-# the start with its line and exit 17
+# and one hold fewer secondaries than the reservation: the kernel refuses
+# the image, its base demand of three harts unmet, so each is reached past
+# that by the debug kernel's knob, SHORT_KNOB, and refused at the program's
+# start with its line and exit 17; and two harts without the knob refused
+# by the kernel before the program starts, KERNEL_SHORT, with status 1
 const GFX_SLOTS = 7
 const WORKER_MACHINES = [
     { harts: 3, bootargs: "", started: 2, harts_of: "1 2" }
@@ -575,6 +578,8 @@ const SHORT_MACHINES = [
     { harts: 1, line: "fps: harts short: 0 secondaries online for the 2 reserved" }
 ]
 const SHORT_EXIT = 17
+const SHORT_KNOB = "jab.nominimum=1"
+const KERNEL_SHORT = "jab: harts short of the program's demand: 2 for 3"
 # The packet's bounds, through the console's K frame on a debug build.
 # The still copy of Render Zero's spawn view, settled on its tiles,
 # drawn in packets of at most PACKET_CAPS' commands and spans, so a frame
@@ -1402,10 +1407,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         }
     }
     for h in $SHORT_MACHINES {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_short_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts $h.harts)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_short_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts $h.harts --bootargs $SHORT_KNOB)
         assert ($h.line in ($run.serial | lines)) $"($h.harts) harts hold fewer secondaries than the reservation, refused with its line, ($h.line): ($run.serial | lines | last 3)"
         assert equal $run.status $SHORT_EXIT $"a machine short of the reservation ends the run with ($SHORT_EXIT) on ($h.harts) harts: ($run.serial | lines | last 3)"
+        assert ($run.machine | get -o below_minimum | default false) $"the run past the kernel's minimum is recorded below it on ($h.harts) harts: ($run.machine)"
     }
+    let kernel_short = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_short_kernel") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts 2)
+    assert equal [$kernel_short.status ($kernel_short.serial | lines)] [1 [$KERNEL_SHORT]] $"two harts without the knob refused by the kernel before the program starts: ($kernel_short.serial | lines | last 3)"
     # the grant moved through the H frame (take-holds): a hart taken and
     # given back on four harts, by the default and by a W of three, and
     # the take refused by the floor on three
@@ -1503,7 +1511,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             }
         }
     }
-    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows; on three, four, and eight harts and on four with hart 2 failed, every grant hart's worker drawing a band a worker and at the default grain; hart 3 taken and given back on four harts, ($take.default_taken) frames drawn by two while taken by the default and ($take.asked_taken) by a W of three, and the take refused by the floor on three; with a worker held and every round cancelled, each the default's picture and counts, the cancelled ones bound with a witness a frame; two and one harts refused short; a worker's fault ends the run; an idle worker sleeps, on eight harts five past a W of two and four past the default's ($GFX_GUIDELINE)"
+    print $"fps: the spawn view by the serial backend, one worker, and two a band a worker and in bands of ($WORKER_GRAIN) rows; on three, four, and eight harts and on four with hart 2 failed, every grant hart's worker drawing a band a worker and at the default grain; hart 3 taken and given back on four harts, ($take.default_taken) frames drawn by two while taken by the default and ($take.asked_taken) by a W of three, and the take refused by the floor on three; with a worker held and every round cancelled, each the default's picture and counts, the cancelled ones bound with a witness a frame; two and one harts refused short past the kernel's minimum by its knob, and two refused by the kernel without it; a worker's fault ends the run; an idle worker sleeps, on eight harts five past a W of two and four past the default's ($GFX_GUIDELINE)"
 
     # the alpha policy rendered: a copy of Render One with its grate
     # wall given the fixture texture and its alcove the solid backdrop,

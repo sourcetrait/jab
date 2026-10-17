@@ -10,15 +10,64 @@
 # launch, and dump-tree, naming both, with no QEMU run; a custom machine of
 # three harts recorded diagnostic, its 4 GiB and no `jab.spec`; a name the
 # spec data does not define refused; a program listing 1KA1 alone refused
-# on 1KB1, naming both. Last the default, in a scratch XDG config home:
-# `jab/config.toml` seeded from asset/default/config.toml byte for byte,
-# one there never written over, JAB_SPEC ahead of it, one naming no spec
-# refused, a home that is not there refused and never made, and a launch
-# naming neither flag on the configured spec.
+# on 1KB1, naming both. Then the startup check (ProgramMinimums): this
+# program's first page read back, its declaration the spec data's; the
+# kernel refusing machines off the spec their command line names (CHECKS);
+# a program's base demand held on a custom machine, its refusal skipped by
+# the debug kernel's knob and the run recorded below the minimum, a release
+# kernel refusing it still; a program declaring nothing and one built
+# before the header each on the legacy path; malformed first pages each
+# refused by name, by the kernel and by check-image; and a kernel without
+# the check running a new image through its jump. Last the default, in a
+# scratch XDG config home: `jab/config.toml` seeded from
+# asset/default/config.toml byte for byte, one there never written over,
+# JAB_SPEC ahead of it, one naming no spec refused, a home that is not
+# there refused and never made, and a launch naming neither flag on the
+# configured spec.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
 const GIB = 1073741824
+# The startup check's refusals of machines off the spec they are named,
+# each a custom machine whose command line names a spec, as a tree of a
+# caller's own would, run on this program's image, with the status and the
+# UART's one line: a spec the image does not list; 1KB1's seven cores on
+# three harts; 1KA1 with hart 2 failed by the late check-in, three
+# discovered and two online; 1KB1's 8 GiB on a machine of 4, and 1KA1's
+# 4 GiB on one of 8; and a name in capitals, read as its lowercase entry,
+# the program running
+const CHECKS = [
+    { name: "unlisted", harts: 3, bootargs: "jab.spec=2ka1", qemu: [], status: 1, line: "jab: spec 2ka1 not listed" }
+    { name: "cores", harts: 3, bootargs: "jab.spec=1kb1", qemu: [], status: 1, line: "jab: spec 1kb1 wants 7 harts: 3 discovered, 3 online" }
+    { name: "offline", harts: 3, bootargs: "jab.spec=1ka1 jab.late=2", qemu: [], status: 1, line: "jab: spec 1ka1 wants 3 harts: 3 discovered, 2 online" }
+    { name: "ram_short", harts: 7, bootargs: "jab.spec=1kb1", qemu: [], status: 1, line: "jab: spec 1kb1 wants 8 GiB of RAM: 0x0000000100000000 bytes installed" }
+    { name: "ram_long", harts: 3, bootargs: "jab.spec=1ka1", qemu: ["-m" "8G"], status: 1, line: "jab: spec 1ka1 wants 4 GiB of RAM: 0x0000000200000000 bytes installed" }
+    { name: "capitals", harts: 3, bootargs: "jab.spec=1KA1", qemu: [], status: 0, line: "spec: up" }
+]
+# The minimum's refusal of a program reserving two graphics harts on a
+# machine of two, and the debug kernel's knob that skips it
+const SHORT = "jab: harts short of the program's demand: 2 for 3"
+const NOMINIMUM = "jab.nominimum=1"
+# The link script every program had before the first page: its code at
+# the window's base
+const LEGACY_LD = "ENTRY(_start)
+
+PHDRS
+{
+    code PT_LOAD FLAGS(5);
+    data PT_LOAD FLAGS(6);
+}
+
+SECTIONS
+{
+    . = 0x80a00000;
+
+    .text : { *(.text .text.*) } :code
+    .rodata : { *(.rodata .rodata.*) } :code
+    .data : { *(.data .data.*) } :data
+    .bss : { *(.bss .bss.*) *(COMMON) } :data
+}
+"
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
@@ -84,6 +133,90 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let on_listed = (jab plan --kernel $kernel --image $listed --out ($out | path join "listed_plan") --spec 1ka1)
     assert equal $on_listed.machine.spec.name "1ka1" $"the spec it lists planned: ($on_listed.machine)"
 
+    # the startup check: this program's first page, its declaration the
+    # spec data's for both specs it lists and its base demand the main hart
+    let own = (jab check-image $image)
+    assert equal [$own.kind $own.declaration.base] ["declared" 1] $"this program's image declared, its base demand one hart: ($own | to nuon)"
+    let declared = ($provisioned | each {|s| { name: ($s.name | str lowercase), cores: $s.cores, ram_gib: ($s.ram / 1GiB | into int), display: $s.display, fps: $s.fps, isa: $s.isa_profile } })
+    assert equal $own.declaration.specs $declared $"its declaration's entries the spec data's: ($own.declaration.specs | to nuon)"
+    # the kernel's refusals of a machine off the named spec, each before the
+    # program starts, its line alone on the UART and status 1; a name in
+    # capitals read as the entries' lowercase
+    for r in $CHECKS {
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"check_($r.name)") --set $set --harts $r.harts --bootargs $r.bootargs --qemu $r.qemu --seconds 20)
+        assert equal [$run.status ($run.serial | lines)] [$r.status [$r.line]] $"($r.name): ($r.bootargs) on ($r.harts) harts (($r.qemu | str join ' ')): ($run.status), ($run.serial)"
+    }
+
+    # the minimum: a program reserving two graphics harts, its base demand
+    # three, refused on a custom machine of two and run on three; past the
+    # minimum on the debug kernel by its knob, the run recorded below it; and
+    # the release kernel, reading no knob, refusing it still
+    let reserving = (fixture $ws ($out | path join "fixtures" "reserving") "reserving" "specs = ['1ka1']\n\n[reserved]\ngfx_harts = 2\n")
+    assert equal (jab check-image $reserving | get declaration.base) 3 "the reserving program's base demand three harts"
+    let short = (jab launch --kernel $kernel --image $reserving --out ($out | path join "short") --set $set --harts 2 --seconds 20)
+    assert equal [$short.status ($short.serial | lines)] [1 [$SHORT]] $"two harts short of the base demand refused: ($short.serial)"
+    let held = (jab launch --kernel $kernel --image $reserving --out ($out | path join "held") --set $set --harts 3 --seconds 20)
+    assert equal [$held.status ($held.serial | lines) $held.diagnostic] [0 [] true] $"three harts hold it, diagnostic as a custom machine: ($held.serial)"
+    let below = (jab launch --kernel $kernel --image $reserving --out ($out | path join "below") --set $set --harts 2 --bootargs $NOMINIMUM --seconds 20)
+    assert equal [$below.status ($below.machine | get -o below_minimum) $below.diagnostic] [0 true true] $"the knob runs it below the minimum, so recorded and diagnostic: ($below.serial), ($below.machine)"
+    let tool = ($ws | path join "sdk" "nu" "jab.nu")
+    ^nu $tool build --kernel ($ws | path join "kernel")
+    let release = (jab target-root $ws | path join "release" "kernel" "jab.elf")
+    let release_below = (jab launch --kernel $release --image $reserving --out ($out | path join "release_below") --harts 2 --bootargs $NOMINIMUM --seconds 20)
+    assert equal [$release_below.status ($release_below.serial | lines)] [1 [$SHORT]] $"the release kernel refuses it under the knob too: ($release_below.serial)"
+
+    # no declaration: a program listing no specs, its header undeclared, and
+    # one built before the header under the link script of then, its code at
+    # the window's base; each runs on the legacy path, on a named machine its
+    # kernel checks nothing of
+    let undeclared = (fixture $ws ($out | path join "fixtures" "undeclared") "undeclared" "")
+    assert equal (jab check-image $undeclared | get kind) "undeclared" "a program listing no specs has its header undeclared"
+    let legacy = (legacy-image $ws ($out | path join "fixtures" "undeclared") ($undeclared | path dirname) ($out | path join "legacy"))
+    assert equal (jab check-image $legacy | get kind) "legacy" "an image built before the header reads as legacy"
+    for c in [{ name: "undeclared", image: $undeclared } { name: "legacy", image: $legacy }] {
+        let run = (jab launch --kernel $kernel --image $c.image --out ($out | path join $"($c.name)_run") --set $set --spec 1kb1 --seconds 20)
+        assert equal [$run.status ($run.serial | lines) $run.declared $run.diagnostic] [0 [] false true] $"the ($c.name) image on 1KB1, undeclared and diagnostic: ($run.serial)"
+    }
+
+    # malformed first pages: copies of this program's image, each patched,
+    # the CRC made again where the patch lies inside the declaration, and
+    # refused by name before the program starts, by the kernel and by
+    # check-image alike
+    let bytes = (open --raw $image | into binary)
+    let crc = ($bytes | bytes at 24..<28 | into int --endian little)
+    let malformed = [
+        { name: "version", patches: [[8 2]], why: "version 2" }
+        { name: "flag_bit", patches: [[12 3]], why: "flags 0x0000000000000003" }
+        { name: "undeclared_length", patches: [[12 0]], why: "flags 0 with a length" }
+        { name: "undeclared_offset", patches: [[12 0] [20 0]], why: "flags 0 with an offset" }
+        { name: "undeclared_crc", patches: [[12 0] [20 0] [16 0]], why: "flags 0 with a CRC" }
+        { name: "no_length", patches: [[20 0]], why: "flags 1 with length 0" }
+        { name: "offset", patches: [[16 128]], why: "offset 128" }
+        { name: "length_short", patches: [[20 20]], why: "length 20" }
+        { name: "length_past", patches: [[20 4096]], why: "length 4096" }
+        { name: "crc", patches: [[24 ($crc bit-xor 1)]], why: $"CRC (hex16 $crc) computed, the header's (hex16 ($crc bit-xor 1))" }
+        { name: "count_none", count: 0, why: "spec count 0" }
+        { name: "count_past", count: 17, why: "spec count 17" }
+        { name: "count_off", count: 3, why: "length 68 for 3 specs" }
+    ]
+    let copies = ($malformed | each {|m|
+        let copy = (patched $bytes $m ($out | path join "malformed" $m.name) ($env.FILE_PWD | path join ".." | path expand))
+        let checked = (refusal { jab check-image $copy })
+        assert ($checked | str contains $"declaration refused: ($m.why)") $"($m.name): check-image refuses it, ($m.why): ($checked)"
+        let run = (jab launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
+        assert equal [$run.status ($run.serial | lines)] [1 [$"jab: declaration refused: ($m.why)"]] $"($m.name): the kernel refuses it, ($m.why): ($run.serial)"
+        { name: $m.name, image: $copy }
+    })
+
+    # a kernel without the check, from a copy of the kernel's sources with
+    # its one call taken out, as every kernel before it entered an image at
+    # its base: the jump takes it to the code, the bad CRC's copy unread
+    let unchecked = (unchecked-kernel $ws $kernel $set ($out | path join "unchecked"))
+    for c in [{ name: "own", image: $image } { name: "crc", image: ($copies | where name == "crc" | first | get image) }] {
+        let run = (jab launch --kernel $unchecked --image $c.image --out ($out | path join $"unchecked_($c.name)") --set $set --spec 1ka1 --seconds 20)
+        assert equal [$run.status ($run.serial | lines)] [0 ["spec: up"]] $"a kernel without the check runs the ($c.name) image through its jump: ($run.serial)"
+    }
+
     # the default, in a scratch XDG config home
     let xdg = ($out | path join "xdg")
     jab retire $xdg
@@ -108,8 +241,88 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { jab spec-default $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
-    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined"
+    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check"
     print "spec: ok"
+}
+
+# A value as the kernel prints one in hex: 0x and sixteen digits.
+def hex16 [v: int]: nothing -> string {
+    $"0x($v | into binary --endian big | encode hex | str lowercase)"
+}
+
+# A copy of an image with its first page patched: each of `m.patches`, a
+# word's offset and its value, written little-endian; or `m.count` as the
+# declaration's count of specs, the CRC made again over the declaration so
+# the count alone is wrong. Beside it a `home` naming the program, so a
+# launch finds its workspace. Its path.
+def patched [bytes: binary, m: record, dir: path, home: path]: nothing -> string {
+    jab retire $dir
+    mkdir $dir
+    mut b = $bytes
+    for p in ($m | get -o patches | default []) {
+        $b = (put-word $b $p.0 $p.1)
+    }
+    let count = ($m | get -o count)
+    if $count != null {
+        let length = ($b | bytes at 20..<24 | into int --endian little)
+        $b = (($b | bytes at 0..<66) ++ ($count | into binary --endian little | bytes at 0..<1) ++ ($b | bytes at 67..))
+        $b = (put-word $b 24 (jab crc32 ($b | bytes at 64..<(64 + $length))))
+    }
+    let file = ($dir | path join "spec.jab")
+    $b | save -f $file
+    $home | save -f ($dir | path join "home")
+    $file
+}
+
+# Bytes with the little-endian word at `at` made `value`.
+def put-word [b: binary, at: int, value: int]: nothing -> binary {
+    ($b | bytes at 0..<$at) ++ ($value | into binary --endian little | bytes at 0..<4) ++ ($b | bytes at ($at + 4)..)
+}
+
+# An image built as every program was before the first page: a fixture's
+# source assembled and linked by the tools its flags stamp names under the
+# link script of then, LEGACY_LD, its code at the window's base and no
+# header; beside it a `home` naming the fixture, so a launch finds its
+# workspace. Its path.
+def legacy-image [ws: path, fixture: path, built: path, dir: path]: nothing -> string {
+    jab retire $dir
+    mkdir $dir
+    let prefix = (open --raw ($built | path join "flags") | decode | lines | first | split row " " | last)
+    let script = ($dir | path join "legacy.ld")
+    $LEGACY_LD | save -f $script
+    let obj = ($dir | path join "legacy.o")
+    let elf = ($dir | path join "legacy.elf")
+    let image = ($dir | path join "legacy.jab")
+    ^$"($prefix)as" -march=rva23u64 -I ($ws | path join "sdk" "src") ($fixture | path join "src" "main.S") -o $obj
+    ^$"($prefix)ld" -T $script -nostdlib $obj -o $elf
+    ^$"($prefix)objcopy" -O binary $elf $image
+    $fixture | save -f ($dir | path join "home")
+    $image
+}
+
+# A kernel without the startup check, as every kernel before it entered an
+# image: a copy of the kernel's sources with kernel.S's one call of
+# start_check taken out, assembled and linked by the tools the test's
+# kernel's flags stamp names, with the build's symbols. Its ELF.
+def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -> string {
+    jab retire $dir
+    mkdir $dir
+    cp -r ($ws | path join "kernel" "src") $dir
+    let main = ($dir | path join "src" "kernel.S")
+    let lines = (open --raw $main | decode | lines)
+    let kept = ($lines | where {|l| not ($l | str starts-with "    call start_check") })
+    assert equal (($lines | length) - ($kept | length)) 1 "the kernel's one call of the check taken out"
+    ($kept | str join "\n") + "\n" | save -f $main
+    let prefix = (open --raw ($kernel | path dirname | path join "flags") | decode | lines | first | split row " " | last)
+    let symbols = ($set | split row "," | where {|s| $s != "" } | each {|s| ["--defsym" $"($s)=1"] } | flatten)
+    let objects = (glob ($dir | path join "src" "*.S") | sort | each {|f|
+        let o = ($dir | path join (($f | path parse | get stem) + ".o"))
+        ^$"($prefix)as" -march=rva23s64 -I ($dir | path join "src" "include") -I ($ws | path join "sdk" "src") ...$symbols $f -o $o
+        $o
+    })
+    let elf = ($dir | path join "jab.elf")
+    ^$"($prefix)ld" -T ($dir | path join "src" "link.ld") -nostdlib ...$objects -o $elf
+    $elf
 }
 
 # The message a call raises, "" when it raises none.

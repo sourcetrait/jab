@@ -173,8 +173,7 @@ harts_topology:
     la t0, harts_refused
     sd t1, 0(t0)                            # a problem keeps every other hart parked
 72:
-.ifdef DEBUG
-    mv a0, s0
+    mv a0, s0                               # the bootargs, jab.spec in every build and the knobs under DEBUG
     la a1, path_chosen
     call dtb_path
     beqz a0, 8f
@@ -199,7 +198,6 @@ harts_topology:
 83:
     sb zero, 0(t1)
 8:
-.endif
     ld ra, 56(sp)
     ld s0, 48(sp)
     ld s1, 40(sp)
@@ -825,6 +823,52 @@ knob_value:
     ret
 .endif
 
+.global spec_name
+spec_name:
+    la t0, boot_args
+1:
+    lbu t1, 0(t0)                           # a token's start
+    beqz t1, 8f
+    li t2, ' '
+    bne t1, t2, 2f
+    addi t0, t0, 1
+    j 1b
+2:
+    mv t3, t0
+    la t4, word_spec
+3:
+    lbu t5, 0(t4)
+    beqz t5, 5f                             # the whole name, its '=' with it
+    lbu t6, 0(t3)
+    bne t5, t6, 4f
+    addi t3, t3, 1
+    addi t4, t4, 1
+    j 3b
+4:
+    lbu t1, 0(t0)                           # another token: past it
+    beqz t1, 8f
+    li t2, ' '
+    beq t1, t2, 1b
+    addi t0, t0, 1
+    j 4b
+5:
+    mv a0, t3                               # the value's first byte
+    li a1, 0
+6:
+    add t5, t3, a1
+    lbu t6, 0(t5)
+    beqz t6, 7f
+    li t2, ' '
+    beq t6, t2, 7f
+    addi a1, a1, 1
+    j 6b
+7:
+    ret
+8:
+    li a0, 0
+    li a1, 0
+    ret
+
 .global sys_harts
 sys_harts:
     call harts_masks
@@ -860,12 +904,12 @@ msg_tree_refused:
     .asciz "jab: device tree refused: code "
 msg_timer:
     .asciz "jab: timer unsupported: timebase-frequency "
-.ifdef DEBUG
 path_chosen:
     .asciz "/chosen"
 word_bootargs:
     .asciz "bootargs"
-.endif
+word_spec:
+    .asciz "jab.spec="
 
 .section .data
 .balign 8
@@ -893,10 +937,8 @@ hart_wake_target:
 .global hart_wake_faulted
 hart_wake_faulted:
     .skip 8
-.ifdef DEBUG
 boot_args:
     .skip BOOT_ARGS_BYTES
-.endif
 .balign 16
 .global hart_areas
 hart_areas:
