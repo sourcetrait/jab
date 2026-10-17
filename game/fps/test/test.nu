@@ -4303,7 +4303,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let sends7 = (gauge run-sends 7 1 $FX_NONCE { workers: null, grain: null })
     let nonce_sends = ($sends7 | where {|s| ($s.bytes | bytes at 0..<1) == ("I" | into binary) })
     let nonce_send = ($nonce_sends | get -o 0 | default { at: null, bytes: 0x[] })
-    let nonce_read = (if ($nonce_send.bytes | bytes length) >= 12 { $nonce_send.bytes | bytes at 4..<12 | into int --endian little } else { null })
+    let nonce_read = (if ($nonce_send.bytes | bytes length) >= 12 { $nonce_send.bytes | bytes at 4..<12 | into int --endian little --signed } else { null })
     assert equal [($nonce_sends | length) $nonce_send.at $nonce_read ($nonce_send.bytes | bytes length)] [1 200ms $FX_NONCE 64] "a run's sends hold one I at 200 ms beside the R and the C, its nonce in bytes 4 to 11"
     assert ((jab launch-nonce 0 true) >= 1) "a run's nonce is minted nonzero"
 
