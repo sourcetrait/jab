@@ -342,6 +342,13 @@ frame goes in at 200 ms ahead of any `--send`, and the bundle binds the
 program's own records to the run by the nonce they carry. Every other
 probe is generic and sends nothing of its own.
 
+walk has such a build, `cadence`, which records every frame of a two
+minute window and sends the records over the API when the window ends.
+`example/walk/test/cadence.nu` runs it once with no probe, on a named
+spec's machine: it mints the nonce, sends the nonce's frame, keeps
+`api.out`, and writes an identity naming the nonce and the digests of
+the image, the kernel, and the romfs. The workbench reads the records.
+
 A gamepad on the host reaches a program two ways, and a program never
 learns which. A run finds the pad through `jabdisco`, built with
 cargo into `tool/target` on first use (it needs libudev's and

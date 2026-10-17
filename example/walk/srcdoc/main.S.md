@@ -41,7 +41,10 @@ follow it, then the export, then the exit. The loop takes walk's order,
 the wait at its head, or with PREPARE the work first and one wait every
 iteration before the flip. CADENCE_TEST makes the build its own
 fixture: a window of ten seconds, QUIET_FRAMES with no walker, the
-stall frames, and the clamp frame.
+stall frames, and the clamp frame. EVENT_ROOM, one of CADENCE_TEST's
+variants, shrinks the event buffer to four past the headroom, so the
+eight entries of the first frame that admits close the window by its
+event room with nothing omitted.
 
 ## .set DISK
 
@@ -226,7 +229,7 @@ further than that.
 
 ## .set EVENTS_MAX
 
-`u64`: the event records the buffer holds.
+`u64`: the event records the buffer holds, 4096, or under EVENT_ROOM four past EVENT_HEADROOM.
 
 ## .set EVENT_HEADROOM
 
@@ -278,7 +281,7 @@ further than that.
 
 ## .set FLAG_BITS
 
-`u32`: the build's flags in the header: TIMING 1, REPLAY 2, PREPARE 4, CADENCE_TEST 8.
+`u32`: the build's flags in the header: TIMING 1, REPLAY 2, PREPARE 4, CADENCE_TEST 8, EVENT_ROOM 16.
 
 ## .set F_KIND
 
@@ -749,7 +752,7 @@ record and the exit names the failure.
 
 ## events
 
-`32768 u8`: the event records, EVENTS_MAX of R_SIZE.
+`32768 u8`: the event records, EVENTS_MAX of R_SIZE, 416 under EVENT_ROOM.
 
 ## replay_head
 

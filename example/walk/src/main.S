@@ -51,6 +51,11 @@
 .error "CADENCE_TEST is one of CADENCE's variants: set cadence with it"
 .endif
 .endif
+.ifdef EVENT_ROOM
+.ifndef CADENCE_TEST
+.error "EVENT_ROOM is one of CADENCE_TEST's variants: set cadence_test with it"
+.endif
+.endif
 
 .ifdef CADENCE
 .ifdef WHOLE
@@ -71,8 +76,12 @@
 .set WINDOW_FIELD, WINDOW_TICKS
 .endif
 .set CADENCE_FRAMES, 8192
-.set EVENTS_MAX, 4096
 .set EVENT_HEADROOM, 48         # eight lanes of three, each leaving and one entering
+.ifdef EVENT_ROOM
+.set EVENTS_MAX, (EVENT_HEADROOM + 4)   # four past the headroom: frame 60's eight entries close the window
+.else
+.set EVENTS_MAX, 4096
+.endif
 .set EXPORT_CHUNK, 4096
 .set SCHEMA, 4
 .set MAGIC, 0x44414357          # WCAD as a le32
@@ -96,6 +105,9 @@
 .endif
 .ifdef CADENCE_TEST
 .set FLAG_BITS, (FLAG_BITS | 8)
+.endif
+.ifdef EVENT_ROOM
+.set FLAG_BITS, (FLAG_BITS | 16)
 .endif
 .set F_KIND, 0
 .set F_ISSUED, 1
