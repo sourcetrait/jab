@@ -595,6 +595,14 @@ the run when a hart other than 0 claims a device's interrupt, `jab: hart N
 claimed a device identity M`, or when a secondary's file enables one, `jab:
 hart N enabled a device identity M`.
 
+Two of the program's buffers belong to the kernel after their call
+returns. A MIDI file is read in place while it plays, and a SoundFont while
+it is loaded. No hart may write either then, a worker included. Every other
+request finishes inside its call. While one of hart 0's calls runs, the
+buffer it uses, the framebuffer during a flip among them, is no worker's to
+write either. The kernel checks none of this; breaking it is the program's
+own fault.
+
 A program that declares its harts owns them. `jab.sys.harts.reserve count`
 reserves every online hart past hart 0 for the program's graphics, once a
 run. The count is the program's declared `JAB_RESERVED_GFX_HARTS`, the

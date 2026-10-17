@@ -1304,12 +1304,17 @@ The file's notes, controllers, program changes, bends, and tempo changes go
 to the synthesizer as the piece runs, stepped a period at a time on the sound
 device's clock. A file the player does not take has no MThd header, a format
 past 1, a SMPTE division, no track or more than JAB_MIDI_TRACKS, or a chunk
-past the end.
+past the end. The file is read in place while it plays, so it stays
+unchanged until jab.sys.midi.playing reads 0 or the piece is stopped: no
+hart writes it then, a worker's included. The kernel checks none of it; a
+file changed under the player is the program's own fault.
 
 ## .macro jab.sys.midi.soundfont
 
 The file stays unchanged while it is loaded because its presets, instruments,
-and samples are read in place. Not a SoundFont 2 file: no RIFF sfbk form, a
+and samples are read in place: no hart writes it until a load of length 0
+unloads it, a worker's included, and the kernel checks none of it. Not a
+SoundFont 2 file: no RIFF sfbk form, a
 list or a hydra chunk missing or out of order, no sample data. Unsound: a
 chunk past the end, a chunk no whole number of its records fills, the buffer
 off a 4-byte boundary.
@@ -1325,6 +1330,17 @@ worker's stack, and it stays the worker's until the worker ends or a stop
 returns. A worker may call jab.sys.harts and the worker calls alone; any
 other call answers JAB_DENIED and does nothing. A worker's fault ends the
 run, every other hart stopped first.
+
+A worker shares the program's memory, and the program's buffers the kernel
+reads later are no worker's to write: a MIDI file while it plays
+(jab.sys.midi.play) and a SoundFont while it is loaded
+(jab.sys.midi.soundfont), both read in place on hart 0 as the sound
+stream refills. Every other request completes inside its call, so no other
+buffer of the program's is the kernel's once the call returns; while one of
+hart 0's calls runs, the buffer it reads or writes, the framebuffer through
+a flip among them, is no worker's either, the program's join keeping the
+two apart. The kernel enforces none of it; a worker writing one is the
+program's own fault.
 
 Once the program has reserved its harts (jab.sys.harts.reserve), every
 start names its owner, the sixth operand: JAB_OWNER_RESERVED on the
