@@ -459,6 +459,78 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let other = (checked $second.bundle $guest)
     assert equal $other.stage 0 $"bundle_second: the second capture's own bundle is admitted: ($other.refused)"
 
+    # the receipt stage's function: each present one past the last, every
+    # other frame the last, the first held to the anchor, one fault one
+    # violation, each rule its own case
+    let p = {|ordinal: int| { presented: true, ordinal: $ordinal } }
+    let n = {|ordinal: int| { presented: false, ordinal: $ordinal } }
+    let violations = [
+        { name: "ordinals_held", frames: [(do $p 4) (do $n 4) (do $p 5) (do $n 5) (do $p 6)], wanted: [] }
+        { name: "ordinals_skip", frames: [(do $p 4) (do $p 6) (do $p 7)], wanted: [{ index: 1, rule: "skip", ordinal: 6, wanted: 5 }] }
+        { name: "ordinals_repeat", frames: [(do $p 4) (do $p 4)], wanted: [{ index: 1, rule: "repeat", ordinal: 4, wanted: 5 }] }
+        { name: "ordinals_backward", frames: [(do $p 4) (do $p 3)], wanted: [{ index: 1, rule: "backward", ordinal: 3, wanted: 5 }] }
+        { name: "ordinals_advance", frames: [(do $p 4) (do $n 5)], wanted: [{ index: 1, rule: "advance", ordinal: 5, wanted: 4 }] }
+        { name: "ordinals_first", frames: [(do $p 5) (do $p 6)], wanted: [{ index: 0, rule: "skip", ordinal: 5, wanted: 4 }] }
+    ]
+    for v in $violations {
+        assert equal (jab ordinal-violations 3 $v.frames) $v.wanted $"($v.name): the violations as the rules name them"
+    }
+
+    # the pairing over synthetic runs: the load's two presents, ordinals 2
+    # and 3, then 120 frames a period apart from 1.6 s, each upload 3 ms
+    # after its present's end on a host clock 1792000000 s on, the open's
+    # upload first, a render after each upload, and a poll 1.5 s past the
+    # last; each case the regular run changed
+    let period_ms = (1000.0 / 60.0)
+    let base = 1792000000.0
+    let ends = ([100.0 1500.0] ++ (0..<120 | each {|i| 1600.0 + $i * $period_ms }))
+    let upload = {|ms: float| { ts: ($base + ($ms + 3.0) / 1000.0), name: "make_current", kind: "upload", key: "chain:0+10" } }
+    let render = {|ms: float| { ts: ($base + ($ms + 5.0) / 1000.0), name: "make_current", kind: "render", key: "chain:?+20" } }
+    let poll = {|ms: float| { ts: ($base + $ms / 1000.0), name: "poll", kind: "poll", key: "chain:" } }
+    let made = {|times: list<float>, after: float| [(do $upload 50.0)] ++ ($times | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($times | last) + $after))] }
+    let flipped = {|times: list<float>| $times | enumerate | each {|e| { status: 0, ordinal: ($e.index + 2), end_us: ($e.item * 1000.0) } } }
+    let regular = { events: (do $made $ends 1500.0), flips: (do $flipped $ends) }
+    let paired = (jab sdl-pair $regular.events $regular.flips)
+    assert equal [$paired.ok ($paired.pairs | length) $paired.window.first $paired.window.last] [true 122 2 123] $"pair_regular: the regular run paired whole, 122 presents, ordinals 2 to 123: ($paired.refusals | to nuon)"
+    assert (($paired.fit.max_residual_ms < 0.01) and (($paired.fit.drift - 1.0 | math abs) < 0.000001)) $"pair_regular: an exact fit, drift 1: ($paired.fit | to nuon)"
+    assert ($paired.limits | str contains "no absolute guest-to-SDL latency") "pair_regular: the limits printed with the reading"
+    # a refused flip and a frame with no flip after frame 10, their ordinals the last
+    let unpaired_flips = ($regular.flips | take 12 | append [{ status: 1, ordinal: 13, end_us: 0.0 } { status: 255, ordinal: 13, end_us: 0.0 }] | append ($regular.flips | skip 12))
+    let unpaired = (jab sdl-pair $regular.events $unpaired_flips)
+    assert equal [$unpaired.ok ($unpaired.pairs | length)] [true 122] $"pair_unpaired: a refused flip and a frame with no flip go unpaired: ($unpaired.refusals | to nuon)"
+    # the window after a loading silence longer than any of its own gaps
+    let quiet = ([100.0 1500.0] ++ (0..<120 | each {|i| 6000.0 + $i * $period_ms }))
+    let silence = (jab sdl-pair (do $made $quiet 1500.0) (do $flipped $quiet))
+    assert equal [$silence.ok ($silence.pairs | length)] [true 122] $"pair_silence: the ordinals place a window after a silence: ($silence.refusals | to nuon)"
+    # Astra's compensating loss and addition: of 120 presents at iP, the
+    # upload at 60P lost and one at 60.25P added, admitted as the limit
+    # says, its largest residual about 0.248 P
+    let even = (1..120 | each {|i| $i * $period_ms })
+    let even_uploads = ($even | each {|ms| if $ms == (60 * $period_ms) { do $upload (60.25 * $period_ms) } else { do $upload $ms } })
+    let compensated = (jab sdl-pair ([(do $upload 0.0)] ++ $even_uploads ++ [(do $poll (($even | last) + 1500.0))]) (do $flipped $even))
+    assert $compensated.ok $"pair_compensated: a compensating loss and addition passes, the documented limit: ($compensated.refusals | to nuon)"
+    assert (($compensated.fit.max_residual_ms > (0.24 * $period_ms)) and ($compensated.fit.max_residual_ms < (0.25 * $period_ms))) $"pair_compensated: its largest residual about 0.248 P: ($compensated.fit.max_residual_ms) ms"
+    # the refusals, each at its own rule
+    let late = ($ends | skip 2 | last 10 | each {|ms| $ms + 10 * $period_ms })
+    let window_uploads = ($regular.events | where kind == "upload")
+    let extra = {|at: float, count: int| 1..$count | each {|i| do $upload ($at + 2.0 + $i) } }
+    let refusals = [
+        { name: "pair_three_uploads", says: "a residual past half the period", events: ((do $made ($ends | take 50) 0.0 | drop 1) ++ (do $extra ($ends | get 49) 2) ++ ((($ends | skip 50) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_upload_missing", says: "a residual past half the period", events: ((do $made ($ends | take 60) 0.0 | drop 1) ++ ((($ends | skip 61) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_duplicated", says: "a duplicated event", events: ($regular.events | take 41 | append ($regular.events | get 40) | append ($regular.events | skip 41)), flips: $regular.flips }
+        { name: "pair_gap", says: "an ordinal gap in the guest's presents", events: ((do $made ($ends | take 30) 0.0 | drop 1) ++ [(do $upload (($ends | get 29) + 5.0))] ++ (($ends | skip 30) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($ends | last) + 1500.0))]), flips: ($regular.flips | take 30 | append ($regular.flips | skip 30 | each {|f| $f | update ordinal ($f.ordinal + 1) })) }
+        { name: "pair_shifted", says: "a residual past half the period", events: ([(do $upload 10.0)] ++ $regular.events), flips: $regular.flips }
+        { name: "pair_slip", says: "a residual past half the period", events: ((do $made ($ends | take 62) 0.0 | drop 1) ++ [(do $upload (($ends | get 61) + 8.0))] ++ ((($ends | skip 62) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_backwards", says: "a stamp going backwards", events: ($regular.events | update 82 {|e| $e | update ts ($e.ts - 0.5) }), flips: $regular.flips }
+        { name: "pair_device", says: "a device error in the window", events: $regular.events, flips: ($regular.flips | take 70 | append { status: 3, ordinal: 71, end_us: 0.0 } | append ($regular.flips | skip 70)) }
+        { name: "pair_cut", says: "the log ending under 1 s past the window's last upload", events: (do $made $ends 500.0), flips: $regular.flips }
+        { name: "pair_short", says: "the log short of an ordinal", events: (do $made ($ends | drop 3) 1500.0), flips: $regular.flips }
+    ]
+    for c in $refusals {
+        let read = (jab sdl-pair $c.events $c.flips)
+        assert ((not $read.ok) and (($read.refusals | get refusal) == [$c.says])) $"($c.name): refused, saying ($c.says) and nothing else: ($read.refusals | to nuon)"
+    }
+
     # the shim's capture, on a binary built non-PIE: the premises first
     let library = (jab shim-build $ws "jabshim_sdl")
     let harness = (jab shim-build $ws "jabshim_sdl_harness" --static)
