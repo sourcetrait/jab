@@ -23,8 +23,12 @@ instead, each run under one of the kernel's GPU knobs: `l` a list of
 three whose second transfer the knob refuses, `b` a list past a batch
 whose first batch's transfer it refuses, `t` a whole flip whose transfer
 it refuses, `f` one whose flush it refuses, and `s` the GPU's source held
-until it fails. A zero-length API write asks whether the port is there:
-it answers 1 with none.
+until it fails. After `t`'s and `f`'s refused flip, the pixel at the
+origin is flipped at once: the tick it reads is the one the refused flip
+left, so the receipt shows whether a refusal moved the frame clock, and a
+pixel away from the screen's middle keeps `t`'s capture the old frame's.
+A zero-length API write asks whether the port is there: it answers 1
+with none.
 
 ## .set FLIPS
 
@@ -134,6 +138,10 @@ thirty-one.
 ## .set KIND_FAILED
 
 `u64`: the held scenario's flip after it failed.
+
+## .set KIND_AFTER
+
+`u64`: the pixel's flip right after a refused whole flip.
 
 ## .set rect
 

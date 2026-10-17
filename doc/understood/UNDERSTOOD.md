@@ -245,7 +245,13 @@ the present ordinal, how many presents the device has answered OK since
 boot, so a program places each of its presents in the host's sequence of
 flushes. A debug kernel's `jab.badxfer`, `jab.badxferat`, and
 `jab.badflush` bootargs make the device refuse a chosen present's transfer
-or flush, which is how `test/framecap` holds the receipts of a failure.
+or flush, which is how `test/framecap` holds the receipts of a failure. A
+kernel built with `FLIP_BATCH`, a candidate under measurement, sends the
+whole flip's transfer and flush as one batch with one wait, as a list's
+are sent, so a refused transfer is followed by the flush, which shows the
+frame before again and counts; `just test test/framecap --set flip_batch`
+holds it, and a kernel built without the symbol is byte for byte the one
+before it.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`

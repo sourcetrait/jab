@@ -27,6 +27,7 @@
 .set KIND_BADFLUSH, 15
 .set KIND_HELD, 16
 .set KIND_FAILED, 17
+.set KIND_AFTER, 18
 
 .macro flip_whole kind
     rdtime s8
@@ -178,12 +179,14 @@ transfer:
     call fill
     jab.sys.display.await
     flip_whole KIND_BADXFER
+    call after_refused
     call report
     j idle
 
 flush:
     jab.sys.display.await
     flip_whole KIND_BADFLUSH
+    call after_refused
     call report
     jab.sys.uart.print msg_done
     jab.sys.exit 0
@@ -219,6 +222,18 @@ no_display:
 flip_failed:
     jab.sys.uart.print msg_flip_failed
     jab.sys.exit 2
+
+after_refused:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    li a0, 0
+    li a1, 0
+    li a2, 1
+    li a3, 1
+    flip_rect KIND_AFTER                    # at once: the tick the refusal left
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
 
 keep:
     la t0, receipt_count

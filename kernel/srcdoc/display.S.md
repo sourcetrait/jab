@@ -91,6 +91,19 @@ before the check, the display not open or failed already, writes zeros of
 its own to a1 and a2, so 0 reads as no decision observed, which `rdtime`
 never is once the kernel runs.
 
+Built with FLIP_BATCH, a candidate under measurement, the screen is
+presented through display_present_rects as a list of one, display_whole:
+its transfer and its flush one batch and one wait where display_present_rect
+waits for each. A refused transfer is then followed by the flush, which
+shows the frame before again and counts as a present, so status 3 says only
+that a command was refused. Without the symbol the kernel is byte for byte
+the one before it.
+
+## display_whole
+
+`4 u32`: under FLIP_BATCH, the whole screen as one rectangle record, x, y,
+width, and height.
+
 ## sys_display_flip_rect
 
 The rectangle is read again from the frame for the present, so the

@@ -47,11 +47,17 @@ sys_display_flip:
     sd a1, 88(sp)               # the decision's stamp
     sd a2, 96(sp)               # the eligibility tick it read
     beqz a0, 2f
+.ifdef FLIP_BATCH
+    la a0, display_whole        # the screen, a list of one: a batch, a wait
+    li a1, 1
+    call display_present_rects
+.else
     li a0, 0
     li a1, 0
     li a2, JAB_DISPLAY_WIDTH
     li a3, JAB_DISPLAY_HEIGHT
     call display_present_rect
+.endif
     li a1, 3
     bnez a0, 3f
     call frame_flipped
@@ -76,6 +82,14 @@ sys_display_flip:
     ld t0, 0(t0)
     sd t0, 104(sp)              # the present ordinal as the call returns
     j trap_return
+
+.ifdef FLIP_BATCH
+.pushsection .rodata
+.balign 4
+display_whole:
+    .word 0, 0, JAB_DISPLAY_WIDTH, JAB_DISPLAY_HEIGHT
+.popsection
+.endif
 
 .global sys_display_flip_rect
 sys_display_flip_rect:
