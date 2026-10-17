@@ -925,7 +925,9 @@ export def wave [path: path]: nothing -> record<rate: int, channels: int, bits: 
 # Read a screen `jab launch` took: its size and its pixels, three bytes
 # each, red, green, blue, row by row from the top left.
 export def screen [path: path]: nothing -> record<width: int, height: int, pixels: binary> {
-    let bytes = (open --raw ($path | path expand))
+    # Bytes whatever the file holds: `open --raw` gives text for a file of
+    # valid UTF-8, a capture whose every channel is below 0x80 among them
+    let bytes = (open --raw ($path | path expand) | into binary)
     # P6, a line of width and height, the maximum, then the pixels
     let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
     let header = ($bytes | bytes at 0..<($newlines.2) | decode | lines)
