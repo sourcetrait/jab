@@ -1,0 +1,6 @@
+name = 'spec'
+sdk = '../../sdk'
+includes = ['../../sdk/src']
+link = '../../sdk/src/program.ld'
+display = 'none'
+specs = ['1ka1', '1kb1']

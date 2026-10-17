@@ -47,6 +47,8 @@ const debug_text = [
     "jab: harts reserved "
     "jab: harts claimed "
     "jab: harts released "
+    "jab: ram free "
+    "jab: ram free none"
 ]
 
 # What every kernel says, because a fault has to be reported whatever
@@ -70,6 +72,8 @@ const fault_text = [
     "jab: timer unsupported: timebase-frequency "
     "jab: machine trap: cause="
     "jab: interrupt platform refused: code "
+    "jab: ram refused: code "
+    "jab: ram missing for "
     "jab: interrupt source "
     "jab: device reset refused: source "
 ]

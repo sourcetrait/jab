@@ -40,6 +40,7 @@ msg_banner:
 .popsection
     call serial_report
     call harts_report
+    call ram_report
 .endif
     csrw sscratch, tp                       # its record while the program runs
     li t0, JAB_PROGRAM_BASE

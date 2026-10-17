@@ -1,7 +1,7 @@
 # kernel.S
 
 Supervisor-mode entry on hart 0, bss already cleared and the device tree
-read in machine mode (boot.S). Builds the page tables and turns on paging,
+and the RAM read in machine mode (boot.S). Builds the page tables and turns on paging,
 starts the frame clock, installs the trap vector, releases the secondary
 harts (harts.S), and enters the program at JAB_PROGRAM_BASE in user mode
 with its stack at JAB_STACK_TOP and every other register cleared. The
@@ -33,7 +33,8 @@ starts: the API when the run put its port on the machine, and under DEBUG
 the debug channel, first, so the banner and everything after it go there,
 the serial device's transport right after the banner (serial.S's
 serial_report), every hart's line after the release (harts.S's
-harts_report). sscratch holds the hart's record while the program runs.
+harts_report), and the RAM's free ranges after them (ram.S's
+ram_report). sscratch holds the hart's record while the program runs.
 
 ## msg_banner
 

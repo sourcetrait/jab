@@ -43,7 +43,8 @@ programs = [
   'test/demand',
   'test/reservations',
   'test/feature',
-  'test/probe'
+  'test/probe',
+  'test/spec'
 ]
 
 # A word standing for a program's path wherever the tool takes one:

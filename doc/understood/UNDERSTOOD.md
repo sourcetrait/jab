@@ -399,19 +399,32 @@ work by; under QEMU's TCG, `cycle` and `instret` both read the host's tick
 counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
 0, since no event is selected and selecting one stays machine mode's.
 
-A machine has the specification's three harts, 1KA1's in `doc/SPEC.md`,
-`-smp 3`, on multithreaded TCG, `-accel tcg,thread=multi`, a host thread
-a hart. The machine is `-machine
+A machine is one of the system specifications `asset/spec.nuon`
+defines: its cores are the harts, `-smp`, its RAM `-m`, and its display
+the GPU's; the kernel is told its name with `jab.spec=<name>` on its
+command line. The spec is the one `--spec` (or `-s`) names on `just run`,
+`jab.nu plan`, `jab launch`, `jab dump-tree`, or the gauge, else the
+default: `JAB_SPEC` when it is set, else the `spec` in `jab/config.toml`
+under the XDG config home, `$XDG_CONFIG_HOME` or `~/.config`. That file
+is written from `asset/default/config.toml`, `spec = '1ka1'`, the first
+time a launch needs it, and never over one that is there; the config
+home itself must already exist. `just test --spec 1kb1` runs the tests'
+launches on that spec. Today the launcher provisions 1KA1, three harts
+and 4 GiB, and 1KB1, seven harts and 8 GiB, both at 1920 by 1080; it
+refuses a spec with more cores than the eight of `jab.inc`'s
+`JAB_HARTS_MAX`, or with another display, and a spec the program does not
+list, naming both. `--harts` with a count from one to eight names a
+custom machine instead, 4 GiB and no `jab.spec`, diagnostic whatever its
+count, which every record of the run labels so; `--spec` with `--harts`
+is refused. Every machine runs multithreaded TCG, `-accel
+tcg,thread=multi`, a host thread a hart, and is `-machine
 virt,aia=aplic-imsic,aclint=on`. Its interrupts go through the RISC-V
 Advanced Interrupt Architecture: the APLIC turns each device's interrupt
 line into a message, and each hart's IMSIC receives those messages in its
-interrupt files. The ACLINT keeps the timer. `--harts` on `just run`,
-`jab.nu plan`, or `jab launch` with any other count up to eight, the
-`JAB_HARTS_MAX` of `jab.inc`, gives a diagnostic machine of that many
-harts, which every record of the run labels so, and a count past eight is
-refused before QEMU starts; every launch's record carries its
-machine, the harts asked for, diagnostic or not, `-machine`, the CPU, and
-the accelerator. QEMU hands every hart the device tree it built, and the
+interrupt files. The ACLINT keeps the timer. Every launch's record
+carries its machine: a named spec's name, cores, RAM, and display, or a
+custom machine's harts and RAM, with `-machine`, the CPU, and the
+accelerator. QEMU hands every hart the device tree it built, and the
 kernel reads it once, on hart 0 in machine mode before anything else
 runs. Every cpu the tree lists is discovered. Hart 0 runs the kernel and
 the program. It also releases every other hart from where it waits. Each
@@ -549,7 +562,7 @@ holds that device's interrupt raised, `jab.hold=2` every disk's, and
 
 `jab launch --qemu <words>` appends words of its own to the machine's
 QEMU line, a device or a property a test needs that no option gives; the
-run is then diagnostic, its machine record marked so and the words
+run is then diagnostic, the words kept in its machine record and
 returned apart as `overrides`. The gauge's `run` and `play` take the same
 option, and a comparison refuses such runs unless `--diagnostic` admits
 them, naming the words.
@@ -560,11 +573,18 @@ such as `-trace alsa_* -D trace.log`; the value is split as a shell
 would split it, quotes grouping a word with spaces and then removed,
 and no shell ever reads it, so a `*` needs no quoting.
 
-The machine has 4 GiB of RAM, and a program owns nearly all of it: the
-kernel keeps the first 2 MiB and the framebuffer the 8 MiB after, and
-the window from there to the end of RAM is the program's,
+The program's window is the same on every machine: the kernel keeps the
+first 2 MiB of RAM and the framebuffer the 8 MiB after, and the window
+from there to the end of the first 4 GiB is the program's,
 `sdk/src/jab.inc` naming its base, its size, and the stack top at its
-end. A program's assets ship on a romfs disk the tool builds from the
+end. The kernel reads the machine's RAM from the device tree's memory
+nodes before anything else runs. It refuses banks that overlap, that
+start below RAM's base, that reach past 256 GiB, or that are empty, and
+a machine whose banks do not hold the kernel, the framebuffer, and the
+window, each refusal a line on the UART and status 1. RAM past the
+window, the 4 GiB from 0x180000000 on 1KB1, is counted and listed free,
+and the debug channel prints it, but no program can reach it yet. A
+program's assets ship on a romfs disk the tool builds from the
 directory its manifest names, a virtio-blk device on the PCI Express
 root the kernel brings up itself, BARs and all, since no firmware runs
 before it; read with `jab.sys.romfs.*`. A second disk, serial `mix`,

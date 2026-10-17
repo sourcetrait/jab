@@ -145,8 +145,8 @@ const CADENCES = [0 1 2]
 const CADENCE_AFTER_FLIP = 0
 # the cap a frame's period comes from when a capture's identity names none
 const CAP = 60
-# the specification's harts, 1KA1's three; a machine of another count is
-# diagnostic
+# the harts of the one machine before named specs, 1KA1's three: a legacy
+# record of another count, marked diagnostic, is read as one of those
 const HARTS = 3
 # a frame's next start less its start less its critical path, wait, and
 # await: the microseconds the conversions drop, at most this
@@ -287,8 +287,8 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--harts 1..8] [--qemu [<word>..]] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
-    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds [..]] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--spec name | --harts 1..8] [--qemu [<word>..]] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--spec name | --harts 1..8] [--qemu [<word>..]] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
     print "nu gauge.nu bench-report <a bench run's directory>"
@@ -328,7 +328,8 @@ def "main run" [
     --host                       # the host's window and audio in place of none and the recording
     --out: string = ""           # where the runs land, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = $HARTS        # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
+    --spec (-s): string = ""     # the named spec the machine is, the configured default unless given
+    --harts: int = 0             # a custom machine of 1 to 8 harts in place of a named spec, the runs then diagnostic
     --qemu: list<string> = []    # words on each launch's line after its own, the runs then diagnostic
     --cpu                        # every QEMU thread's CPU read at 5 s, each placement, and the route's end, as host-time windows
     --sdl-probe                  # the sdl shim on each run under sdl,gl=on, each run bundled last
@@ -336,8 +337,8 @@ def "main run" [
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
-    jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
+    let machine = (jab machine-for $at.workspace $spec $harts)
     let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_render_0.nuon" } else { $route | path expand })
@@ -366,12 +367,12 @@ def "main run" [
             | append [{ at: $r.end, bytes: (pose command-frame "E") }]
             | sort-by at)
         let mode = { window: $host, sound: (if $host { "host" } else { "recorded" }), pad: "route", seed: $seed, cadence: $cadence, workers: $asked.workers, grain: $asked.grain, end: $r.end, capture: $capture }
-        let id = (identity $at $set $map_name $route_file $mode $harts $words | merge { profile: "paired", capture_nonce: $nonce })
+        let id = (identity $at $set $map_name $route_file $mode $machine $words | merge { profile: "paired", capture_nonce: $nonce })
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
@@ -404,13 +405,14 @@ def "main play" [
     --grain: int = 32            # the rows a band asked with the workers, the program's own 32 unless given, 0 for a band a worker
     --out: string = ""           # where the run lands, a stamped directory under the tree's unless given
     --label: string = ""         # a name for the build in the summary
-    --harts: int = $HARTS        # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
+    --spec (-s): string = ""     # the named spec the machine is, the configured default unless given
+    --harts: int = 0             # a custom machine of 1 to 8 harts in place of a named spec, the run then diagnostic
     --qemu: list<string> = []    # words on the launch's line after its own, the run then diagnostic
 ] {
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
-    jab machine-of $harts | ignore
     let at = (places $tree $kernel $image $out)
+    let machine = (jab machine-for $at.workspace $spec $harts)
     let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
     let disk = (romfs-of $at.game "render_0" $at.out)
@@ -424,10 +426,10 @@ def "main play" [
         | append (workers-sends $asked)
         | append [{ at: $end, bytes: (pose command-frame "E") }])
     let mode = { window: true, sound: "host", pad: "host", seed: $seed, cadence: $cadence, workers: $asked.workers, grain: $asked.grain, end: $end, capture: $capture }
-    let id = (identity $at $set "render_0" null $mode $harts $qemu)
+    let id = (identity $at $set "render_0" null $mode $machine $qemu)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --harts $harts --qemu $qemu)
+    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
     let ran_id = (launched-identity $id $launched)
@@ -582,8 +584,10 @@ def workers-sends [asked: record]: nothing -> list<any> {
 # What a run was, written beside its capture before it starts: the
 # records' schemas this reader takes and the clock, the workspace the SDK
 # and kernel come from, the program's own source, the build, the assets,
-# the route, the cap, the machine (the harts asked for, a diagnostic run
-# or not, -machine, the CPU, and the accelerator with its thread mode),
+# the route, the cap, the machine (`jab machine-of`'s record: a named
+# spec's, its name, cores, RAM, and display, or a custom machine's, its
+# harts and RAM, diagnostic; -machine, the CPU, and the accelerator with
+# its thread mode, and the words beside them),
 # the QEMU words of the launch's own (`overrides`), the host, the
 # toolchain, and the mode: the window, the sound, the pad, the seed, the
 # cadence asked for, the workers and grain asked for, null for none, and
@@ -592,7 +596,7 @@ def workers-sends [asked: record]: nothing -> list<any> {
 # beside the image (ImageProvenance), null without one. The QEMU, the
 # machine, and the words are the launch's, written in when it returns
 # (launched-identity).
-def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, harts: int, qemu: list<string>]: nothing -> record {
+def identity [at: record, set: string, map: string, route: oneof<string, nothing>, mode: record, machine: record, qemu: list<string>]: nothing -> record {
     let built = ($at.image | path dirname)
     let flags = (image-flags $at.image)
     let prefix = (if $flags == null { null } else { $flags | split row " " | last })
@@ -623,7 +627,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
         assets: { map: $map, tree: $tree, digest: (tree-digest $tree) },
         route: (if $route == null { null } else { { file: $route, sha256: (digest $route) } }),
         cap: (if $cap == null { null } else { $cap | into int }),
-        machine: (jab machine-of $harts --overrides $qemu),
+        machine: ($machine | update overrides $qemu),
         overrides: $qemu,
         qemu: null,
         host: {
@@ -2588,10 +2592,13 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "correction fails its checks stops the comparison"
             ] | str join " "),
             machine: ([
-                "a run's machine is the one its identity records, its harts, whether it is diagnostic, -machine,"
-                "the CPU, and the accelerator, or none for a capture older than the record; a run on a diagnostic"
-                "machine or with QEMU words of its launch's own stands diagnostic, runs on more than one machine"
-                "are refused unless --diagnostic admits them, and each table row names its build's machine"
+                "a run's machine is the one its identity records, a named spec's, its name, cores, RAM, and display,"
+                "or a custom machine's, its harts and RAM, with -machine, the CPU, and the accelerator, a legacy"
+                "record from before named specs its harts and whether it is diagnostic, or none for a capture older"
+                "than the record; a run on a custom machine, on one its legacy record marks diagnostic, or with QEMU"
+                "words of its launch's own stands diagnostic, runs on more than one machine, a named spec's and a"
+                "legacy record's among them, are refused unless --diagnostic admits them, and each table row names"
+                "its build's machine"
             ] | str join " "),
             table: ([
                 "a build's value for a leg is the mean of its runs' values and the half spread is half their range,"
@@ -2611,8 +2618,8 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
                 "after it, or from schema 4 one asking workers not asked before its first frame or"
                 "asked again after it or with a frame drawn by other workers or at another grain, or asking none"
                 "with workers asked after its first frame or frames at more than one count of workers or grain;"
-                "diagnostic, a run on a machine its identity records as diagnostic, any count of harts but the"
-                "specification's three, or whose identity carries QEMU words of its launch's own, each named; those"
+                "diagnostic, a run on a custom machine, on one its legacy record marks diagnostic, any count of harts"
+                "but the specification's three, or whose identity carries QEMU words of its launch's own, each named; those"
                 "five refused unless --diagnostic admits it; or valid; each table row names its batches' standings"
             ] | str join " "),
             route: ([
@@ -2657,9 +2664,11 @@ export def compare [files: list<string>, field: string, bin_cm: int, --diagnosti
 # incomplete, with the problems; unchecked, complete but measured before
 # the analyzer recorded validity; invalid, with the reasons; unpaired, a
 # run that cannot be paired with another (unpaired-reasons); diagnostic,
-# a run on a machine its identity records as diagnostic or whose identity
-# carries QEMU words of its launch's own, the words and a hart count other
-# than the specification's three named; or valid.
+# a run on a custom machine, its harts and RAM named, one whose legacy
+# record, from before named specs, marks it diagnostic, a hart count other
+# than the specification's three named, one whose machine was launched
+# with QEMU words of its own, or one whose identity carries such words,
+# the words named; or valid.
 def standing-of [
     m: oneof<record, nothing>    # the run's measurement as its gauge.nuon holds it
     rows: list<any>              # the run's rows
@@ -2694,12 +2703,15 @@ def standing-of [
     let unpaired = (unpaired-reasons $m $requested $asked)
     if not ($unpaired | is-empty) { return { standing: "unpaired", reasons: $unpaired } }
     let words = ($overrides | default [])
-    let marked = ($machine != null and ($machine | get -o diagnostic) == true)
-    if $marked or (not ($words | is-empty)) {
+    let custom = ($machine | get -o diagnostic)
+    let built = (($custom | describe) | str starts-with "record")
+    let legacy = ($custom == true)
+    let marked = ($legacy or (not (($machine | get -o overrides | default []) | is-empty)))
+    if $built or $marked or (not ($words | is-empty)) {
         let harts = ($machine | get -o harts)
         let causes = ([
             (if ($words | is-empty) { null } else { $"QEMU words of its launch's own: ($words | str join ' ')" }),
-            (if $harts == null or $harts == $HARTS { null } else { $"a diagnostic machine of ($harts) harts, not the specification's three" }),
+            (if $built { $"a custom machine of ($custom.harts) harts and ($custom.ram_gib) GiB, no named spec" } else if $legacy and $harts != null and $harts != $HARTS { $"a diagnostic machine of ($harts) harts, not the specification's three" } else { null }),
         ] | compact)
         let why = (if ($causes | is-empty) { ["a machine its identity records as diagnostic"] } else { $causes })
         return { standing: "diagnostic", reasons: $why }
@@ -3104,12 +3116,20 @@ def route-text [t: record]: nothing -> string {
     $"the route of SHA-256 ($t.sha256), ($t.file | default 'not found')"
 }
 
-# A machine as a run's identity records it, in words: its harts and
-# whether it is diagnostic, -machine, the CPU, and the accelerator, or
-# unrecorded for an identity older than the record.
+# A machine as a run's identity records it, in words: its harts, then a
+# named spec's name and RAM, a custom machine's RAM and its standing,
+# diagnostic, or a legacy record, written before named specs, named so
+# with its standing as it marks it; -machine, the CPU, and the
+# accelerator; or unrecorded for an identity older than the record.
 def machine-text [m: any]: nothing -> string {
     if $m == null { return "unrecorded" }
-    let kind = (if ($m | get -o diagnostic) == true { ", diagnostic" } else { "" })
+    let spec = ($m | get -o spec)
+    let custom = ($m | get -o diagnostic)
+    let kind = (if (($spec | describe) | str starts-with "record") {
+        $", ($spec.name), ($spec.ram_gib) GiB"
+    } else if (($custom | describe) | str starts-with "record") {
+        $", custom, ($custom.ram_gib) GiB, diagnostic"
+    } else if $custom == true { ", legacy, diagnostic" } else { ", legacy" })
     $"($m | get -o harts) harts($kind), -machine ($m | get -o machine), -cpu ($m | get -o cpu), -accel ($m | get -o accel)"
 }
 

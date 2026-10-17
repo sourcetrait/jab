@@ -1,6 +1,9 @@
 .include "jab.inc"
 
 .set HOLD_TICKS, 120
+.set PAGE, 4096
+.set PROBE_BASE, (JAB_STACK_TOP - 0x40000000)
+.set PROBE_END, (JAB_STACK_TOP - 0x100000)
 
 .section .text
 .global _start
@@ -26,6 +29,41 @@ _start:
     li a0, ' '
     call put_char
     mv a0, s2
+    call put_dec
+    li a0, '\n'
+    call put_char
+    sb zero, 0(s3)
+    jab.sys.uart.print line
+    li t0, PROBE_BASE
+    li t1, PROBE_END
+    li t2, PAGE
+1:
+    bgeu t0, t1, 2f
+    sd t0, 0(t0)                            # each page's first word its own address
+    add t0, t0, t2
+    j 1b
+2:
+    li t0, PROBE_BASE
+    li s0, 0                                # the pages read back
+    li s1, 0                                # those not holding their address
+3:
+    bgeu t0, t1, 5f
+    ld t3, 0(t0)
+    addi s0, s0, 1
+    beq t3, t0, 4f
+    addi s1, s1, 1
+4:
+    add t0, t0, t2
+    j 3b
+5:
+    la s3, line
+    la a1, word_window
+    call put_str
+    mv a0, s0
+    call put_dec
+    li a0, ' '
+    call put_char
+    mv a0, s1
     call put_dec
     li a0, '\n'
     call put_char
@@ -73,6 +111,8 @@ put_dec:
 .section .rodata
 word_harts:
     .asciz "harts "
+word_window:
+    .asciz "window "
 
 .section .bss
 line:

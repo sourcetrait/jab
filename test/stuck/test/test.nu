@@ -50,8 +50,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $held.status 0 $"rng held: exit status ($held.status): ($held.serial)"
     let rng = (mmio-source $held.debug "jab: rng at 0x")
     assert equal ($held.serial | lines) ["stuck: scenario rng" $"jab: interrupt source ($rng) stalled" "stuck random 0 then 1, buffer intact, flip 0"] $"rng held: the source masked once, the outstanding draw answering 1, the buffer untouched past the refill, the display flipping: ($held.serial)"
-    assert $held.machine.diagnostic $"a launch with QEMU words of its own is diagnostic: ($held.machine)"
-    assert equal $held.overrides $RNG_WORDS $"the words come back apart: ($held.overrides)"
+    assert $held.diagnostic $"a launch with QEMU words of its own is diagnostic: ($held.machine)"
+    assert equal [$held.overrides $held.machine.overrides] [$RNG_WORDS $RNG_WORDS] $"the words come back apart and in the machine's record: ($held.overrides)"
 
     let free = (scenario $kernel $image ($out | path join "rng_free") $set "r" --qemu $RNG_WORDS)
     assert equal $free.status 0 $"rng free: exit status ($free.status): ($free.serial)"

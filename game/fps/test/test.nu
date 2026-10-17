@@ -4560,9 +4560,10 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let five_five = (do $compared [$five_a $five_b] "tiles_us" false)
     assert ($five_five == "") $"two runs at schema 5 compare on tiles_us: ($five_five)"
 
-    # machines: the specification's three harts, two harts diagnostic, and
-    # three harts on another -machine, the PLIC's line before the AIA
-    let three = (jab machine-of 3)
+    # machines: 1KA1's, a custom machine of two harts, diagnostic, and
+    # 1KA1's on another -machine, the PLIC's line before the AIA
+    let spec_one = (jab spec-row ($env.FILE_PWD | path join ".." ".." ".." | path expand) "1ka1")
+    let three = (jab machine-of --spec $spec_one)
     let two = (jab machine-of 2)
     let plic = ($three | update machine "virt")
     let on_three = (fx-gauge $dir "machine_three" "three" "three" 0 $good2 --machine $three)
@@ -4570,7 +4571,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let on_plic = (fx-gauge $dir "machine_plic" "plic" "plic" 0 $good2 --machine $plic)
     let diag_refused = (try { gauge compare [$on_three $on_two] "draw_us" 50; "" } catch {|e| $e.msg })
     let diag_says = $"a run on a diagnostic machine is refused as diagnostic: ($diag_refused)"
-    assert ($diag_refused | str contains $"($on_two) run 1, diagnostic: a diagnostic machine of 2 harts") $diag_says
+    assert ($diag_refused | str contains $"($on_two) run 1, diagnostic: a custom machine of 2 harts and 4 GiB, no named spec") $diag_says
     let diag_admitted = (gauge compare [$on_three $on_two] "draw_us" 50 --diagnostic)
     assert equal ($diag_admitted.table | where build == "two" | get 0.standings) ["diagnostic"] "--diagnostic admits it marked"
     let across = (try { gauge compare [$on_three $on_plic] "draw_us" 50; "" } catch {|e| $e.msg })
@@ -4584,13 +4585,13 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     } catch {|e| $e.msg })
     assert ($one_name | str contains "come from 2 builds") $"one name's runs on two machines are two builds: ($one_name)"
 
-    # QEMU words of the launch's own: the machine the launch returns, the
-    # specification's three marked diagnostic, and the one asked for before
-    # it, unmarked, each with the words beside it; both stand diagnostic,
-    # the reason naming the words and no hart count
+    # QEMU words of the launch's own: the machine the launch returns, 1KA1's
+    # with the words in its record, and the one asked for before it, without
+    # them, each with the words beside it; both stand diagnostic, the reason
+    # naming the words and no hart count
     let words = ["-global" "virtio-rng-device.period=6000"]
     let worded = [
-        { name: "words_launched", machine: (jab machine-of 3 --overrides $words) }
+        { name: "words_launched", machine: (jab machine-of --spec $spec_one --overrides $words) }
         { name: "words_asked", machine: $three }
     ]
     for w in $worded {
@@ -4618,7 +4619,7 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     assert equal ($pool.apart | get standing) ["diagnostic"] $"the diagnostic machine's run kept apart: ($pool.apart)"
     assert equal ($doc.runs | get machine.harts) [3 2] $"every run names its machine: ($doc.runs)"
     let text = (gauge bench-text $doc | lines)
-    let line = $"machine: 2 harts, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two run 1"
+    let line = $"machine: 2 harts, custom, 4 GiB, diagnostic, -machine ($two.machine), -cpu ($two.cpu), -accel ($two.accel); QEMU unrecorded: two run 1"
     assert ($line in $text) $"the report names the run's machine, ($line): ($text)"
     let pooled = ($text | skip until {|l| $l | str starts-with "  cadence 0" } | get -o 1)
     assert equal $pooled "    median 1.8 ms under the 15 ms ceiling, a tail of 0 of 3 frames at or over it" "a cadence's lines lead with the pool's median against the ceiling, its tail beside"
@@ -4708,14 +4709,16 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     # each run stands, groups, and is named as its own identity asks
     let qemu_runs = "QEMU emulator version 10.1.2"
     let qemu_summary = "QEMU emulator version 9.2.4"
-    let routed_id = {|cadence: int, harts: int, cap: int|
-        { build: { image_sha256: "bench_image" }, cap: $cap, machine: (jab machine-of $harts), qemu: { binary: "qemu-system-riscv64", version: $qemu_runs }, mode: { cadence: $cadence, workers: 2, grain: 0, pad: "route" } }
+    let three_m = (jab machine-of --spec $spec_one)
+    let two_m = (jab machine-of 2)
+    let routed_id = {|cadence: int, machine: record, cap: int|
+        { build: { image_sha256: "bench_image" }, cap: $cap, machine: $machine, qemu: { binary: "qemu-system-riscv64", version: $qemu_runs }, mode: { cadence: $cadence, workers: 2, grain: 0, pad: "route" } }
     }
     let bench_summary = { build: { image_sha256: "bench_image" }, cap: 50, machine: (jab machine-of 4), qemu: { binary: "qemu-system-riscv64", version: $qemu_summary }, mode: { cadence: 1, workers: 1, grain: 16, pad: "host" } }
     let three_runs = [
-        { run: 1, id: (do $routed_id 0 3 60), items: (fx-items 3 --schema 4 --asked --cadence 0) }
-        { run: 2, id: (do $routed_id 2 2 60), items: (fx-items 3 --schema 4 --asked --cadence 2) }
-        { run: 3, id: (do $routed_id 0 3 30), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+        { run: 1, id: (do $routed_id 0 $three_m 60), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+        { run: 2, id: (do $routed_id 2 $two_m 60), items: (fx-items 3 --schema 4 --asked --cadence 2) }
+        { run: 3, id: (do $routed_id 0 $three_m 30), items: (fx-items 3 --schema 4 --asked --cadence 0) }
     ]
     let bench_runs = ($dir | path join "bench_runs")
     jab retire $bench_runs
@@ -4728,16 +4731,14 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     for x in [[1 0 60] [2 2 60] [3 0 30]] {
         assert equal (do $group_of $runs_doc $x.0) [[route $x.1 (1000000 / $x.2)]] $"run ($x.0)'s group is its own kind, cadence, and period, once"
     }
-    let three_m = (jab machine-of 3)
-    let two_m = (jab machine-of 2)
-    let three_line = $"machine: 3 harts, -machine ($three_m.machine), -cpu ($three_m.cpu), -accel ($three_m.accel); ($qemu_runs)"
-    let two_line = $"machine: 2 harts, diagnostic, -machine ($two_m.machine), -cpu ($two_m.cpu), -accel ($two_m.accel); ($qemu_runs)"
+    let three_line = $"machine: 3 harts, 1ka1, 4 GiB, -machine ($three_m.machine), -cpu ($three_m.cpu), -accel ($three_m.accel); ($qemu_runs)"
+    let two_line = $"machine: 2 harts, custom, 4 GiB, diagnostic, -machine ($two_m.machine), -cpu ($two_m.cpu), -accel ($two_m.accel); ($qemu_runs)"
     let runs_lines = (gauge bench-text $runs_doc | lines | where {|l| $l starts-with "machine: " })
     assert equal $runs_lines [$"($three_line): one run 1, one run 3" $"($two_line): one run 2"] "the bench names each run once under its own machine and QEMU, the summary's nowhere"
     # the same report with a play beside its route runs
     let bench_mixed = ($dir | path join "bench_mixed")
     jab retire $bench_mixed
-    let played_id = ((do $routed_id 0 3 60) | update mode.pad "host")
+    let played_id = ((do $routed_id 0 $three_m 60) | update mode.pad "host")
     fx-request-report ($bench_mixed | path join "one") "one" $bench_summary ($three_runs | append { run: 4, id: $played_id, items: (fx-items 3 --schema 4 --asked --cadence 0) }) | ignore
     let mixed_doc = (gauge bench-doc $bench_mixed)
     assert equal (do $group_of $mixed_doc 4) [[play 0 (1000000 / 60)]] "the play run sits in the play group, once"
@@ -4746,6 +4747,19 @@ export def gauge-rules [dir: path]: nothing -> nothing {
     let mixed_report = ($bench_mixed | path join "one" "gauge.nuon" | path expand)
     let mixed_refusals = ($mixed_doc.compared | each {|c| [$c.field ($c | get -o error | default "" | str contains $"($mixed_report) holds play and route runs") ($c | get -o table)] })
     assert equal $mixed_refusals [[critical_us true null] [draw_us true null]] $"a report mixing a play and route runs refuses the route comparison on both fields, no table holding the play: ($mixed_doc.compared)"
+    # records written before named specs, three harts and four marked
+    # diagnostic as their bool marks them: each named legacy
+    let legacy_m = { harts: 3, diagnostic: false, machine: $three_m.machine, cpu: $three_m.cpu, accel: $three_m.accel }
+    let legacy_four = ($legacy_m | merge { harts: 4, diagnostic: true })
+    let bench_legacy = ($dir | path join "bench_legacy")
+    jab retire $bench_legacy
+    fx-request-report ($bench_legacy | path join "one") "one" $bench_summary [
+        { run: 1, id: (do $routed_id 0 $legacy_m 60), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+        { run: 2, id: (do $routed_id 0 $legacy_four 60), items: (fx-items 3 --schema 4 --asked --cadence 0) }
+    ] | ignore
+    let legacy_lines = (gauge bench-text (gauge bench-doc $bench_legacy) | lines | where {|l| $l starts-with "machine: " })
+    let legacy_line = {|m: record, standing: string| $"machine: ($m.harts) harts, legacy($standing), -machine ($m.machine), -cpu ($m.cpu), -accel ($m.accel); ($qemu_runs)" }
+    assert equal $legacy_lines [$"(do $legacy_line $legacy_m ''): one run 1" $"(do $legacy_line $legacy_four ', diagnostic'): one run 2"] $"a record written before named specs reads as legacy, its standing as it marks it: ($legacy_lines)"
 
     # identities: a run's own file with its audited correction applied,
     # else the report's embedded copy with its correction provenance, else

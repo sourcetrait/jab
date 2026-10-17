@@ -53,7 +53,9 @@ const triples = [
 # The window's base (jab.inc): the kernel's 2 MiB and the framebuffer's
 # 8 MiB come first, and the program has the rest of the machine's 4 GiB.
 const program_base = "0x80a00000"
-const memory = ["-m" "4G"]
+# A custom machine's RAM, the 4 GiB every machine had before named specs;
+# a named spec's is its own.
+const custom_ram_gib = 4
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
@@ -84,12 +86,10 @@ const accel = "tcg,thread=multi"
 # The interrupt platform: the APLIC in MSI mode feeding each hart's IMSIC
 # interrupt files, with the ACLINT's timer, which only TCG offers.
 const machine_name = "virt,aia=aplic-imsic,aclint=on"
-# The harts a machine takes: the specification's three, 1KA1's in
-# doc/SPEC.md, and any other count up to the eight of JAB_HARTS_MAX in
-# jab.inc, the most the ABI names, for a diagnostic run, which its record
-# labels so.
+# The harts a machine takes, up to the eight of JAB_HARTS_MAX in jab.inc,
+# the most the ABI names: a named spec's cores, or a custom machine's
+# count, which its record labels diagnostic whatever it is.
 const harts_allowed = [1 2 3 4 5 6 7 8]
-const harts_default = 3
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
 # on every refresh its cursor blinks.
@@ -192,23 +192,98 @@ def cpu-model [qemu: string]: nothing -> string {
     $cpu_profile
 }
 
-# What a machine of that many harts is, the record a run keeps of it: the
-# harts asked for, whether the run is diagnostic (any count but the
-# specification's three, or `overrides`, QEMU words of the launch's own on
-# its line), the -machine options, the CPU model, and the accelerator
-# with its thread mode. A count outside 1 to 8 (harts_allowed) is refused.
-export def machine-of [harts: int, --overrides: list<string> = []]: nothing -> record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string> {
-    if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), the specification's three or a diagnostic count, not ($harts)"} }
-    { harts: $harts, diagnostic: ($harts != $harts_default or (not ($overrides | is-empty))), machine: $machine_name, cpu: $cpu_profile, accel: $accel }
+# What a launch's machine is, the record a run keeps of it. A named
+# spec's, given its row (spec-row): its cores the harts and its RAM, with
+# `spec` its name in lowercase, its cores, its RAM in GiB, and its
+# display, `diagnostic` null. A custom machine of `harts` harts, 1 to 8
+# (harts_allowed), and custom_ram_gib: `diagnostic` its harts and RAM and
+# `spec` null, whatever its count. Never both, and one of them always.
+# Beside either the harts and the RAM it has, the -machine options, the
+# CPU model, the accelerator with its thread mode, and `overrides`, QEMU
+# words of a launch's own on its line.
+export def machine-of [harts?: int, --spec: any = null, --overrides: list<string> = []]: nothing -> record<harts: int, ram_gib: int, spec: any, diagnostic: any, machine: string, cpu: string, accel: string, overrides: list<string>> {
+    if $spec != null and $harts != null { error make {msg: "--spec with --harts: a named spec provisions its own harts, and --harts names a custom machine"} }
+    if $spec == null and $harts == null { error make {msg: "a machine is a named spec's, --spec, or a custom one, --harts N"} }
+    let common = { machine: $machine_name, cpu: $cpu_profile, accel: $accel, overrides: $overrides }
+    if $spec != null {
+        let ram = ($spec.ram / 1GiB | into int)
+        let named = { name: ($spec.name | str lowercase), cores: $spec.cores, ram_gib: $ram, display: $spec.display }
+        { harts: $spec.cores, ram_gib: $ram, spec: $named, diagnostic: null } | merge $common
+    } else {
+        if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), a custom machine's harts, not ($harts)"} }
+        { harts: $harts, ram_gib: $custom_ram_gib, spec: null, diagnostic: { harts: $harts, ram_gib: $custom_ram_gib } } | merge $common
+    }
 }
 
-# The machine on `qemu`: virt with `options` after it when given, the
-# RVA23 CPU, multithreaded TCG, that many harts (machine-of), every
-# transport modern.
-def machine-args [qemu: string, harts: int, --options: string = ""]: nothing -> list<string> {
-    let m = (machine-of $harts)
+# The machine a launch asks for (machine-of): `--harts`, given past 0, a
+# custom machine; else the spec `--spec` names, or the configured default
+# (spec-default), its row from `ws`'s spec data (spec-row). Both given are
+# refused, naming both, before QEMU starts.
+export def machine-for [ws: oneof<string, nothing>, spec: string, harts: int]: nothing -> record {
+    if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
+    if $harts != 0 { return (machine-of $harts) }
+    if $ws == null { error make {msg: "a named spec needs its workspace's asset/spec.nuon, and this launch has no workspace; name a custom machine with --harts"} }
+    let name = (if $spec != "" { $spec } else { spec-default $ws })
+    machine-of --spec (spec-row $ws $name)
+}
+
+# A spec's row from the workspace's spec data (specs-of), its name matched
+# in any case, held to what the launcher can provision: its cores within
+# the harts a machine takes (harts_allowed), and the ABI's display, 1920 by
+# 1080 (display_size); otherwise refused, naming the spec and why.
+export def spec-row [ws: path, name: string]: nothing -> record {
+    let rows = (specs-of $ws)
+    let found = ($rows | where {|r| ($r.name | str lowercase) == ($name | str lowercase) })
+    if ($found | is-empty) { error make {msg: $"no spec ($name) in the spec data, which defines ($rows | get name | str join ', ')"} }
+    let r = ($found | first)
+    if $r.cores not-in $harts_allowed { error make {msg: $"($r.name) has ($r.cores) cores, past the ($harts_allowed | last) harts a machine takes; the launcher cannot provision it"} }
+    if $r.display != $display_size { error make {msg: $"($r.name)'s display is ($r.display.width) by ($r.display.height), and the ABI's ($display_size.width) by ($display_size.height); the launcher cannot provision it yet"} }
+    $r
+}
+
+# The default spec: JAB_SPEC where it is set, else `spec` in
+# `jab/config.toml` under the XDG config home, $XDG_CONFIG_HOME or
+# ~/.config, which is checked and never made; `jab/` under it is made, and
+# the file, where there is none, seeded from the workspace's
+# asset/default/config.toml, never over one there.
+export def spec-default [ws: path]: nothing -> string {
+    let forced = ($env.JAB_SPEC? | default "")
+    if $forced != "" { return $forced }
+    let given = ($env.XDG_CONFIG_HOME? | default "")
+    let home = (if $given == "" { $nu.home-dir | path join ".config" } else { $given })
+    if ($home | path type) != "dir" { error make {msg: $"the XDG config home ($home) is not there, where jab/config.toml names the default spec; set JAB_SPEC or pass --spec"} }
+    let dir = ($home | path join "jab")
+    mkdir $dir
+    let file = ($dir | path join "config.toml")
+    if ($file | path type) == null {
+        let seed = ($ws | path join "asset" "default" "config.toml")
+        if not ($seed | path exists) { error make {msg: $"no ($seed) to seed ($file) from"} }
+        cp $seed $file
+    }
+    let cfg = (try { open --raw $file | into binary | decode | from toml } catch {|e| error make {msg: $"($file) is no TOML the tools read: ($e.msg)"} })
+    let spec = ($cfg | get -o spec)
+    if ($spec | describe) != "string" or ($spec | str trim) == "" { error make {msg: $"($file) names no `spec`, the default spec a launch runs"} }
+    $spec
+}
+
+# A launch's command line for the kernel: `bootargs`, then a named spec's
+# `jab.spec=<name>`; a custom machine's `bootargs` alone.
+def spec-bootargs [m: record, bootargs: string]: nothing -> string {
+    if $m.spec == null { return $bootargs }
+    [$bootargs $"jab.spec=($m.spec.name)"] | where {|w| $w != "" } | str join " "
+}
+
+# The machine on `qemu` as `m` (machine-of) provisions it: virt with
+# `options` after it when given, the RVA23 CPU, multithreaded TCG, its
+# harts, every transport modern.
+def machine-args [qemu: string, m: record, --options: string = ""]: nothing -> list<string> {
     let machine = (if $options == "" { $m.machine } else { $"($m.machine),($options)" })
     ["-machine" $machine "-cpu" (cpu-model $qemu) "-accel" $m.accel "-smp" ($m.harts | into string)] ++ $machine_rest
+}
+
+# The RAM `m` has (machine-of), in GiB.
+def memory-args [m: record]: nothing -> list<string> {
+    ["-m" $"($m.ram_gib)G"]
 }
 
 # The scalar types a spec's type may name.
@@ -499,10 +574,14 @@ def audio-plan [found: oneof<record, nothing>]: nothing -> string {
 # into the retire home of `target`, the workspace's target or else the
 # program's, wherever `out` lies (retire), its pipes kept; `target` is
 # handed back for a harness that clears away files of its own. The
-# machine has `harts` harts, 1 to 8, and `machine` is its record
-# (machine-of); `bootargs` goes to the kernel through QEMU's -append,
-# into the device tree's /chosen, where a debug kernel reads its test
-# knobs and a release kernel reads nothing; `dtb` hands the kernel that
+# machine is the one `--spec` names, or with `--harts` a custom one of 1
+# to 8 harts, or with neither the configured default (machine-for), and
+# `machine` is its record (machine-of); a named spec the image's demand
+# does not list is refused before anything is made, a legacy image's run
+# taking the named machine. `bootargs` goes to the kernel through QEMU's
+# -append, into the device tree's /chosen, a named spec's
+# `jab.spec=<name>` after it (spec-bootargs), where a debug kernel reads its test
+# knobs, and the record's `bootargs` is the line as given; `dtb` hands the kernel that
 # tree through -dtb in place of the one QEMU builds, QEMU checking its
 # header before any hart runs. `demand` is the demand recorded with the
 # image at its build (image-demand), null for a program on the legacy path
@@ -533,15 +612,20 @@ export def plan [
     --window
     --live-sound
     --host-pad
-    --harts: int = $harts_default
+    --spec: string = ""
+    --harts: int = 0
     --bootargs: string = ""
     --dtb: path = ""
     --send: table<at: duration, bytes: binary> = []
     --sdl-probe: path = ""
     --capture-nonce: int = 0
     --profile: string = ""
-]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
-    let machine = (machine-of $harts)
+]: nothing -> record<qemu_binary: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+    let out = ($out | path expand)
+    let ws = (launch-workspace $kernel $image $out)
+    let machine = (machine-for $ws $spec $harts)
+    let demand = (image-demand $image)
+    spec-listed $machine $demand ($image | path parse | get stem)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
     let probed = ($sdl_probe != "")
@@ -551,11 +635,8 @@ export def plan [
     if $profile not-in ["" "generic" "paired"] { error make {msg: $"--profile ($profile): a capture's profile is paired or generic"} }
     if $profile == "generic" and not $probed { error make {msg: "--profile generic is a probing launch's, classification alone; it needs --sdl-probe"} }
     if $profile == "paired" and $capture_nonce == 0 { error make {msg: "--profile paired needs the run's --capture-nonce, minted by the caller that makes the request"} }
-    let out = ($out | path expand)
     mkdir $out
-    let ws = (launch-workspace $kernel $image $out)
     let root = (target-root (if $ws != null { $ws } else { image-home $image }))
-    let demand = (image-demand $image)
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
@@ -587,8 +668,9 @@ export def plan [
         let driver = (if $server { {} } else { { SDL_VIDEODRIVER: "offscreen" } })
         $pad.env | merge { LD_PRELOAD: $preload, SDL_SHIM_LOG: $sdl_log } | merge $nonce | merge $driver
     })
-    let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
-    let args = ((machine-args $qemu $harts) ++ (name-args ($image | path parse | get stem)) ++ $memory ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let line = (spec-bootargs $machine $bootargs)
+    let append = (if $line == "" { [] } else { ["-append" $line] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
+    let args = ((machine-args $qemu $machine) ++ (name-args ($image | path parse | get stem)) ++ (memory-args $machine) ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" $shown "-monitor" $"pipe:($monitor)" "-serial" $"file:($log)"
@@ -618,7 +700,7 @@ export def plan [
         audio: $backend,
         bridge: $hosted.bridge,
         machine: $machine,
-        bootargs: $bootargs,
+        bootargs: $line,
         demand: $demand,
         sends: $send,
         sdl_log: $sdl_log,
@@ -720,8 +802,8 @@ def image-manifest [image: path]: nothing -> record {
 # actions go through the monitor and the pipes as headless. The result
 # carries the machine's line, `qemu_binary` and `qemu`, with the
 # `window` and the `audio` backend it ran with, and `machine`, the
-# record of the harts it had (machine-of); `--harts`, `--bootargs`, and
-# `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
+# record of the machine it had (machine-of); `--spec`, `--harts`,
+# `--bootargs`, and `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
 # that long after the start and again a second on (threads-of), each
 # reading timed as it is taken, since the loop polls: `threads_span` is
 # the seconds between the two, a second give or take a poll, and
@@ -738,14 +820,15 @@ def image-manifest [image: path]: nothing -> record {
 # its request with `at` and `threads` null, missing. `--qemu` appends words of its own
 # to the line, unchanged, after the launch's: a device or a property a
 # test needs that no launch flag gives. Such a run is diagnostic, its
-# `machine` keeping the platform asked for and marked so (machine-of
-# with the words), and the words
-# come back apart as `overrides`, so the requested platform and the
+# `machine` keeping the platform asked for with the words in its
+# `overrides`, and the words
+# come back apart as `overrides` too, so the requested platform and the
 # custom command stay distinct; `qemu` is the line as it ran. `declared`
 # says whether the demand recorded with the image at its build declares
 # one (image-demand), and `diagnostic` is the run's standing: on a
-# diagnostic machine, or of an image built on the legacy path or with no
-# record beside it, undeclared and claiming no console. `--sdl-probe`,
+# custom machine, with QEMU words of its own, or of an image built on the
+# legacy path or with no record beside it, undeclared and claiming no
+# console. `--sdl-probe`,
 # `--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
 # minted here only for a probing launch given none (launch-nonce); the
 # launch writes the API only what its caller sends, never for itself.
@@ -774,7 +857,8 @@ export def launch [
     --window                   # the window a run of the program opens, in place of none
     --live-sound               # the sound device over the host's audio as a run discovers it, in place of the --sound recording
     --host-pad                 # the host's own gamepad as a run attaches it, in place of a --pad table
-    --harts: int = $harts_default # the machine's harts, the specification's three, or any other from 1 to 8 for a diagnostic run
+    --spec (-s): string = ""   # the named spec the machine is, its cores, RAM, and display; the configured default unless given
+    --harts: int = 0           # a custom machine of 1 to 8 harts in place of a named spec, the run then diagnostic
     --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
     --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
     --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
@@ -783,12 +867,12 @@ export def launch [
     --sdl-probe: path = ""     # the sdl shim's log: QEMU under sdl,gl=on with the shim preloaded, Linux only
     --capture-nonce: int = 0   # the run's capture nonce from the caller making the request; minted here for a probe given none
     --profile: string = ""     # the capture's profile, paired or generic (plan)
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record<harts: int, diagnostic: bool, machine: string, cpu: string, accel: string>, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
     let nonce = (launch-nonce $capture_nonce ($sdl_probe != ""))
-    let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile)
+    let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --spec $spec --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile)
     let send = $machine.sends
     let out = $machine.out
     let log = $machine.serial_log
@@ -915,7 +999,7 @@ export def launch [
     }
     let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
     if $bridge != null { try { job kill $bridge } }
-    let ran_on = (machine-of $harts --overrides $qemu)
+    let ran_on = ($machine.machine | update overrides $qemu)
     {
         status: $result.exit_code,
         serial: (if ($log | path exists) { open --raw $log | decode } else { "" }),
@@ -940,7 +1024,7 @@ export def launch [
         screen_completed: $screen_completed,
         send_seconds: $send_seconds,
         declared: ($machine.demand != null),
-        diagnostic: ($ran_on.diagnostic or $machine.demand == null),
+        diagnostic: ($ran_on.diagnostic != null or (not ($qemu | is-empty)) or $machine.demand == null),
         qemu_pid: $qemu_pid,
         sdl_log: $machine.sdl_log,
         shim: $machine.shim,
@@ -965,21 +1049,25 @@ export def due-order [events: table<kind: string, index: int, at: duration>, scr
     ($due | where {|e| $e.at < $screen }) ++ [{ kind: "screen", index: 0, at: $screen }] ++ ($due | where {|e| $e.at >= $screen })
 }
 
-# The device tree QEMU builds for a launch's machine of that many harts,
-# written to the file `out` through -machine dumpdtb, QEMU exiting once
-# it is written and before any hart runs, `bootargs` in /chosen as a
-# launch's -append puts it; the kernel and the image place the line as
-# plan places it, and a previous file there is retired. The file's path.
-export def dump-tree [--kernel: path, --image: path, --out: path, --harts: int = $harts_default, --bootargs: string = ""]: nothing -> string {
+# The device tree QEMU builds for a launch's machine, the one `--spec`
+# names, a custom one of `--harts` harts, or the configured default
+# (machine-for), written to the file `out` through -machine dumpdtb, QEMU
+# exiting once it is written and before any hart runs, `bootargs` in
+# /chosen as a launch's -append puts it, a named spec's
+# `jab.spec=<name>` after it; the kernel and the image place the line as plan
+# places it, and a previous file there is retired. The file's path.
+export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string = "", --harts: int = 0, --bootargs: string = ""]: nothing -> string {
     let file = ($out | path expand)
     let dir = ($file | path dirname)
-    mkdir $dir
     let ws = (launch-workspace $kernel $image $dir)
+    let machine = (machine-for $ws $spec $harts)
+    mkdir $dir
     let root = (target-root (if $ws != null { $ws } else { image-home $image }))
     retire $file $root
     let qemu = (qemu-binary (image-home $image) $ws)
-    let append = (if $bootargs == "" { [] } else { ["-append" $bootargs] })
-    let args = ((machine-args $qemu $harts --options $"dumpdtb=($file)") ++ $memory ++ ["-bios" "none" "-kernel" ($kernel | path expand) "-display" "none"] ++ $append)
+    let line = (spec-bootargs $machine $bootargs)
+    let append = (if $line == "" { [] } else { ["-append" $line] })
+    let args = ((machine-args $qemu $machine --options $"dumpdtb=($file)") ++ (memory-args $machine) ++ ["-bios" "none" "-kernel" ($kernel | path expand) "-display" "none"] ++ $append)
     let made = (^$qemu ...$args | complete)
     if $made.exit_code != 0 or not ($file | path exists) { error make {msg: $"QEMU wrote no device tree to ($file): ($made.stderr | str trim)"} }
     $file
@@ -2347,14 +2435,19 @@ def test-args [ready: record]: nothing -> list<string> {
 # has one else the blank image that has always been there, the debug
 # channel to a file when DEBUG is set, the API's port when `api` asks,
 # the window given (null for the one a run would open), the UART where
-# `serial` says (`stdio` or `none`), and no monitor, on a machine of
-# `harts` harts (machine-of). The ports' files sit beside the build
+# `serial` says (`stdio` or `none`), and no monitor, on the machine
+# `spec` names, a custom one of `harts` harts, or the configured default
+# (machine-for), a named spec the program does not list refused before
+# QEMU starts (spec-listed). The ports' files sit beside the build
 # output, named in the README.
-def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --harts: int = $harts_default]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string> {
+def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pad_pipe: string, machine: record> {
     let ready = (prepared $dir $names)
     let c = $ready.context
+    let m = (machine-for $c.workspace $spec $harts)
+    spec-listed $m (image-demand $ready.image) $c.manifest.name
     let qemu = (qemu-binary $c.here $c.workspace)
-    let machine = (machine-args $qemu $harts)
+    let line = (spec-bootargs $m "")
+    let machine = ((machine-args $qemu $m) ++ (if $line == "" { [] } else { ["-append" $line] }))
     let assets = (assets-image $c)
     let disk = (if $assets == "" {
         let blank = ($c.target | path join "disk.img")
@@ -2368,7 +2461,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let ports = (ports $c.symbols $c.out $api $gamepad.port $c.root)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { sound-args (audio-plan ($found | get -o audio)) } else { [] })
-    let args = ($machine ++ (name-args $c.manifest.name) ++ $memory ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
+    let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($program_base),force-raw=on"
         "-display" $shown "-serial" $serial "-monitor" "none"
@@ -2377,7 +2470,17 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
-    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, pad_pipe: $ports.pad_pipe }
+    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, pad_pipe: $ports.pad_pipe, machine: $m }
+}
+
+# A named spec held to the program's demand: refused naming both when the
+# demand recorded with its image (image-demand) does not list it; a
+# custom machine, and a legacy image, null demand, on any machine, pass.
+# Untyped because it ends in an error.
+def spec-listed [m: record, demand: oneof<record, nothing>, program: string] {
+    if $m.spec == null or $demand == null { return }
+    if $m.spec.name in ($demand.specs | each {|s| $s | str lowercase }) { return }
+    error make {msg: $"($program) does not list ($m.spec.name), the spec this launch names; it lists ($demand.specs | str join ', ')"}
 }
 
 # Whatever JAB_QEMU_ARGS holds, split into words as a shell would read
@@ -2519,8 +2622,8 @@ def tool-build [ws: path, package: string, without: string]: nothing -> string {
 # With a pad on the port, the bridge runs beside QEMU, started first
 # so it is writing the header as the kernel comes up, and ended with
 # it; the bridge ends itself as well once its pipe has no reader.
-def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool, sound: bool, --harts: int = $harts_default]: nothing -> nothing {
-    let line = (run-line $dir $names $api null "stdio" $kbm $pad $sound --harts $harts)
+def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> nothing {
+    let line = (run-line $dir $names $api null "stdio" $kbm $pad $sound --spec $spec --harts $harts)
     if ($line.window | str starts-with "vnc=") {
         print "no display server here, so this is a development run: the display is served over VNC on 127.0.0.1:5930; tunnel it with `ssh -N -L 5930:127.0.0.1:5930 <this host>` and view it with `vncviewer 127.0.0.1:5930`"
     }
@@ -4294,13 +4397,13 @@ def pad-choice [pad: bool, no_pad: bool]: nothing -> bool {
 # harness in another language to run and drive: `nu jab.nu plan <dir>
 # --disk <romfs> --serial fps --api --gamepad --set debug`, the kernel and
 # the image the program's own builds, `out` under the program's build tree
-# unless given, `--harts` and `--bootargs` plan's.
-def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --harts: int = $harts_default, --bootargs: string = ""] {
+# unless given, `--spec`, `--harts`, and `--bootargs` plan's.
+def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --spec (-s): string = "", --harts: int = 0, --bootargs: string = ""] {
     let names = (symbols $set)
     let c = (context ($dir | path expand) "program" $names)
     let ready = (prepared ($dir | path expand) $names)
     let out = (if $out == "" { $c.out | path join "machine" } else { $out | path expand })
-    plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --harts $harts --bootargs $bootargs | to json
+    plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --spec $spec --harts $harts --bootargs $bootargs | to json
 }
 
 # Build: at a workspace's root the kernel and every program, or the
@@ -4320,12 +4423,16 @@ def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {
 # Test with DEBUG set beside whatever --set names: at a workspace's root
 # every program's test, or those at or under a path, with a summary,
 # failing if any fails; at a program's directory its test/test.nu on the
-# debug kernel.
-def "main test" [dir: path, ...words: string, --set: string = ""] {
+# debug kernel. `--spec` names the spec every launch of the tests runs
+# that names none of its own, JAB_SPEC for them (spec-default).
+def "main test" [dir: path, ...words: string, --set: string = "", --spec (-s): string = ""] {
     let names = (symbols $set)
-    if (is-workspace $dir) { test-under $dir $words $names; return }
-    prepare $dir "test"
-    ^nu ...(test-args (prepared $dir (with-debug $names)))
+    let forced = (if $spec == "" { {} } else { { JAB_SPEC: $spec } })
+    with-env $forced {
+        if (is-workspace $dir) { test-under $dir $words $names; return }
+        prepare $dir "test"
+        ^nu ...(test-args (prepared $dir (with-debug $names)))
+    }
 }
 
 # Build, then run one program with its window and the UART on stdio: at
@@ -4333,15 +4440,17 @@ def "main test" [dir: path, ...words: string, --set: string = ""] {
 # at a program's directory that program. Release unless --set says
 # otherwise; the API's port on the machine with --api; the keyboard and
 # the tablet off with --no-kbm, the gamepad the host has off with
-# --no-pad, the sound device off with --no-sound; the specification's
-# three harts, or any other count from one to eight for a diagnostic run
-# with --harts.
+# --no-pad, the sound device off with --no-sound; the machine the spec
+# --spec names, its cores, RAM, and display, or the configured default,
+# or a custom one of one to eight harts with --harts for a diagnostic run,
+# the two together refused.
 # QEMU's exit code is the program's status.
-def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --harts: int = $harts_default] {
+def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0] {
     let program = (if (is-workspace $dir) { run-target $dir $words } else { $dir | path expand })
-    machine-of $harts | ignore
+    if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
+    if $harts != 0 { machine-of $harts | ignore }
     prepare $program "run"
-    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound) --harts $harts
+    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound) --spec $spec --harts $harts
 }
 
 # Probe one program under a window for --seconds and print one NUON
@@ -4369,5 +4478,5 @@ def "main retire" [ws: path] {
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--harts 1..8]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--spec name | --harts 1..8]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
 }

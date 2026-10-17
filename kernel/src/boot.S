@@ -50,6 +50,8 @@ _start:
     mv a0, s1
     call aia_topology
     call aia_root
+    mv a0, s1
+    call ram_topology
     la t0, kmain
     csrw mepc, t0
     csrr a0, mhartid                        # kmain's hart

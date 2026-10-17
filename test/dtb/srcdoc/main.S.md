@@ -11,11 +11,22 @@ controller's phandle and the node dtb_phandle finds for it, `phandle <n>
 same|other <name>`; /chosen's bootargs, `bootargs <text>`; and paths found
 or not, `found <path>` or `absent <path>`; and the supervisor IMSIC's
 compatible list through dtb_listed, `listed <string> <0|1>`, for both of
-its entries, a prefix of one, and a tail of one.
+its entries, a prefix of one, and a tail of one. Last the kernel's RAM
+reader, kernel/src/ram.S assembled in with RAM_READER set, over QEMU's
+own trees and the test's RAM trees: each tree checked, `ram <name> tree
+<code>` when refused, then `ram <name> <code> <banks>`; for a tree read
+whole each bank, `ram <name> bank <base> <end>`, whether the program's
+window is backed, `ram <name> window <0|1>`, and the free view,
+`ram <name> free <n>` and each `ram <name> range <base> <end>`, all in
+decimal.
 
 ## .set FILE_BYTES
 
 `u64`: the largest tree file read, tree's size.
+
+## .set BANKS
+
+`u64`: the banks a RAM tree is read into, and the free ranges.
 
 ## files
 
@@ -28,6 +39,11 @@ its entries, a prefix of one, and a tail of one.
 ## listed
 
 `5 addr`: the strings looked for in the IMSIC's compatible, ended by 0.
+
+## ram_files
+
+`17 addr`: the RAM trees read, in order, ended by 0: QEMU's at 4 GiB and
+at 8, then the test's.
 
 ## path_good
 ## path_magic
@@ -45,6 +61,25 @@ its entries, a prefix of one, and a tail of one.
 
 `u8`: the trees' files on the disk, QEMU's own first, then the test's
 broken and nested ones.
+
+## path_virt8
+## path_ram1
+## path_ram2
+## path_ramnodes
+## path_ram32
+## path_ramedge
+## path_ramwindow
+## path_ramoverlap
+## path_ramoverflow
+## path_ramempty
+## path_ramlow
+## path_ramhigh
+## path_ramcells
+## path_ramnoreg
+## path_ramnone
+## path_rammany
+
+`u8`: the RAM trees' files: QEMU's own at 8 GiB, then the test's.
 
 ## path_root
 ## path_cpus
@@ -111,6 +146,15 @@ a tail of one.
 
 `u8`: the lines of a run that cannot go on.
 
+## word_ram
+## word_bank
+## word_window
+## word_free
+## word_range
+## word_tree
+
+`u8`: the RAM lines' words.
+
 ## tree
 
 `FILE_BYTES u8`: the tree read, on an 8-byte boundary as dtb_check asks.
@@ -130,3 +174,11 @@ a tail of one.
 ## digits
 
 `32 u8`: line_dec's digits, built backward.
+
+## banks
+
+`BANKS * 16 u8`: the banks ram_banks reads, a base and an end each.
+
+## free
+
+`BANKS * 16 u8`: the free ranges ram_free writes.

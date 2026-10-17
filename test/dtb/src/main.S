@@ -2,6 +2,7 @@
 .include "dtb.inc"
 
 .set FILE_BYTES, 65536
+.set BANKS, 16
 
 .section .text
 .global _start
@@ -200,6 +201,103 @@ _start:
     addi s1, s1, 8
     j 81b
 82:
+    la s1, ram_files
+83:
+    ld s2, 0(s1)
+    beqz s2, 89f
+    mv a0, s2
+    call load
+    bltz a0, 91f
+    mv a1, a0
+    la a0, tree
+    call dtb_check
+    bnez a0, 87f
+    la a0, tree
+    la a1, banks
+    li a2, BANKS
+    call ram_banks
+    mv s3, a0                               # the code
+    mv s4, a1                               # the banks
+    call ram_line
+    mv a0, s3
+    call line_dec
+    li a0, ' '
+    call line_char
+    mv a0, s4
+    call line_dec
+    call line_print
+    bnez s3, 88f
+    la s5, banks
+    mv s6, s4
+84:
+    beqz s6, 85f
+    call ram_line
+    la a0, word_bank
+    call line_str
+    ld a0, 0(s5)
+    call line_dec
+    li a0, ' '
+    call line_char
+    ld a0, 8(s5)
+    call line_dec
+    call line_print
+    addi s5, s5, 16
+    addi s6, s6, -1
+    j 84b
+85:
+    la a0, banks
+    mv a1, s4
+    li a2, JAB_PROGRAM_BASE
+    li a3, JAB_STACK_TOP
+    call ram_backed
+    mv s6, a0
+    call ram_line
+    la a0, word_window
+    call line_str
+    mv a0, s6
+    call line_dec
+    call line_print
+    la a0, banks
+    mv a1, s4
+    la a2, free
+    li a3, BANKS
+    li a4, JAB_STACK_TOP
+    call ram_free
+    mv s6, a0
+    call ram_line
+    la a0, word_free
+    call line_str
+    mv a0, s6
+    call line_dec
+    call line_print
+    la s5, free
+86:
+    beqz s6, 88f
+    call ram_line
+    la a0, word_range
+    call line_str
+    ld a0, 0(s5)
+    call line_dec
+    li a0, ' '
+    call line_char
+    ld a0, 8(s5)
+    call line_dec
+    call line_print
+    addi s5, s5, 16
+    addi s6, s6, -1
+    j 86b
+87:
+    mv s3, a0
+    call ram_line
+    la a0, word_tree
+    call line_str
+    mv a0, s3
+    call line_dec
+    call line_print
+88:
+    addi s1, s1, 8
+    j 83b
+89:
     jab.sys.exit 0
 90:
     la a0, msg_no_disk
@@ -303,6 +401,19 @@ load:
     addi sp, sp, 32
     ret
 
+ram_line:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, word_ram
+    call line_str
+    addi a0, s2, 1                          # the name past its /
+    call line_str
+    li a0, ' '
+    call line_char
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+
 line_reset:
     la t0, line
     la t1, lineptr
@@ -370,6 +481,8 @@ line_print:
     j line_reset
 
 .include "dtb.S"
+.set RAM_READER, 1
+.include "ram.S"
 
 .section .rodata
 .balign 8
@@ -401,6 +514,25 @@ listed:
     .quad word_imsic
     .quad word_imsics_tail
     .quad 0
+ram_files:
+    .quad path_good
+    .quad path_virt8
+    .quad path_ram1
+    .quad path_ram2
+    .quad path_ramnodes
+    .quad path_ram32
+    .quad path_ramedge
+    .quad path_ramwindow
+    .quad path_ramoverlap
+    .quad path_ramoverflow
+    .quad path_ramempty
+    .quad path_ramlow
+    .quad path_ramhigh
+    .quad path_ramcells
+    .quad path_ramnoreg
+    .quad path_ramnone
+    .quad path_rammany
+    .quad 0
 
 path_good:
     .asciz "/good.dtb"
@@ -428,6 +560,38 @@ path_deep16:
     .asciz "/deep16.dtb"
 path_deep17:
     .asciz "/deep17.dtb"
+path_virt8:
+    .asciz "/virt8.dtb"
+path_ram1:
+    .asciz "/ram1.dtb"
+path_ram2:
+    .asciz "/ram2.dtb"
+path_ramnodes:
+    .asciz "/ramnodes.dtb"
+path_ram32:
+    .asciz "/ram32.dtb"
+path_ramedge:
+    .asciz "/ramedge.dtb"
+path_ramwindow:
+    .asciz "/ramwindow.dtb"
+path_ramoverlap:
+    .asciz "/ramoverlap.dtb"
+path_ramoverflow:
+    .asciz "/ramoverflow.dtb"
+path_ramempty:
+    .asciz "/ramempty.dtb"
+path_ramlow:
+    .asciz "/ramlow.dtb"
+path_ramhigh:
+    .asciz "/ramhigh.dtb"
+path_ramcells:
+    .asciz "/ramcells.dtb"
+path_ramnoreg:
+    .asciz "/ramnoreg.dtb"
+path_ramnone:
+    .asciz "/ramnone.dtb"
+path_rammany:
+    .asciz "/rammany.dtb"
 
 path_root:
     .asciz "/"
@@ -510,6 +674,18 @@ msg_good_refused:
     .asciz "the good tree refused"
 msg_lookup:
     .asciz "a lookup failed"
+word_ram:
+    .asciz "ram "
+word_bank:
+    .asciz "bank "
+word_window:
+    .asciz "window "
+word_free:
+    .asciz "free "
+word_range:
+    .asciz "range "
+word_tree:
+    .asciz "tree "
 
 .section .bss
 .balign 8
@@ -523,3 +699,8 @@ lineptr:
     .skip 8
 digits:
     .skip 32
+.balign 8
+banks:
+    .skip (BANKS * 16)
+free:
+    .skip (BANKS * 16)

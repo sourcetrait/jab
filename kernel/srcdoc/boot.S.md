@@ -27,8 +27,9 @@ reading keeps what it finds there; nothing has been pushed on the stack
 yet, which lies in bss. The tree is read with paging off at the address
 QEMU handed over, the harts first (harts.S's harts_topology), then the
 interrupt platform (aia.S's aia_topology), and the root APLIC domain is set
-up from it (aia_root); then the mret enters kmain as supervisor with the
-hart id in a0.
+up from it (aia_root); then the RAM's banks are read and the ranges the
+kernel and the program use proved backed (ram.S's ram_topology), and the
+mret enters kmain as supervisor with the hart id in a0.
 
 ## hart_park
 

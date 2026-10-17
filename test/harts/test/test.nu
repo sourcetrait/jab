@@ -2,16 +2,22 @@
 # of its own (HeldSpan); then the launcher's greatest machine held to the
 # SDK's JAB_HARTS_MAX, read from jab.inc (LauncherBound), a machine of
 # that many harts taken and one of a hart more refused before QEMU
-# starts, no QEMU run for it; then jab.sys.harts on machines of one,
-# two, three, and four harts and of JAB_HARTS_MAX's, three cold boots of
+# starts, no QEMU run for it; then jab.sys.harts on custom machines of
+# one, two, three, and four harts and of JAB_HARTS_MAX's, and on 1KA1 and
+# 1KB1, three cold boots of
 # each, every hart of the device tree discovered and online and none
 # failed, read after the program has held two seconds; the kernel's own
 # lines on the debug channel, its masks and every hart's line, each
 # online hart's record and canary read back by hart 0; the idle
 # secondaries' vCPU threads burning no host core over the held span, a
-# second as the launch times it; and each launch's record of its machine,
-# every count but the specification's three diagnostic, the line carrying
-# -smp and multithreaded TCG. Then the platform check's two classes on
+# second as the launch times it; every page of the program window's last
+# GiB but its top MiB, where the stack is, written and read back; and each
+# launch's record of its machine, a custom machine of each count
+# diagnostic and a named spec's, 1KA1's three harts and 4 GiB and 1KB1's
+# seven and 8 GiB, its name, cores, and RAM, `jab.spec=<name>` on the
+# kernel's line, the line carrying -smp, -m, and multithreaded TCG, and the
+# debug kernel's free RAM, none at 4 GiB and the 4 GiB from 0x180000000
+# at 8. Then the platform check's two classes on
 # trees of the test's own through -dtb, QEMU's four-hart tree with one
 # change each, on a machine of four: a cpu whose id is past
 # JAB_HARTS_MAX, a topology problem, named on the debug channel, the
@@ -79,29 +85,42 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     let debug = ($set | str contains "DEBUG")
     let threads = ($nu.os-info.name == "linux")
+    let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
+    let machines = (([1 2 3 4 $max] | each {|n| { name: $"harts_($n)", harts: $n, spec: "" } }) ++ (["1ka1" "1kb1"] | each {|s| { name: $"spec_($s)", harts: (jab spec-row $ws $s | get cores), spec: $s } }))
     mut seen = []
-    for n in [1 2 3 4 $max] {
+    for m in $machines {
+        let n = $m.harts
+        let ram_gib = (if $m.spec == "" { 4 } else { jab spec-row $ws $m.spec | get ram | $in / 1GiB | into int })
         for boot in 1..3 {
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"harts_($n)_($boot)") --set $set --harts $n --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
-            assert equal $run.status 0 $"exit status on ($n) harts, boot ($boot): ($run.serial)"
-            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($n) harts"
+            let asked = (if $m.spec == "" { { harts: $n } } else { { spec: $m.spec } })
+            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"($m.name)_($boot)") --set $set --spec ($asked | get -o spec | default "") --harts ($asked | get -o harts | default 0) --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+            assert equal $run.status 0 $"exit status on ($m.name), boot ($boot): ($run.serial)"
+            assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($m.name)"
             let mask = ((1 bit-shl $n) - 1)
-            assert equal ($run.serial | lines) [$"harts ($mask) ($mask) 0"] $"on ($n) harts, boot ($boot), every one discovered and online, none failed: ($run.serial)"
-            assert equal $run.machine.harts $n $"the launch's record of its harts: ($run.machine)"
-            assert equal $run.machine.diagnostic ($n != 3) $"a machine of ($n) harts diagnostic or not: ($run.machine)"
+            assert equal ($run.serial | lines) [$"harts ($mask) ($mask) 0" "window 261888 0"] $"on ($m.name), boot ($boot), every hart discovered and online, none failed, and every page of the window's last GiB but its top MiB read back: ($run.serial)"
+            assert equal [$run.machine.harts $run.machine.ram_gib] [$n $ram_gib] $"the launch's record of its harts and RAM: ($run.machine)"
+            if $m.spec == "" {
+                assert equal [$run.machine.spec $run.machine.diagnostic] [null { harts: $n, ram_gib: 4 }] $"a custom machine of ($n) harts, diagnostic whatever its count: ($run.machine)"
+            } else {
+                assert equal [$run.machine.spec.name $run.machine.spec.cores $run.machine.spec.ram_gib $run.machine.diagnostic] [$m.spec $n $ram_gib null] $"the named spec ($m.spec), its cores and RAM: ($run.machine)"
+                assert ($run.qemu | window 2 | any {|w| $w.0 == "-append" and ($w.1 | split row " " | any {|a| $a == $"jab.spec=($m.spec)" }) }) $"jab.spec=($m.spec) on the kernel's line: ($run.qemu)"
+            }
             assert equal $run.machine.accel "tcg,thread=multi" $"multithreaded TCG: ($run.machine)"
             assert ($run.qemu | window 2 | any {|w| $w.0 == "-smp" and $w.1 == ($n | into string) }) $"-smp ($n) on the line: ($run.qemu)"
+            assert ($run.qemu | window 2 | any {|w| $w.0 == "-m" and $w.1 == $"($ram_gib)G" }) $"-m ($ram_gib)G on the line: ($run.qemu)"
             assert ($run.qemu | window 2 | any {|w| $w.0 == "-accel" and $w.1 == "tcg,thread=multi" }) $"-accel tcg,thread=multi on the line: ($run.qemu)"
             if $debug {
                 let lines = ($run.debug | lines)
                 let line = $"jab: harts discovered (hex64 $mask) online (hex64 $mask) failed (hex64 0)"
-                assert ($lines | any {|l| $l == $line }) $"the kernel's masks on ($n) harts, ($line): ($run.debug)"
+                assert ($lines | any {|l| $l == $line }) $"the kernel's masks on ($m.name), ($line): ($run.debug)"
                 for h in 0..<$n {
                     assert ($lines | any {|l| $l == $"jab: hart ($h) online" }) $"hart ($h) online, its record and canary as it wrote them: ($run.debug)"
                 }
+                let free = (if $ram_gib == 4 { "jab: ram free none" } else { $"jab: ram free (hex64 0x180000000)-(hex64 (0x80000000 + $ram_gib * 1073741824))" })
+                assert ($lines | any {|l| $l == $free }) $"the kernel's free RAM on ($m.name), ($free): ($run.debug)"
             }
-            if $threads { idle-harts $run (1..<$n | each {|h| $h }) $"($n) harts, boot ($boot)" }
-            if $boot == 1 { $seen = ($seen | append { harts: $n, serial: ($run.serial | str trim) }) }
+            if $threads { idle-harts $run (1..<$n | each {|h| $h }) $"($m.name), boot ($boot)" }
+            if $boot == 1 { $seen = ($seen | append { harts: $n, serial: ($run.serial | lines | first) }) }
         }
     }
 
@@ -114,7 +133,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     put32 $tree (prop-offset $tree "/cpus/cpu@3" "reg") $PAST_MAX | save --raw -f $past_file
     let past = (jab launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --harts 4 --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
     assert equal $past.status 0 $"the program runs on hart 0 past a topology problem: ($past.serial)"
-    assert equal ($past.serial | lines) ["harts 7 1 6"] $"harts 0 to 2 discovered, hart 0 online, 1 and 2 failed: ($past.serial)"
+    assert equal ($past.serial | lines) ["harts 7 1 6" "window 261888 0"] $"harts 0 to 2 discovered, hart 0 online, 1 and 2 failed: ($past.serial)"
     # harts 1 and 2 refused and hart 3 outside the tree, each parked in
     # machine mode for the run, its thread idle
     if $threads { idle-harts $past [1 2 3] "the harts parked for good" }
@@ -150,9 +169,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # wrapper would come before the assertion's own failure
     mut tried = []
     for t in [
-        { name: "wide_same", tree: (do $wide 0), status: 0, serial: ["harts 15 15 0"] }
+        { name: "wide_same", tree: (do $wide 0), status: 0, serial: ["harts 15 15 0" "window 261888 0"] }
         { name: "wide_high", tree: (do $wide 1), status: 1, serial: [$"jab: timer unsupported: timebase-frequency ((1 bit-shl 32) + $rate)"] }
-        { name: "own_every", tree: $every, status: 0, serial: ["harts 15 15 0"] }
+        { name: "own_every", tree: $every, status: 0, serial: ["harts 15 15 0" "window 261888 0"] }
         { name: "own_slow", tree: (do $own $tree "cpu@2" $SLOW_TIMEBASE), status: 1, serial: [$"jab: timer unsupported: timebase-frequency ($SLOW_TIMEBASE)"] }
     ] {
         let file = ($out | path join $"($t.name).dtb")
@@ -190,7 +209,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # address, both failed and the run going on
     let missing = (jab launch --kernel $kernel --image $image --out ($out | path join "missing") --set $set --harts 2 --dtb ($out | path join "virt4.dtb") --seconds 20)
     assert equal $missing.status 0 $"the program runs past two missing harts: ($missing.serial)"
-    assert equal ($missing.serial | lines) ["harts 15 3 12"] $"harts 0 to 3 discovered, 0 and 1 online, 2 and 3 failed: ($missing.serial)"
+    assert equal ($missing.serial | lines) ["harts 15 3 12" "window 261888 0"] $"harts 0 to 3 discovered, 0 and 1 online, 2 and 3 failed: ($missing.serial)"
     if $debug {
         let lines = ($missing.debug | lines)
         for line in [$"jab: harts discovered (hex64 15) online (hex64 3) failed (hex64 12)" "jab: hart 1 online" "jab: hart 2 failed: no interrupt file" "jab: hart 3 failed: no interrupt file"] {
@@ -204,9 +223,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         # losing; still failed two seconds on, and parked, its thread idle
         let late = (jab launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
         assert equal $late.status 0 $"the program runs past a late hart: ($late.serial)"
-        assert equal ($late.serial | lines) ["harts 7 3 4"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
+        assert equal ($late.serial | lines) ["harts 7 3 4" "window 261888 0"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
         let lines = ($late.debug | lines)
-        for line in ["jab: bootargs jab.late=2" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
+        for line in [$"jab: bootargs jab.late=2 jab.spec=(jab spec-default $ws)" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
             assert ($lines | any {|l| $l == $line }) $"($line): ($late.debug)"
         }
         if $threads { idle-harts $late [1 2] "the late check-in" }

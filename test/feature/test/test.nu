@@ -1,7 +1,8 @@
 # feature's integration test: a synthetic feature on hart ownership by
 # role, one program printing a line a step and sending a record a frame
-# over the API, read on machines of three harts, 1KA1's, declared; of four,
-# diagnostic; and of four with hart 2 failed by jab.late=2, a sparse grant.
+# over the API, read on 1KA1's machine, its three harts, declared; on a
+# custom machine of four, diagnostic; and on four with hart 2 failed by
+# jab.late=2, a sparse grant.
 # The program reserves its manifest's graphics harts, renders frames of 64
 # rows on its grant, and takes a feature of its manifest's I/O harts, the
 # grant's highest, admitted only while the grant past them keeps the
@@ -61,10 +62,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let constants = (open --raw ($out | path join "jab_manifest.inc") | into binary | decode | lines | str join "; ")
     print $"feature: image (open --raw $image | into binary | hash sha256), built with ($constants)"
     let machines = ([
-        { name: "three", harts: 3, bootargs: "", online: [1 2] }
-        { name: "four", harts: 4, bootargs: "", online: [1 2 3] }
+        { name: "three", spec: "1ka1", harts: 0, bootargs: "", online: [1 2] }
+        { name: "four", spec: "", harts: 4, bootargs: "", online: [1 2 3] }
     ] ++ (if $debug { [
-        { name: "sparse", harts: 4, bootargs: "jab.late=2", online: [1 3] }
+        { name: "sparse", spec: "", harts: 4, bootargs: "jab.late=2", online: [1 3] }
     ] } else { [] }))
     let result = (xorshift $FEATURE_SEED $FEATURE_STEPS)
     let most = ($machines | each {|m| (plan-of $m.online $reserved $feature).frames } | math max)
@@ -72,7 +73,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     mut held = []
     mut first: any = null
     for m in $machines {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --harts $m.harts --bootargs $m.bootargs --seconds 30 --api)
+        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --spec $m.spec --harts $m.harts --bootargs $m.bootargs --seconds 30 --api)
         let plan = (plan-of $m.online $reserved $feature)
         let got = ($run.serial | lines)
         let stop = ($got | where {|l| $l | str starts-with "transition stop " } | get -o 0)
@@ -90,7 +91,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal ($got | length) ($want | length) $"($m.name): nothing after the program's last line: ($run.serial)"
         assert equal $run.status 0 $"($m.name): exit status: ($run.serial)"
         assert equal (open --raw $run.qemu_log) "" $"($m.name): QEMU has no complaint about the guest"
-        assert equal [$run.declared $run.diagnostic] [true ($m.harts != 3)] $"($m.name): a declared run, diagnostic off the specification's three harts: ($run.declared), ($run.diagnostic)"
+        assert equal [$run.declared $run.diagnostic] [true ($m.spec == "")] $"($m.name): a declared run, diagnostic on a custom machine and on 1KA1 not: ($run.declared), ($run.diagnostic)"
         if $debug {
             if $m.bootargs != "" { assert ($run.debug | str contains $"jab: bootargs ($m.bootargs)") $"($m.name): the knob reached the kernel: ($run.debug)" }
             let changes = ($run.debug | lines | where {|l| ["jab: harts reserved " "jab: harts claimed " "jab: harts released "] | any {|p| $l | str starts-with $p } })

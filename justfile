@@ -35,7 +35,8 @@ build *args:
     def --wrapped main [...args] { ^nu '{{jab}}' build '{{here}}' ...$args }
 
 # `just test`, `just test example/pad`, `just test game/fps`; each
-# test's output, then a summary, failing if any fails
+# test's output, then a summary, failing if any fails; `--spec 1kb1`
+# runs the tests' launches on that spec in place of the configured one
 # Build with DEBUG set, then test every program, or those under a path
 [script("nu")]
 test *args:
@@ -44,8 +45,9 @@ test *args:
 # `just run example/bounce`, `just run fps`; release, or `--set
 # debug`; `--api` puts the API's port on the machine; the host's gamepad
 # and sound come along unless `--no-pad` or `--no-sound`, the keyboard
-# and the tablet unless `--no-kbm`; the specification's three harts, or
-# any other count from 1 to 8 with `--harts` for a diagnostic machine
+# and the tablet unless `--no-kbm`; the machine is the configured spec,
+# `jab/config.toml`'s under the XDG config home, or the one `-s 1kb1`
+# names, or a custom machine of 1 to 8 harts with `--harts`, diagnostic
 # Build, then run one program in its window
 [script("nu")]
 run +args:
