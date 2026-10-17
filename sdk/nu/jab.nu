@@ -1895,6 +1895,24 @@ export def threads-between [first: table<id: string, name: string, cpu: float>, 
     { span: $span, threads: $threads }
 }
 
+# A process's resident memory in bytes as its host reports it: VmRSS in
+# /proc/<pid>/status on Linux, `ps -o rss=` in KiB on macOS; null where
+# neither reads, the process gone or the host another.
+def memory-of [pid: int]: nothing -> any {
+    match $nu.os-info.name {
+        "linux" => {
+            let status = (try { open --raw ("/proc" | path join ($pid | into string) "status") | decode } catch { "" })
+            let kb = ($status | lines | parse --regex '^VmRSS:\s+(?P<kb>\d+) kB' | get -o 0.kb)
+            if $kb == null { null } else { ($kb | into int) * 1024 }
+        },
+        "macos" => {
+            let out = (try { ^ps -o rss= -p ($pid | into string) | complete | get stdout | str trim } catch { "" })
+            if $out == "" { null } else { ($out | into int) * 1024 }
+        },
+        _ => null,
+    }
+}
+
 # `ps` clock text, M:SS.hh or H:MM:SS.hh, as seconds.
 def clock-seconds [text: string]: nothing -> float {
     $text | split row ":" | each {|p| $p | into float } | reduce --fold 0.0 {|it, acc| $acc * 60.0 + $it }
@@ -1930,8 +1948,8 @@ def watch-header [pid: int, started: datetime]: nothing -> record {
 # workspace's target's watch.nuonl, a previous recording retired,
 # whatever shell this is run from: a first line describing the run
 # (watch-header), then a line per sample with every thread's cumulative
-# CPU seconds, one short line printed per sample with the rates since
-# the last. When the run ends, the report on the recording is printed to
+# CPU seconds and the process's resident memory (memory-of), one short
+# line printed per sample with the rates since the last. When the run ends, the report on the recording is printed to
 # paste (watch-report-of), the first `--skip` seconds dropped as the
 # load. Interrupted, it ends with no report. `watch bench` records a
 # bench's runs instead.
@@ -1952,7 +1970,7 @@ def "main watch" [ws: path, --skip: float = 5.0] {
         if (jab-pids | where {|p| $p == $pid } | is-empty) { print "jab watch: the run has ended"; break }
         let at = (((date now) - $started) / 1sec)
         let threads = (threads-of $pid)
-        ({ at: $at, threads: $threads } | to nuon) + (char nl) | save --raw --append $file
+        ({ at: $at, threads: $threads, rss: (memory-of $pid) } | to nuon) + (char nl) | save --raw --append $file
         let previous = $last
         if $previous != null {
             let seconds = ($at - $previous.at)
@@ -1981,7 +1999,10 @@ def "main watch" [ws: path, --skip: float = 5.0] {
 # translator's mode from the threads' names: a lone `ALL CPUs/TCG` thread
 # runs every hart on one host thread, single-threaded and never evidence
 # of multicore performance, `CPU N/TCG` threads a thread a hart; null
-# where the names say neither, as on macOS.
+# where the names say neither, as on macOS. `memory` the process's
+# resident memory in bytes over the stretch, its median by nearest rank
+# and its peak with the samples holding it, null for a recording made
+# before the watch read it.
 def watch-report-of [file: path, skip: float]: nothing -> record {
     let lines = (open --raw $file | decode | lines | where {|l| ($l | str trim) != "" })
     let header = ($lines | first | from nuon)
@@ -2007,6 +2028,7 @@ def watch-report-of [file: path, skip: float]: nothing -> record {
     } | compact | where steady >= 0.005 | sort-by steady --reverse)
     let names = ($last.threads | get name)
     let tcg = (if ($names | any {|n| $n == "ALL CPUs/TCG" }) { "single-threaded" } else if ($names | any {|n| $n =~ '^CPU \d+/TCG$' }) { "multi-threaded" } else { null })
+    let resident = ($samples | each {|s| $s | get -o rss } | compact | sort)
     {
         run: $header.run,
         skipped: $skipped,
@@ -2015,7 +2037,14 @@ def watch-report-of [file: path, skip: float]: nothing -> record {
         tcg: $tcg,
         process: (if ($threads | is-empty) { 0.0 } else { $threads | get steady | math sum | math round -p 3 }),
         threads: $threads,
+        memory: (if ($resident | is-empty) { null } else { { median: ($resident | get ((($resident | length) * 0.5 | math ceil) - 1)), peak: ($resident | last), samples: ($resident | length) } }),
     }
+}
+
+# A watch report's memory in words, the resident median and peak in MiB,
+# empty where it holds none.
+def memory-text [memory: any]: nothing -> string {
+    if $memory == null { "" } else { $"; resident ($memory.median / 1048576 | math round) MiB at the median, ($memory.peak / 1048576 | math round) at the peak" }
 }
 
 # The one build tree a workspace writes into, every build and every
@@ -4788,12 +4817,12 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         let now = (date now)
         for e in ($seen | enumerate | where {|x| not $x.item.ended }) {
             if $e.item.pid in $pids {
-                ({ at: (($now - $e.item.started) / 1sec), threads: (threads-of $e.item.pid) } | to nuon) + (char nl) | save --raw --append $e.item.file
+                ({ at: (($now - $e.item.started) / 1sec), threads: (threads-of $e.item.pid), rss: (memory-of $e.item.pid) } | to nuon) + (char nl) | save --raw --append $e.item.file
             } else {
                 let i = $e.index
                 $seen = ($seen | enumerate | each {|x| if $x.index == $i { $x.item | merge { ended: true } } else { $x.item } })
                 let r = (try { watch-report-of $e.item.file $skip } catch { null })
-                print (if $r == null { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended, too short to report" } else { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended: ($r.process) of a core over ($r.seconds) s; (watch-top $r.threads)" })
+                print (if $r == null { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended, too short to report" } else { $"jab watch: ($e.item.label), QEMU ($e.item.n) ended: ($r.process) of a core over ($r.seconds) s; (watch-top $r.threads)(memory-text $r.memory)" })
             }
         }
         $tick += 1
@@ -4819,7 +4848,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     print (if ($text_file | path exists) { open --raw $text_file | decode | str trim --right } else { "the bench wrote no report" })
     print "per QEMU, the steady CPU seconds a second:"
     for p in $per {
-        print (if ($p.watch | get -o error) != null { $"  ($p.step) ($p.n): ($p.watch.error)" } else { $"  ($p.step) ($p.n): ($p.watch.process) of a core over ($p.watch.seconds) s; (watch-top $p.watch.threads)" })
+        print (if ($p.watch | get -o error) != null { $"  ($p.step) ($p.n): ($p.watch.error)" } else { $"  ($p.step) ($p.n): ($p.watch.process) of a core over ($p.watch.seconds) s; (watch-top $p.watch.threads)(memory-text $p.watch.memory)" })
     }
     let report_file = ($run | path join "report.nuon")
     let whole = {

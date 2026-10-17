@@ -297,8 +297,10 @@ A run prints nothing of its own; what the kernel says in a debug build
 is in `debug.log` beside the program's build output, and what a program
 sends over the API is in `api.out` there. `just watch`, from any shell
 while a program runs, records the QEMU process per thread once a
-second to `watch.nuonl` in the target until the run ends, printing each
-second's rates as it goes: on Linux the harts as `CPU 0/TCG` and on
+second to `watch.nuonl` in the target until the run ends, with the
+process's resident memory beside each second (VmRSS on Linux, `ps -o
+rss=` on macOS), printing each second's rates as it goes: on Linux the
+harts as `CPU 0/TCG` and on
 and the main loop under the process name, which is where the host's
 copy and paint of each flip lands; on macOS, whose threads carry no
 names, the first row is the thread that draws the window and the rest
@@ -308,9 +310,10 @@ CPU, and the accelerator off QEMU's command line, window, the symbols
 the kernel was built with), the translator's mode as `tcg`,
 single-threaded when one `ALL CPUs/TCG` thread runs every hart, which
 is never evidence of multicore performance, and multi-threaded with a
-`CPU N/TCG` thread a hart, and per thread the steady CPU seconds a
+`CPU N/TCG` thread a hart, per thread the steady CPU seconds a
 second after the first five, which `--skip` changes, a run too short for
-them reported over all it has, ready to paste. On
+them reported over all it has, and the resident memory's median and
+peak over the same stretch, ready to paste. On
 macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
@@ -355,7 +358,8 @@ file to copy off the host. `just watch bench <program>/<bench>`, in a
 second terminal before the bench starts or while it runs, records every
 QEMU of the run per thread under the step its own command line names;
 when the bench has finished it prints the bench's report and its own per
-QEMU, writes them together as `watch.nuon` in the run, then packs the run
+QEMU, the steady CPU and the resident memory, writes them together as
+`watch.nuon` in the run, then packs the run
 again with its recording into that same tar, the old one moved aside,
 and names it last. `just bench` alone lists the benches, and `--only`
 runs the steps its comma-separated labels name.
