@@ -10,13 +10,22 @@ macro jab.sys.display.open > status a0 u64,scratch a7 [302:305] :brings the disp
  status :0, also when open already; 1 with no virtio-gpu; 2 when the device refuses the kernel; 3 when a command fails
 macro jab.sys.display.ready > ready a0 bool,scratch a7 [307:310]
  ready :1 when a flip would go through now, 0 while the cap holds it back
-macro jab.sys.display.flip > status a0 u64,scratch a7 [312:315] :shows the framebuffer; never waits
+macro jab.sys.display.flip > status a0 u64,stamp a1 u64,tick a2 u64,ordinal a3 u64,scratch a7 [312:315] :shows the framebuffer; never waits
  status :0 when the frame went to the host; 1 when it came before the cap allows, nothing shown; 2 when the display is not open; 3 when the device refused it
-macro jab.sys.display.flip.rect > status a0 u64,scratch a7 [317:320] :shows only the rectangle the program has in a0 to a3, x, y, width, height in pixels
- status :jab.sys.display.flip's codes, and 4 when the rectangle is empty or reaches outside the screen
-macro jab.sys.display.flip.rects buffer addr,count u64 > status a0 u64,scratch a1,a7 [322:327] :shows that many rectangles of the framebuffer as one flip
+ stamp :the kernel's rdtime as its readiness check passed or refused the flip; 0 when the call ended before any check, 2 or 3 with the display failed already
+ tick :the eligibility tick that check read; 0 when stamp is
+ ordinal :the present ordinal as the call returns, how many presents the device has answered OK since boot, display.open's the first
+macro jab.sys.display.flip.rect > status a0 u64,stamp a1 u64,tick a2 u64,ordinal a3 u64,scratch a7 [317:320] :shows only the rectangle the program has in a0 to a3, x, y, width, height in pixels
+ status :jab.sys.display.flip's codes, and 4 when the rectangle is empty or reaches outside the screen, checked before any decision
+ stamp :as jab.sys.display.flip's, 0 with 4
+ tick :as jab.sys.display.flip's, 0 with 4
+ ordinal :as jab.sys.display.flip's
+macro jab.sys.display.flip.rects buffer addr,count u64 > status a0 u64,stamp a1 u64,tick a2 u64,ordinal a3 u64,scratch a7 [322:327] :shows that many rectangles of the framebuffer as one flip
  buffer :the rectangles, JAB_RECT_SIZE bytes each
- status :jab.sys.display.flip's codes, and 4 when the count is 0 or more than the window could hold, or any rectangle is empty or reaches outside the screen, nothing shown then
+ status :jab.sys.display.flip's codes, and 4 when the count is 0 or more than the window could hold, or any rectangle is empty or reaches outside the screen, checked before any decision, nothing shown then
+ stamp :as jab.sys.display.flip's, 0 with 4
+ tick :as jab.sys.display.flip's, 0 with 4
+ ordinal :as jab.sys.display.flip's; a list whose flush the device answered OK counts its present though a transfer of its last batch was refused
 macro jab.sys.kernel.flags > flags a0 u64,scratch a7 [329:332]
  flags :the mask of what the kernel was built with, JAB_KERNEL_* bits
 macro jab.sys.display.print message label > status a0 u64,framebuffer JAB_DISPLAY_BASE,scratch a7 [334:338] :writes the string to the screen console, opening the display first; a newline ends the line, and the console scrolls at the bottom

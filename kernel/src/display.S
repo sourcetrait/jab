@@ -39,11 +39,13 @@ sys_display_flip:
     la t0, display_state
     ld t0, 0(t0)
     li a0, 2
-    beqz t0, 1f
+    beqz t0, 5f
     li a0, 3                    # its source stuck: the device refuses
     li t1, 1
-    bne t0, t1, 1f
+    bne t0, t1, 4f
     call frame_ready
+    sd a1, 88(sp)               # the decision's stamp
+    sd a2, 96(sp)               # the eligibility tick it read
     beqz a0, 2f
     li a0, 0
     li a1, 0
@@ -60,8 +62,19 @@ sys_display_flip:
     j 1f
 3:
     mv a0, a1
+    j 1f
+4:
+    sd zero, 88(sp)             # failed already: no decision observed
+    sd zero, 96(sp)
+    j 1f
+5:
+    sd zero, 88(sp)             # not open: no decision observed
+    sd zero, 96(sp)
 1:
     sd a0, 80(sp)
+    la t0, present_ordinal
+    ld t0, 0(t0)
+    sd t0, 104(sp)              # the present ordinal as the call returns
     j trap_return
 
 .global sys_display_flip_rect
@@ -89,6 +102,8 @@ sys_display_flip_rect:
     add t5, t2, t4
     bgtu t5, t6, 9f
     call frame_ready
+    mv s0, a1                   # the decision's stamp
+    mv s1, a2                   # the rectangle's eligibility tick
     beqz a0, 8f
     ld a0, 80(sp)
     ld a1, 88(sp)
@@ -99,14 +114,23 @@ sys_display_flip_rect:
     bnez a0, 7f
     call frame_flipped
     li a0, 0
-    j 9f
+    j 10f
 7:
     mv a0, a1
-    j 9f
+    j 10f
 8:
     li a0, 1
+    j 10f
 9:
+    li s0, 0                    # before any check: no decision observed
+    li s1, 0
+10:
     sd a0, 80(sp)
+    sd s0, 88(sp)
+    sd s1, 96(sp)
+    la t0, present_ordinal
+    ld t0, 0(t0)
+    sd t0, 104(sp)              # the present ordinal as the call returns
     j trap_return
 
 .global sys_display_flip_rects
@@ -149,6 +173,8 @@ sys_display_flip_rects:
     addi s3, s3, -1
     bnez s3, 1b
     call frame_ready
+    sd a1, 88(sp)               # the decision's stamp
+    sd a2, 96(sp)               # the list's eligibility tick
     beqz a0, 8f
     mv a0, s0
     mv a1, s1
@@ -156,31 +182,43 @@ sys_display_flip_rects:
     bnez a0, 7f
     call frame_flipped
     li a0, 0
-    j 9f
+    j 10f
 7:
     li a0, 3
-    j 9f
+    j 10f
 8:
     li a0, 1
+    j 10f
 9:
+    sd zero, 88(sp)             # before any check: no decision observed
+    sd zero, 96(sp)
+10:
     sd a0, 80(sp)
+    la t0, present_ordinal
+    ld t0, 0(t0)
+    sd t0, 104(sp)              # the present ordinal as the call returns
     j trap_return
 
 .global display_present_rects
 display_present_rects:
-    addi sp, sp, -80
-    sd ra, 72(sp)
-    sd s0, 64(sp)
-    sd s1, 56(sp)
-    sd s2, 48(sp)
-    sd s3, 40(sp)
-    sd s4, 32(sp)
-    sd s5, 24(sp)
-    sd s6, 16(sp)
-    sd s7, 8(sp)
+    addi sp, sp, -96
+    sd ra, 88(sp)
+    sd s0, 80(sp)
+    sd s1, 72(sp)
+    sd s2, 64(sp)
+    sd s3, 56(sp)
+    sd s4, 48(sp)
+    sd s5, 40(sp)
+    sd s6, 32(sp)
+    sd s7, 24(sp)
     mv s0, a0                   # the next rectangle
     mv s1, a1                   # how many are left
     beqz s1, 8f
+.ifdef DEBUG
+    call present_faults
+    sd a0, 16(sp)               # the knobs' faults for this present
+    sd zero, 8(sp)              # the transfers sent
+.endif
     li s4, JAB_DISPLAY_WIDTH    # its left
     li s5, JAB_DISPLAY_HEIGHT   # its top
     li s6, 0                    # its right
@@ -226,6 +264,15 @@ display_present_rects:
     lwu a1, JAB_RECT_Y(t0)
     lwu a2, JAB_RECT_WIDTH(t0)
     lwu a3, JAB_RECT_HEIGHT(t0)
+.ifdef DEBUG
+    ld t1, 8(sp)
+    addi t1, t1, 1
+    sd t1, 8(sp)                # this transfer's number, 1 the first
+    lwu t2, 16(sp)              # the transfer the knob refuses
+    bne t1, t2, 5f
+    li a2, JAB_DISPLAY_WIDTH + 1
+5:
+.endif
     call gpu_transfer_command
     addi s3, s3, 1
     j 4b
@@ -238,28 +285,52 @@ display_present_rects:
     mv a1, s5
     sub a2, s6, s4
     sub a3, s7, s5
+.ifdef DEBUG
+    ld t1, 16(sp)
+    srli t1, t1, 32             # the flush the knob refuses
+    beqz t1, 6f
+    li a2, JAB_DISPLAY_WIDTH + 1
+6:
+.endif
     call gpu_flush_command
 16:
     call gpu_batch_run
+    bnez s1, 17f
+    li t0, 2
+    beq a0, t0, 7f              # stuck: nothing answered
+    li t1, GPU_RESP_BYTES
+    mul t1, t1, s2
+    la t2, gpu_batch_resps
+    add t2, t2, t1              # the flush's own answer, chain s2
+    lwu t1, VIRTIO_GPU_HDR_TYPE(t2)
+    li t2, VIRTIO_GPU_RESP_OK_NODATA
+    bne t1, t2, 18f
+    la t2, present_ordinal      # the list's flush answered OK: one more present
+    ld t1, 0(t2)
+    addi t1, t1, 1
+    sd t1, 0(t2)
+18:
     bnez a0, 7f
-    bnez s1, 2b
     j 8f
+17:
+    bnez a0, 7f
+    j 2b
 7:
     li a0, 1
     j 9f
 8:
     li a0, 0
 9:
-    ld ra, 72(sp)
-    ld s0, 64(sp)
-    ld s1, 56(sp)
-    ld s2, 48(sp)
-    ld s3, 40(sp)
-    ld s4, 32(sp)
-    ld s5, 24(sp)
-    ld s6, 16(sp)
-    ld s7, 8(sp)
-    addi sp, sp, 80
+    ld ra, 88(sp)
+    ld s0, 80(sp)
+    ld s1, 72(sp)
+    ld s2, 64(sp)
+    ld s3, 56(sp)
+    ld s4, 48(sp)
+    ld s5, 40(sp)
+    ld s6, 32(sp)
+    ld s7, 24(sp)
+    addi sp, sp, 96
     ret
 
 gpu_transfer_command:
@@ -409,6 +480,8 @@ gpu_batch_run:
 6:
     la t0, gpu_queue
     sd zero, GPUQ_PENDING(t0)
+    li a0, 2                    # its source stuck: no answer read
+    j 9f
 7:
     li a0, 1
     j 9f
@@ -730,6 +803,9 @@ msg_gpu_at:
     bnez a0, 7f
     call gpu_set_scanout
     bnez a0, 7f
+.ifdef DEBUG
+    call present_knobs
+.endif
     li a0, 0
     li a1, 0
     li a2, JAB_DISPLAY_WIDTH
@@ -762,6 +838,10 @@ display_present_rect:
     sd a1, 24(sp)
     sd a2, 16(sp)
     sd a3, 8(sp)
+.ifdef DEBUG
+    call present_faults
+    sd a0, 0(sp)                # the knobs' faults for this present
+.endif
     li a0, VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D
     call gpu_command
     la t0, gpu_cmd
@@ -769,6 +849,13 @@ display_present_rect:
     ld t2, 24(sp)
     ld t3, 16(sp)
     ld t4, 8(sp)
+.ifdef DEBUG
+    lwu t5, 0(sp)               # the transfer the knob refuses, 1 this one
+    li t6, 1
+    bne t5, t6, 2f
+    li t3, JAB_DISPLAY_WIDTH + 1
+2:
+.endif
     sw t1, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_X)(t0)
     sw t2, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_Y)(t0)
     sw t3, (VIRTIO_GPU_TRANSFER_RECT + VIRTIO_GPU_RECT_WIDTH)(t0)
@@ -791,6 +878,13 @@ display_present_rect:
     ld t2, 24(sp)
     ld t3, 16(sp)
     ld t4, 8(sp)
+.ifdef DEBUG
+    ld t5, 0(sp)
+    srli t5, t5, 32             # the flush the knob refuses
+    beqz t5, 3f
+    li t3, JAB_DISPLAY_WIDTH + 1
+3:
+.endif
     sw t1, (VIRTIO_GPU_FLUSH_RECT + VIRTIO_GPU_RECT_X)(t0)
     sw t2, (VIRTIO_GPU_FLUSH_RECT + VIRTIO_GPU_RECT_Y)(t0)
     sw t3, (VIRTIO_GPU_FLUSH_RECT + VIRTIO_GPU_RECT_WIDTH)(t0)
@@ -800,10 +894,68 @@ display_present_rect:
     li a0, VIRTIO_GPU_FLUSH_SIZE
     li a1, VIRTIO_GPU_RESP_OK_NODATA
     call gpu_submit
+    bnez a0, 1f
+    la t0, present_ordinal      # the flush answered OK: one more present
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)
 1:
     ld ra, 40(sp)
     addi sp, sp, 48
     ret
+
+.ifdef DEBUG
+present_knobs:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, knob_badxfer
+    call knob_value
+    la t0, badxfer_call
+    sd a0, 0(t0)
+    la a0, knob_badxferat
+    call knob_value
+    bgez a0, 1f
+    li a0, 1                    # absent: the first transfer
+1:
+    la t0, badxfer_at
+    sd a0, 0(t0)
+    la a0, knob_badflush
+    call knob_value
+    la t0, badflush_call
+    sd a0, 0(t0)
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.pushsection .rodata
+knob_badxfer:
+    .asciz "jab.badxfer="
+knob_badxferat:
+    .asciz "jab.badxferat="
+knob_badflush:
+    .asciz "jab.badflush="
+.popsection
+
+present_faults:
+    la t0, present_calls
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                # this present call's number, 1 the first
+    li a0, 0
+    la t0, badxfer_call
+    ld t2, 0(t0)
+    bne t1, t2, 1f
+    la t0, badxfer_at
+    lwu a0, 0(t0)               # its transfer refused
+1:
+    la t0, badflush_call
+    ld t2, 0(t0)
+    bne t1, t2, 2f
+    li t2, 1
+    slli t2, t2, 32
+    or a0, a0, t2               # and its flush
+2:
+    ret
+.endif
 
 gpu_get_display_info:
     addi sp, sp, -16
@@ -1168,3 +1320,15 @@ console_col:
     .skip 8
 console_row:
     .skip 8
+present_ordinal:
+    .skip 8
+.ifdef DEBUG
+present_calls:
+    .skip 8
+badxfer_call:
+    .skip 8
+badxfer_at:
+    .skip 8
+badflush_call:
+    .skip 8
+.endif

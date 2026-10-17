@@ -82,16 +82,45 @@ newline ends the line; the bottom scrolls.
 
 `u32`: its ground, black.
 
+## sys_display_flip
+
+Beside its status each flip answers its receipt in a1 to a3: the `rdtime`
+frame_ready read as it decided and the tick it held it against, stored the
+moment it decides, and present_ordinal as the call returns. A path that ends
+before the check, the display not open or failed already, writes zeros of
+its own to a1 and a2, so 0 reads as no decision observed, which `rdtime`
+never is once the kernel runs.
+
+## sys_display_flip_rect
+
+The rectangle is read again from the frame for the present, so the
+receipt's stamp and tick wait in s0 and s1 and go to a1 and a2 with the
+status.
+
 ## sys_display_flip_rects
 
 Every rectangle is checked before any is shown. The count is bounded before
-it is scaled, so the byte size the bounds see never wraps.
+it is scaled, so the byte size the bounds see never wraps. The count waits
+in s1 before the stamp and the tick take its slot.
 
 ## display_present_rects
 
 The rectangle holding them all is found from the list first; then the
 transfers go in batches of GPU_TRANSFERS_PER_BATCH, and the flush rides the
 last batch, so a list up to GPU_TRANSFERS_PER_BATCH is one wait.
+
+present_ordinal moves on the flush's own answer, chain s2 of the last batch,
+whatever that batch's transfers answered: the device applies a flush after a
+refused transfer of the same batch, so the screen took the present though
+the batch's merged answer says a command failed. A stuck source's batch reads
+no answer and moves nothing. Under DEBUG the knobs' faults ride the frame at
+16 and the transfers sent at 8, a transfer numbered from 1 across the call's
+batches.
+
+## gpu_batch_run
+
+2 for its stuck source, whose responses are never read, so a caller tells
+it apart from a command the device refused.
 
 ## gpu_batch_add
 
@@ -123,7 +152,9 @@ Its t registers live across text_pixel, which touches t1 and a7 only.
 ## display_open
 
 What the display is comes first, then the resource, its backing, the
-scanout, and the first frame.
+scanout, and the first frame. Under DEBUG the GPU knobs are read
+(present_knobs) before the first frame, the open's present being a present
+call of its own.
 
 ## msg_gpu_at
 
@@ -132,7 +163,39 @@ scanout, and the first frame.
 ## display_present_rect
 
 The transfer's offset is the byte offset of the rectangle's top left in the
-framebuffer.
+framebuffer. Its flush answered OK moves present_ordinal on: the whole flip,
+the rectangle flip, the open's first frame, and a print's band alike. Under
+DEBUG present_faults numbers the call, and its knobs' faults ride the
+frame's slot 0, the transfer's number in the low half, 1 the one this
+present sends, and the flush in bit 32; each refused one is sent with a
+width past the resource, which QEMU refuses at its bounds check.
+
+## present_knobs
+
+Under DEBUG: the GPU knobs from the bootargs, read once a display_open
+before its first frame. `jab.badxfer=<n>` names the present call whose
+transfer is refused and `jab.badxferat=<k>` which of its transfers, 1 when
+absent; `jab.badflush=<n>` the present call whose flush is refused. A present
+call is any display_present_rect or display_present_rects, the open's and a
+print's among them.
+
+## knob_badxfer
+
+`13 u8`: the knob naming the present call whose transfer is refused, under
+DEBUG only.
+
+## knob_badxferat
+
+`15 u8`: the knob naming which of its transfers.
+
+## knob_badflush
+
+`14 u8`: the knob naming the present call whose flush is refused.
+
+## present_faults
+
+Under DEBUG: the present call counted from boot, and the faults the knobs
+name for it.
 
 ## gpu_get_display_info
 
@@ -202,3 +265,24 @@ answering that the device refuses and jab.sys.print going to the UART.
 ## console_row
 
 `u64`: the cursor's line.
+
+## present_ordinal
+
+`u64`: the presents the device has answered OK since boot, each a flush's
+own answer, in every build.
+
+## present_calls
+
+`u64`: the present calls made since boot, under DEBUG only.
+
+## badxfer_call
+
+`u64`: the present call jab.badxfer names, all ones when absent.
+
+## badxfer_at
+
+`u64`: the transfer of that call jab.badxferat names, 1 when absent.
+
+## badflush_call
+
+`u64`: the present call jab.badflush names, all ones when absent.

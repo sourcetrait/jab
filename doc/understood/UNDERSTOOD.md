@@ -197,7 +197,13 @@ painted once, as the rectangle holding them all: a paint costs the
 host's window a fixed price and a wait however small it is, and a
 window drawn on a timer draws late by as long as the paints take, so
 one a tick is what keeps a busy screen smooth under SDL and Cocoa
-alike.
+alike. Every flip answers its receipt beside its status: the time the
+kernel's readiness check read, the tick it held that time against, and
+the present ordinal, how many presents the device has answered OK since
+boot, so a program places each of its presents in the host's sequence of
+flushes. A debug kernel's `jab.badxfer`, `jab.badxferat`, and
+`jab.badflush` bootargs make the device refuse a chosen present's transfer
+or flush, which is how `test/framecap` holds the receipts of a failure.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`

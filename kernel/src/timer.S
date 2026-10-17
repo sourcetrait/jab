@@ -21,6 +21,8 @@ frame_ready:
     ld t1, 0(t1)
     sltu a0, t0, t1
     xori a0, a0, 1
+    mv a1, t0                               # the decision's stamp
+    mv a2, t1                               # the eligibility tick it read
     ret
 
 .global frame_flipped

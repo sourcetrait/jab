@@ -1151,6 +1151,18 @@ JAB_ROMFS_TYPE and JAB_ROMFS_EXEC mask leaves the offset. A name is at most
 
 A program awaits the tick, or asks jab.sys.display.ready, before it flips.
 
+Every flip answers its receipt beside its status, the flips' observations
+in every build: the decision's stamp, the eligibility tick, and the present
+ordinal. A presented flip's stamp is at or past its tick and an early one's
+before it, both inside the call. The ordinal counts the flushes the device
+has answered OK since boot, display.open's present the first and a print's
+among them, so a program names each of its presents' place in the host's
+sequence of flushes; a refusal, a bad rectangle, and a failed flush leave it
+where it was. A call that ends before any check, the display not open or
+failed already, or a bad rectangle or count, reads 0 in both the stamp and
+the tick, which `rdtime` never is once the kernel runs. A worker's flip
+answers JAB_DENIED and leaves a1 to a3 as they were.
+
 ## .macro jab.sys.display.flip.rect
 
 One flip a frame, so several changed areas go as the one rectangle holding

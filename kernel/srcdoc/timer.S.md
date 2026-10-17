@@ -22,6 +22,11 @@ answered it (frame_reported).
 A device that stops returning raises no line (sound.S), so a wait on the
 sound stream alone wakes on this timer to look.
 
+## frame_ready
+
+Beside the readiness it answers the `rdtime` it read in a1 and the tick it
+held it against in a2, the flips' receipt.
+
 ## frame_flipped
 
 A punctual program keeps an exact cadence and a slow one is never refused.

@@ -1,68 +1,148 @@
 # main.S
 
-framecap: the frame cap. Sixty-four flips in a row with no waiting:
-the first goes through and the rest come too early, which the kernel
-refuses without showing them. Then sixty-four frames the proper way,
-await then flip, half of them whole and half a rectangle, which take
-sixty-four periods of the cap while the hart halts between them.
-Then a rectangle reaching past the screen's edge, which the kernel
-must refuse; then a list of two rectangles as one flip, a list with
-one past the edge, and a list of none; then what the kernel was built
-with. Reports on the UART.
+framecap: the frame cap and the flips' receipts. A flip before the
+display opens, which answers 2. Then sixty-four flips in a row with no
+waiting: the first goes through and the rest come too early, which the
+kernel refuses without showing them. Then sixty-four frames the proper
+way, await then flip, half of them whole and half a rectangle, which take
+sixty-four periods of the cap while the hart halts between them. Then a
+rectangle reaching past the screen's edge, which the kernel must refuse;
+then a list of two rectangles as one flip, a list with one past the edge,
+and a list of none; then a flip, a print to the screen, and a flip, the
+print's present between them; then what the kernel was built with.
+
+Every flip keeps its receipt: the kind of flip, the status in a0, the
+decision's stamp in a1, the eligibility tick in a2, and the present
+ordinal in a3 as the kernel answered them, with the program's own
+`rdtime` just before the call and just after it, the bracket a stamp must
+lie in. The receipts are kept in memory and printed after the flips, so
+no print slows the burst.
+
+With the API on the machine, a letter sent over it picks a scenario
+instead, each run under one of the kernel's GPU knobs: `l` a list of
+three whose second transfer the knob refuses, `b` a list past a batch
+whose first batch's transfer it refuses, `t` a whole flip whose transfer
+it refuses, `f` one whose flush it refuses, and `s` the GPU's source held
+until it fails. A zero-length API write asks whether the port is there:
+it answers 1 with none.
 
 ## .set FLIPS
 
 `u64`: the flips in each run, sixty-four.
 
-## _start
+## .set RECEIPTS
 
-The lines in order: `refused=NN`, the flips refused of the first run; then
-thirty-two whole frames, awaited, and thirty-two rectangles, awaited, which
-print nothing unless one fails; then a rectangle past the right edge,
-`badrect=NN`; then a list of two rectangles as one flip, a list holding one
-past the edge, and a list of none, `rects=NN badrects=NN norects=NN` a line
-each; then what the kernel was built with, `flags=NN`; then `paced`. Each
-number is two digits.
+`u64`: the receipts the program keeps, room for the plain run's 135.
 
-## refused
+## .set RECEIPT_BYTES
 
-`8 u8`: the refused flips' line, its digits following.
+`u64`: a receipt's bytes: the kind, the status, the stamp before, a1 to
+a3, and the stamp after, seven u64, and one spare.
 
-## refused_digits
+## .set SELECT_WAIT
 
-`4 u8`: the refused flips' count, a newline, and the terminator.
+`u64`: two seconds of `rdtime`, how long the program waits for a
+scenario's letter.
 
-## badrect
+## .set HELD_WAIT
 
-`8 u8`: the bad rectangle's line, its digits following.
+`u64`: three and a half seconds of `rdtime`, past the stuck-source
+window's three, how long the held scenario awaits with no flip.
 
-## badrect_digits
+## .set SENTINEL
 
-`4 u8`: the bad rectangle's code, a newline, and the terminator.
+`u64`: what the held scenario leaves in a1 to a3 before its last flip,
+so a kernel that wrote nothing there shows it.
 
-## rects
+## .set OLD
 
-`6 u8`: the list's line, its digits following.
+`u32`: the old frame's colour, 0x00RRGGBB.
 
-## rects_digits
+## .set NEW
 
-`4 u8`: the list's code, a newline, and the terminator.
+`u32`: the new frame's colour, 0x00RRGGBB.
 
-## badrects
+## .set LIST_LONG
 
-`9 u8`: the bad list's line, its digits following.
+`u64`: the long list's rectangles, thirty-three, past a batch's
+thirty-one.
 
-## badrects_digits
+## .set KIND_CLOSED
 
-`4 u8`: the bad list's code, a newline, and the terminator.
+`u64`: a receipt's kind: the flip before the open.
 
-## norects
+## .set KIND_BURST
 
-`8 u8`: the empty list's line, its digits following.
+`u64`: a flip of the burst.
 
-## norects_digits
+## .set KIND_WHOLE
 
-`4 u8`: the empty list's code, a newline, and the terminator.
+`u64`: an awaited whole flip.
+
+## .set KIND_RECT
+
+`u64`: an awaited rectangle flip.
+
+## .set KIND_BADRECT
+
+`u64`: the rectangle past the edge.
+
+## .set KIND_RECTS
+
+`u64`: the list of two.
+
+## .set KIND_BADRECTS
+
+`u64`: the list holding one past the edge.
+
+## .set KIND_NORECTS
+
+`u64`: the list of none.
+
+## .set KIND_BEFORE_PRINT
+
+`u64`: the flip before the print.
+
+## .set KIND_AFTER_PRINT
+
+`u64`: the flip after the print.
+
+## .set KIND_OLD
+
+`u64`: a scenario's whole flip of the old frame.
+
+## .set KIND_LIST
+
+`u64`: the list scenario's list.
+
+## .set KIND_LONG
+
+`u64`: the long list scenario's list.
+
+## .set KIND_BADXFER
+
+`u64`: the transfer scenario's whole flip.
+
+## .set KIND_BADFLUSH
+
+`u64`: the flush scenario's whole flip.
+
+## .set KIND_HELD
+
+`u64`: the held scenario's flip before the source fails.
+
+## .set KIND_FAILED
+
+`u64`: the held scenario's flip after it failed.
+
+## .set rect
+
+`u64`: the long list's rectangle being laid out, the assembler's count.
+
+## line
+
+`128 u8`: a receipt's line, `receipt ` and seven sixteen-digit hex fields,
+the last ending the line, written over in place for each receipt.
 
 ## flags
 
@@ -80,9 +160,29 @@ number is two digits.
 
 `8 u32`: two rectangles, the second reaching past the bottom.
 
+## three_rects
+
+`12 u32`: three rectangles in a row across the top, the list scenario's.
+
+## long_rects
+
+`132 u32`: LIST_LONG rectangles of ten pixels, forty apart along a row.
+
 ## paced
 
-`7 u8`: the last line, once every check has run.
+`7 u8`: the plain run's last line, once every check has run.
+
+## msg_print
+
+`9 u8`: the text the plain run prints to the screen between two flips.
+
+## msg_done
+
+`25 u8`: a scenario's line once its receipts are out.
+
+## msg_no_scenario
+
+`23 u8`: the line for an API with no letter in time.
 
 ## msg_no_display
 
@@ -91,3 +191,16 @@ number is two digits.
 ## msg_flip_failed
 
 `37 u8`: the line for a flip after await that failed.
+
+## receipt_count
+
+`u64`: how many receipts are kept.
+
+## receipts
+
+`RECEIPTS * RECEIPT_BYTES u8`: the receipts, RECEIPT_BYTES each.
+
+## selector
+
+`8 u8`: where the scenario's letter lands, and the zero-length write's
+buffer.
