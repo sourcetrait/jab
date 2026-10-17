@@ -223,7 +223,13 @@ font it wrote and then a piano from FluidR3. A program's exit plays the stream o
 the ring, the voices, and then silence enough that the host has played
 the last of it, and a device that returns nothing for three seconds is
 declared dead, `jab: sound stalled` on the console, the calls
-answering 2 from then on rather than a wait that never ends. A run plays through the output the host's own sound
+answering 2 from then on rather than a wait that never ends. A debug
+kernel's exit line on the debug channel counts the periods submitted,
+returned, and failed, and the services that found no period still with
+the device once they had taken its returns, `exhausted`; a debug kernel
+reads `jab.soundlate=<ms>` to hold one service that long, which
+`test/sound` uses to see the count rise by one while the stream goes on.
+A run plays through the output the host's own sound
 system calls its default, which `jabdisco` finds (below): on Linux
 the sound server's default sink, reached through ALSA's `default`
 device and the server's ALSA plugin, on macOS the system's output
