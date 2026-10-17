@@ -209,6 +209,9 @@ msg_sound_at:
     li t0, SIE_SEIE
     csrs sie, t0
     call sound_service
+.ifdef DEBUG
+    call sound_late_arm                     # past the priming: the count and the knob from here on
+.endif
     li a0, 0
     j 8f
 5:
@@ -324,7 +327,13 @@ sound_service:
     sd a5, 40(sp)
     sd a6, 32(sp)
     sd a7, 24(sp)
+.ifdef DEBUG
+    call sound_late_spin
+.endif
     call sound_drain
+.ifdef DEBUG
+    call sound_count_empty
+.endif
     li s0, 0
 1:
     la t0, sound_busy
@@ -356,6 +365,79 @@ sound_service:
     addi sp, sp, 96
 9:
     ret
+
+.ifdef DEBUG
+.set SOUNDLATE_MAX_MS, 2000
+
+sound_late_arm:                             # past the priming: the count from here on, and jab.soundlate's one delay
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la t0, sound_counting
+    li t1, 1
+    sd t1, 0(t0)
+    la a0, knob_soundlate
+    call knob_value
+    bltz a0, 1f                             # no knob: no delay
+    li t0, SOUNDLATE_MAX_MS
+    bleu a0, t0, 2f
+    mv a0, t0                               # held to its bound
+2:
+    li t0, (JAB_TIME_HZ / 1000)
+    mul a0, a0, t0
+    la t0, sound_late
+    sd a0, 0(t0)
+1:
+    ld ra, 8(sp)
+    addi sp, sp, 16
+    ret
+.pushsection .rodata
+knob_soundlate:
+    .asciz "jab.soundlate="
+.popsection
+
+sound_late_spin:                            # jab.soundlate's delay, once: the service held before its drain while the device returns its periods
+    la t0, sound_late
+    ld t1, 0(t0)
+    beqz t1, 2f
+    sd zero, 0(t0)                          # one shot: spent before it runs
+    rdtime t2
+    add t1, t1, t2                          # the delay's end
+1:
+    rdtime t2
+    bltu t2, t1, 1b
+2:
+    ret
+
+sound_count_empty:                          # after the drain: no period still with the device counts once
+    la t0, sound_counting
+    ld t0, 0(t0)
+    beqz t0, 2f
+    la t0, sound_busy
+    li t1, 0
+    li t2, JAB_SOUND_PERIODS
+1:
+    add t3, t0, t1
+    lbu t3, 0(t3)
+    bnez t3, 2f                             # a period still with the device
+    addi t1, t1, 1
+    bltu t1, t2, 1b
+    la t0, sound_exhausted
+    ld t1, 0(t0)
+    addi t1, t1, 1                          # every period back: the queue empty after the drain
+    sd t1, 0(t0)
+2:
+    ret
+
+.pushsection .bss
+.balign 8
+sound_exhausted:
+    .skip 8
+sound_counting:
+    .skip 8
+sound_late:
+    .skip 8
+.popsection
+.endif
 
 sound_mix:
     addi sp, sp, -32
@@ -600,6 +682,10 @@ sound_flush:
     beqz t0, 9f
     addi sp, sp, -32
     sd ra, 24(sp)
+.ifdef DEBUG
+    la t0, sound_counting
+    sd zero, 0(t0)                          # the exit's services uncounted
+.endif
     li a0, 0
     li a1, -1
     call synth_all_off
@@ -689,6 +775,11 @@ sound_flush:
     la t0, sound_failed
     ld a0, 0(t0)
     call debug_put_dec
+    la a0, msg_sound_exhausted
+    call debug_puts
+    la t0, sound_exhausted
+    ld a0, 0(t0)
+    call debug_put_dec
     li a0, '\n'
     call debug_putc
 .pushsection .rodata
@@ -698,6 +789,8 @@ msg_sound_returned:
     .asciz " returned "
 msg_sound_failed:
     .asciz " failed "
+msg_sound_exhausted:
+    .asciz " exhausted "
 .popsection
 .endif
     ld ra, 24(sp)

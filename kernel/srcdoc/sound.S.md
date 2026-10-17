@@ -72,6 +72,10 @@ it held before QEMU ends.
 
 `u64`: the longest the exit waits for the ring and the voices to end.
 
+## .set SOUNDLATE_MAX_MS
+
+`u64`: under DEBUG, jab.soundlate's bound in ms, 2,000.
+
 ## sys_sound_write
 
 The count is capped to the room before it is multiplied, so a count that
@@ -100,7 +104,39 @@ enabled from here on, and the stream is primed with every period.
 
 Called wherever the device's line is taken (virtio.S), in a wait or from the
 trap vector, which is why it keeps every register but the t registers and
-a0.
+a0. Under DEBUG it counts a service that finds no period still with the
+device once its drain has consumed the completions, never before:
+sound_busy is cleared only as sound_drain takes each return, so at the
+service's entry a late service still sees every period busy though the
+device returned them all. The count is that sampling point's alone, the
+device holding none of the guest's periods as a service has drained and
+before it refills; the queue can still run empty unobserved, between the
+check and the refill's submits or after the last service, and the count
+says nothing of output underrun past QEMU's backend. The priming's
+service and the exit's are left out. jab.soundlate=<ms> holds the first
+service past the priming that long on rdtime before its drain, once, the
+device returning its periods meanwhile, so that service counts and
+refills, the stream going on: a refill needs no completion after the
+queue runs empty, which never comes, since irq_serve acknowledges the
+transport before it calls the service.
+
+## knob_soundlate
+
+`15 u8`: under DEBUG, the knob that delays one service, its value in ms.
+
+## sound_exhausted
+
+`u64`: under DEBUG, the services that found the queue empty after their
+drain.
+
+## sound_counting
+
+`u64`: under DEBUG, 1 from the priming's end to the exit's flush, while
+the services count.
+
+## sound_late
+
+`u64`: under DEBUG, jab.soundlate's delay in ticks, 0 once spent.
 
 ## sound_mix
 
@@ -146,7 +182,9 @@ SOUND_DRAIN_PERIODS more returns past the periods then in flight, every
 refill silence by then, so the host's own buffer has played the last
 content before QEMU ends; then, the refills stopped, until every period has
 come back, a stall there being the device keeping a period, after which the
-exit goes on. With DEBUG the counts go to the debug channel.
+exit goes on. With DEBUG the counts go to the debug channel, the services
+that found the queue empty after their drain the last, and the flush's own
+services are left out of that count.
 
 ## msg_sound_counts
 
@@ -159,6 +197,10 @@ exit goes on. With DEBUG the counts go to the debug channel.
 ## msg_sound_failed
 
 `9 u8`: that line's failed field.
+
+## msg_sound_exhausted
+
+`12 u8`: that line's exhausted field.
 
 ## sound_control_queue
 

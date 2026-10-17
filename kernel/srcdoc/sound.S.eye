@@ -9,26 +9,29 @@ ecall sys_sound_ready > status a0 u64,room a1 u64 [69:79]
  room :the frames a write would take now
 call local sound_room > room a0 u64 [81:91]
  room :the frames the ring has room for
-call sound_open > status a0 u64,state sound_state u64,live sound_live u64,clobber a1-a6 [92:244] :brings the sound device up with its stream set to the one format, started, and every period mixed and offered
+call sound_open > status a0 u64,state sound_state u64,live sound_live u64,clobber a1-a6 [92:247] :brings the sound device up with its stream set to the one format, started, and every period mixed and offered
  status :0, 1 with no sound device, 2 when the device refuses the kernel or a request, asked again answering as before at once
-call local sound_queue_setup > refused a0 bool,clobber a2 [246:275] :gives the tx queue the sound queue record's rings, SNDQ_SIZE entries
+call local sound_queue_setup > refused a0 bool,clobber a2 [249:278] :gives the tx queue the sound queue record's rings, SNDQ_SIZE entries
  refused :1 when the device offers fewer
-call local sound_control_simple code u32 > failed a0 bool,clobber a1-a6 [277:283] :runs a request that takes only the stream
+call local sound_control_simple code u32 > failed a0 bool,clobber a1-a6 [280:286] :runs a request that takes only the stream
  failed :0 when the device said OK, else 1, its source stuck included
-call local sound_control length u32 > failed a0 bool,clobber a1-a6 [285:312] :runs the request of that many bytes in sound_request through the control queue, the hart halted until the device answers
+call local sound_control length u32 > failed a0 bool,clobber a1-a6 [288:315] :runs the request of that many bytes in sound_request through the control queue, the hart halted until the device answers
  failed :0 when the device said OK, else 1, its source stuck included
-call sound_service > clobber a0 [313:358] :keeps the stream running, every period the device returned mixed afresh and offered again, the file player stepped a period first; nothing until the stream is live
-call local sound_mix samples addr > clobber a0-a7 [360:427] :fills a period's samples from the ring's frames and the synthesizer's voices, clipped to the sample range
+call sound_service > clobber a0 [316:369] :keeps the stream running, every period the device returned mixed afresh and offered again, the file player stepped a period first; nothing until the stream is live
+call local sound_late_arm > clobber a0 [372:392] :under DEBUG, past the priming: the services' count begun, and jab.soundlate's one delay armed, held to SOUNDLATE_MAX_MS
+call local sound_late_spin [398:409] :under DEBUG, jab.soundlate's delay once: the service held on rdtime before its drain while the device returns its periods
+call local sound_count_empty [411:440] :under DEBUG, after the drain: a service finding no period still with the device counted in sound_exhausted, from the priming's end to the exit's flush
+call local sound_mix samples addr > clobber a0-a7 [442:509] :fills a period's samples from the ring's frames and the synthesizer's voices, clipped to the sample range
  samples :where the period's samples go
-call local sound_submit period u64 > busy sound_busy u8,submitted sound_submitted u64 [429:455] :offers the period, full, to the device
-call sound_drain > returned sound_returned u64,failed sound_failed u64,last sound_last_return u64 [456:499] :frees every period the device has returned, reading each one's status
-call sound_stalled > stalled a0 bool,live sound_live u64,state sound_state u64 [500:540]
+call local sound_submit period u64 > busy sound_busy u8,submitted sound_submitted u64 [511:537] :offers the period, full, to the device
+call sound_drain > returned sound_returned u64,failed sound_failed u64,last sound_last_return u64 [538:581] :frees every period the device has returned, reading each one's status
+call sound_stalled > stalled a0 bool,live sound_live u64,state sound_state u64 [582:622]
  stalled :1 when the live stream has a period in flight and no return for SOUND_STALL_TICKS, the stream then dead with a line on the UART
-call sound_tick [541:574] :a checkpoint for a long loop inside a call, draining the interrupts when the device has returned a period; keeps every register, t ones included
-call local sound_wait > clobber a0 [576:596] :halts until the device's line or the poll timer, then drains the interrupts and reports
-call sound_flush > live sound_live u64,clobber a0-a3 [597:706] :plays the stream out for a program's exit; nothing with no live stream, and done once it dies
-call local sound_progress > progress a0 u64 [708:714] :the control and transmit queues' used indexes summed
-call local sound_fault > live sound_live u64,state sound_state u64 [716:724] :its source stuck: the stream dead, as sound_stalled leaves it, the device reset (virtio_reset)
-call sound_pending > room a0 bool [725:737]
+call sound_tick [623:656] :a checkpoint for a long loop inside a call, draining the interrupts when the device has returned a period; keeps every register, t ones included
+call local sound_wait > clobber a0 [658:678] :halts until the device's line or the poll timer, then drains the interrupts and reports
+call sound_flush > live sound_live u64,clobber a0-a3 [679:799] :plays the stream out for a program's exit; nothing with no live stream, and done once it dies
+call local sound_progress > progress a0 u64 [801:807] :the control and transmit queues' used indexes summed
+call local sound_fault > live sound_live u64,state sound_state u64 [809:817] :its source stuck: the stream dead, as sound_stalled leaves it, the device reset (virtio_reset)
+call sound_pending > room a0 bool [818:830]
  room :1 when the ring has room for a period, so a write can take more
-call sound_in_flight > busy a0 bool [738:750] :under DEBUG, 1 while any period is with the device
+call sound_in_flight > busy a0 bool [831:843] :under DEBUG, 1 while any period is with the device
