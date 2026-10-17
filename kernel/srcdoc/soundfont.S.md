@@ -27,6 +27,13 @@ recomputed a period. Every routine keeps the s registers unless its
 signature says otherwise, since the note calls run inside the stream's
 refill.
 
+Every global here is hart 0's: hart 0's MIDI calls and the stream's service
+inside its drain alone touch it. A worker's calls are jab.sys.harts and the
+worker calls (trap.S's worker_call), and a secondary's drain serves no
+device, its interrupt file enabling the wake alone (aia.S), so no path a
+worker takes reaches a routine or the data of this file; test/owners holds
+that on the built kernels.
+
 ## .set VOICES
 
 `u64`: the font's voices.

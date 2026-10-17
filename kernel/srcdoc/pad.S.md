@@ -20,6 +20,13 @@ moved reads 0 once normalised. jab.sys.pad.read normalises every axis into
 the program's record at the call. A program never learns which way its pad
 came.
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it,
+the serial device's fault among them (serial.S). A worker's calls are
+jab.sys.harts and the worker calls (trap.S's worker_call), and a secondary's
+drain serves no device, its interrupt file enabling the wake alone (aia.S),
+so no path a worker takes reaches a routine or the data of this file;
+test/owners holds that on the built kernels.
+
 ## .set PAD_RING
 
 `u64`: the events the pad's ring holds.

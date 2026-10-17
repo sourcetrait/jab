@@ -134,9 +134,12 @@ and the stop forced, which takes the worker out at its next boundary.
 ## .set FAULT_LINE
 ## .set FAULT_LINE_DEC
 ## .set FAULT_LINE_HEX
+## .set FAULT_HART_DEC
 
 `u64`: a fault's kinds: a trap in the program, a trap in the kernel, and a
-line alone, with a value in decimal, or with a value in hex.
+line alone, with a value in decimal, or with a value in hex; and under
+DEBUG a line opening with its hart's number, a value in decimal after it
+(trap.S's fatal_hart_dec).
 
 ## .set LEAVEHOLD_HELD
 ## .set LEAVEHOLD_EXPIRED

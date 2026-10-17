@@ -8,6 +8,22 @@
 
 .global hart_idle
 hart_idle:                                  # a secondary between its workers, on its record's stack
+.ifdef DEBUG
+    li t0, IMSIC_EIE0
+    csrw CSR_SISELECT, t0
+    csrr t0, CSR_SIREG
+    li t1, ~(1 << AIA_WAKE)
+    and t1, t0, t1
+    beqz t1, 10f                            # its file enables the wake alone
+    ctz a1, t1
+    la a0, msg_enabled
+    j fatal_hart_dec                        # a device's identity enabled off hart 0
+.pushsection .rodata
+msg_enabled:
+    .asciz " enabled a device identity "
+.popsection
+10:
+.endif
     li t0, SIE_SEIE
     csrw sie, t0
 1:

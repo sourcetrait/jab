@@ -8,6 +8,12 @@ the whole buffer from QEMU's default backend but need not be by the
 specification. The device comes up on the first call and the program's own
 buffer is what the device writes, so nothing is copied.
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it.
+A worker's calls are jab.sys.harts and the worker calls (trap.S's
+worker_call), and a secondary's drain serves no device, its interrupt file
+enabling the wake alone (aia.S), so no path a worker takes reaches a routine
+or the data of this file; test/owners holds that on the built kernels.
+
 ## sys_random
 
 One descriptor the device writes, the program's buffer, is offered in the

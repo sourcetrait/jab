@@ -8,6 +8,12 @@ the queue, when the program asks for a key or awaits one. Only EV_KEY events
 are kept: the code and the value, 0 released, 1 pressed, 2 held, as Linux
 defines them.
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it.
+A worker's calls are jab.sys.harts and the worker calls (trap.S's
+worker_call), and a secondary's drain serves no device, its interrupt file
+enabling the wake alone (aia.S), so no path a worker takes reaches a routine
+or the data of this file; test/owners holds that on the built kernels.
+
 ## .set KEYBOARD_RING
 
 `u64`: the key events the kernel's ring holds.

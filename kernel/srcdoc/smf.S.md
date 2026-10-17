@@ -16,6 +16,13 @@ its length. The piece ends when every track has. Every read is bounded by
 its track's chunk, so a malformed file ends its track rather than reading
 past it.
 
+Every global here is hart 0's: hart 0's MIDI calls and the stream's service
+inside its drain alone touch it. A worker's calls are jab.sys.harts and the
+worker calls (trap.S's worker_call), and a secondary's drain serves no
+device, its interrupt file enabling the wake alone (aia.S), so no path a
+worker takes reaches a routine or the data of this file; test/owners holds
+that on the built kernels.
+
 ## .set TRACKS
 
 `u64`: the tracks a file may hold.

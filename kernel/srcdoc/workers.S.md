@@ -26,6 +26,18 @@ start's wake sent after the check stays pending in the hart's file and ends
 the wfi at once. The drain claims the wake and fences, so the state is read
 after it.
 
+Under DEBUG the hart's own file's eie0 is read back first, through
+siselect: an identity enabled there besides the wake ends the run, `jab:
+hart N enabled a device identity M` (trap.S's fatal_hart_dec). Only the
+wake belongs in a secondary's file (aia.S's aia_file_open), the half of the
+drain's path condition a misconfigured file breaks before any message
+lands in it (aia.S's irq_drain).
+
+## msg_enabled
+
+`28 u8`: the readback's line between its hart and its identity, under DEBUG
+only.
+
 ## worker_enter
 
 The swap from starting to running races hart 0's swap from starting back to

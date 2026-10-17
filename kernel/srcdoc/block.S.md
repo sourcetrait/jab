@@ -15,6 +15,12 @@ JAB_BLOCK_KIND_NONE and no capacity, so a program sees that the machine
 carries a disk there and reads why from the code it gets back. A format
 reads through this layer: romfs.S.
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it.
+A worker's calls are jab.sys.harts and the worker calls (trap.S's
+worker_call), and a secondary's drain serves no device, its interrupt file
+enabling the wake alone (aia.S), so no path a worker takes reaches a routine
+or the data of this file; test/owners holds that on the built kernels.
+
 ## sys_block_list
 
 An id is one more than its index, so an `at` of 1 also starts at the first

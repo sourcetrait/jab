@@ -37,7 +37,8 @@ A fault ends the run, and its line goes out once every hart has stopped. The
 faulting hart records the fault in its own record (hart.inc), no lock held:
 a trap's cause, pc, and tval, or a line and a value, the unknown call's, the
 bad address's, the timer's, and the faults of other files through
-fatal_plain, fatal_dec, and fatal_hex. Then it claims the shutdown
+fatal_plain, fatal_dec, and fatal_hex, and under DEBUG fatal_hart_dec, whose
+line opens with its hart's number. Then it claims the shutdown
 (workers.S's shutdown_enter): a hart behind another's claim parks, and the
 owner stops every other hart and goes on to fatal_exit, which prints every
 recorded line under the line lock, its own first.
@@ -126,7 +127,14 @@ shutdown unanswered: hart N`, a hart that missed its safe point.
 ## fault_line
 
 A worker's line names its hart and its argument, the program's own fault
-on hart 0 keeps its form, and a kernel fault names its hart on any.
+on hart 0 keeps its form, and a kernel fault names its hart on any. Under
+DEBUG a fatal_hart_dec line opens `jab: hart N` on whichever hart it is,
+the line and its value after it.
+
+## msg_hart_head
+
+`11 u8`: a fatal_hart_dec line's head, its hart's number after it, under
+DEBUG only.
 
 ## interrupt_return
 

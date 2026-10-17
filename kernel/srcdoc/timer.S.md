@@ -11,6 +11,11 @@ an input and comes back after the tick loses nothing; the wait moves a
 passed tick itself only when it reported that tick already and no flip has
 answered it (frame_reported).
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and its
+waits are workers.S's, so no path a worker takes reaches a routine or the
+data of this file; test/owners holds that on the built kernels.
+
 ## .set TICK
 
 `u64`: a frame period in time ticks.

@@ -24,6 +24,15 @@ line on the UART, rather than holding a wait forever. A long call looks at
 the stream from inside its loops through sound_tick, so the lead is never
 spent by the kernel's own work.
 
+Every global here is hart 0's: hart 0's calls, its drain, and the stream's
+service inside them alone touch it. A worker's calls are jab.sys.harts and
+the worker calls (trap.S's worker_call), and a secondary's drain serves no
+device, its interrupt file enabling the wake alone (aia.S), so no path a
+worker takes reaches a routine or the data of this file but two reads
+test/owners allows by instruction on the built kernels: irq_drain's of
+sound_base, which orders the sound first and on a worker's hart decides
+nothing, and sys_worker_wait's of sound_live, on hart 0's branch alone.
+
 ## .set SOUND_STREAM
 
 `u32`: the playback stream's id.

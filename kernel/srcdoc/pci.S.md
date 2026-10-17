@@ -12,6 +12,12 @@ and the device is kept in a record for whoever drives it (block.S). A
 device's interrupt is a level held until its ISR register is read, which
 the drain does for every device on a line it claims (aia.S).
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it.
+A worker's calls are jab.sys.harts and the worker calls (trap.S's
+worker_call), and a secondary's drain serves no device, its interrupt file
+enabling the wake alone (aia.S), so no path a worker takes reaches a routine
+or the data of this file; test/owners holds that on the built kernels.
+
 ## pci_bring_up
 
 The line is QEMU_VIRT_PCIE_IRQ0 plus the slot and the pin, less one, modulo

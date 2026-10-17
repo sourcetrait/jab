@@ -97,6 +97,20 @@ between passes, and a wfi that returns with nothing to claim was a spurious
 wake, since an interrupt file's changes reach mip eventually, not
 necessarily at once.
 
+Under DEBUG a pass on any hart but 0 whose claims hold an identity besides
+the wake ends the run, `jab: hart N claimed a device identity M` (trap.S's
+fatal_hart_dec). Every device source targets hart 0's file and a
+secondary's enables the wake alone, so on a worker's hart the claims hold
+the wake at most and the calls into irq_serve below are never reached; that
+is the path condition test/owners cuts the worker paths at, and this check
+is what makes a break of it fail loudly rather than serve a device off
+hart 0.
+
+## msg_claimed
+
+`28 u8`: the claim check's line between its hart and its identity, under
+DEBUG only.
+
 ## irq_serve
 
 A PCI line's devices each read their ISR (pci.S), which drops the level; an

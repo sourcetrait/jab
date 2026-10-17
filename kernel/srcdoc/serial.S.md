@@ -28,6 +28,13 @@ and jab.sys.await watches. With no port on the machine the calls say so.
 The pad's port carries bytes from the host alone, which pad.S reads out of
 the offered buffers as a stream and parses itself (doc/padport.md).
 
+Every global here is hart 0's: kmain's open before the release, then hart
+0's calls and its drain alone touch it. A worker's calls are jab.sys.harts
+and the worker calls (trap.S's worker_call), and a secondary's drain serves
+no device, its interrupt file enabling the wake alone (aia.S), so no path a
+worker takes reaches a routine or the data of this file; test/owners holds
+that on the built kernels.
+
 ## .set SERIAL_API_PORT
 
 `u32`: the API's port.

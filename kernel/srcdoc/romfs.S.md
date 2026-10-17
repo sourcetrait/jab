@@ -19,6 +19,12 @@ handle that is not a header, a header whose kind is wrong for the call -
 since every handle the kernel hands out is none of those and a program that
 invents one has a bug.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels.
+
 ## .set ROMFS_MAGIC_LOW
 
 `u32`: "-rom" as the little-endian word a load sees.

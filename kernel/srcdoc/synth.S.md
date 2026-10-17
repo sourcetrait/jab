@@ -27,6 +27,13 @@ when it cannot; the arguments are read from the frame after that, masked to
 their ranges rather than checked; and the notes a call touches are the
 calls' own (synth_live).
 
+Every global here is hart 0's: hart 0's MIDI calls and the stream's service
+inside its drain alone touch it. A worker's calls are jab.sys.harts and the
+worker calls (trap.S's worker_call), and a secondary's drain serves no
+device, its interrupt file enabling the wake alone (aia.S), so no path a
+worker takes reaches a routine or the data of this file; test/owners holds
+that on the built kernels.
+
 ## .set VOICES
 
 `u64`: the chip-tune voices.

@@ -260,6 +260,12 @@ fatal_plain:                                # a0 the fault's line
 fatal_dec:                                  # a0 the fault's line, a1 a value in decimal after it
     li t0, FAULT_LINE_DEC
     j 1f
+.ifdef DEBUG
+.global fatal_hart_dec
+fatal_hart_dec:                             # a0 the line after its hart's number, a1 a value in decimal after it
+    li t0, FAULT_HART_DEC
+    j 1f
+.endif
 .global fatal_hex
 fatal_hex:                                  # a0 the fault's line, a1 a value in hex after it
     li t0, FAULT_LINE_HEX
@@ -326,6 +332,10 @@ fault_line:                                 # a0 a hart's record: its fault's li
     beq t0, t1, 3f
     li t1, FAULT_KERNEL
     beq t0, t1, 5f
+.ifdef DEBUG
+    li t1, FAULT_HART_DEC
+    beq t0, t1, 9f
+.endif
     ld a0, HART_LINE(s0)
     call uart_puts
     ld t0, HART_FAULT(s0)
@@ -383,6 +393,22 @@ fault_line:                                 # a0 a hart's record: its fault's li
     ld s0, 0(sp)
     addi sp, sp, 16
     ret
+.ifdef DEBUG
+9:
+    la a0, msg_hart_head                    # the hart's own line: its number, the line, the value
+    call uart_puts
+    ld a0, HART_ID(s0)
+    call uart_put_dec
+    ld a0, HART_LINE(s0)
+    call uart_puts
+    ld a0, HART_VALUE(s0)
+    call uart_put_dec
+    j 8b
+.pushsection .rodata
+msg_hart_head:
+    .asciz "jab: hart "
+.popsection
+.endif
 
 .global trap_return
 trap_return:

@@ -4,6 +4,7 @@
 .include "jab.inc"
 .include "dtb.inc"
 .include "aia.inc"
+.include "hart.inc"
 
 .section .text
 
@@ -554,6 +555,21 @@ irq_drain:
     bnez s1, 1b
 2:
     fence iorw, rw
+.ifdef DEBUG
+    ld t0, HART_ID(tp)
+    beqz t0, 21f                            # hart 0 serves the devices
+    li t1, ~(1 << AIA_WAKE)
+    and t1, s0, t1
+    beqz t1, 21f                            # the wake alone, all a secondary's file enables
+    ctz a1, t1
+    la a0, msg_claimed
+    j fatal_hart_dec                        # a device's identity claimed off hart 0: the drain's path condition broken
+.pushsection .rodata
+msg_claimed:
+    .asciz " claimed a device identity "
+.popsection
+21:
+.endif
     li s2, 0                                # a source stuck this pass
     li t0, ~(1 << AIA_WAKE)
     and s0, s0, t0                          # the wake asks for nothing more

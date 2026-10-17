@@ -22,6 +22,12 @@ The console is cells of FONT_WIDTH by FONT_HEIGHT, each glyph a 16-bit row
 per pixel row with the glyph in the high FONT_WIDTH bits, white on black. A
 newline ends the line; the bottom scrolls.
 
+Every global here is hart 0's: hart 0's calls and its drain alone touch it.
+A worker's calls are jab.sys.harts and the worker calls (trap.S's
+worker_call), and a secondary's drain serves no device, its interrupt file
+enabling the wake alone (aia.S), so no path a worker takes reaches a routine
+or the data of this file; test/owners holds that on the built kernels.
+
 ## .set DISPLAY_RESOURCE
 
 `u32`: the one resource's id.
