@@ -10,6 +10,7 @@ pub(crate) use std::{
 };
 
 mod derivative;
+mod differ;
 mod error;
 mod levels;
 mod map;
@@ -20,6 +21,7 @@ mod run;
 mod scene;
 
 pub(crate) use derivative::*;
+pub(crate) use differ::*;
 pub(crate) use error::*;
 pub(crate) use levels::*;
 pub(crate) use map::*;
@@ -33,6 +35,7 @@ pub use run::run;
 #[cfg(test)]
 mod tests {
     mod derivative;
+    mod differ;
     mod levels;
     mod map;
     mod nuon;

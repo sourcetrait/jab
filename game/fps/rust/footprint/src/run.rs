@@ -1,7 +1,7 @@
 use crate::*;
 
 /// The invocation, each subcommand's arguments.
-const USAGE: &str = "footprint derivative <coord> <izb> <uzb> <z> | footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> <owner.ppm> <levels.ppm>... [--rows <rows.nuon>]";
+const USAGE: &str = "footprint derivative <coord> <izb> <uzb> <z> | footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> <owner.ppm> <levels.ppm>... [--rows <rows.nuon>] | footprint differ <a.ppm> <b.ppm>";
 
 /// The subcommand named, its answer printed as NUON.
 pub fn run() -> ExitCode {
@@ -24,6 +24,7 @@ fn dispatch(args: &[String]) -> FootprintResult<Nuon> {
         Some("derivative") => derivative_command(&args[1..]),
         Some("blocks") => blocks_command(&args[1..]),
         Some("reference") => reference_command(&args[1..]),
+        Some("differ") => differ_command(&args[1..]),
         _ => Err(FootprintError::Usage(USAGE.to_string())),
     }
 }
@@ -147,5 +148,33 @@ fn reference_command(args: &[String]) -> FootprintResult<Nuon> {
         ("rows", count(rows.len() as u64)),
         ("unread_materials", Nuon::List(unread)),
         ("captures", Nuon::List(files.iter().zip(&tallies).map(|(file, tally)| tally_nuon(file, tally)).collect())),
+    ]))
+}
+
+/// A region's fields as NUON.
+fn region_nuon(region: &Region) -> Nuon {
+    record(vec![
+        ("x0", Nuon::Int(region.x0 as i64)),
+        ("y0", Nuon::Int(region.y0 as i64)),
+        ("x1", Nuon::Int(region.x1 as i64)),
+        ("y1", Nuon::Int(region.y1 as i64)),
+        ("pixels", count(region.pixels)),
+        ("largest", Nuon::Int(region.largest as i64)),
+    ])
+}
+
+/// Two captures' differing pixels by region, the stamp's cells skipped.
+fn differ_command(args: &[String]) -> FootprintResult<Nuon> {
+    let [a_path, b_path] = args else {
+        return Err(FootprintError::Usage(USAGE.to_string()));
+    };
+    let (a_path, b_path) = (Path::new(a_path), Path::new(b_path));
+    let (a, b) = (read_ppm(a_path)?, read_ppm(b_path)?);
+    let regions = differ(&a, &b).map_err(|message| FootprintError::refused(b_path, message))?;
+    Ok(record(vec![
+        ("width", Nuon::Int(a.width as i64)),
+        ("height", Nuon::Int(a.height as i64)),
+        ("pixels", count(regions.iter().map(|r| r.pixels).sum())),
+        ("regions", Nuon::List(regions.iter().map(region_nuon).collect())),
     ]))
 }

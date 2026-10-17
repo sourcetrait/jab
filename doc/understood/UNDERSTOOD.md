@@ -259,8 +259,9 @@ with `FOOTPRINT`, a candidate, takes each block's mip level from the row
 derivative at the block's own start, and a debug build with `LEVELS`
 stores each pixel's block level, offset, and span in place of its
 colour, which the game's `rust/footprint` crate reads and holds to the
-exact footprint; `game/fps/test/footprint` holds the candidate's
-arithmetic to the crate's and a laid pattern's capture to its decode.
+exact footprint, its `differ` boxing where two pictures part;
+`game/fps/test/footprint` holds the candidate's arithmetic to the crate's
+and a laid pattern's capture to its decode.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`
