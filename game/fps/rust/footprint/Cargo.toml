@@ -1,0 +1,10 @@
+[package]
+name = "footprint"
+description = "The texture footprint's reference for the renderer's mip level: LEVELS captures read, each block's level held to the exact footprint"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true

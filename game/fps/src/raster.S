@@ -1131,6 +1131,11 @@ packet_render:
     lhu a0, SPAN_X0(s2)
     lhu a1, SPAN_X1(s2)
     lhu a2, SPAN_ROW(s2)
+.ifdef LEVELS
+    la t0, span_records
+    sub a3, s2, t0
+    srli a3, a3, 4                  # the span's index in the packet
+.endif
     call span_fill
     addi s2, s2, SPAN_RECORD_SIZE
     addi s3, s3, -1
@@ -1252,6 +1257,9 @@ band_render:
     bgeu a2, s2, 81f                # past the band
     lhu a0, SPAN_X0(t0)
     lhu a1, SPAN_X1(t0)
+.ifdef LEVELS
+    mv a3, s10                      # the span's index in the packet
+.endif
     call span_fill
     addi s10, s10, 1
     j 8b
@@ -1295,6 +1303,9 @@ span_fill:
     ld t0, CTX_COMMAND(tp)
     ld t0, POLY_SURFACE(t0)
     sd t0, 32(sp)                   # the surface, stored as the pixel
+.endif
+.ifdef LEVELS
+    sd a3, 32(sp)                   # the span's index, each block's level put over it
 .endif
     ld t0, CTX_COMMAND(tp)          # the command, the polygon as preparation published it
     ld s3, POLY_IZA(t0)
@@ -1376,6 +1387,15 @@ span_fill:
     li t3, -1
     sd t3, 240(sp)                  # no request in hand
     ld a0, CTX_COMMAND(tp)
+.ifdef FOOTPRINT
+    ld t4, 232(sp)
+    sd t4, 208(sp)                  # the first block's start z, the span's
+.ifdef COUNT
+    bnez s3, 2801f
+    count_add COUNT_FLAT, a5, a6    # 1/z flat along the row
+2801:
+.endif
+.else
     mul t3, s10, s3
     add t3, s2, t3                  # 1/z at the end, kept for the row below it
     li t4, IZ_MIN
@@ -1488,6 +1508,7 @@ span_fill:
 .endif
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
+.endif
     ld t3, 16(sp)
     andi t3, t3, POLY_LIT
     beqz t3, 29f                    # unlit: no tiles
@@ -1568,6 +1589,9 @@ span_fill:
     count_add COUNT_MISMATCHES, a6, a7
 .endif
 35:
+.ifdef FOOTPRINT
+    sd t4, 168(sp)                  # the block's end z, the next block's start
+.endif
     mul t3, s11, s6
     add t3, t3, s4                  # u/z at the end
     mul t3, t3, t4
@@ -1634,6 +1658,34 @@ span_fill:
     bge a7, a0, 432f
     mv a7, a0
 432:
+.ifdef FOOTPRINT
+    ld a0, CTX_COMMAND(tp)
+    li a1, 0                        # 1/z held at IZ_MIN: z constant there, IZB's term gone
+    li a2, IZ_MIN
+    blt s2, a2, 4371f
+    ld a1, POLY_IZB(a0)
+4371:
+    ld a2, 208(sp)                  # the block's start z
+    ld a3, POLY_UZB(a0)
+    row_derivative a4, s8, a1, a3, a2, a5, a6, 4374f
+    bge a7, a4, 4372f
+    mv a7, a4
+4372:
+    ld a3, POLY_VZB(a0)
+    row_derivative a4, s9, a1, a3, a2, a5, a6, 4374f
+    bge a7, a4, 4373f
+    mv a7, a4
+    j 4373f
+4374:
+.ifdef COUNT
+    count_add COUNT_SATURATED, a5, a6
+.endif
+    li a7, -1
+    srli a7, a7, 1                  # saturated: the greatest footprint, the chain's last level
+4373:
+    ld a0, 168(sp)
+    sd a0, 208(sp)                  # the next block's start z
+.else
     ld a0, 208(sp)                  # the step down a row here
     bge a7, a0, 433f
     mv a7, a0
@@ -1643,6 +1695,7 @@ span_fill:
     ld a6, 208(sp)
     add a6, a6, a0
     sd a6, 208(sp)                  # and at the next block
+.endif
     srli a7, a7, 17
     ld a0, 224(sp)                  # the chain's last level
     li a6, 0
@@ -1662,6 +1715,14 @@ span_fill:
 436:
 .endif
     sd a6, 192(sp)                  # the block's level
+.ifdef LEVELS
+    ld a7, 32(sp)
+    slli a7, a7, 48
+    srli a7, a7, 48                 # the span's index
+    slli a5, a6, 20
+    or a7, a7, a5
+    sd a7, 32(sp)                   # the block's level over it, LEVELS' code less the offset
+.endif
     li t4, 0                        # the pixels past the depth test this block
 .ifdef CENSUS
     census_start
@@ -1924,6 +1985,7 @@ span_fill:
     slli a7, a7, 24
     or a6, a6, a7                   # the alpha kept
     owner_pixel a6
+    levels_pixel a6, a5
     sw a6, 0(t0)
     sw s2, 0(t1)
 46:
@@ -1976,6 +2038,7 @@ span_fill:
     slli a7, a7, 24
     or a6, a6, a7
     owner_pixel a6
+    levels_pixel a6, a5
     sw a6, 0(t0)
     sw s2, 0(t1)
 56:
@@ -2042,6 +2105,7 @@ span_fill:
     add a5, a5, a1
     lw a0, 0(a5)
     owner_pixel a0
+    levels_pixel a0, a5
     sw a0, 0(t0)
     sw s2, 0(t1)
 82:
@@ -2069,6 +2133,7 @@ span_fill:
     srli a5, a0, 31
     beqz a5, 86f
     owner_pixel a0
+    levels_pixel a0, a5
     sw a0, 0(t0)
     sw s2, 0(t1)
 86:
@@ -2107,6 +2172,7 @@ span_fill:
     add a5, a5, a1
     lw a0, 0(a5)
     owner_pixel a0
+    levels_pixel a0, a5
     sw a0, 0(t0)
     sw s2, 0(t1)
 41:
@@ -2136,6 +2202,7 @@ span_fill:
     srli a6, a0, 31
     beqz a6, 51f
     owner_pixel a0
+    levels_pixel a0, a5
     sw a0, 0(t0)
     sw s2, 0(t1)
 51:
@@ -2210,6 +2277,9 @@ span_fill:
     sll s9, s9, a4                  # the texel row's bytes
     li s2, SKY_DEPTH
     mv t2, s10
+.ifdef LEVELS
+    mv s11, s10                     # a sky pixel's offset its place in the span, modulo a block
+.endif
     li t4, 0                        # the pixels past the depth test
 71:
     lwu a7, 0(t1)
@@ -2222,6 +2292,7 @@ span_fill:
     add a5, a5, a1
     lw a0, 0(a5)
     owner_pixel a0
+    levels_pixel a0, a5
     sw a0, 0(t0)
     sw s2, 0(t1)
 72:

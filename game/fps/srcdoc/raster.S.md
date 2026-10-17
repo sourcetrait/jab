@@ -367,6 +367,8 @@ loop's place (workers.S's round_run), which sums the workers' contexts;
 the packet is emptied and the ticks taken the same way. A debug build
 checks the tile pool frozen at the render's start and after its joins
 (tile.S's tile_check), so every flush, round, and the last join holds it.
+Under LEVELS the span's index in the packet, its record's offset from
+span_records over 16, rides a3 into span_fill.
 
 ## band_render
 
@@ -378,7 +380,8 @@ first span at or past the band's first row by a binary search over the
 run's rows, and each span from there until one past the band, through
 span_fill with the command in the context. It shares the packet's page
 with packet_render and span_fill, so its call a span chains within the
-page as the serial loop's does.
+page as the serial loop's does. Under LEVELS the span's index, s10, rides
+a3 into span_fill, the packet's index whichever renderer draws it.
 
 ## span_fill
 
@@ -740,6 +743,40 @@ the store, where the colour register is dead. The instrument is the
 acceptance measure of a change to what is drawn where: two builds posed
 on the same views must own every pixel alike, which the colour captures
 cannot say once a span's blocks shift.
+
+### The candidate's footprint
+
+FOOTPRINT, FootprintEstimate's candidate, a build symbol so every image
+built without it is byte for byte the one before. Under it the prologue
+computes none of today's estimate, the end's z, the two z a row below, and
+the row step's change a pixel, up to four divides a span; it keeps the
+span's z, slot 232, as the first block's start z in slot 208, and each
+block's end z, kept in slot 168 at its computation, becomes the next
+block's start there, so a block knows its start z with no divide. At the
+level each block takes the row derivatives of u and v at its start through
+render.inc's row_derivative, from s8, s9, the start z, and the command's
+IZB, UZB, and VZB, IZB taken as zero where s2, the start's raw 1/z, lies
+under IZ_MIN, the clamp's mapping; the footprint is the largest of the
+along-span steps and the two derivatives, and a saturation sets it to the
+greatest, which the halvings hold at the chain's last level. A COUNT
+build counts the saturations and the flat spans the prologue counted
+before. Each block pays about forty integer ops, four multiplies and four
+high multiplies among them, where today's paid about eight; the prologue's
+divides go. Both estimators read the along-span step as the block's
+secant, the steps the block takes.
+
+### The levels build
+
+Under LEVELS every pixel loop stores its pixel's code (render.inc's
+levels_pixel) in place of the texel: slot 32 holds the span's index from
+a3 at the entry, and each block's level is put over it once the level is
+known, (level << 20) | span, the pixel loop adding its offset in the
+block. The sky's span takes s11 as its pixels, so its offset counts along
+the span modulo a block at level 0. The crosshair stays off and the stamp
+stays on, as under OWNER, whose slot the code shares and beside which the
+build refuses itself. A LEVELS capture is read whole by the game's
+footprint crate: each block by its span and start, its level, and a
+frame drawn from one packet, a flush restarting the indices.
 
 ## count_stats
 

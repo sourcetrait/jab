@@ -41,7 +41,9 @@ the ownership alone; the build is debug with owner beside it, `just do
 pose <map> <poses> <out> --set debug,owner`. A debug build hands the
 frame's number, s8, in a0 for its stamp (hud.S): to hud_draw, which stamps
 first, and under OWNER to hud_stamp_draw alone, so an owner capture is
-bound to its frame as a colour one is.
+bound to its frame as a colour one is. A LEVELS build, whose pixel loops
+store each pixel's level code (raster.S), draws the stamp alone the same
+way.
 
 The three type libraries are included after jab.inc: their macros expand in
 place at every site, so the engine carries no sine, cosine, arctangent, dot,
@@ -456,7 +458,8 @@ are the made plus the avoided; every avoided one was recomputed from its
 original operands and compared, a difference counted a mismatch. The
 re-entries are lit blocks entering an interval mid-way after a tile
 block on spans whose 1/z changes, by the interval's case (raster.S's The
-cadence).
+cadence). With FOOTPRINT the line ends `; saturated {saturated}`, the
+blocks whose row derivative saturated.
 
 ## clear_screen
 
@@ -931,6 +934,26 @@ COUNT build alone.
 ## word_count_mismatches
 
 `14 u8`.
+
+## word_count_reentry_two
+
+`14 u8`.
+
+## word_count_reentry_four
+
+`17 u8`.
+
+## word_count_reentry_cut
+
+`11 u8`.
+
+## word_count_reentry_end
+
+`11 u8`.
+
+## word_count_saturated
+
+`13 u8`: FOOTPRINT's alone.
 
 ## k_seconds_a_tick
 

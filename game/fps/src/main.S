@@ -254,7 +254,11 @@ frame:
     call hud_stamp_draw             # an owner build's stamp alone, no crosshair
 .endif
 .else
+.ifdef LEVELS
+    call hud_stamp_draw             # a levels build's too
+.else
     call hud_draw
+.endif
 .endif
     rdtime t0
     la t1, frame_clock
@@ -1351,6 +1355,13 @@ count_report:
     call append_dec
     la a1, word_count_reentry_end
     call append_str
+.ifdef FOOTPRINT
+    la a1, word_count_saturated
+    call append_str
+    la t0, count_stats
+    ld a1, COUNT_SATURATED(t0)
+    call append_dec
+.endif
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1825,6 +1836,10 @@ word_count_reentry_cut:
     .asciz " in four, "
 word_count_reentry_end:
     .asciz " cut short"
+.ifdef FOOTPRINT
+word_count_saturated:
+    .asciz "; saturated "
+.endif
 .endif
 .endif
 

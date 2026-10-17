@@ -81,7 +81,8 @@ console last chose, with their harts and the reservation's grant
 (workers.S's workers_latch), so every render of the frame is one kind: the
 serial backend at 0 workers, else a round each on the same harts, the
 first of them clearing. The bands' counters are zeroed over every slot
-with the frame's other counts. The
+with the frame's other counts, and a COUNT build's counts, FOOTPRINT's
+saturations among them, with the stats. The
 depth clear is 8 MB, about two milliseconds; its loop and the uncovered
 count's are aligned to 32 bytes inside their functions. On a DEBUG build the
 frame is painted magenta first, so a capture shows what no surface reached;

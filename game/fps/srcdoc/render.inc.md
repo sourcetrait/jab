@@ -1154,9 +1154,15 @@ a tile block, on spans whose 1/z changes (raster.S's The cadence).
 `u64`: the same for an interval the span's end cut short, its step the
 per-lane division's.
 
+## .set COUNT_SATURATED
+
+`u64`: on a COUNT build with FOOTPRINT, the blocks whose row derivative
+saturated, each read at its chain's last level; the line's `; saturated
+N`. The blocks the candidate differentiates are the shifted and the short.
+
 ## .set COUNT_SIZE
 
-The count record's bytes.
+The count record's bytes, 96 with FOOTPRINT's saturations and 88 without.
 
 ## .set MAX_COMMANDS
 
@@ -2825,3 +2831,41 @@ from the slot span_fill's prologue fills, so a capture reads which surface
 won each pixel; the crosshair stays off. The owner_pixel macro is a load from
 span_fill's slot under OWNER and nothing otherwise, so the pixel loops carry
 the instrument at no cost to a normal build.
+
+## .macro levels_pixel
+
+Under LEVELS, FootprintEstimate's instrument, a pixel loop stores its
+pixel's code in place of its colour: (level << 20) | (offset << 16) |
+span, the block's level in red's high nibble, the pixel's offset in its
+block in red's low nibble, the span's index in the packet in green and
+blue, since QEMU's screendump carries three bytes a pixel and the
+framebuffer word's fourth never crosses. Slot 32 holds the span's index
+from span_fill's entry and the block's level over it from each block's
+level on; the offset is s11 less t2, the block's pixels less the loop's
+count left, masked to a block so the sky's span-long count stays a
+block's. The magenta prepaint reads as the sentinel level 15, a pixel no
+span drew. A pixel's block starts at its x less its offset, found even
+where a later span hides the start itself. The build refuses itself
+without DEBUG, beside OWNER, whose code shares the slot, and where
+MIP_LEVELS passes 15, BLOCK is not 16, or SPAN_RECORDS passes 65,536, so a
+code always fits its fields. The game's footprint crate reads a capture's
+blocks (`blocks`) and holds them to the exact footprint (`reference`).
+
+## .macro row_derivative
+
+FootprintEstimate's candidate, the row derivative of a texel coordinate at
+a block's start from the block's own z, by multiplies: with u = (u/z) /
+(1/z), du/dy = (B_u - u B) z, B the polygon's IZB and B_u its UZB (or
+VZB for v). In fixed point u IZB is 16.16 by 6.26, so DEPTH_BITS down to
+u/z's 48.16 before the subtraction, and the difference times the 16.16 z
+is 16 down to 16.16 texels a row. No range proof over supported geometry
+is offered, the near plane bounding 1/z where a surface shows but not its
+row gradient: each product is taken exactly, `mul` and `mulh`, the
+128-bit value shifted before its narrowing is checked, so a raw product
+past 64 bits whose shifted value fits is taken; the subtraction's signed
+overflow and the most negative value, which has no absolute, are
+overflows too. Each branches to the caller's saturate, which reads the
+chain's last level, the coarsest. The caller passes zero for IZB where the
+block's start 1/z lies under IZ_MIN, the drawn mapping's z constant there.
+test/footprint's cases hold every answer to the footprint crate's i128
+arithmetic.

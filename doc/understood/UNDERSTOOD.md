@@ -254,7 +254,13 @@ holds it, and a kernel built without the symbol is byte for byte the one
 before it. bounce, walk, wasd, and pad built with `PREPARE`, the
 candidate loop beside it, draw first and wait for the tick after, then
 flip what they kept; `just test example/<name> --set prepare` holds each,
-and without the symbol each image is the one before it.
+and without the symbol each image is the one before it. The game built
+with `FOOTPRINT`, a candidate, takes each block's mip level from the row
+derivative at the block's own start, and a debug build with `LEVELS`
+stores each pixel's block level, offset, and span in place of its
+colour, which the game's `rust/footprint` crate reads and holds to the
+exact footprint; `game/fps/test/footprint` holds the candidate's
+arithmetic to the crate's and a laid pattern's capture to its decode.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`

@@ -4,6 +4,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "footprint",
     "svg2png",
 ]
 
