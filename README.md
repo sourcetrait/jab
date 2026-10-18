@@ -1,5 +1,5 @@
 # Jab
-[![License Badge]][License]
+[![License Badge]][License] [![Rein Badge]][AI]
 
 Jab is a specialized RISC-V (RVA23) system.
 
@@ -24,6 +24,9 @@ Let us know! Upvote an existing issue or create one if not found.
 
 Have questions, concerns, ideas, or requests?  
 Upvote an existing discussion or create one if not found.
+
+### AI
+LLM generation is heavily used.
 
 ### Contributors
 Contributors, please review [SOURCETRAIT.md](https://github.com/sourcetrait/sourcetrait_common/blob/dev/SOURCETRAIT.md).  
@@ -59,3 +62,5 @@ If not, see https://www.gnu.org/licenses/.
 
 [License]: #License-AGPL3
 [License Badge]: https://img.shields.io/badge/license-AGPL3-blue.svg
+[AI]: #AI
+[Rein Badge]: https://img.shields.io/badge/rein-AI-blue.svg
