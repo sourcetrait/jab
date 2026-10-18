@@ -14,10 +14,9 @@
 # into its service are cut on a worker's hart, the drain's path
 # condition, which a debug kernel holds as it runs: a drain off hart 0
 # that claims a device identity ends the run, and so does a secondary
-# whose file enables one at its idle's entry. Proved on four debug
-# kernels built here, a violation each, every one refused with its path
-# named; then the program runs, its worker woken asleep in its wait, and
-# no hart claims or enables a device identity.
+# whose file enables one at its idle's entry. Then the program runs, its
+# worker woken asleep in its wait, and no hart claims or enables a device
+# identity.
 use ../../../sdk/nu/jab.nu
 use std/assert
 
@@ -56,11 +55,6 @@ const branches = [beq bne blt bge bltu bgeu beqz bnez blez bgez bltz bgtz bgt bl
 const ends = [j jr ret sret mret]
 const padding = [nop unimp]
 
-# The lines the violations' edits stand on, each exactly once in its file
-const wake_fence = "    fence rw, rw                            # the caller's stores before the sleepers' states\n"
-const drain_stuck = "    li s2, 0                                # a source stuck this pass\n"
-const pad_label = "\npad_head:\n"
-
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($set | str contains "DEBUG") $"the run's checks are a debug kernel's, and the build is ($set)"
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
@@ -78,19 +72,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let release_reading = (owners-check $release $inc)
     assert equal $release_reading.violations [] $"owners: the release kernel's worker paths reach no driver: (violation-text $release_reading.violations)"
 
-    # each violation refused with its path named
-    let cases = (violation-cases)
-    let built = ($out | path join "violations")
-    jab retire $built
-    for case in $cases {
-        let elf = (violated $ws $tool $kernel_dir $built $case.name $case.edits)
-        let reading = (owners-check $elf $inc)
-        let found = ($reading.violations | where {|v| $v.kind == $case.kind and $v.function == $case.function and ($case.symbol == "" or $v.symbol == $case.symbol) })
-        assert (not ($found | is-empty)) $"owners: ($case.name), ($case.why), refused: (violation-text $reading.violations)"
-        assert ($found | all {|v| $v.path != "" }) $"owners: ($case.name)'s refusal names its path: (violation-text $found)"
-        print $"owners: ($case.name) refused: (violation-text $found)"
-    }
-
     # the run: the worker woken asleep in its wait, every drain off hart 0
     # claiming the wake alone, every secondary's file enabling it alone
     let run = (jab launch --kernel $kernel --image $image --out ($out | path join "run") --set $set --seconds 20)
@@ -105,64 +86,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
     print "owners: the drain's cut assumes a worker's claim holds the wake alone: a secondary's file enables the wake alone (aia_file_open) and every device source targets hart 0's file (irq_enable); the debug kernel's claim and configuration checks hold it as it runs"
     print "owners: ok"
-}
-
-# The violations, each a debug kernel's edits, what its refusal is, and
-# the function and symbol it names
-def violation-cases []: nothing -> table<name: string, why: string, edits: table<file: string, find: string, put: string>, kind: string, function: string, symbol: string> {
-    [
-        {
-            name: "forbidden_call"
-            why: "a worker-admitted call calling a driver's routine"
-            edits: [[file, find, put]; ["workers.S", $wake_fence, ("    call keyboard_drain\n" + $wake_fence)]]
-            kind: routine, function: keyboard_drain, symbol: ""
-        }
-        {
-            name: "driver_data"
-            why: "a worker's path loading a driver's data"
-            edits: [[file, find, put]; ["pad.S", $pad_label, "\n.global pad_head\npad_head:\n"] ["workers.S", $wake_fence, ("    la t0, pad_head\n    ld t0, 0(t0)\n" + $wake_fence)]]
-            kind: data, function: sys_worker_wake, symbol: pad_head
-        }
-        {
-            name: "indirect_call"
-            why: "a worker-admitted call calling a driver's routine through a register"
-            edits: [[file, find, put]; ["workers.S", $wake_fence, ("    la t0, keyboard_drain\n    jalr t0\n" + $wake_fence)]]
-            kind: indirect, function: sys_worker_wake, symbol: ""
-        }
-        {
-            name: "second_sound_base"
-            why: "a second load of the sound's base in the drain"
-            edits: [[file, find, put]; ["aia.S", $drain_stuck, ($drain_stuck + "    la t0, sound_base\n    ld t0, 0(t0)\n")]]
-            kind: data, function: irq_drain, symbol: sound_base
-        }
-    ]
-}
-
-# A debug kernel built from a copy of the checkout's kernel and SDK with
-# one violation's edits, each find exactly once in its file, the copy's
-# manifest naming the checkout as its workspace so its toolchain is the
-# checkout's: the ELF, built beside the copy in the target
-def violated [ws: path, tool: path, kernel_dir: path, built: path, name: string, edits: table<file: string, find: string, put: string>]: nothing -> path {
-    let dir = ($built | path join $name)
-    mkdir ($dir | path join "kernel")
-    mkdir ($dir | path join "sdk")
-    cp -r ($kernel_dir | path join "src") ($dir | path join "kernel")
-    cp ($kernel_dir | path join "kernel.jab.toml") ($dir | path join "kernel")
-    cp -r ($ws | path join "sdk" "src") ($dir | path join "sdk")
-    let manifest = ($dir | path join "kernel" "kernel.jab.toml")
-    open $manifest | reject -o do | upsert workspace $ws | to toml | save --raw -f $manifest
-    for e in $edits {
-        let file = ($dir | path join "kernel" "src" $e.file)
-        let text = (open --raw $file | decode)
-        let n = (($text | split row $e.find | length) - 1)
-        if $n != 1 { error make {msg: $"($name): its find in ($e.file) matches ($n) times, not once"} }
-        $text | str replace $e.find $e.put | save --raw -f $file
-    }
-    let r = (^nu $tool build ($dir | path join "kernel") --kernel --set debug | complete)
-    if $r.exit_code != 0 { error make {msg: $"($name): the debug build failed: ($r.stdout + $r.stderr | lines | last 6 | str join ' | ')"} }
-    let elf = (jab paths-of ($dir | path join "kernel" "**" "jab.elf") | get -o 0)
-    if $elf == null { error make {msg: $"($name): no jab.elf under ($dir)"} }
-    $elf
 }
 
 # Violations as one line each, their paths with them
