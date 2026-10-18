@@ -57,6 +57,29 @@ runs only under QEMU's `virt` machine.
   shared by them, and otherwise in `.target/tmp`. `extern/` local
   links, ignored.
 
+Every nushell tree takes one layout: the repository's own `nu/` for the
+SDK and the workspace, a prog's or a kit's `nu/` beside its `src/` at
+`<prog|kit>/<name>/nu/`, and the kernel's at `kernel/nu/`. In a tree,
+`bin/` holds `do.nu`, the casual driver (`build`, `run`, `test`, and
+`bench`, and at the root `watch`), `nuance.nu`, the nuanced commands
+grouped by concept, and `nuance/`, a nuanced script that fits no group;
+`mod/<concept>/mod.nu` holds the code, one concept a directory module, a
+concept past about 500 lines split into child modules under it, and code
+that only a nuanced command uses under `mod/nuance/`; `nuon/<concept>/` a
+module's data and `type/<concept>/<Model>.nutype` its shape; and
+`srcdoc/` mirrors `bin/`, `mod/`, `type/`, and `nuon/`, a file's prose in
+`<file>.md` beside its path. A bin `use`s the modules it fronts and holds
+no logic, each `def "main <verb>"` one call of one module function, its
+result returned as the module returns it. A module imports another by
+its path relative to the importing file, exports its API typed in and
+out, keeps its helpers unexported, and names no definition after a
+builtin. A definition carries one summary line of 80 characters at most
+in the source, its usage and reasoning in the mirror. The root's `do`
+links to `nu/bin/do.nu` (`nu nu/bin/do.nu` on Windows, where a symlink
+checks out as a text file). Examples and test programs keep their
+`test/test.nu` and carry no tree. The SDK's `sdk/nu/jab.nu` and the
+game's scripts under `game/fps/nu/` predate the layout and move into it.
+
 Build and run with `just` and nushell, from anywhere in the repository,
 a program named by its path from the root or by a shortcut
 `workspace.jab.toml` names, `fps` for `game/fps`: `just build` (or
