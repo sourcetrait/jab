@@ -1857,7 +1857,7 @@ def block-sum [bytes: binary, at: list<int>]: nothing -> int {
 # across one costs a lookup, and a trap in a per-pixel loop would cost
 # more. `jab hot` gives an end exclusive, so a page is an end less one's.
 def hot-functions [image: path]: nothing -> nothing {
-    let elf = ($image | path dirname | path join "fps.elf")
+    let elf = ($image | path parse | update extension "elf" | path join)
     let hot = (jab hot $elf $HOT_FUNCTIONS)
     for h in $hot {
         assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
@@ -1882,7 +1882,7 @@ def release-strings [image: path]: nothing -> nothing {
     let tool = ($here | path join ".." ".." "sdk" "nu" "jab.nu" | path expand)
     let built = (^nu $tool build $here | complete)
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
-    let release = (jab program-out $here "release" | path join "fps.jab")
+    let release = (jab program-out $here "release" | path join "fierce.jab")
     assert ($release | path exists) $"the release image at ($release)"
     let debug_found = (jab strings $image "fps: ")
     for text in $DEBUG_TEXT {

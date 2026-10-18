@@ -22,7 +22,7 @@ def main [--kernel: path, --image: path, --out: path, --map: string = "render_0"
     let machine = (jab plan --kernel $kernel --image $image --out $out --disk $disk --serial "fps" --set $set --api --gamepad --sound)
     let plan = ($out | path join "plan.json")
     $machine | to json | save --raw -f $plan
-    let elf = ($image | path dirname | path join "fps.elf")
+    let elf = ($image | path parse | update extension "elf" | path join)
     let flags = ($elf | path dirname | path join "flags")
     let prefix = (if ($flags | path exists) { open --raw $flags | decode | lines | get 0 | split row " " | last } else { "" })
     let robo = (jab robo-build $workspace)

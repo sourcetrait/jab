@@ -1,6 +1,6 @@
 # pose.nu: captures of a map from placed camera poses, through the
 # console's P frame: `nu pose.nu <map> <poses.nuon> <out> --kernel
-# <jab.elf> --image <fps.jab>`, each pose a record {name, x, y, z, yaw,
+# <jab.elf> --image <fierce.jab>`, each pose a record {name, x, y, z, yaw,
 # pitch}, the eye in metres with z up, degrees, yaw 0 along +x and 90
 # along +y, pitch up positive; a launch a pose on a romfs of the map's
 # tree with the frame sent at 2 s and the screen taken at 3 s, the

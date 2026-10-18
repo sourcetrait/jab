@@ -76,7 +76,7 @@
 # `bench-report` reads a run of a bench whose steps are this script's,
 # every cadence's frames pooled. `just do gauge`, `just do gauge-play`,
 # `just do gauge-read`, and `just do gauge-compare` run it, and `just
-# bench game/fps/cadence` runs `play`, `run`, and `bench-report`.
+# bench kit/fierce/cadence` runs `play`, `run`, and `bench-report`.
 # A run's identity is read through one reader (identity-of): the run's
 # identity.nuon, its directory found beside its report before the path
 # the report recorded, with an audited correction beside it applied
@@ -287,7 +287,7 @@ const LEGACY_FIELDS = ["build.image_sha256" "build.kernel_sha256" "assets" "rout
 const CPU_FROM = 5sec
 
 def main [] {
-    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fps.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds \"[..]\"] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--spec name | --harts 1..8] [--qemu \"[<word>..]\"] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
+    print "nu gauge.nu run [--tree release|debug] [--kernel <jab.elf>] [--image <fierce.jab>] [--route <route.nuon>] [--map <tree>] [--runs N] [--seeds \"[..]\"] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--host] [--spec name | --harts 1..8] [--qemu \"[<word>..]\"] [--cpu] [--sdl-probe] [--trace] [--out <dir>] [--label <name>]"
     print "nu gauge.nu play [--tree release|debug] [--seconds N] [--seed N] [--cadence 0|1|2] [--workers 0..7] [--grain N] [--spec name | --harts 1..8] [--qemu \"[<word>..]\"] [--out <dir>] [--label <name>]"
     print "nu gauge.nu read <api.out> [--route <route.nuon>] [--out <dir>] [--label <name>]"
     print "nu gauge.nu compare <gauge.nuon>... [--field draw_us] [--bin-cm 50] [--out <file>]"
@@ -533,7 +533,7 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
         workspace: $workspace,
         tree: $tree,
         kernel: (if $kernel == "" { jab program-kernel $program $tree } else { $kernel | path expand }),
-        image: (if $image == "" { $built | path join "fps.jab" } else { $image | path expand }),
+        image: (if $image == "" { $built | path join "fierce.jab" } else { $image | path expand }),
         out: $target,
     }
 }
@@ -636,7 +636,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
             flags: $flags,
             image: $at.image,
             image_sha256: (digest $at.image),
-            elf_sha256: (digest ($built | path join "fps.elf")),
+            elf_sha256: (digest ($at.image | path parse | update extension "elf" | path join)),
             kernel: $at.kernel,
             kernel_sha256: (digest $at.kernel),
             provenance: (if ($provenance_file | path exists) { open $provenance_file } else { null }),
@@ -1095,12 +1095,23 @@ def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, di
     { dir: $workspace, commit: $commit, dirty: ($status != "") }
 }
 
+# A path a record wrote under the game's old place, `game/fps`, read at
+# its new one, `kit/fierce`, when the old is gone: the move of KitFierce.
+# Any other path, and one still there, as written.
+def moved [file: string]: nothing -> string {
+    if $file == "" or ($file | path exists) { return $file }
+    let parts = ($file | path split)
+    let at = ($parts | window 2 | enumerate | where {|w| $w.item == ["game" "fps"] } | get -o 0.index)
+    if $at == null { return $file }
+    $parts | first $at | append ["kit" "fierce"] | append ($parts | skip ($at + 2)) | path join
+}
+
 # The program an image was built from: the directory its build wrote
-# beside it as `home`, else, for an image built before that, the
-# directory the image's nearest `.target` sits in.
+# beside it as `home`, read through the move (moved), else, for an image
+# built before that, the directory the image's nearest `.target` sits in.
 def program-of [image: path]: nothing -> string {
     let marker = ($image | path expand | path dirname | path join "home")
-    if ($marker | path exists) { return (open --raw $marker | decode | str trim) }
+    if ($marker | path exists) { return (moved (open --raw $marker | decode | str trim)) }
     let parts = ($image | path expand | path split)
     let marks = ($parts | enumerate | where {|e| $e.item == ".target" } | get index)
     if ($marks | is-empty) { $image | path expand | path dirname } else { $parts | first ($marks | last) | path join }
@@ -2329,7 +2340,7 @@ def report [label: string, id: record, runs: list<any>, out: path]: nothing -> n
 export def legs-for [dir: path, id: record, route: string]: nothing -> record<legs: list<any>, route: oneof<string, nothing>, checked: bool> {
     let recorded = ($id | get -o route.sha256)
     let kept = ($dir | path join "route.nuon")
-    let named = ($id | get -o route.file | default "")
+    let named = (moved ($id | get -o route.file | default ""))
     let file = (if $route != "" { $route | path expand } else if ($kept | path exists) { $kept } else { $named })
     if $file == "" { return { legs: [{ name: "play", places: [], pad: [] }], route: null, checked: false } }
     if not ($file | path exists) { error make { msg: $"the route ($file) is not there" } }
@@ -2351,12 +2362,13 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
 def route-of [report: path, run: record, effective: record]: nothing -> record<sha256: any, file: any, legs: any, problem: any> {
     let recorded = ($effective.identity | get -o route.sha256)
     if $recorded == null { return { sha256: null, file: null, legs: null, problem: null } }
-    let named = ($effective.identity | get -o route.file)
+    let recorded_file = ($effective.identity | get -o route.file)
+    let named = (if $recorded_file == null { null } else { moved $recorded_file })
     let bound = (if $effective.file == null { [] } else { [($effective.file | path dirname)] })
     let kept = ($bound | append (run-dirs $report $run) | uniq | each {|d| $d | path join "route.nuon" } | where {|f| $f | path exists })
     let file = (if not ($kept | is-empty) { $kept | first } else { $named })
     if $file == null or (not ($file | path exists)) {
-        return { sha256: $recorded, file: $file, legs: null, problem: $"its identity records the route ($named | default 'unnamed') of SHA-256 ($recorded), and none is beside its run or at that file" }
+        return { sha256: $recorded, file: $file, legs: null, problem: $"its identity records the route ($recorded_file | default 'unnamed') of SHA-256 ($recorded), and none is beside its run or at that file" }
     }
     let bytes = (open --raw $file | into binary)
     let sha = ($bytes | hash sha256)

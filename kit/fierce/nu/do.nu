@@ -22,7 +22,7 @@ def places []: nothing -> record<game: string, workspace: string, tool: string> 
 # compiled first.
 def build [set: string]: nothing -> nothing {
     let p = (places)
-    ^nu $p.tool build $p.workspace "game/fps" --set $set
+    ^nu $p.tool build $p.workspace "kit/fierce" --set $set
 }
 
 # Every asset under content/ rendered to the file beside it the engine
@@ -59,7 +59,7 @@ def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
     build $set
     let p = (places)
     let built = (jab program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "pose.nu") $map ($poses | path expand) ($out | path expand) --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fps.jab") --set $set
+    ^nu ($p.game | path join "test" "pose.nu") $map ($poses | path expand) ($out | path expand) --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --set $set
 }
 
 # Build with DEBUG set, then play Render Zero on the pad from seeded
@@ -70,7 +70,7 @@ def "main smoke" [seeds: string = "1", seconds: int = 60] {
     build "debug"
     let p = (places)
     let built = (jab program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "smoke.nu") --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fps.jab") --out ($built | path join "smoke") --seeds ($list | to nuon) --seconds $seconds
+    ^nu ($p.game | path join "test" "smoke.nu") --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --out ($built | path join "smoke") --seeds ($list | to nuon) --seconds $seconds
 }
 
 # Build with DEBUG set, then hand a map to robojab for an agent or a
@@ -82,7 +82,7 @@ def "main play" [target: string = "mcp", map: string = "render_0", seconds: int 
     build "debug"
     let p = (places)
     let built = (jab program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "play.nu") --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fps.jab") --out ($built | path join "play") --map $map --seconds $seconds --target $target
+    ^nu ($p.game | path join "test" "play.nu") --kernel (jab program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --out ($built | path join "play") --map $map --seconds $seconds --target $target
 }
 
 # Build, then play the gauge's route (test/route_render_0.nuon) on that

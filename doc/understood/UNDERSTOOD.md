@@ -77,14 +77,15 @@ builtin. A definition carries one summary line of 80 characters at most
 in the source, its usage and reasoning in the mirror. The root's `do`
 links to `nu/bin/do.nu` (`nu nu/bin/do.nu` on Windows, where a symlink
 checks out as a text file). Examples and test programs keep their
-`test/test.nu` and carry no tree. The SDK's `sdk/nu/jab.nu` and the
-game's scripts under `game/fps/nu/` predate the layout and move into it.
+`test/test.nu` and carry no tree. The SDK's `sdk/nu/jab.nu` and
+fierce's scripts under `kit/fierce/nu/` predate the layout and move into
+it.
 
 Build and run with `just` and nushell, from anywhere in the repository,
 a program named by its path from the root or by a shortcut
-`workspace.jab.toml` names, `fps` for `game/fps`: `just build` (or
-`just build example`, `just build game/fps`), `just test` (or `just
-test example/pad`), `just run example/helloworld` or `just run fps`, and
+`workspace.jab.toml` names, `fierce` for `kit/fierce`: `just build` (or
+`just build example`, `just build kit/fierce`), `just test` (or `just
+test example/pad`), `just run example/helloworld` or `just run fierce`, and
 `just watch`; `just do` lists the commands for development. `just run`
 opens QEMU's own window when a display server is present, SDL with
 OpenGL on Linux and Windows and Cocoa on macOS, and otherwise serves the
@@ -129,7 +130,7 @@ appends to `<endpoint>.in` into the pipe and writing what the pipe gives
 to `<endpoint>.out`, and the pad bridge is the pad port's own client, so
 a gamepad takes the route it takes on macOS. That route is built and
 held by its tests here on Linux, its Windows half untried on Windows
-yet. A program the workspace does not list, `game/fps`
+yet. A program the workspace does not list, `kit/fierce`
 the first, builds against it: its kernel is built here with the same
 symbols, and the generic disk, the toolchain link, the shims, and
 discovery are this workspace's, and its output lands in the one target
@@ -290,7 +291,8 @@ derivative at the block's own start, and a debug build with `LEVELS`
 stores each pixel's block level, offset, and span in place of its
 colour, which the game's `rust/footprint` crate reads and holds to the
 exact footprint, its `differ` boxing where two pictures part;
-`game/fps/test/footprint` holds the candidate's arithmetic to the crate's.
+`kit/fierce/test/footprint` holds the candidate's arithmetic to the
+crate's.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`
@@ -356,8 +358,8 @@ span beside them. `test/harts` and `test/jobs` hold an idle hart under
 0.05 of a core that way.
 
 `just bench <program>/<bench>` runs a program's bench, the NUON file of
-that name under the program's `bench/`: `just bench game/fps/cadence`
-(or `fps/cadence`) is `game/fps/bench/cadence.nuon`. The program is
+that name under the program's `bench/`: `just bench kit/fierce/cadence`
+(or `fierce/cadence`) is `kit/fierce/bench/cadence.nuon`. The program is
 built in the bench's tree, then each step runs in order, a script of the
 program's with its arguments and its own output directory; a step a
 person attends is announced and counted down first, and a step that
@@ -367,7 +369,7 @@ all of it is recorded. The cadence bench's report, `gauge.nu
 bench-report`, names the machine and the QEMU each step ran on, pools
 only the runs a comparison would take as valid, and lists every other
 run apart, as a diagnostic with its reasons, a run on a diagnostic
-machine among them. `game/fps/bench/qual_1ka1.nuon` and
+machine among them. `kit/fierce/bench/qual_1ka1.nuon` and
 `qual_1kb1.nuon` are the qualification's, each launching every run by
 its spec's name: the factory route in two batches of three seeded runs,
 the second's seeds reversed, a free play, the presentation's probed

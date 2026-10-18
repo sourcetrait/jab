@@ -1,4 +1,5 @@
-name = 'fps'
+name = 'fierce'
+serial = 'fps'
 sdk = '../../sdk'
 workspace = '../..'
 includes = ['../../sdk/src']

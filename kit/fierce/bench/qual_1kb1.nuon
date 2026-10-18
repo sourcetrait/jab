@@ -6,7 +6,7 @@
 # name, auto, as the bench's comparison reads a build: auto_1 and auto_2
 # the factory route, auto_3 and auto_4 the shim control's unprobed arm,
 # auto_5 and auto_6 the scaling control's automatic arm. `just bench
-# game/fps/qual_1kb1` runs it, `just watch bench game/fps/qual_1kb1` in a
+# kit/fierce/qual_1kb1` runs it, `just watch bench kit/fierce/qual_1kb1` in a
 # second terminal records every run of it.
 {
   summary: "the qualification on 1KB1: the factory route twice, your play, the probed batches and their shim control, two workers against the automatic choice"
