@@ -138,10 +138,11 @@ root and take it with the members; one outside the tree names the
 workspace in its manifest, `workspace = '../../../..'` relative to the
 manifest. A manifest may also name `target_assets`, a tree its content
 compiles to in its asset shard of the target, which becomes its disk;
-`prepare`, a nushell script the tool runs before building, testing, or
-running it; `do`, a nushell script whose `main <command>` definitions
-are its commands for development; and `paired`, the build symbol under
-which a probe of it is paired (below).
+`serial`, the serial that disk carries on a run, the program's name
+unless given; `prepare`, a nushell script the tool runs before building,
+testing, or running it; `do`, a nushell script whose `main <command>`
+definitions are its commands for development; and `paired`, the build
+symbol under which a probe of it is paired (below).
 
 A program names the system specifications it supports with `specs`, a
 list of the names `asset/spec.nuon` gives them, in any case. Beside it

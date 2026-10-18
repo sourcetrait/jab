@@ -2893,7 +2893,8 @@ def test-args [ready: record]: nothing -> list<string> {
 # The QEMU line that runs a program, built first: the QEMU it runs on
 # (qemu-binary, beside the program and then in the workspace) and its
 # arguments, the full virtio device set, the program's own disk when it
-# has one else the blank image that has always been there, the debug
+# has one, its serial the manifest's `serial` else the program's name,
+# else the blank image that has always been there, the debug
 # channel to a file when DEBUG is set, the API's port when `api` asks,
 # the window given (null for the one a run would open), the UART where
 # `serial` says (`stdio` or `none`), and no monitor, on the machine
@@ -2918,7 +2919,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
         if not ($blank | path exists) { ^truncate -s 64M $blank }
         $blank
     } else { $assets })
-    let disk_serial = (if $assets == "" { "disk0" } else { disk-serial $c.manifest.name })
+    let disk_serial = (if $assets == "" { "disk0" } else { disk-serial ($c.manifest | get -o serial | default $c.manifest.name) })
     let shown = (if $window == null { display $c.manifest } else { $window })
     let found = (if (discovery-wanted $pad $sound) { discover $c.workspace } else { { gamepad: null, audio: null } })
     let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
