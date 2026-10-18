@@ -1616,12 +1616,12 @@ def pad-port-header []: nothing -> binary {
 }
 
 # A value as `width` little-endian bytes, two's complement.
-def le [value: int, width: int]: nothing -> binary {
+export def le [value: int, width: int]: nothing -> binary {
     $value | into binary --endian little | bytes at 0..<$width
 }
 
 # `n` zero bytes.
-def zeros [n: int]: nothing -> binary {
+export def zeros [n: int]: nothing -> binary {
     if $n <= 0 { 0x[] } else { 1..$n | each {|| 0x[00] } | bytes collect }
 }
 
