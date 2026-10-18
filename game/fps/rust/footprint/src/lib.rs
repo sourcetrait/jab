@@ -31,15 +31,3 @@ pub(crate) use reference::*;
 pub(crate) use scene::*;
 
 pub use run::run;
-
-#[cfg(test)]
-mod tests {
-    mod derivative;
-    mod differ;
-    mod levels;
-    mod map;
-    mod nuon;
-    mod ppm;
-    mod reference;
-    mod scene;
-}

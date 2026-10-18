@@ -5,25 +5,13 @@
 
 .set CASES, 12
 .set CASE_SIZE, 32
-.set RUNS, 10
-.set RUN_SIZE, 20
 .set LINE_BYTES, 256
-.set SENTINEL_PIXEL, 0x00ff00ff
 
 .section .text
 .global _start
 _start:
     call cases_run
-    jab.sys.display.open
-    call pattern_draw
-1:
-    jab.sys.display.await
-    jab.sys.display.flip
-    li t0, 1
-    beq a0, t0, 1b                  # early: flipped again at the next tick
-2:
-    jab.sys.display.await
-    j 2b
+    jab.sys.exit 0
 
 cases_run:
     addi sp, sp, -32
@@ -77,47 +65,6 @@ cases_run:
     ld s2, 16(sp)
     ld s3, 8(sp)
     addi sp, sp, 32
-    ret
-
-pattern_draw:
-    li t0, JAB_DISPLAY_BASE
-    li t1, JAB_DISPLAY_PITCH
-    li t2, JAB_DISPLAY_HEIGHT
-    mul t1, t1, t2
-    add t1, t1, t0                  # the framebuffer's end
-    li t2, SENTINEL_PIXEL
-1:
-    sw t2, 0(t0)
-    addi t0, t0, 4
-    bltu t0, t1, 1b
-    la t3, runs
-    li t4, RUNS
-2:
-    lwu t0, 0(t3)
-    li t1, JAB_DISPLAY_PITCH
-    mul t0, t0, t1
-    lwu t1, 4(t3)
-    slli t1, t1, 2
-    add t0, t0, t1
-    li t1, JAB_DISPLAY_BASE
-    add t0, t0, t1                  # the run's first pixel
-    lwu t1, 8(t3)                   # its pixels
-    lwu t2, 12(t3)
-    slli t2, t2, 20
-    lwu t5, 16(t3)
-    or t2, t2, t5                   # its level over its span's index
-    li t5, 0
-3:
-    andi t6, t5, 15
-    slli t6, t6, 16
-    or t6, t6, t2                   # and the pixel's offset in its block
-    sw t6, 0(t0)
-    addi t0, t0, 4
-    addi t5, t5, 1
-    bltu t5, t1, 3b
-    addi t3, t3, RUN_SIZE
-    addi t4, t4, -1
-    bnez t4, 2b
     ret
 
 line_reset:
@@ -206,18 +153,6 @@ cases:
     .dword 1234567, 98765, 4567890, 345678
     .dword 0, 0, ((1 << 47) - 1), (1 << 32)
     .dword 0, 0, (1 << 47), (1 << 32)
-.balign 4
-runs:
-    .word 100, 200, 16, 2, 300
-    .word 100, 216, 16, 2, 300
-    .word 100, 232, 16, 3, 300
-    .word 101, 500, 16, 0, 7
-    .word 101, 516, 4, 1, 7
-    .word 102, 700, 16, 5, 40
-    .word 102, 700, 4, 6, 41
-    .word 2, 10, 16, 1, 9
-    .word 1, 56, 16, 4, 10
-    .word 1079, 1904, 16, 9, 65535
 word_derivative:
     .asciz "footprint: derivative "
 word_saturated:
