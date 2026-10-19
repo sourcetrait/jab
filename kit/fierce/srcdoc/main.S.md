@@ -37,8 +37,8 @@ instructions, is the pacing, a phase.
 
 The crosshair is left off under OWNER, the build whose pixel loops store
 the surface index in place of the colour (raster.S), so a capture of it is
-the ownership alone; the build is debug with owner beside it, `just do
-pose <map> <poses> <out> --set debug,owner`. A debug build hands the
+the ownership alone; the build is debug with owner beside it,
+`kit/fierce/nu/bin/nuance.nu pose <map> <poses> <out> --set debug,owner`. A debug build hands the
 frame's number, s8, in a0 for its stamp (hud.S): to hud_draw, which stamps
 first, and under OWNER to hud_stamp_draw alone, so an owner capture is
 bound to its frame as a colour one is. A LEVELS build, whose pixel loops
@@ -273,7 +273,7 @@ build's lines added to the reporting; and the await's start, which ends the
 critical path. One register, s9, carries the last mark, so each phase starts
 where the one before ended but for the few instructions storing it, which no
 phase holds: the record's unattributed time, a few microseconds a frame
-(`just test` prints the walk's greatest). At its start, once the frame
+(`./do test` prints the walk's greatest). At its start, once the frame
 before's records are out, a frame zeroes its accumulators, the wait, the
 pacing, the flip's ticks, the wakes, the presses, the attempts, and the
 refusals, and presets the flip's status to FLIP_NONE, so a frame that

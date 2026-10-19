@@ -45,7 +45,7 @@ sphere per collision with the contact point, a wall or the other
 sphere; and one of this example's own, a colour record when a button
 paints your sphere, its x the colour and its y the button's code.
 Values are the program's own fixed point. With no API port on the
-machine (`just run example pad` without `--api`) the reads find
+machine (`./do run example pad` without `--api`) the reads find
 nothing and the writes are refused.
 
 Built with PREPARE, a candidate under measurement, each frame works

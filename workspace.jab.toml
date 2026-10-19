@@ -49,6 +49,6 @@ programs = [
 ]
 
 # A word standing for a program's path wherever the tool takes one:
-# `just run fierce` is `just run kit/fierce`.
+# `./do run fierce` is `./do run kit/fierce`.
 [shortcuts]
 fierce = 'kit/fierce'

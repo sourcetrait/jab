@@ -9,7 +9,7 @@
 # greatest of the round's dispatches plus that round's barrier, the least
 # the round cost beyond its jobs, and no ceiling on it. All three are
 # elapsed time by rdtime, the machine's 10 MHz clock, as distributions over
-# a hundred rounds a size. `just bench test/jobs/costs` runs it on a
+# a hundred rounds a size. `./do bench test/jobs/costs` runs it on a
 # release build and reports; the test runs it once on its debug one.
 use ../../../nu/mod/walk
 use ../../../nu/mod/build

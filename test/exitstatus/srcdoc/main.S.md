@@ -1,6 +1,6 @@
 # main.S
 
-exitstatus: exits with a nonzero status, which `just test` must return.
+exitstatus: exits with a nonzero status, which `./do test` must return.
 
 ## message
 

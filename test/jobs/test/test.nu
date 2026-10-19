@@ -19,7 +19,7 @@
 # - Cancel: a job cancelled a band in, done as cancelled before its last
 #   band; a job cancelled before it is published, done as cancelled with
 #   no band run.
-# Then the costs scenario once on three harts (costs.nu, which `just bench
+# Then the costs scenario once on three harts (costs.nu, which `./do bench
 # test/jobs/costs` runs on a release build): every sample in, each a
 # distribution, the round's overhead bound beside the dispatch and the
 # barrier and at least each, held to no number, since a debug build's TCG

@@ -11,7 +11,7 @@
 #   each row has one owner; and three rows sent over the API equal to the
 #   same rows computed here in the program's fixed point.
 # - Bench: three workers over four seconds of the fixed frame (scaling.nu,
-#   which `just bench example/workers/scaling` runs on a release build for
+#   which `./do bench example/workers/scaling` runs on a release build for
 #   one, two, and three): the last frame's hash the proof's, each worker's
 #   rows a third of every frame's, every row its band's worker's, the
 #   bands forward in time and overlapping, and the worker harts busy at

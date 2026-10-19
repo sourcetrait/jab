@@ -10,7 +10,7 @@
 # what one host core can give; the hashes equal
 # across the runs and the rows summing to the frames' say the work was
 # right and done once; the bands' overlap, their summed time over the
-# frame's span, is the supporting record. `just bench
+# frame's span, is the supporting record. `./do bench
 # example/workers/scaling` runs it on a release build and reports; the
 # test runs the three-worker run once on its debug one.
 use ../../../nu/mod/walk

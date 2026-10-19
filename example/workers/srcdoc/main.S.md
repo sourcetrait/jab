@@ -143,7 +143,7 @@ size.
 ## _start
 
 A write of no bytes tells whether the API's port is on the machine, 0 with
-it and 1 without, so `just run` with no `--api` animates at once.
+it and 1 without, so `./do run` with no `--api` animates at once.
 
 ## proof
 

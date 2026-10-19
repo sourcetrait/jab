@@ -30,7 +30,7 @@ records of REPORT_SIZE bytes: a velocity record for a sphere when its
 velocity changes, an acceleration record when the drive vector the
 held keys apply changes, and a hit record per sphere per collision
 with the contact point, a wall or the other sphere. Values are the
-program's own fixed point. With no API port on the machine (`just run
+program's own fixed point. With no API port on the machine (`./do run
 example wasd` without `--api`) the reads find nothing and the writes
 are refused, and the example runs on the keyboard alone.
 

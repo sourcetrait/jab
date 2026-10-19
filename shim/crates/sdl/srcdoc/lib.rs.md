@@ -1,6 +1,6 @@
 # lib.rs
 
-Preloaded into QEMU with LD_PRELOAD for `just do probe sdl` and a probing
+Preloaded into QEMU with LD_PRELOAD for `nu/bin/nuance/probe.nu sdl` and a probing
 launch, it logs to the file `SDL_SHIM_LOG` names. The log opens with an
 object table, then the run's lines, and then carries one line an event; the
 SDK's `sdl resolve` and `sdl report` read it. Every line starts with

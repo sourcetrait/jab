@@ -1,7 +1,8 @@
 # jab_jobs.inc's costs around a job's work, at four job sizes, one worker
 # and then two on the specification's three harts, elapsed by rdtime on a
-# release build: `just bench test/jobs/costs` runs it and reports, `just
-# watch bench test/jobs/costs` in a second terminal records it.
+# release build: `./do bench test/jobs/costs` runs it and reports,
+# `nu/bin/nuance.nu watch bench test/jobs/costs` in a second terminal
+# records it.
 {
   summary: "jab_jobs.inc's dispatch and barrier costs at 10 us, 100 us, 1 ms, and 10 ms jobs, one worker then two"
   tree: "release"

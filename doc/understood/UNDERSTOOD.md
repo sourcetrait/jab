@@ -6,8 +6,10 @@ running RISC-V programs a hobbyist drops in. Everything is virtio, and it
 runs only under QEMU's `virt` machine.
 
 - `workspace.jab.toml` the workspace: the kernel and the programs.
-- `justfile` the repository's one justfile, every recipe handing off to
-  the bins under `nu/bin`, `do` to `sdk/nu/jab.nu`.
+- `do` the driver, a link to `nu/bin/do.nu`: `build`, `test`, `run`,
+  `bench`, and `watch`. `justfile` a shim over the bins while every
+  consumer moves to them, `just do` handing a command for development to
+  the tree that holds it.
 - `kernel/` the kernel: `kernel.jab.toml`, sources under `src/`, and
   each source's `.eye` and `.md` under `srcdoc/`.
 - `sdk/` what a program uses, its sources under `src/` and their `.eye`
@@ -16,9 +18,8 @@ runs only under QEMU's `virt` machine.
   `jab_f64.inc`, and `jab_rng.inc`, mathematics and chance as macros
   the program carries and expands in place, never a call and never a
   trap; `jab_jobs.inc`, jobs for workers as macros over mailboxes the
-  program owns, whose waits are the kernel's; the program link script;
-  and `nu/jab.nu`, the development commands' `do` alone, the SDK's
-  nushell being the root's `nu/`.
+  program owns, whose waits are the kernel's; and the program link
+  script. The SDK's nushell is the root's `nu/`.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `doc/SPEC.md` the system specifications, TheUser's and the authority;
@@ -69,9 +70,10 @@ concept past about 500 lines split into child modules under it, and code
 that only a nuanced command uses under `mod/nuance/`; `nuon/<concept>/` a
 module's data and `type/<concept>/<Model>.nutype` its shape; and
 `srcdoc/` mirrors `bin/`, `mod/`, `type/`, and `nuon/`, a file's prose in
-`<file>.md` beside its path. A bin `use`s the modules it fronts and holds
-no logic, each `def "main <verb>"` one call of one module function, its
-result returned as the module returns it. A module imports another by
+`<file>.md` beside its path. A bin is executable, so any tool runs it by
+its path, `use`s the modules it fronts, and holds no logic, each `def
+"main <verb>"` one call of one module function, its result returned as the
+module returns it. A module imports another by
 its path relative to the importing file, named through `path self`, `use
 (path self ../target)`, so nushell, which keeps one module per path as
 written, parses each module file once however many modules import it. A
@@ -85,29 +87,38 @@ typed in and out, keeps its helpers unexported, and names no definition
 after a builtin. A definition carries one summary line of 80 characters at most
 in the source, its usage and reasoning in the mirror. The root's `do`
 links to `nu/bin/do.nu` (`nu nu/bin/do.nu` on Windows, where a symlink
-checks out as a text file). Examples and test programs keep their
-`test/test.nu` and carry no tree. The SDK's nushell is the root's
-`nu/`, `sdk/nu/jab.nu` keeping `do` alone; fierce's scripts under
-`kit/fierce/nu/` predate the layout and move into it.
+checks out as a text file). nushell's `path self` names the link it was
+run through, not the file, so the linked bin resolves itself first,
+`const HERE = (path self | path expand | path dirname)`, and binds each
+import from there, `const BUILD = ($HERE | path join ../mod/build | path
+expand)`. Examples and test programs keep their `test/test.nu` and carry
+no tree. The SDK's nushell is the root's `nu/`, the kernel's
+`kernel/nu/`, and fierce's `kit/fierce/nu/`.
 
-Build and run with `just` and nushell, from anywhere in the repository,
-a program named by its path from the root or by a shortcut
-`workspace.jab.toml` names, `fierce` for `kit/fierce`: `just build` (or
-`just build example`, `just build kit/fierce`), `just test` (or `just
-test example/pad`), `just run example/helloworld` or `just run fierce`, and
-`just watch`; `just do` lists the commands for development. `just run`
+Build and run with the root's `do` and nushell, a program named by its
+path from the root or by a shortcut `workspace.jab.toml` names, `fierce`
+for `kit/fierce`: `./do build` (or `./do build example`, `./do build
+kit/fierce`), `./do test` (or `./do test example/pad`), `./do run
+example/helloworld` or `./do run fierce`, and `./do watch`. An absolute
+path in place of the program's names a workspace's, the kernel's, or a
+program's directory, built, tested, or run alone, a program outside the
+workspace among them. The commands for development are each tree's own
+`nu/bin/nuance.nu`: the root's `watch bench`, `clean`, and `retire`, the
+kernel's `font`, and fierce's; the SDK's own scripts are
+`nu/bin/nuance/plan.nu`, `probe.nu`, and `sdl.nu`. `./do run`
 opens QEMU's own window when a display server is present, SDL with
 OpenGL on Linux and Windows and Cocoa on macOS, and otherwise serves the
 console over VNC on 127.0.0.1:5930, to tunnel and view; `JAB_DISPLAY`
 overrides with any `-display` value. Nothing the tools clear away is
 deleted, robojab included: a build's, a test's, or a bench's is moved
 whole into the retire home, `tmp/retired/<stamp>/` at its place there.
-`just clean` retires the whole target, so the next build starts from
-nothing, and `just do clean <path>` retires only the outputs of the
-programs under a path, or the kernel's, in one tree with `--tree`.
-`just retire` is the one command that deletes: it removes the retire
-home's `tmp` and everything in it. Neither `just clean` nor
-`just retire` takes an argument.
+`nu/bin/nuance.nu clean` retires the whole target, so the next build
+starts from nothing, and `nu/bin/nuance.nu clean <path>` retires only the
+outputs of the programs under a path, or the kernel's, in one tree with
+`--tree`. `nu/bin/nuance.nu retire` is the one command that deletes: it
+removes the retire home's `tmp` and everything in it. The justfile
+stands as a shim over these while every consumer moves to them, `just
+build` the root's `./do build`, `just do font` the kernel's `font`, and on.
 The toolchain is found by its install directory, the one holding
 `bin/`: `RISCV_TOOLCHAIN`, else an `extern/riscv` link beside the kernel
 or program, else the workspace's `extern/riscv`, else the tools on
@@ -143,16 +154,16 @@ yet. A program the workspace does not list, `kit/fierce`
 the first, builds against it: its kernel is built here with the same
 symbols, and the generic disk, the toolchain link, the shims, and
 discovery are this workspace's, and its output lands in the one target
-at its path from here; `just build` and `just test` find it under the
+at its path from here; `./do build` and `./do test` find it under the
 root and take it with the members; one outside the tree names the
 workspace in its manifest, `workspace = '../../../..'` relative to the
 manifest. A manifest may also name `target_assets`, a tree its content
 compiles to in its asset shard of the target, which becomes its disk;
 `serial`, the serial that disk carries on a run, the program's name
 unless given; `prepare`, a nushell script the tool runs before building,
-testing, or running it; `do`, a nushell script whose `main <command>`
-definitions are its commands for development; and `paired`, the build
-symbol under which a probe of it is paired (below).
+testing, or running it; and `paired`, the build symbol under which a
+probe of it is paired (below). A program's commands for development are
+its own nu tree's bins.
 
 A program names the system specifications it supports with `specs`, a
 list of the names `asset/spec.nuon` gives them, in any case. Beside it
@@ -206,13 +217,13 @@ program again. The build refuses a listed spec whose display is not the
 ABI's 1920 by 1080 or whose profile is not RVA23. `demand check-image
 <image>` reads the page back and holds it to the kernel's rules.
 
-A build is described by its symbols: `just build --set debug,stats`
+A build is described by its symbols: `./do build --set debug,stats`
 names them, in any case, and each reaches the assembler as a defined
 symbol, `DEBUG` and `STATS`, for `.ifdef` to read in the kernel and in
 your program alike. A build with `DEBUG` lands in the target's `debug/`
-and any other in its `release/`, so the two coexist. `just test` always
+and any other in its `release/`, so the two coexist. `./do test` always
 sets `DEBUG`, so a program's own debug reporting is there for its test;
-`just build` and `just run` are release unless asked otherwise, and a
+`./do build` and `./do run` are release unless asked otherwise, and a
 release kernel carries no debug code and no debug text, which
 `test/purity` checks. The same test reads the kernel's sources for the
 ordering its devices need: every virtio doorbell, and every write that
@@ -289,11 +300,11 @@ or flush, which is how `test/framecap` holds the receipts of a failure. A
 kernel built with `FLIP_BATCH`, a candidate under measurement, sends the
 whole flip's transfer and flush as one batch with one wait, as a list's
 are sent, so a refused transfer is followed by the flush, which shows the
-frame before again and counts; `just test test/framecap --set flip_batch`
+frame before again and counts; `./do test test/framecap --set flip_batch`
 holds it, and a kernel built without the symbol is byte for byte the one
 before it. bounce, walk, wasd, and pad built with `PREPARE`, the
 candidate loop beside it, draw first and wait for the tick after, then
-flip what they kept; `just test example/<name> --set prepare` holds each,
+flip what they kept; `./do test example/<name> --set prepare` holds each,
 and without the symbol each image is the one before it. The game built
 with `FOOTPRINT`, a candidate, takes each block's mip level from the row
 derivative at the block's own start, and a debug build with `LEVELS`
@@ -304,7 +315,7 @@ exact footprint, its `differ` boxing where two pictures part;
 crate's.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
-debug channel, a virtio-serial port, which `just run ... --set debug`
+debug channel, a virtio-serial port, which `./do run ... --set debug`
 writes to `debug.log` beside the program's build output and a test reads
 back as `debug` from `launch`. The console UART carries only what
 the program sends it, and the fault lines, in every build.
@@ -335,7 +346,7 @@ the API's writes went in, seconds from the launch's start.
 
 A run prints nothing of its own; what the kernel says in a debug build
 is in `debug.log` beside the program's build output, and what a program
-sends over the API is in `api.out` there. `just watch`, from any shell
+sends over the API is in `api.out` there. `./do watch`, from any shell
 while a program runs, records the QEMU process per thread once a
 second to `watch.nuonl` in the target until the run ends, with the
 process's resident memory beside each second (VmRSS on Linux, `ps -o
@@ -366,8 +377,8 @@ between the readings and those over the span, its share of a core, the
 span beside them. `test/harts` and `test/jobs` hold an idle hart under
 0.05 of a core that way.
 
-`just bench <program>/<bench>` runs a program's bench, the NUON file of
-that name under the program's `bench/`: `just bench kit/fierce/cadence`
+`./do bench <program>/<bench>` runs a program's bench, the NUON file of
+that name under the program's `bench/`: `./do bench kit/fierce/cadence`
 (or `fierce/cadence`) is `kit/fierce/bench/cadence.nuon`. The program is
 built in the bench's tree, then each step runs in order, a script of the
 program's with its arguments and its own output directory; a step a
@@ -394,17 +405,18 @@ state file beside the stamps says what runs. At its end the run is
 packed into one tar beside its directory, named for the bench and the
 stamp, `example_workers_scaling-<stamp>.tar` for
 `example/workers/scaling`, and the bench's last line names it: the one
-file to copy off the host. `just watch bench <program>/<bench>`, in a
-second terminal before the bench starts or while it runs, records every
-QEMU of the run per thread under the step its own command line names;
+file to copy off the host. `nu/bin/nuance.nu watch bench
+<program>/<bench>`, in a second terminal before the bench starts or while
+it runs, records every QEMU of the run per thread under the step its own
+command line names;
 when the bench has finished it prints the bench's report and its own per
 QEMU, the steady CPU and the resident memory, writes them together as
 `watch.nuon` in the run, then packs the run
 again with its recording into that same tar, the old one moved aside,
-and names it last. `just bench` alone lists the benches, and `--only`
+and names it last. `./do bench` alone lists the benches, and `--only`
 runs the steps its comma-separated labels name.
 
-`just do probe sdl example/walk` looks at the window itself: it runs
+`nu/bin/nuance/probe.nu sdl example/walk` looks at the window itself: it runs
 the program under SDL with OpenGL for twelve seconds (`--seconds N`)
 with a small library preloaded into QEMU, `shim/crates/sdl`, built with
 cargo into the target's `shim/`. The library logs every SDL call the
@@ -522,13 +534,13 @@ counter and count no guest work, and `hpmcounter3` to `hpmcounter18` read
 A machine is one of the system specifications `asset/spec.nuon`
 defines: its cores are the harts, `-smp`, its RAM `-m`, and its display
 the GPU's; the kernel is told its name with `jab.spec=<name>` on its
-command line. The spec is the one `--spec` (or `-s`) names on `just run`,
+command line. The spec is the one `--spec` (or `-s`) names on `./do run`,
 `nu/bin/nuance/plan.nu`, `launch`, `machine dump-tree`, or the gauge, else the
 default: `JAB_SPEC` when it is set, else the `spec` in `jab/config.toml`
 under the XDG config home, `$XDG_CONFIG_HOME` or `~/.config`. That file
 is written from `asset/default/config.toml`, `spec = '1ka1'`, the first
 time a launch needs it, and never over one that is there; the config
-home itself must already exist. `just test --spec 1kb1` runs the tests'
+home itself must already exist. `./do test --spec 1kb1` runs the tests'
 launches on that spec. Today the launcher provisions 1KA1, three harts
 and 4 GiB, and 1KB1, seven harts and 8 GiB, both at 1920 by 1080; it
 refuses a spec with more cores than the eight of `jab.inc`'s
@@ -681,7 +693,7 @@ A cancel names the job in flight, or the next job once the mailbox is free,
 and each publish drops any other, so a cancel left over from an older job
 never ends a newer one, even when the generation count wraps.
 `test/jobs` races every order a job and its wake can come in, a thousand
-rounds each, and `just bench test/jobs/costs` measures what a job costs
+rounds each, and `./do bench test/jobs/costs` measures what a job costs
 around its work, at four job sizes, with one worker and with two on the
 specification's three harts: the dispatch to a worker, the barrier back
 to hart 0, and the least a round of jobs costs beyond its work, its
@@ -696,7 +708,7 @@ With the API the program proves itself. The letter `p` draws one fixed
 frame with each count of workers and hashes each image before its bars and
 text, so the three hashes agree when the work is right, and it sends three
 rows for the host to compute again. A digit, `1` to `3`, draws that frame
-over and over for four seconds with that many workers. `just bench
+over and over for four seconds with that many workers. `./do bench
 example/workers/scaling` runs one, two, and three workers on a release
 build and reports the frames, the hashes, each worker's rows, each hart's
 share of a core over a timed second, and how much the bands overlapped in
