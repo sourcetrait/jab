@@ -3,7 +3,7 @@
 ## sdl-decide
 
 How a make_current the timing rule leaves reached the window, by its
-frames past the shim's own (sdl-resolve). Its immediate caller must
+frames past the shim's own (sdl resolve). Its immediate caller must
 resolve to the SDL front end, the anchor: sdl2_gl_switch makes a
 `switch`, the window taking a new surface; sdl2_gl_update an upload,
 read by its second frame, the function that called it. The console's
@@ -15,7 +15,7 @@ first update; an unresolved frame of the executable makes it the
 console's own only beside a device module, with the executable's table
 read and holding both of the console's update functions of one family,
 since a module reaches the console through those alone. Anything else
-is `refused`: `class` says which refusal (sdl-report), `fault` what
+is `refused`: `class` says which refusal (sdl report), `fault` what
 failed, and `at` the frame at fault.
 
 ## sdl-frame-name
@@ -46,7 +46,7 @@ the chains' counts, and the frames at fault.
 
 ## main
 
-The shim's log at `log` (sdl-resolve) with each make_current read by
+The shim's log at `log` (sdl resolve) with each make_current read by
 where it came from. A make_current followed by a window-size call
 within 2 ms opens a drawn frame, a `render`. Every other is read by its
 frames (sdl-decide): a `switch`, the window taking a new surface; a
@@ -56,13 +56,13 @@ its `kind`, a make_current's one of those four and any other event's
 its name, and its `callers` as the record names them (sdl-frame-name),
 the immediate caller first. The reading comes only when every
 make_current is decided; otherwise the first refusal in order: the
-log's lines, a stop notice, and its structure (sdl-log), nm absent, an
+log's lines, a stop notice, and its structure (sdl log), nm absent, an
 object that is no longer the file its line names or a deleted
 executable, an object nm cannot read, a make_current failing the anchor
 or unmodelled, and an upload whose second frame does not resolve, each
 naming its fault, how many make_currents or lines hold it, and up to
 four of them. With --tables, a bundle's directory, the tables come out
-of the bundle (sdl-resolve).
+of the bundle (sdl resolve).
 
 ## sdl-chain-key
 

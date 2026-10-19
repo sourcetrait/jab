@@ -1,5 +1,5 @@
 # demand's integration test: a program's declared demand as the SDK reads
-# it, `jab demand-of` and the build's check, the constants the build
+# it, `demand of` and the build's check, the constants the build
 # generates, the demand recorded with its image, and a launch's record of
 # it. First this program, on the legacy path: no demand, its build carrying
 # no generated constants and recording a null demand beside its image,
@@ -24,7 +24,7 @@
 # declared and not diagnostic on three harts and diagnostic on four, the
 # plan carrying the demand demand-of gives, and still the built demand
 # with its reservation edited and then its `specs` removed, each without a
-# rebuild. Its record is held to its rules (image-demand): unreadable as
+# rebuild. Its record is held to its rules (demand image): unreadable as
 # NUON or no record, a field missing or a third, `image` of another type,
 # in capitals, or another image's, `demand` of another type, and every rule
 # of the demand's shape broken in turn, each refused naming its fault, as
@@ -207,7 +207,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let regenerated = (open --raw $include_file | into binary | decode)
     assert equal $regenerated $generated_text "the include its generator no longer wrote holds the generator's text after the build"
 
-    # the record held to its rules (image-demand), each fault refused
+    # the record held to its rules (demand image), each fault refused
     # naming it
     let record_file = (record-of $declared_image)
     let zeros = ("0" | fill --character "0" --width 64)
@@ -318,7 +318,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the declaration's build key (ProgramMinimums): a program declaring a
     # spec of a workspace of the test's own, its spec data a copy of this
     # one's; the spec's cores changed there build it again with the new
-    # number in its image's declaration (check-image), the change undone
+    # number in its image's declaration (demand check-image), the change undone
     # builds it back, and a build with nothing changed builds nothing
     let keyed = ($fixtures | path join "keyed")
     mkdir ($keyed | path join "asset")

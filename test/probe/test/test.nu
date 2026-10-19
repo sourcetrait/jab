@@ -1,5 +1,5 @@
-# probe's integration test: the SDK's sdl probe, `jab sdl-resolve` and
-# `jab sdl-report`, held to shim logs of the test's own over objects of
+# probe's integration test: the SDK's sdl probe, `sdl resolve` and
+# `sdl report`, held to shim logs of the test's own over objects of
 # its own, and then the shim's capture held to a binary of its own. The
 # objects are assembled by the workspace's toolchain, the prefix from the
 # flags stamp beside this program's image, from test/fixture.S: a shared

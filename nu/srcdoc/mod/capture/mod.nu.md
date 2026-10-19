@@ -13,7 +13,7 @@ end of the file when the chunk's size was never written.
 
 ## screen
 
-Read a screen `jab launch` took: its size and its pixels, three bytes
+Read a screen `launch` took: its size and its pixels, three bytes
 each, red, green, blue, row by row from the top left.
 
 - Bytes whatever the file holds: `open --raw` gives text for a file of

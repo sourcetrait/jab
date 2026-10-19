@@ -13,7 +13,7 @@ count, which its record labels diagnostic whatever it is.
 
 ## row
 
-A spec's row from the workspace's spec data (specs-of), its name matched
+A spec's row from the workspace's spec data (spec data), its name matched
 in any case, held to what the launcher can provision: its cores within
 the harts a machine takes (harts_allowed), and the ABI's display, 1920 by
 1080 (display_size); otherwise refused, naming the spec and why.
@@ -32,8 +32,8 @@ The system specifications as the tools read them. doc/SPEC.md is the
 authority, TheUser's, and the workspace's asset/spec.nuon carries its
 definitions for the tools, a table of one row a spec, held to
 asset/spec.nutype, the type the table takes, which is read from its file
-with the data and kept nowhere in this tool. `spec-table` reads any such
-pair and `specs-of` the workspace's own, the one reader the launcher, a
+with the data and kept nowhere in this tool. `spec read` reads any such
+pair and `spec data` the workspace's own, the one reader the launcher, a
 build's checks, and an image's list share. Every value is checked
 against the type field by field: a field missing, a value of another
 type, and a field the type does not name, at any depth, are each refused
@@ -50,7 +50,7 @@ Untyped because it ends in an error.
 ## data
 
 The workspace's spec data, its asset/spec.nuon held to its
-asset/spec.nutype (spec-table). Untyped because it ends in an error.
+asset/spec.nutype (spec read). Untyped because it ends in an error.
 
 ## spec-label
 

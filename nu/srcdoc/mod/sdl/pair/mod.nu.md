@@ -2,17 +2,17 @@
 
 ## pair_limits
 
-The pairing's limits, printed with every reading (sdl-pair).
+The pairing's limits, printed with every reading (sdl pair).
 
 ## main
 
 A probed run's presents paired one for one with the host's flip uploads
 (ProbeRuns), from the run's classified events, a validated paired
-bundle's (sdl-bundle-check) or sdl-classify's on the host with the run's
+bundle's (sdl bundle-check) or `sdl classify`'s on the host with the run's
 binding checked there, and the guest's flips in its window in order,
 each its status, its present ordinal, and its end in microseconds on the
 guest's clock: 1, the presented flips' ordinals each one past the one
-before (ordinal-violations), a gap refusing the run; 2, the host's flip
+before (present ordinal-violations), a gap refusing the run; 2, the host's flip
 uploads numbered from the log's first, 1 on, the shim logging from
 QEMU's start; 3, the present of ordinal k paired with upload k, the log
 holding every ordinal through the window's last present and going on at

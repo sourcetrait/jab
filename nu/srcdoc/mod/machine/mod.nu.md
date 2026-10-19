@@ -57,7 +57,7 @@ lists the model; a QEMU that does not is refused with its version.
 ## of
 
 What a launch's machine is, the record a run keeps of it. A named
-spec's, given its row (spec-row): its cores the harts and its RAM, with
+spec's, given its row (spec row): its cores the harts and its RAM, with
 `spec` its name in lowercase, its cores, its RAM in GiB, and its
 display, `diagnostic` null. A custom machine of `harts` harts, 1 to 8
 (harts_allowed), and custom_ram_gib: `diagnostic` its harts and RAM and
@@ -68,9 +68,9 @@ words of a launch's own on its line.
 
 ## resolve
 
-The machine a launch asks for (machine-of): `--harts`, given past 0, a
+The machine a launch asks for (machine of): `--harts`, given past 0, a
 custom machine; else the spec `--spec` names, or the configured default
-(spec-default), its row from `ws`'s spec data (spec-row). Both given are
+(spec configured), its row from `ws`'s spec data (spec row). Both given are
 refused, naming both, before QEMU starts.
 
 ## spec-bootargs
@@ -87,13 +87,13 @@ else after its `=`.
 
 ## machine-args
 
-The machine on `qemu` as `m` (machine-of) provisions it: virt with
+The machine on `qemu` as `m` (machine of) provisions it: virt with
 `options` after it when given, the RVA23 CPU, multithreaded TCG, its
 harts, every transport modern.
 
 ## memory-args
 
-The RAM `m` has (machine-of), in GiB.
+The RAM `m` has (machine of), in GiB.
 
 ## name-args
 
@@ -110,7 +110,7 @@ not supported by your OS"), so the process name is Linux's alone.
 
 The device tree QEMU builds for a launch's machine, the one `--spec`
 names, a custom one of `--harts` harts, or the configured default
-(machine-for), written to the file `out` through -machine dumpdtb, QEMU
+(machine resolve), written to the file `out` through -machine dumpdtb, QEMU
 exiting once it is written and before any hart runs, `bootargs` in
 /chosen as a launch's -append puts it, a named spec's
 `jab.spec=<name>` after it; the kernel and the image place the line as plan

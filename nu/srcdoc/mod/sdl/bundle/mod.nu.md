@@ -6,7 +6,7 @@ A probed run's capture made portable, `sdl bundle <probe dir> <bundle
 dir>`, on the host that took it as the run's last step, while
 the objects its log names are still the files their lines name. The log
 in the probe directory, `sdl.log`, is classified as the probe reads it
-(sdl-classify), a refusal ending the bundle with nothing written; then
+(sdl classify), a refusal ending the bundle with nothing written; then
 into `bundle`, a directory not yet there, go the log as it was written;
 for each object whose table the reading read, nm's text as it was
 parsed, `tables/<index>.nm`, the file's own SHA-256 taken with its
@@ -40,13 +40,13 @@ and jab.nu's SHA-256, stays as written.
 
 ## sdl-qemu-of
 
-The QEMU a log names, object 0 of its table (sdl-log): its path, and
+The QEMU a log names, object 0 of its table (sdl log): its path, and
 while the file is the one its line names, its version and its SHA-256,
 `sha256` where it was taken already; null fields otherwise.
 
 ## bundle-check
 
-A bundle (sdl-bundle) held to its manifest wherever it is read, `sdl
+A bundle (sdl bundle) held to its manifest wherever it is read, `sdl
 bundle-check <bundle dir>`, stage by stage, the first that fails
 refusing it by its stage and name with nothing read from it: 1, the
 inventory, bundle.nuon at bundle_schema 1 or 2, every file the manifest
@@ -59,7 +59,7 @@ object's table listed and no other's; 3, the sequence, the log's events
 as sdl-log reads them, which reads no object file, classified.nuon's in
 count and line by line in line, stamp, name, render flag, and chain key;
 4, the replay, the log classified again from the bundle's tables
-(sdl-classify --tables), every event's kind and callers classified.nuon's;
+(sdl classify --tables), every event's kind and callers classified.nuon's;
 5, the run by its profile: paired, the log's process the identity's
 qemu_pid, the log's nonce the identity's capture_nonce, and the nonce
 the guest echoed, read from the bundle's api.out by `guest`, the

@@ -10,7 +10,7 @@ where no function lies. test/probe runs it with the SDL shim preloaded and
 checks its premises before trusting the reading.
 
 It is built by `cargo rustc` with `-C relocation-model=static`, which the
-SDK's `shim-build --static` passes; a plain `cargo build` gives a PIE.
+SDK's `tool shim --static` passes; a plain `cargo build` gives a PIE.
 
 ## const RTLD_DEFAULT
 

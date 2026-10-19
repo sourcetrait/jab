@@ -22,5 +22,5 @@ else the one above the kernel's ELF, else the one above `out`.
 
 ## manifest
 
-The manifest of the program an image was built from (image-home), for
+The manifest of the program an image was built from (image home), for
 the window it names; an empty record when there is none.

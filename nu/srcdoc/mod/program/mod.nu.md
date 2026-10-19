@@ -29,7 +29,7 @@ channel to a file when DEBUG is set, the API's port when `api` asks,
 the window given (null for the one a run would open), the UART where
 `serial` says (`stdio` or `none`), and no monitor, on the machine
 `spec` names, a custom one of `harts` harts, or the configured default
-(machine-for), a named spec the program does not list refused before
+(machine resolve), a named spec the program does not list refused before
 QEMU starts (spec-listed). The ports' files sit beside the build
 output, named in the README. With a pad on the port, `bridge` is the
 pad's identity and `bridge_pipe` the pipe the bridge writes
@@ -56,7 +56,7 @@ that ended in failure said on stderr, naming its pipe.
 Test the programs at or under a path in the workspace, every program
 for none, each on a build with DEBUG beside `names` and prepared to
 test first; prints each test's output and a summary, exits 1 if any
-fails. A test that drives the API asks `jab launch` for the port
+fails. A test that drives the API asks `launch` for the port
 itself.
 
 ## plan
@@ -73,7 +73,7 @@ Test with DEBUG set beside whatever --set names: at a workspace's root
 every program's test, or those at or under a path, with a summary,
 failing if any fails; at a program's directory its test/test.nu on the
 debug kernel. `--spec` names the spec every launch of the tests runs
-that names none of its own, JAB_SPEC for them (spec-default).
+that names none of its own, JAB_SPEC for them (spec configured).
 
 ## boot
 

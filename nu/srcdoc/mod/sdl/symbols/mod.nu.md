@@ -36,7 +36,7 @@ says which held: read, no_file, nm_absent, deleted, changed, or
 unreadable, with nm's own words in `why`; `source` which table
 answered: symtab, dynsym, or none; `console` whether it holds both of
 the console's update functions of one family; and `nm`, nm's text as it
-was read, which a bundle keeps (sdl-bundle).
+was read, which a bundle keeps (sdl bundle).
 
 ## sdl-table-from
 
@@ -45,8 +45,8 @@ the table the text came from, the text kept whole as `nm`.
 
 ## sdl-bundled-table
 
-A needed object's table out of a bundle (sdl-bundle) in place of nm on
-its path, the replay's source (sdl-bundle-check): the state its
+A needed object's table out of a bundle (sdl bundle) in place of nm on
+its path, the replay's source (sdl bundle-check): the state its
 manifest entry records where that is not `read`, else its table file,
 taken only when the file's raw bytes have the SHA-256 the entry names;
 `unbundled` where the manifest holds no entry, no table, or another
@@ -61,7 +61,7 @@ it. None where the address falls between functions.
 
 ## resolve
 
-The shim's log at `log` (sdl-log) with its make_currents' frames
+The shim's log at `log` (sdl log) with its make_currents' frames
 resolved: the object table, each object with its file name and the
 state of its symbol table (sdl-table); `virtio_gpu_in`, module or
 executable; and every event in order, each frame of a make_current
@@ -76,7 +76,7 @@ in every make_current the timing rule leaves, and the executable's
 where the device's code is there; with --every, every object a
 make_current's frame lies in. The device's code lives in a module when
 the table lists one whose file name starts hw-display-virtio-gpu, else
-in the executable. With --tables, a bundle's directory (sdl-bundle),
+in the executable. With --tables, a bundle's directory (sdl bundle),
 each table comes out of the bundle in place of nm on its object's path,
 as a bundle's check replays it (sdl-bundled-table). A log the shim could
 not have written is refused.
@@ -84,7 +84,7 @@ not have written is refused.
 ## sdl-resolved
 
 sdl-resolve's reading, beside it each object's table whole as read
-(sdl-table), by index, and the run's lines (sdl-log); `bundle` the
+(sdl-table), by index, and the run's lines (sdl log); `bundle` the
 tables' bundle, "" for nm.
 
 ## sdl-held

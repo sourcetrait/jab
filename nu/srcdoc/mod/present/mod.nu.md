@@ -23,4 +23,4 @@ the largest earlier q less eps, so the running maximum and its index
 are kept and the check is linear. Every violation by its flip's index,
 its witness the index of that maximum, the two flips' gap, and the
 bound it did not pass. Read only on a present sequence that held
-(ordinal-violations), so no present is missing from the flips.
+(present ordinal-violations), so no present is missing from the flips.

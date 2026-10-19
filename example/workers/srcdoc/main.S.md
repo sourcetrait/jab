@@ -168,7 +168,7 @@ before each generation; a worker reads them after its await.
 ## mandel_row
 
 On a page of its own (`.balign 4096`), so QEMU's translator chains its loop
-within one page, which `jab hot` checks; it makes no kernel call. c's x
+within one page, which `capture hot` checks; it makes no kernel call. c's x
 advances a step a pixel from the row's first.
 
 ## frame_worker

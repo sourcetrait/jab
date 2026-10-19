@@ -22,10 +22,10 @@ QEMU reads as the pad, which the driver writes 24-byte input_event
 records into, else (and with `--pad-port`) the pad port's `pad_pipe_in`
 pipe, whose header, `pad_header` as hex, the driver writes first, the
 pipes made. On Windows, where QEMU makes each pipe chardev one named
-pipe and waits for its client before it starts (pipe-path), each pipe's
+pipe and waits for its client before it starts (chardev pipe-path), each pipe's
 in-file is a plain file a writer appends to (pipe-write), and `relays`
 names the relay each pipe with no client of its own takes, the
-monitor's, the API's, and a scripted pad's port (relays-of), its
+monitor's, the API's, and a scripted pad's port (chardev relays-of), its
 binary `relay_binary` (relay-build), none and "" elsewhere;
 `bridge_pipe` is the pipe the pad bridge writes, "" with no pad port
 (bridge-pipe). The machine is headless unless `--window` puts it in the
@@ -40,8 +40,8 @@ into the retire home of `target`, the workspace's target or else the
 program's, wherever `out` lies (retire), its pipes kept; `target` is
 handed back for a harness that clears away files of its own. The
 machine is the one `--spec` names, or with `--harts` a custom one of 1
-to 8 harts, or with neither the configured default (machine-for), and
-`machine` is its record (machine-of), `below_minimum` true beside it
+to 8 harts, or with neither the configured default (machine resolve), and
+`machine` is its record (machine of), `below_minimum` true beside it
 where `bootargs` carries a debug kernel's jab.nominimum=1, which skips
 the program's minimum (knob-of); a named spec the image's demand
 does not list is refused before anything is made, a legacy image's run
@@ -51,7 +51,7 @@ taking the named machine. `bootargs` goes to the kernel through QEMU's
 knobs, and the record's `bootargs` is the line as given; `dtb` hands the kernel that
 tree through -dtb in place of the one QEMU builds, QEMU checking its
 header before any hart runs. `demand` is the demand recorded with the
-image at its build (image-demand), null for a program on the legacy path
+image at its build (demand image), null for a program on the legacy path
 and for an image with no record; a record that does not hold is refused.
 `send` is what a launch writes into the API at its times, kept as given
 in `sends`, and anything to send puts the port on as `--api` does. With
@@ -60,10 +60,10 @@ sdl shim built and preloaded beside any other (`shim`), logging to that
 file (`sdl_log`, a stale one retired), SDL's offscreen driver where no
 display server is. `capture_nonce` is the caller's, never minted here,
 1 to 2^63 - 1 or none, handed to the shim as `SDL_SHIM_NONCE` in its
-sixteen hex digits (nonce-hex); `profile` the capture's, `paired` only
+sixteen hex digits (nonce hex); `profile` the capture's, `paired` only
 with a nonce, `generic` for a probe that names none, "" for a run that
 claims none; `capture` the run's capture identity as it stands before
-QEMU starts (capture-identity).
+QEMU starts (launch capture-identity).
 
 - a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
   is recorded below it, where a release kernel reads no knob and refuses
@@ -121,13 +121,13 @@ where the pad needs one and ended after; the screen and the timed
 actions go through the monitor and the pipes as headless. The result
 carries the machine's line, `qemu_binary` and `qemu`, with the
 `window` and the `audio` backend it ran with, and `machine`, the
-record of the machine it had (machine-of); `--spec`, `--harts`,
+record of the machine it had (machine of); `--spec`, `--harts`,
 `--bootargs`, and `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
 that long after the start and again a second on (threads-of), each
 reading timed as it is taken, since the loop polls: `threads_span` is
 the seconds between the two, a second give or take a poll, and
 `threads` carries each thread's name, the CPU seconds it used in
-between, and those over the span (threads-between), the harts' threads
+between, and those over the span (process threads-between), the harts' threads
 named `CPU N/TCG` on Linux; empty, its span null, when the run ended
 before the second reading. With `--threads-at`, every QEMU thread's
 cumulative CPU seconds are read at each time it lists, `thread_readings`
@@ -144,23 +144,23 @@ test needs that no launch flag gives. Such a run is diagnostic, its
 come back apart as `overrides` too, so the requested platform and the
 custom command stay distinct; `qemu` is the line as it ran. `declared`
 says whether the demand recorded with the image at its build declares
-one (image-demand), and `diagnostic` is the run's standing: on a
+one (demand image), and `diagnostic` is the run's standing: on a
 custom machine, with QEMU words of its own, of an image built on the
 legacy path or with no record beside it, undeclared and claiming no
 console, or below its program's minimum (plan's `below_minimum`). `--sdl-probe`,
 `--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
-minted here only for a probing launch given none (launch-nonce); the
+minted here only for a probing launch given none (nonce mint); the
 launch writes the API only what its caller sends, never for itself. On
 Windows, where QEMU waits for a client of each of its pipes before it
 starts, the relays plan names start beside QEMU, a job each
-(relays-start), every write goes into a pipe's in-file (pipe-write), and
+(chardev relays-start), every write goes into a pipe's in-file (pipe-write), and
 once QEMU has ended each relay is given a second to end with its pipe,
 any left stopped, and one that ended in failure fails the launch,
-naming its pipe (relays-held).
+naming its pipe (chardev relays-held).
 `qemu_pid` is QEMU's pid as the loop read it while QEMU lived, since
 QEMU removes its pid file as it exits, null where it never came up; the
 result carries `sdl_log`, `shim`, `capture_nonce`, and `profile` as
-planned, and `capture`, the run's capture identity (capture-identity).
+planned, and `capture`, the run's capture identity (launch capture-identity).
 
 - `--kernel`: the kernel ELF
 - `--image`: the program's .jab
@@ -210,7 +210,7 @@ planned, and `capture`, the run's capture identity (capture-identity).
   minted here for a probe given none
 - `--profile`: the capture's profile, paired or generic (plan)
 
-- the timed actions in the order a poll takes them (due-order): by
+- the timed actions in the order a poll takes them (launch due-order): by
   time, and at one time the keys, then the API's bytes, then the pad's
   groups, each in its table's order
 - QEMU deletes its pid file as it exits, so the read is tried, never

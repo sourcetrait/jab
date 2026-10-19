@@ -45,7 +45,7 @@ both digests named.
 A program's assets as a romfs image, built when the directory it names
 has moved on: `assets` in its manifest, relative to the manifest, or
 `target_assets`, a tree the program's content compiles to under its
-asset shard of the target (program-shard), with the program's own name
+asset shard of the target (build program-shard), with the program's own name
 as the volume's. The image is what `just run` puts on the machine, and
 the program reads it with jab.sys.romfs.*.
 

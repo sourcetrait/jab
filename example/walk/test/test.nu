@@ -83,7 +83,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     print "walk: ok"
 }
 
-# Where a colour is on a screen, as `jab ink` says, over the pixels of
+# Where a colour is on a screen, as `capture ink` says, over the pixels of
 # it that touch another of it, a side or a corner.
 def joined-ink [screen: record<width: int, height: int, pixels: binary>, color: string]: nothing -> record<count: int, left: int, top: int, right: int, bottom: int> {
     let w = $screen.width

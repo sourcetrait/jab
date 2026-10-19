@@ -6,7 +6,7 @@ kernel drives it as a virtio-input device. Everywhere else QEMU has no
 way to carry a gamepad, so the pad comes in over a port on the
 machine's virtio-serial device, `nr=3`, named `jab.pad`, written by a
 process on the host: the SDK's `jabshim_pad`, which reads the pad
-through gilrs, or `jab launch --pad <file>`, which plays a table. The
+through gilrs, or `launch --pad <file>`, which plays a table. The
 kernel takes the port as the pad when the machine carries no
 virtio-input pad, and a program sees no difference: `jab.sys.pad.read`,
 `jab.sys.pad.input`, `jab.sys.pad.axis`, `jab.sys.pad.name`, and the pad await
@@ -95,7 +95,7 @@ puts the port on the line, `-chardev pipe,id=jabpad,path=<out>/padport`
 and `-device virtserialport,chardev=jabpad,nr=3,name=jab.pad`, and
 starts `jabshim_pad <out>/padport.in <name> <vendor> <product>` beside
 QEMU, ended with it. On Linux the pad is passed through and the port
-is never used for a run. `jab launch --pad <file>` plays the file's
+is never used for a run. `launch --pad <file>` plays the file's
 table into the port on any host but Linux, and on Linux under
 `--pad-port`, with a header describing the reference pad the evdev
 shim answers as, so a test reads the same lines either way.

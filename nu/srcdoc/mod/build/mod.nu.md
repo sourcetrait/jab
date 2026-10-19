@@ -47,7 +47,7 @@ The kernel a program runs on in `tree` (kernel-elf).
 
 The kernel's or a program's context for a build with `names` set:
 manifest, workspace (workspace-of), toolchain, symbols, the target
-(target-root, the workspace's or a lone program's own), the tree in
+(target root, the workspace's or a lone program's own), the tree in
 it (debug or release), and the output directory, the tree's shard
 (shard-of).
 
@@ -86,7 +86,7 @@ counted among the inputs the same way and linked ahead of the program's
 own object, so a change to a listed spec's row builds the image again
 with the new declaration, and a build with nothing changed builds
 nothing. Every build writes `demand.nuon` beside the image, the demand
-recorded with it (image-demand), and a cached image is taken only beside
+recorded with it (demand image), and a cached image is taken only beside
 a record that holds and names the build's demand, any other building
 again whole, the image and its record together.
 

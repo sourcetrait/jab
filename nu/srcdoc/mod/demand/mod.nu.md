@@ -165,13 +165,13 @@ snake_case `name` and at least one role of feature_roles, each an int of
 
 ## record-holds
 
-Whether the record beside an image holds (image-demand) and names the
+Whether the record beside an image holds (demand image) and names the
 demand a build resolved; a record missing, unsound, of another image,
 or of another demand is false, so the build runs again whole.
 
 ## spec-listed
 
 A named spec held to the program's demand: refused naming both when the
-demand recorded with its image (image-demand) does not list it; a
+demand recorded with its image (demand image) does not list it; a
 custom machine, and a legacy image, null demand, on any machine, pass.
 Untyped because it ends in an error.

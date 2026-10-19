@@ -19,7 +19,7 @@ output lands in that workspace's target at the program's path
 
 Whether `dir` is one of the workspace's own, its kernel or a program
 workspace.jab.toml lists, by its workspace-relative path, which is how
-an image built before its `home` marker is placed (image-home).
+an image built before its `home` marker is placed (image home).
 
 ## is-workspace
 

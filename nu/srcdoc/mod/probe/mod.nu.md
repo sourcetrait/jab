@@ -11,12 +11,12 @@ its flips reached the window, read through QEMU's own symbol tables;
 
 The SDL probe: the shim built with cargo into the target's shim/, the
 program run under `sdl,gl=on` with the UART off for `seconds`, the
-shim's log read back through binutils' nm (sdl-report), and one NUON
+shim's log read back through binutils' nm (sdl report), and one NUON
 record printed, or the refusal saying why the log cannot be read and
 no record. Linux only, since it preloads a library into QEMU. With no
 display server SDL runs its offscreen driver, which draws nothing but
 keeps every path the same. Each run mints its capture nonce for the
-shim (launch-nonce), keeps QEMU's pid while it lives (probe-launch),
+shim (nonce mint), keeps QEMU's pid while it lives (probe-launch),
 and writes the run's identity beside the log, `identity.nuon`. Its
 profile, its port, and its sends are probe-plan's: paired where the
 build sets the manifest's `paired`, the nonce's frame sent first;
@@ -24,15 +24,15 @@ build sets the manifest's `paired`, the nonce's frame sent first;
 writes the file's bytes. With the port on, the program's bytes are kept
 beside the log as `api.out`.
 `--trace` has QEMU trace the device's flushes and set_scanouts into
-`trace.log` there, its messages stamped (trace-args). The run is
-bundled last (sdl-bundle) into `bundle` there, a previous bundle and
+`trace.log` there, its messages stamped (probe trace-args). The run is
+bundled last (sdl bundle) into `bundle` there, a previous bundle and
 every file the probe writes retired first.
 
 ## plan
 
 What a probe of a program's build puts on the machine and sends
 (CaptureBundle's profiles): paired where the build sets the manifest's
-`paired` (probe-paired), the port on and the nonce's frame (nonce-frame)
+`paired` (probe-paired), the port on and the nonce's frame (wnon-frame)
 at 200 ms, then `send`'s bytes at 200 ms where there are any; generic
 otherwise, the port on with `api` or bytes to send, and only those
 bytes sent, never a frame of the probe's own.

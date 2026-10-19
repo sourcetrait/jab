@@ -5,7 +5,7 @@
 # constant's expansion against the assembler's .float or .double of the
 # same value, bit for bit; the generator against the same xorshift run
 # here over two 32-bit halves; then the hot-code check through
-# `jab hot`: expand_all, a page of its own holding every macro, lies
+# `capture hot`: expand_all, a page of its own holding every macro, lies
 # within its page and traps nowhere, and trapped, the control beside
 # it, is seen to make its one kernel call.
 #

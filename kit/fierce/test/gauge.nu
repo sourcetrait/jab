@@ -606,7 +606,7 @@ def workers-sends [asked: record]: nothing -> list<any> {
 # What a run was, written beside its capture before it starts: the
 # records' schemas this reader takes and the clock, the workspace the SDK
 # and kernel come from, the program's own source, the build, the assets,
-# the route, the cap, the machine (`jab machine-of`'s record: a named
+# the route, the cap, the machine (`machine of`'s record: a named
 # spec's, its name, cores, RAM, and display, or a custom machine's, its
 # harts and RAM, diagnostic; -machine, the CPU, and the accelerator with
 # its thread mode, and the words beside them),

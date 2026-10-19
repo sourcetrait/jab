@@ -7,7 +7,7 @@ runs only under QEMU's `virt` machine.
 
 - `workspace.jab.toml` the workspace: the kernel and the programs.
 - `justfile` the repository's one justfile, every recipe handing off to
-  `sdk/nu/jab.nu`.
+  the bins under `nu/bin`, `do` to `sdk/nu/jab.nu`.
 - `kernel/` the kernel: `kernel.jab.toml`, sources under `src/`, and
   each source's `.eye` and `.md` under `srcdoc/`.
 - `sdk/` what a program uses, its sources under `src/` and their `.eye`
@@ -17,7 +17,8 @@ runs only under QEMU's `virt` machine.
   the program carries and expands in place, never a call and never a
   trap; `jab_jobs.inc`, jobs for workers as macros over mailboxes the
   program owns, whose waits are the kernel's; the program link script;
-  and `nu/jab.nu` for its test.
+  and `nu/jab.nu`, the development commands' `do` alone, the SDK's
+  nushell being the root's `nu/`.
 - `doc/syscalls.nuon` the system call table of record; `doc/lists.md`
   how every call that fills a buffer with records works.
 - `doc/SPEC.md` the system specifications, TheUser's and the authority;
@@ -77,9 +78,9 @@ builtin. A definition carries one summary line of 80 characters at most
 in the source, its usage and reasoning in the mirror. The root's `do`
 links to `nu/bin/do.nu` (`nu nu/bin/do.nu` on Windows, where a symlink
 checks out as a text file). Examples and test programs keep their
-`test/test.nu` and carry no tree. The SDK's `sdk/nu/jab.nu` and
-fierce's scripts under `kit/fierce/nu/` predate the layout and move into
-it.
+`test/test.nu` and carry no tree. The SDK's nushell is the root's
+`nu/`, `sdk/nu/jab.nu` keeping `do` alone; fierce's scripts under
+`kit/fierce/nu/` predate the layout and move into it.
 
 Build and run with `just` and nushell, from anywhere in the repository,
 a program named by its path from the root or by a shortcut
@@ -194,7 +195,7 @@ after them at 0. The build generates the page as `jab_header.S` beside
 the image, rewrites the file only when its text changes, and counts it
 among the build's inputs, so a change to a listed spec's row builds the
 program again. The build refuses a listed spec whose display is not the
-ABI's 1920 by 1080 or whose profile is not RVA23. `jab check-image
+ABI's 1920 by 1080 or whose profile is not RVA23. `demand check-image
 <image>` reads the page back and holds it to the kernel's rules.
 
 A build is described by its symbols: `just build --set debug,stats`
@@ -262,7 +263,7 @@ through coreaudio, on Windows through dsound; a host with no output
 gets the `none` backend, which discards, so a program's sound calls
 still answer. `JAB_AUDIO` names a backend and its options outright,
 skipping discovery, and `--no-sound` leaves the device off. `jab
-launch --sound` records the guest's output to a wav, which `jab wave`
+launch --sound` records the guest's output to a wav, which `capture wave`
 reads back, so the sound tests measure a tone rather than listening
 for it. A list of rectangles
 flipped at once crosses to the host rectangle by rectangle and is
@@ -297,7 +298,7 @@ crate's.
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `just run ... --set debug`
 writes to `debug.log` beside the program's build output and a test reads
-back as `debug` from `jab launch`. The console UART carries only what
+back as `debug` from `launch`. The console UART carries only what
 the program sends it, and the fault lines, in every build.
 
 The API is a second port, bytes both ways between a program and the
@@ -307,17 +308,17 @@ run example wasd --api` puts the port on the machine, and without the
 flag the calls report that there is none. The host's end sits beside
 the build output: `api.in`, a named pipe the host writes into, on
 Windows a plain file the pipe's relay forwards, and `api.out`, a file
-the program's bytes land in, which a test drives through `jab launch
+the program's bytes land in, which a test drives through `launch
 --api --send`. `example/wasd` speaks a small binary
 API over it, its records at the top of its `main.S`.
 
-A test takes the screen with `jab launch --capture <at>`, which ends the
+A test takes the screen with `launch --capture <at>`, which ends the
 run once the screen is whole, or with `--screen <at>`, which takes it
 while the run goes on to its bound. Each turn of the launch's loop takes
 the timed inputs, the keys, the API's bytes, and the pad's events, in
 the order of their times, and the screen after those due before its time
 and ahead of those due at or after it, which wait until its file is
-whole: the PPM's header and every pixel of the display. `jab due-order`
+whole: the PPM's header and every pixel of the display. `launch due-order`
 is that order as a function of the inputs and the time, so a test can
 hold it on a late turn of the loop without a run. A screen that fails
 leaves the result no screen and every input after it unwritten. The
@@ -349,7 +350,7 @@ macOS a thread is its row, and QEMU's worker threads come and go, so
 a row that changed identity during the recording is reported with
 `stable: false` and no peak.
 
-A test reads the threads itself with `jab launch --threads <at>`: every
+A test reads the threads itself with `launch --threads <at>`: every
 QEMU thread's CPU at that time and again a second on, each reading timed
 as it is taken, since the launch's loop polls and the span is a second
 give or take a poll. Each thread comes back with the CPU seconds it used
@@ -423,11 +424,11 @@ made it. As its last step the probe bundles the run into `probe/bundle`
 beside the log, so the reading can be checked on another machine: the
 log as it was written, the symbol tables the reading used, the reading
 itself, and a manifest of every file's SHA-256 beside the host and its
-QEMU. `jab sdl-bundle-check` holds a bundle to its manifest stage by
+QEMU. `sdl bundle-check` holds a bundle to its manifest stage by
 stage and reads the log again from the bundled tables, so a bundle made
 on one host is admitted on another where the files the log names are
 not there, and a bundle altered anywhere is refused at the stage that
-finds it. `jab launch --sdl-probe <log>` puts the same library into a
+finds it. `launch --sdl-probe <log>` puts the same library into a
 test's own launch, its window SDL with OpenGL.
 
 The probe puts the API's port on the machine with `--api`, and
@@ -489,7 +490,7 @@ transports, fixed in the board, so the disks ride the machine's PCI
 Express root instead (`virtio-blk-pci`), where any number fit, and the
 full line is six transports, seven with the serial device, eight with a
 pad; the tool still refuses a ninth and says so. A test plays a gamepad with no device on
-the host: `jab launch --pad <file>` takes a NUON table of timed
+the host: `launch --pad <file>` takes a NUON table of timed
 events and, on Linux, makes a fifo and preloads `shim/crates/evdev`
 into QEMU to answer the device's questions as an 8BitDo pad would; on
 any other host, and on Linux with `--pad-port`, it plays the table
@@ -514,7 +515,7 @@ A machine is one of the system specifications `asset/spec.nuon`
 defines: its cores are the harts, `-smp`, its RAM `-m`, and its display
 the GPU's; the kernel is told its name with `jab.spec=<name>` on its
 command line. The spec is the one `--spec` (or `-s`) names on `just run`,
-`jab.nu plan`, `jab launch`, `jab dump-tree`, or the gauge, else the
+`nu/bin/nuance/plan.nu`, `launch`, `machine dump-tree`, or the gauge, else the
 default: `JAB_SPEC` when it is set, else the `spec` in `jab/config.toml`
 under the XDG config home, `$XDG_CONFIG_HOME` or `~/.config`. That file
 is written from `asset/default/config.toml`, `spec = '1ka1'`, the first
@@ -551,7 +552,7 @@ platform other than QEMU's ends the run before the program starts, its
 line on the console and status 1. `jab
 launch --dtb <file>` hands the machine a tree of its own, `--bootargs
 <text>` puts QEMU's `-append` in the tree, which a debug kernel prints,
-and `jab dump-tree` writes the tree QEMU builds for a machine. A debug
+and `machine dump-tree` writes the tree QEMU builds for a machine. A debug
 kernel reads two more settings there for `test/harts`: `jab.late=<hart>`
 holds that hart back until it has been failed, and `jab.stray=1` makes a
 kernel fault. A fault in the kernel, on any hart, prints its line on the
@@ -711,7 +712,7 @@ holds that device's interrupt raised, `jab.hold=2` every disk's, and
 `jab.unsent=3` leaves the API's writes unannounced to the device;
 `test/stuck` uses them to prove each rule, one scenario a launch.
 
-`jab launch --qemu <words>` appends words of its own to the machine's
+`launch --qemu <words>` appends words of its own to the machine's
 QEMU line, a device or a property a test needs that no option gives; the
 run is then diagnostic, the words kept in its machine record and
 returned apart as `overrides`. The gauge's `run` and `play` take the same

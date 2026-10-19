@@ -42,7 +42,7 @@ or a make_current whose frames do not start in the shim's library.
 
 ## sdl-run-lines
 
-A shim log's run lines (sdl-log), from its events in order, each its
+A shim log's run lines (sdl log), from its events in order, each its
 line number and its text past the stamp: the process as the first event,
 `process` and QEMU's pid in ASCII digits, and the capture nonce as the
 second, `nonce` and sixteen lowercase hex digits, not all zero, a run's

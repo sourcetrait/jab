@@ -472,7 +472,7 @@ span_fill shares a page with packet_render, the pair aligned to it and
 kept under it: QEMU's translator ends a block at a page boundary and chains
 blocks within a page only, so a loop straddling one leaves the translated
 code every iteration, measured seven times slower. The test holds both
-within their page, together, through the SDK's `jab hot`.
+within their page, together, through the SDK's `capture hot`.
 
 ### The prologue and the blocks
 

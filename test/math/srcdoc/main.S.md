@@ -105,7 +105,7 @@ the state.
 ## expand_all
 ## trapped
 
-The two sit on pages of their own for `jab hot`, the SDK's hot-code check,
+The two sit on pages of their own for `capture hot`, the SDK's hot-code check,
 which measures a function as the span from its symbol to the next symbol in
 address order: `expand_all` must hold every macro with no `ecall`, and
 `trapped` one `ecall`. They are placed before the line helpers so `trapped`'s

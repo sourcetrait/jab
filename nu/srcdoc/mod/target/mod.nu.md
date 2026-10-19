@@ -11,7 +11,7 @@ each other. `anchor` is the workspace, or a program with none above it.
 
 ## is-target
 
-Whether `dir` is a target this tool makes (target-root): a `.target`
+Whether `dir` is a target this tool makes (target root): a `.target`
 directory, or a checkout's under `jab/target` in the XDG cache, which
 is never that directory's shared `tmp` (retire-home).
 

@@ -3,7 +3,7 @@
 Preloaded into QEMU with LD_PRELOAD for `just do probe sdl` and a probing
 launch, it logs to the file `SDL_SHIM_LOG` names. The log opens with an
 object table, then the run's lines, and then carries one line an event; the
-SDK's `jab sdl-resolve` and `jab sdl-report` read it. Every line starts with
+SDK's `sdl resolve` and `sdl report` read it. Every line starts with
 the time since the epoch in seconds and microseconds.
 
 The real SDL functions are found in libSDL2 itself, opened by name: QEMU's

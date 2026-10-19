@@ -1,8 +1,8 @@
 # run.rs
 
 The SDK's tool runs the relay as a job beside QEMU on Windows, one a pipe
-chardev QEMU serves with no client of its own (`relays-start` in
-`sdk/nu/jab.nu`): `<name>` is the chardev's `path` option, a bare name,
+chardev QEMU serves with no client of its own (`chardev relays-start`):
+`<name>` is the chardev's `path` option, a bare name,
 `<in-file>` the file the launch appends what it sends to, and `<out-file>`
 the file the pipe's bytes land in. Exit 0 is the pipe closed by QEMU, 1 a
 connection never made or a pipe or file failing, 2 an invocation or a host

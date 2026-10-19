@@ -1857,11 +1857,11 @@ def block-sum [bytes: binary, at: list<int>]: nothing -> int {
 
 # Each hot function within one page of code and trapping no more than
 # its table says, and the span loop's family together on one page,
-# through the SDK's `jab hot` over the ELF beside the image: QEMU's
+# through the SDK's `capture hot` over the ELF beside the image: QEMU's
 # translator ends a block at a page boundary and chains blocks within a
 # page only, so a loop straddling one runs seven times slower, a call
 # across one costs a lookup, and a trap in a per-pixel loop would cost
-# more. `jab hot` gives an end exclusive, so a page is an end less one's.
+# more. `capture hot` gives an end exclusive, so a page is an end less one's.
 def hot-functions [image: path]: nothing -> nothing {
     let elf = ($image | path parse | update extension "elf" | path join)
     let hot = (capture hot $elf $HOT_FUNCTIONS)
