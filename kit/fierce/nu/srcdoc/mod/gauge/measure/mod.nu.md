@@ -52,6 +52,12 @@ a flip's status: 0 presented, 1 refused before the tick, 2 no display,
 the statuses a valid measurement holds; 2, 3, or any other is a frame
 never shown
 
+## TICKS_PER_US
+
+the guest clock's ticks a microsecond, its 10 MHz, the unit of a
+receipt's acceptance stamps; an acceptance interval keeps the tenth of a
+microsecond
+
 ## ANDROID_EVENTS
 
 the android events and what a round met, as the program reports them
@@ -76,8 +82,9 @@ ms apart here, so two reports nearer than that go in together and fire
 once in a frame, as two S frames would act on one. The wakes a frame
 stays under: a consume that takes nothing spins its 500 us again on
 every wake, twenty or more in a period's wait. MotionByTime on the
-still copy of Render Zero: the placement, north along the bay's east side clear of
-the pillars, the standing stall, the stick held forward, the E, the
+still copy of Render Zero: the placement, north along the bay's east
+side clear of the pillars, the standing stall, the stick held forward,
+the E, the
 body's speed, and the clearance from every wall of a frame's sector its
 frames keep
 
@@ -100,7 +107,9 @@ presentation, from schema 3 its packets, from schema 4 its workers, or
 at schema 5 its tile pool break their rules (invalidity), or from schema
 7 its receipts break the receipt stage (receipt-invalidity). The
 measurement carries `nonce_set` and `late_nonce`, an I answered before
-the first state or after it, and `load`, the load record. A valid
+the first state or after it, `load`, the load record, and `acceptance`,
+whether its rows' acceptance intervals stand and why not where not
+(acceptance-of, accepted). A valid
 window is under the ceiling when its critical path's median is under
 CEILING_US, `under` null for one not valid; its frames at or over the
 ceiling, each row's `over`, are its tail, counted in any clocked
@@ -203,6 +212,25 @@ anchor, no load record before the frames, the sequence is named
 unanchored and read no further; the window's completeness refuses such
 a capture first.
 
+## acceptance-of
+
+Whether a measurement's acceptance intervals stand (AcceptanceInterval):
+only at schema 7 or later, the capture complete and its receipt stage
+passed; else unavailable, its reason the schema carrying no receipt, the
+present sequence not whole, or the receipt sequence invalid. An
+unavailable acceptance leaves every row's `acceptance_interval_us` null,
+never filled from the completions, so a comparison on it refuses the run
+as holding no number in the field.
+
+## accepted
+
+Each presented frame's `acceptance_interval_us`: its receipt's
+acceptance stamp less the present's before it, the first frame's from
+the load record's cleared screen, consecutive by their present ordinals,
+in microseconds to the tenth. A frame that refused its flip or made none
+adds no present and breaks no adjacency: its field stays null and the
+interval across it lands on the next present.
+
 ## popcount
 
 The harts a mask holds.
@@ -249,7 +277,8 @@ two contradictory records cannot each pass alone.
 Every frame from 0 to `last` as one row: its leg (by the placements
 answered before it), whether a placement opened it, its state, and
 with the clock records its phases, the time it left unattributed, its
-flip's interval from the presented one before and its latency from
+completion interval, its flip's end less the presented one's before,
+its acceptance interval null for accepted to fill, and its latency from
 its start, the drawing's parts, and the tile cache's counts; from
 schema 2 its presentation too, the submission age from its simulation
 to its presented flip's end and the residual its next start leaves past
@@ -317,7 +346,8 @@ A sum that is 0 for no values.
 ## leg-summary
 
 A leg's frames summed up: the counts, then with the clock records the
-critical path and every phase, the flips, the unattributed time, the
+critical path and every phase, the flips, the acceptance and the
+completion intervals apart, the unattributed time, the
 drawing's parts, the tile cache, the presentation, the packets, and the
 workers that drew them with their rounds' times, the fast frames, their
 critical path under `period_us`, with those among them that waited

@@ -56,6 +56,9 @@ export const FLIP_EARLY = 1
 # The flip statuses a valid measurement holds, presented and early
 const FLIP_VALID = [0 1]
 
+# The guest clock's ticks a microsecond, its 10 MHz, a receipt's stamps' unit
+const TICKS_PER_US = 10.0
+
 # The android events' names, indexed as the program reports them
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
@@ -77,11 +80,13 @@ export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> reco
     let problems = (if not $clocked { [] } else { window-problems $s $schema })
     let complete = ($clocked and ($problems | is-empty))
     let last = (if not $clocked { ($s.states | length) - 1 } else if $final == null { ($s.frames | length) - 1 } else { $final })
-    let rows = (rows-of $s $legs $last $schema)
+    let framed = (rows-of $s $legs $last $schema)
     let anchor = ($s.loads | get -o 0.clear_ordinal)
-    let receipted = (if $complete and ($schema | default 1) >= 7 { receipt-invalidity $rows $anchor } else { [] })
-    let invalid = (if $complete { (invalidity $rows $schema) ++ $receipted } else { [] })
+    let receipted = (if $complete and ($schema | default 1) >= 7 { receipt-invalidity $framed $anchor } else { [] })
+    let invalid = (if $complete { (invalidity $framed $schema) ++ $receipted } else { [] })
     let valid = ($complete and ($invalid | is-empty))
+    let acceptance = (acceptance-of $clocked $schema $complete $receipted)
+    let rows = (if $acceptance.available { accepted $framed ($s.loads | get -o 0.clear_stamp) } else { $framed })
     let period_us = (1000000 / $cap)
     let names = ($legs | get name)
     let summaries = ($names | each {|n| leg-summary $n ($rows | where leg == $n) $period_us } | where frames > 0)
@@ -104,6 +109,7 @@ export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> reco
         nonce_set: $s.nonce_set,
         late_nonce: $s.late_nonce,
         load: ($s.loads | get -o 0),
+        acceptance: $acceptance,
         workers: ($rows | get -o workers | compact | uniq | sort),
         grains: ($rows | get -o grain | compact | uniq | sort),
         grants: ($rows | get -o grant | compact | uniq | sort),
@@ -327,6 +333,31 @@ def receipt-invalidity [rows: list<any>, anchor: oneof<int, nothing>]: nothing -
     ] | compact
 }
 
+# Whether a measurement's acceptance intervals stand, and why not where not
+def acceptance-of [clocked: bool, schema: any, complete: bool, receipted: list<string>]: nothing -> record<available: bool, reason: any> {
+    if not $clocked or ($schema | default 1) < 7 { return { available: false, reason: $"schema ($schema | default 1) carries no receipt" } }
+    if not $complete { return { available: false, reason: "the capture is not complete, so its present sequence is not whole" } }
+    if not ($receipted | is-empty) { return { available: false, reason: "its receipt sequence is invalid" } }
+    { available: true, reason: null }
+}
+
+# Each presented frame's acceptance interval from the present before it, the
+# first from the load's cleared screen; a frame that presented nothing keeps
+# null and breaks no adjacency
+def accepted [rows: list<any>, anchor: int]: nothing -> list<any> {
+    mut last = $anchor
+    mut out = []
+    for r in $rows {
+        if $r.flip_status == $FLIP_PRESENTED {
+            $out = ($out | append ($r | upsert acceptance_interval_us ((($r.receipt_stamp - $last) / $TICKS_PER_US) | math round --precision 1)))
+            $last = $r.receipt_stamp
+        } else {
+            $out = ($out | append $r)
+        }
+    }
+    $out
+}
+
 # The count of harts a mask holds
 def popcount [mask: int]: nothing -> int {
     0..<$HARTS_MAX | where {|h| (($mask bit-shr $h) bit-and 1) == 1 } | length
@@ -458,7 +489,8 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
             $rows = ($rows | append ($base | merge {
                 start_us: $f.start_us, critical_us: $f.critical_us, hud_us: $f.hud_us, mix_us: $f.mix_us,
                 flip_us: $f.flip_us, report_us: $f.report_us, await_us: $f.await_us, flip_done_us: $f.flip_done_us,
-                flip_status: $f.flip_status, flip_interval_us: $interval, latency_us: ($f.flip_done_us - $f.start_us),
+                flip_status: $f.flip_status, completion_interval_us: $interval, acceptance_interval_us: null,
+                latency_us: ($f.flip_done_us - $f.start_us),
                 unattributed_us: ($f.critical_us - ($phases | each {|ph| $timed | get $ph } | math sum)),
                 clear_us: $d.clear_us, portals_us: $d.portals_us, planes_us: $d.planes_us, walls_us: $d.walls_us,
                 sprites_us: $d.sprites_us, tiles_us: $d.tiles_us,
@@ -488,7 +520,7 @@ def hartsless []: nothing -> record {
 
 # A row's clock columns, all null, presentation's and packets' among them
 def clockless []: nothing -> record {
-    [start_us critical_us hud_us mix_us flip_us report_us await_us flip_done_us flip_status flip_interval_us latency_us unattributed_us clear_us portals_us planes_us walls_us sprites_us tiles_us parts_unattributed_us tiles_built tile_resets tiled_pixels lit_pixels fallback_pixels tile_bytes tile_peak spans spans_over over aligned]
+    [start_us critical_us hud_us mix_us flip_us report_us await_us flip_done_us flip_status completion_interval_us acceptance_interval_us latency_us unattributed_us clear_us portals_us planes_us walls_us sprites_us tiles_us parts_unattributed_us tiles_built tile_resets tiled_pixels lit_pixels fallback_pixels tile_bytes tile_peak spans spans_over over aligned]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
     | merge (presentationless)
     | merge (packetless)
@@ -566,7 +598,8 @@ def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> r
         await: (stats ($clocked | get await_us)),
         flips_early: ($clocked | where {|r| $r.flip_status == $FLIP_EARLY } | length),
         flips_failed: ($clocked | where {|r| $r.flip_status > $FLIP_EARLY } | length),
-        flip_interval: (stats ($clocked | get flip_interval_us)),
+        completion_interval: (stats ($clocked | get completion_interval_us)),
+        acceptance_interval: (stats ($clocked | get acceptance_interval_us)),
         latency: (stats ($clocked | get latency_us)),
         unattributed: (stats ($clocked | get unattributed_us)),
         parts_unattributed: (stats ($clocked | get parts_unattributed_us)),

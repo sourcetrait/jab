@@ -47,7 +47,8 @@ def bench-frames [rows: list<any>, period: number]: nothing -> record {
     {
         frames: ($rows | length),
         presented: ($rows | where {|r| ($r | get -o flip_status) == $FLIP_PRESENTED } | length),
-        interval: (measure stats (column-of $rows "flip_interval_us")),
+        acceptance: (measure stats (column-of $rows "acceptance_interval_us")),
+        completion: (measure stats (completion-of $rows)),
         call_interval: (measure stats $calls),
         grid: ($multiples | uniq --count | sort-by value | each {|c| { periods: $c.value, intervals: $c.count } }),
         off_grid: (($calls | length) - ($multiples | length)),
@@ -73,6 +74,12 @@ def bench-frames [rows: list<any>, period: number]: nothing -> record {
 # A column of rows, null in a row that lacks it
 def column-of [rows: list<any>, name: string]: nothing -> list<any> {
     $rows | each {|r| $r | get -o $name }
+}
+
+# Each row's completion interval; a report written before AcceptanceInterval
+# names the same flip-end-to-flip-end interval flip_interval_us
+def completion-of [rows: list<any>]: nothing -> list<any> {
+    $rows | each {|r| $r | get -o completion_interval_us | default ($r | get -o flip_interval_us) }
 }
 
 # A bench step's runs, each as its own identity asks, its standing and frames
@@ -133,7 +140,7 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
     let head = $"  cadence ($c.cadence | default 'none asked') at a period of (report ms $c.period_us) ms, ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
     let apart = ($c.apart | each {|a|
-        let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, presented every (report ms $a.frames.interval.median) ms at the median" })
+        let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, accepted every (report ms $a.frames.acceptance.median) and completed every (report ms $a.frames.completion.median) ms at the median" })
         $"    left out of the pool, a diagnostic: ($a.label) run ($a.run), ($a.standing): ($a.reasons | str join '; '); ($seen)"
     })
     if $f.frames == 0 { return ([$head "    no valid run to pool"] ++ $apart) }
@@ -141,7 +148,8 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     [
         $head
         $"    median (report ms $f.critical.median) ms (report against-ceiling $f.critical.median) the ($CEILING_US // 1000) ms ceiling, a tail of ($f.over) of ($f.frames) frames at or over it"
-        $"    ($f.frames) frames, ($f.presented) presented every (report spread $f.interval)"
+        $"    ($f.frames) frames, ($f.presented) presented, accepted every (report spread $f.acceptance)"
+        $"    completed every (report spread $f.completion)"
         $"    submission age (report spread $f.submission_age)"
         $"    critical path (report spread $f.critical); drawing (report spread $f.draw)"
         $"    wait (report spread $f.wait); pacing (report ms $f.pacing.median) and await (report ms $f.await.median) at the median"

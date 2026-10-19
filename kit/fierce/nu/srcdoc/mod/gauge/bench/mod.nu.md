@@ -16,9 +16,17 @@ is unknown, and for the next frame presented after it; and with
 whether the frame before it ran past the period. The clocked frames
 alone.
 
+## completion-of
+
+Each row's completion interval, read from `flip_interval_us` in a report
+written before AcceptanceInterval renamed it, the same flip end to flip
+end.
+
 ## bench-frames
 
-Frames pooled: the counts; the presented interval, the interval
+Frames pooled: the counts; the acceptance interval, between consecutive
+presents' acceptance stamps, and the completion interval, between their
+flips' ends, kept apart (AcceptanceInterval); the interval
 between presenting calls, the submission age, the critical path, the
 drawing, the wait, the pacing, and the await by nearest rank (stats);
 the presenting calls' known intervals on the tick grid, within a

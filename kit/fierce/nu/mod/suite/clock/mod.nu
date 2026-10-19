@@ -192,7 +192,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         let metres = (((($last.x - $first.x) ** 2) + (($last.y - $first.y) ** 2)) | math sqrt)
         let speed = ($metres / $seconds)
         assert ((($speed - $MOTION_SPEED) | math abs) <= ($MOTION_SPEED * 0.02)) $"the body walks 4 m/s by the clock ($says): ($speed) m/s over ($seconds) s"
-        print $"fps: the walk at cadence ($cadence): ($speed) m/s over ($seconds) s, ($clear | length) frames, the interval's median ($m.rows | get flip_interval_us | compact | math median) us"
+        print $"fps: the walk at cadence ($cadence): ($speed) m/s over ($seconds) s, ($clear | length) frames, the completion interval's median ($m.rows | get completion_interval_us | compact | math median) us"
     }
 }
 
