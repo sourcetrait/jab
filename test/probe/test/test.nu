@@ -41,6 +41,8 @@ use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
 use ../../../nu/mod/present
 use ../../../nu/mod/target
+use ../../../nu/mod/sdl
+use ../../../nu/mod/tool
 use std/assert
 
 # An address as the shim writes one, in lowercase hex.
@@ -347,8 +349,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let run_lines = ["process 4242" $"nonce ($nonce_text)"]
     let lined = (do $log "lined" ($exe ++ $run_lines ++ [$flip_chain]))
     assert equal (reading $lined) $flip "lined: the run's lines beside a flip's upload, read as one"
-    assert equal (jab sdl-log $lined | select process nonce) { process: 4242, nonce: $nonce_text } "lined: the log's process and nonce read apart"
-    assert equal (jab sdl-log (do $log "unlined" ($exe ++ [$flip_chain])) | select process nonce) { process: null, nonce: null } "unlined: a log with neither line, written before them, reads none"
+    assert equal (sdl log $lined | select process nonce) { process: 4242, nonce: $nonce_text } "lined: the log's process and nonce read apart"
+    assert equal (sdl log (do $log "unlined" ($exe ++ [$flip_chain])) | select process nonce) { process: null, nonce: null } "unlined: a log with neither line, written before them, reads none"
     let run_refusals = [
         { name: "process_twice", lines: ($exe ++ ["process 4242" "process 4243" $flip_chain]), says: "the log gives its process line twice: 2 lines" }
         { name: "nonce_twice", lines: ($exe ++ $run_lines ++ [$"nonce ($nonce_text)" $flip_chain]), says: "the log gives its nonce line twice: 2 lines" }
@@ -435,7 +437,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         mkdir $probe
         let sdl = ($probe | path join "sdl.log")
         write-log $sdl ($exe ++ [$"process ($pid)" $"nonce (nonce hex $run_nonce)" $flip_chain $registration_chain $switch_chain $render_chain "size"])
-        let upload = (jab sdl-log $sdl | get events | where name == "make_current" | first)
+        let upload = (sdl log $sdl | get events | where name == "make_current" | first)
         let flushed = (($upload.ts - 0.002) * 1e9 | into int | into datetime | format date "%Y-%m-%dT%H:%M:%S%.6fZ")
         $"($flushed) virtio_gpu_cmd_res_flush res 0x1, x 0, y 0, w 1920, h 1080\n" | save --raw ($probe | path join "trace.log")
         $run_nonce | into binary --endian little | save --raw ($probe | path join "api.out")
@@ -550,24 +552,24 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let made = {|times: list<float>, after: float| [(do $upload 50.0)] ++ ($times | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($times | last) + $after))] }
     let flipped = {|times: list<float>| $times | enumerate | each {|e| { status: 0, ordinal: ($e.index + 2), end_us: ($e.item * 1000.0) } } }
     let regular = { events: (do $made $ends 1500.0), flips: (do $flipped $ends) }
-    let paired = (jab sdl-pair $regular.events $regular.flips)
+    let paired = (sdl pair $regular.events $regular.flips)
     assert equal [$paired.ok ($paired.pairs | length) $paired.window.first $paired.window.last] [true 122 2 123] $"pair_regular: the regular run paired whole, 122 presents, ordinals 2 to 123: ($paired.refusals | to nuon)"
     assert (($paired.fit.max_residual_ms < 0.01) and (($paired.fit.drift - 1.0 | math abs) < 0.000001)) $"pair_regular: an exact fit, drift 1: ($paired.fit | to nuon)"
     assert ($paired.limits | str contains "no absolute guest-to-SDL latency") "pair_regular: the limits printed with the reading"
     # a refused flip and a frame with no flip after frame 10, their ordinals the last
     let unpaired_flips = ($regular.flips | take 12 | append [{ status: 1, ordinal: 13, end_us: 0.0 } { status: 255, ordinal: 13, end_us: 0.0 }] | append ($regular.flips | skip 12))
-    let unpaired = (jab sdl-pair $regular.events $unpaired_flips)
+    let unpaired = (sdl pair $regular.events $unpaired_flips)
     assert equal [$unpaired.ok ($unpaired.pairs | length)] [true 122] $"pair_unpaired: a refused flip and a frame with no flip go unpaired: ($unpaired.refusals | to nuon)"
     # the window after a loading silence longer than any of its own gaps
     let quiet = ([100.0 1500.0] ++ (0..<120 | each {|i| 6000.0 + $i * $period_ms }))
-    let silence = (jab sdl-pair (do $made $quiet 1500.0) (do $flipped $quiet))
+    let silence = (sdl pair (do $made $quiet 1500.0) (do $flipped $quiet))
     assert equal [$silence.ok ($silence.pairs | length)] [true 122] $"pair_silence: the ordinals place a window after a silence: ($silence.refusals | to nuon)"
     # Astra's compensating loss and addition: of 120 presents at iP, the
     # upload at 60P lost and one at 60.25P added, admitted as the limit
     # says, its largest residual about 0.248 P
     let even = (1..120 | each {|i| $i * $period_ms })
     let even_uploads = ($even | each {|ms| if $ms == (60 * $period_ms) { do $upload (60.25 * $period_ms) } else { do $upload $ms } })
-    let compensated = (jab sdl-pair ([(do $upload 0.0)] ++ $even_uploads ++ [(do $poll (($even | last) + 1500.0))]) (do $flipped $even))
+    let compensated = (sdl pair ([(do $upload 0.0)] ++ $even_uploads ++ [(do $poll (($even | last) + 1500.0))]) (do $flipped $even))
     assert $compensated.ok $"pair_compensated: a compensating loss and addition passes, the documented limit: ($compensated.refusals | to nuon)"
     assert (($compensated.fit.max_residual_ms > (0.24 * $period_ms)) and ($compensated.fit.max_residual_ms < (0.25 * $period_ms))) $"pair_compensated: its largest residual about 0.248 P: ($compensated.fit.max_residual_ms) ms"
     # the refusals, each at its own rule
@@ -587,13 +589,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "pair_short", says: "the log short of an ordinal", events: (do $made ($ends | drop 3) 1500.0), flips: $regular.flips }
     ]
     for c in $refusals {
-        let read = (jab sdl-pair $c.events $c.flips)
+        let read = (sdl pair $c.events $c.flips)
         assert ((not $read.ok) and (($read.refusals | get refusal) == [$c.says])) $"($c.name): refused, saying ($c.says) and nothing else: ($read.refusals | to nuon)"
     }
 
     # the shim's capture, on a binary built non-PIE: the premises first
-    let library = (jab shim-build $ws "jabshim_sdl")
-    let harness = (jab shim-build $ws "jabshim_sdl_harness" --static)
+    let library = (tool shim $ws "jabshim_sdl")
+    let harness = (tool shim $ws "jabshim_sdl_harness" --static)
     let header = (^readelf -h $harness | complete | get stdout)
     assert ($header =~ 'Type:\s+EXEC') $"harness: an EXEC: ($header | lines | where {|l| $l =~ 'Type:' } | str join '')"
     let loads = (^readelf -lW $harness | complete | get stdout | lines | parse --regex '^\s+LOAD\s+0x[0-9a-f]+\s+0x(?P<vaddr>[0-9a-f]+)' | into int --radix 16 vaddr)

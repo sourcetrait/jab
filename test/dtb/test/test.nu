@@ -26,6 +26,7 @@
 # -append, a named spec's `jab.spec` after it.
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
+use ../../../nu/mod/spec
 use std/assert
 
 # The reader's codes, kernel/src/include/dtb.inc's DTB_*
@@ -50,7 +51,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     # the line a launch on the configured spec hands the kernel: the test's
     # own words, then the spec's name
-    let line = $"($BOOTARGS) jab.spec=(jab spec-default $ws)"
+    let line = $"($BOOTARGS) jab.spec=(spec configured $ws)"
     let good = (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt3.dtb") --bootargs $BOOTARGS)
     jab dump-tree --kernel $kernel --image $image --out ($stage | path join "virt8.dtb") --spec 1kb1 | ignore
     let tree = (open --raw $good | into binary)

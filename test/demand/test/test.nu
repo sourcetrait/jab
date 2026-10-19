@@ -46,12 +46,13 @@
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/spec
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let here = ($env.FILE_PWD | path join ".." | path expand)
     let ws = ($here | path join ".." ".." | path expand)
-    let specs = (jab specs-of $ws)
+    let specs = (spec data $ws)
 
     # this program, on the legacy path
     let own = (read-demand $here)

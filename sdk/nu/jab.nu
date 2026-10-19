@@ -2,8 +2,8 @@
 #
 # As a module (`use jab.nu`) it gives a program's integration test
 # `jab launch`, which runs a program headless and can take its screen,
-# and the helpers that read a screen: `jab screen`, `jab ink`,
-# `jab pixel`, `jab thumbnail`. As a script (`nu jab.nu <command> ...`)
+# and the capture module's helpers read it: `capture screen`, `capture ink`,
+# `capture pixel`, `capture thumbnail`. As a script (`nu jab.nu <command> ...`)
 # it builds, runs, and tests the kernel and the programs for the
 # repository's one justfile, doing every lookup the workspace defines:
 # the programs (the members workspace.jab.toml lists and every other
@@ -48,25 +48,23 @@
 
 use ../../nu/mod/audio
 use ../../nu/mod/bound
+use ../../nu/mod/disk
 use ../../nu/mod/host
 use ../../nu/mod/nonce
-use ../../nu/mod/nutype
-use ../../nu/mod/present
 use ../../nu/mod/process
+use ../../nu/mod/sdl/log
 use ../../nu/mod/sdl/refusal
+use ../../nu/mod/spec
 use ../../nu/mod/stamp
 use ../../nu/mod/target
+use ../../nu/mod/tool
+use ../../nu/mod/toolchain
 use ../../nu/mod/walk
 use ../../nu/mod/word
+use ../../nu/mod/workspace
 
 # This tool's own file, which `do` runs again for the SDK's commands.
 const self = (path self)
-# The riscv64 binutils prefixes: the official toolchain's triple first,
-# then the names distributions package the tools under.
-const triples = [
-    "riscv64-unknown-linux-gnu-" "riscv64-linux-gnu-"
-    "riscv64-unknown-elf-" "riscv64-elf-"
-]
 # The window's base (jab.inc): the kernel's 2 MiB and the framebuffer's
 # 8 MiB come first, and the program has the rest of the machine's 4 GiB.
 const program_base = "0x80a00000"
@@ -76,9 +74,6 @@ const custom_ram_gib = 4
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
-# The display's size, jab.inc's JAB_DISPLAY_WIDTH by JAB_DISPLAY_HEIGHT:
-# every screen a launch takes is this many pixels.
-const display_size = { width: 1920, height: 1080 }
 # The image's first page (jab.inc's JAB_IMAGE_* and JAB_DECL_*), which the
 # kernel reads before the program starts (start_check): at the window's
 # base one uncompressed `jal x0` to the code at the second page,
@@ -122,10 +117,6 @@ const accel = "tcg,thread=multi"
 # The interrupt platform: the APLIC in MSI mode feeding each hart's IMSIC
 # interrupt files, with the ACLINT's timer, which only TCG offers.
 const machine_name = "virt,aia=aplic-imsic,aclint=on"
-# The harts a machine takes, up to the eight of JAB_HARTS_MAX in jab.inc,
-# the most the ABI names: a named spec's cores, or a custom machine's
-# count, which its record labels diagnostic whatever it is.
-const harts_allowed = [1 2 3 4 5 6 7 8]
 # No parallel port: QEMU's default is a text console of its own, which
 # under SDL is a second, hidden window with its own GL context, drawn
 # on every refresh its cursor blinks.
@@ -143,28 +134,6 @@ const console_updates = [
 # How a virtio-gpu module's file name starts in a modular QEMU's
 # packages: hw-display-virtio-gpu.so and its -gl and -pci kin.
 const device_module = "hw-display-virtio-gpu"
-# Every line the sdl shim writes (shim/crates/sdl), its time first, in
-# seconds to the microsecond: an object-table line, its index, the file's
-# inode, size, and modification time in nanoseconds or `- - -` where there
-# is no file, then its path, the rest of the line, empty allowed; a run's
-# line, `process` or `nonce` with whatever follows, held to its own form
-# apart so a malformed one is refused by name (sdl-run-lines); a
-# make_current with its frames, each an object's index or `?` with an
-# address in lowercase hex; a window-size call, a swap, or a poll; or a
-# notice the shim writes as it stops the run.
-const sdl_line = (
-    '^[0-9]+\.[0-9]{6} (?:'
-    + 'object [0-9]+ (?:[0-9]+ [0-9]+ -?[0-9]+|- - -) .*'
-    + '|process(?: .*)?|nonce(?: .*)?'
-    + '|make_current(?: (?:[0-9]+|\?)\+[0-9a-f]+)*'
-    + '|size|swap|poll'
-    + '|libSDL2 not found|symbol not found'
-    + ')$'
-)
-# The shim's notices, each written as it aborts QEMU when it cannot reach
-# SDL: libSDL2 missing, or a function missing from it.
-const sdl_notices = ["libSDL2 not found" "symbol not found"]
-
 # The QEMU a machine runs on: an extern when there is one, else PATH.
 # `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
 # top, where the Windows installer puts it, looked for as the
@@ -207,7 +176,7 @@ def image-home [image: path]: nothing -> string {
     let relative = ($parts | skip ($mark + 2) | drop 1)
     if ($relative | is-empty) or not ($base | path join "workspace.jab.toml" | path exists) { return $base }
     let program = ($base | path join ...$relative)
-    if (member-of $program $base) { $program } else { $base }
+    if (workspace member-of $program $base) { $program } else { $base }
 }
 
 # The CPU every machine runs, the RVA23 profile, once the QEMU it runs on
@@ -240,7 +209,7 @@ export def machine-of [harts?: int, --spec: any = null, --overrides: list<string
         let named = { name: ($spec.name | str lowercase), cores: $spec.cores, ram_gib: $ram, display: $spec.display }
         { harts: $spec.cores, ram_gib: $ram, spec: $named, diagnostic: null } | merge $common
     } else {
-        if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), a custom machine's harts, not ($harts)"} }
+        if $harts not-in $spec.harts_allowed { error make {msg: $"--harts takes ($spec.harts_allowed | first) to ($spec.harts_allowed | last), a custom machine's harts, not ($harts)"} }
         { harts: $harts, ram_gib: $custom_ram_gib, spec: null, diagnostic: { harts: $harts, ram_gib: $custom_ram_gib } } | merge $common
     }
 }
@@ -253,47 +222,8 @@ export def machine-for [ws: oneof<string, nothing>, spec: string, harts: int]: n
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
     if $harts != 0 { return (machine-of $harts) }
     if $ws == null { error make {msg: "a named spec needs its workspace's asset/spec.nuon, and this launch has no workspace; name a custom machine with --harts"} }
-    let name = (if $spec != "" { $spec } else { spec-default $ws })
-    machine-of --spec (spec-row $ws $name)
-}
-
-# A spec's row from the workspace's spec data (specs-of), its name matched
-# in any case, held to what the launcher can provision: its cores within
-# the harts a machine takes (harts_allowed), and the ABI's display, 1920 by
-# 1080 (display_size); otherwise refused, naming the spec and why.
-export def spec-row [ws: path, name: string]: nothing -> record {
-    let rows = (specs-of $ws)
-    let found = ($rows | where {|r| ($r.name | str lowercase) == ($name | str lowercase) })
-    if ($found | is-empty) { error make {msg: $"no spec ($name) in the spec data, which defines ($rows | get name | str join ', ')"} }
-    let r = ($found | first)
-    if $r.cores not-in $harts_allowed { error make {msg: $"($r.name) has ($r.cores) cores, past the ($harts_allowed | last) harts a machine takes; the launcher cannot provision it"} }
-    if $r.display != $display_size { error make {msg: $"($r.name)'s display is ($r.display.width) by ($r.display.height), and the ABI's ($display_size.width) by ($display_size.height); the launcher cannot provision it yet"} }
-    $r
-}
-
-# The default spec: JAB_SPEC where it is set, else `spec` in
-# `jab/config.toml` under the XDG config home, $XDG_CONFIG_HOME or
-# ~/.config, which is checked and never made; `jab/` under it is made, and
-# the file, where there is none, seeded from the workspace's
-# asset/default/config.toml, never over one there.
-export def spec-default [ws: path]: nothing -> string {
-    let forced = ($env.JAB_SPEC? | default "")
-    if $forced != "" { return $forced }
-    let given = ($env.XDG_CONFIG_HOME? | default "")
-    let home = (if $given == "" { $nu.home-dir | path join ".config" } else { $given })
-    if ($home | path type) != "dir" { error make {msg: $"the XDG config home ($home) is not there, where jab/config.toml names the default spec; set JAB_SPEC or pass --spec"} }
-    let dir = ($home | path join "jab")
-    mkdir $dir
-    let file = ($dir | path join "config.toml")
-    if ($file | path type) == null {
-        let seed = ($ws | path join "asset" "default" "config.toml")
-        if not ($seed | path exists) { error make {msg: $"no ($seed) to seed ($file) from"} }
-        cp $seed $file
-    }
-    let cfg = (try { open --raw $file | into binary | decode | from toml } catch {|e| error make {msg: $"($file) is no TOML the tools read: ($e.msg)"} })
-    let spec = ($cfg | get -o spec)
-    if ($spec | describe) != "string" or ($spec | str trim) == "" { error make {msg: $"($file) names no `spec`, the default spec a launch runs"} }
-    $spec
+    let name = (if $spec != "" { $spec } else { spec configured $ws })
+    machine-of --spec (spec row $ws $name)
 }
 
 # A launch's command line for the kernel: `bootargs`, then a named spec's
@@ -327,86 +257,6 @@ def memory-args [m: record]: nothing -> list<string> {
     ["-m" $"($m.ram_gib)G"]
 }
 
-# The system specifications as the tools read them. doc/SPEC.md is the
-# authority, TheUser's, and the workspace's asset/spec.nuon carries its
-# definitions for the tools, a table of one row a spec, held to
-# asset/spec.nutype, the type the table takes, which is read from its file
-# with the data and kept nowhere in this tool. `spec-table` reads any such
-# pair and `specs-of` the workspace's own, the one reader the launcher, a
-# build's checks, and an image's list share. Every value is checked
-# against the type field by field: a field missing, a value of another
-# type, and a field the type does not name, at any depth, are each refused
-# naming the row and the field, which nushell's own check of a type does
-# not name. Past the type, the rows must mean something: a spec at least,
-# every name given and none twice without regard to case, since a
-# program's manifest names its specs in any case, and every count, clock,
-# rate, and size the type names above zero, the VRAM only where a spec
-# gives one. A file that does not parse is refused naming it, NUON's own
-# refusal of a field given twice in a record among them. Every problem
-# found is named, a line each. The rows come back as the file has them.
-# Untyped because it ends in an error.
-export def spec-table [data: path, type: path] {
-    for f in [$type $data] { if not ($f | path exists) { error make {msg: $"($f): no such file"} } }
-    let text = (try { open --raw $type | decode } catch {|e| error make {msg: $"($type): unreadable: ($e.msg)"} })
-    let schema = (nutype model $text $type)
-    if $schema.kind != "table" { error make {msg: $"($type): the tools read a table of specs, table<...>, not (nutype type-name $schema)"} }
-    let name_field = ($schema.fields | where name == "name" | get -o 0)
-    if $name_field == null or $name_field.schema != { kind: "scalar", name: "string" } { error make {msg: $"($type): `name: string` is the field the tools match a spec by, and the type has none"} }
-    let rows = (try { open --raw $data | decode | from nuon } catch {|e| error make {msg: $"($data): not NUON the tools can read: ($e.msg)"} })
-    let got = ($rows | describe)
-    if not (($got | str starts-with "table") or ($got | str starts-with "list")) { error make {msg: $"($data): a table of specs expected, ($got) found"} }
-    if ($rows | is-empty) { error make {msg: $"($data): no spec in it"} }
-    let typed = ($rows | enumerate | each {|r|
-        let label = (spec-label $r.index $r.item)
-        nutype record-problems $r.item $schema.fields "" | each {|p| $"  ($label): ($p)" }
-    } | flatten)
-    if not ($typed | is-empty) { error make {msg: ([$"($data) does not hold to ($type):"] ++ $typed | str join "\n")} }
-    let meant = (spec-meaning $rows ($schema.fields | get name))
-    if not ($meant | is-empty) { error make {msg: ([$"($data): its specs do not hold:"] ++ ($meant | each {|m| $"  ($m)" }) | str join "\n")} }
-    $rows
-}
-
-# The workspace's spec data, its asset/spec.nuon held to its
-# asset/spec.nutype (spec-table). Untyped because it ends in an error.
-export def specs-of [ws: path] {
-    let asset = ($ws | path expand | path join "asset")
-    spec-table ($asset | path join "spec.nuon") ($asset | path join "spec.nutype")
-}
-
-# A spec's row as a problem names it: its place, and its name when it
-# has one.
-def spec-label [index: int, row: any]: nothing -> string {
-    let name = (if ($row | describe | str starts-with "record") { $row | get -o name } else { null })
-    if ($name | describe) == "string" and $name != "" { $"row ($index + 1) \(($name)\)" } else { $"row ($index + 1)" }
-}
-
-# What a spec table means that its type cannot say, a line each: every
-# name given and none twice without regard to case; each count, clock,
-# rate, and size the type names above zero, the VRAM only where a spec
-# gives one. `named` are the type's fields, so a rule for a field the type
-# no longer names is passed over.
-def spec-meaning [rows: list<any>, named: list<string>]: nothing -> list<string> {
-    let labelled = ($rows | enumerate | each {|r| { label: (spec-label $r.index $r.item), row: $r.item } })
-    let unnamed = ($labelled | where {|r| ($r.row.name | str trim) == "" } | each {|r| $"($r.label): name empty" })
-    let twice = ($labelled
-        | where {|r| ($r.row.name | str trim) != "" }
-        | group-by {|r| $r.row.name | str trim | str lowercase }
-        | transpose key rows
-        | where {|g| ($g.rows | length) > 1 }
-        | each {|g| $"($g.rows | get label | str join ' and ') name one spec, ($g.key) in any case" })
-    let numbers = {|v| ($v | describe) in ["int" "float"] }
-    let sizes = {|v| ($v | describe) == "filesize" }
-    let below = ($labelled | each {|r|
-        let counts = ([cores clock_ghz fps] | where {|f| $f in $named and (do $numbers ($r.row | get $f)) and ($r.row | get $f) <= 0 } | each {|f| $"($r.label): ($f) ($r.row | get $f), above zero wanted" })
-        let ram = (if "ram" in $named and (do $sizes $r.row.ram) and $r.row.ram <= 0B { [$"($r.label): ram ($r.row.ram), above zero wanted"] } else { [] })
-        let display = (if "display" in $named and ($r.row.display | describe | str starts-with "record") {
-            [width height] | where {|s| (do $numbers ($r.row.display | get -o $s)) and ($r.row.display | get $s) <= 0 } | each {|s| $"($r.label): display.($s) ($r.row.display | get $s), above zero wanted" }
-        } else { [] })
-        let vram = (if "vram" in $named and (do $sizes $r.row.vram) and $r.row.vram <= 0B { [$"($r.label): vram ($r.row.vram), above zero wanted where a spec gives one"] } else { [] })
-        $counts ++ $ram ++ $display ++ $vram
-    } | flatten)
-    $unnamed ++ $twice ++ $below
-}
 # The guest is named for the program, `jab <program>`, which is what
 # QEMU's window shows inside its own prefix, hardcoded in every front
 # end (SDL adds the console's index too: `QEMU (jab pad-0)`), and the
@@ -566,7 +416,7 @@ export def plan [
     let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio audio-plan ($found | get -o audio) } else { "" })
     let audio = (if $sound { audio sound-args $backend --streams 1 } else if $live_sound { audio sound-args $backend } else { [] })
     if $probed and $ws == null { error make {msg: "--sdl-probe needs the program's workspace, which holds shim/crates/sdl"} }
-    let shim = (if $probed { shim-build $ws "jabshim_sdl" } else { "" })
+    let shim = (if $probed { tool shim $ws "jabshim_sdl" } else { "" })
     let sdl_log = (if $probed { $sdl_probe | path expand } else { "" })
     if $probed { target retire $sdl_log $root }
     let shown = (if $probed { "sdl,gl=on" } else if $window { display (image-manifest $image) } else { "none" })
@@ -584,7 +434,7 @@ export def plan [
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" $shown "-monitor" $"pipe:($watch.name)" "-serial" $"file:($log)"
         "-pidfile" $pidfile "-d" "guest_errors" "-D" $qemu_log
-    ] ++ $append ++ (disks-args (machine-disks $disk $serial true $ws)))
+    ] ++ $append ++ (disk disks-args (disk machine-disks $disk $serial true $ws)))
     let planned = {
         qemu_binary: $qemu,
         timeout_binary: $bound.path,
@@ -653,9 +503,9 @@ export def capture-identity [machine: record, pid: oneof<int, nothing>]: nothing
 def launch-workspace [kernel: path, image: path, out: path]: nothing -> oneof<string, nothing> {
     let home = (image-home $image)
     let manifest = ($home | path join "program.jab.toml")
-    let found = (if ($manifest | path exists) { try { workspace-of $home (open $manifest) } catch { null } } else { null })
+    let found = (if ($manifest | path exists) { try { workspace workspace-of $home (open $manifest) } catch { null } } else { null })
     if $found != null { return $found }
-    workspace-dir ($kernel | path expand) | default (workspace-dir $out)
+    workspace workspace-dir ($kernel | path expand) | default (workspace workspace-dir $out)
 }
 
 # The manifest of the program an image was built from (image-home), for
@@ -795,7 +645,7 @@ export def launch [
     let pad_in = $machine.pad_pipe_in
     let gamepad = ($gamepad | merge { port: $machine.pad_port, fifo: $machine.pad_fifo, header: ($machine.pad_header | decode hex), env: $machine.env })
     let bridge = (if $machine.bridge == null { null } else {
-        let bin = (shim-build $machine.workspace "jabshim_pad" --bin)
+        let bin = (tool shim $machine.workspace "jabshim_pad" --bin)
         let b = $machine.bridge
         let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
         let product = (if $b.product == null { "" } else { $b.product | into string })
@@ -985,101 +835,6 @@ export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string
     $file
 }
 
-# The QEMU arguments that put raw images on the machine as virtio-blk
-# disks, in the order given, so the first is disk 1 to the kernel. Each
-# rides the PCI Express root rather than one of the eight mmio slots,
-# modern-only and on INTx (`disable-legacy=on,vectors=0`), which is how
-# the kernel drives it. A serial is what the guest reads back with
-# jab.sys.block.list, so it is how a program tells one disk from another.
-# An image built from assets, the program's own or the generic disk,
-# is attached read-only, so a program cannot change what the next run
-# reads: a write to it comes back to the program as the device's error
-# code, and the file on the host is never touched. The blank data disk
-# a run carries when a program ships no assets stays writable.
-def disks-args [disks: table<id: string, file: string, serial: string, readonly: bool>]: nothing -> list<string> {
-    $disks | each {|d| [
-        "-drive" $"if=none,id=($d.id),file=($d.file | path expand),format=raw(if $d.readonly { ',readonly=on' } else { '' })"
-        "-device" $"virtio-blk-pci,disable-legacy=on,vectors=0,drive=($d.id),serial=($d.serial)"
-    ] } | flatten
-}
-
-# The disks a machine carries: the program's own first, when there is
-# one, read-only when it is an asset image, then the generic assets
-# disk, always read-only, when the workspace has one, so a program's
-# disk is 1 and the generic disk 2, or 1 on its own.
-def machine-disks [own: string, own_serial: string, own_readonly: bool, ws: oneof<string, nothing>]: nothing -> table<id: string, file: string, serial: string, readonly: bool> {
-    let first = (if ($own | is-empty) { [] } else { [{ id: "disk0", file: $own, serial: $own_serial, readonly: $own_readonly }] })
-    let mix = (mix-image $ws)
-    let second = (if $mix == "" { [] } else { [{ id: "mix", file: $mix, serial: "mix", readonly: true }] })
-    $first ++ $second
-}
-
-# The generic assets disk, disk 1 of every run and launch: `generic/`
-# in the workspace mirrored to the image's root, plus what
-# `generic/manifest.nuon` fetches, each entry an archive by URL and
-# sha256 with the members to take and where each lands, so the large
-# third-party assets, the soundfonts today, are never committed and
-# are verified on every build. Staged under the target's generic/ and
-# built into its mix.romfs whenever the tree or the manifest changes,
-# the archives kept under its fetch/, a stale stage retired. The path,
-# or "" with no workspace or no generic/ in it.
-def mix-image [ws: oneof<string, nothing>]: nothing -> string {
-    if $ws == null { return "" }
-    let generic = ($ws | path join "generic")
-    if not ($generic | path exists) { return "" }
-    let target = (target root $ws)
-    let image = ($target | path join "mix.romfs")
-    let stamp = ($target | path join "mix.flags")
-    let manifest_path = ($generic | path join "manifest.nuon")
-    let manifest = (if ($manifest_path | path exists) { open $manifest_path } else { [] })
-    let inputs = (walk tree [$generic])
-    let flags = (stamp id ($manifest | to nuon) $inputs)
-    if ($image | path exists) and (not (stamp stale $image $inputs $flags $stamp)) { return $image }
-    let stage = ($target | path join "generic")
-    target retire $stage $target
-    mkdir $stage
-    for f in (walk files [$generic]) {
-        let relative = ($f | path relative-to $generic)
-        if $relative == "manifest.nuon" { continue }
-        let dest = ($stage | path join $relative)
-        mkdir ($dest | path dirname)
-        cp $f $dest
-    }
-    for entry in $manifest {
-        let archive = (fetched $target $entry.url $entry.sha256)
-        let unpack = ($target | path join "fetch" "unpack")
-        target retire $unpack $target
-        mkdir $unpack
-        ^tar -xzf $archive -C $unpack ...($entry.members | get from)
-        for m in $entry.members {
-            let dest = ($stage | path join $m.to)
-            mkdir ($dest | path dirname)
-            mv ($unpack | path join $m.from) $dest
-        }
-        target retire $unpack $target
-    }
-    assets-names $stage
-    ^genromfs -d $stage -f $image -V (volume-name "mix")
-    $flags | save -f $stamp
-    $image
-}
-
-# An archive the manifest names, fetched into the target's fetch/ on
-# first use, which a run says once since it can take a while, and verified
-# by its sha256 then and on every later build; a mismatch stops with
-# both digests named.
-def fetched [target: path, url: string, sha256: string]: nothing -> string {
-    let dir = ($target | path join "fetch")
-    mkdir $dir
-    let file = ($dir | path join ($url | path basename))
-    if not ($file | path exists) {
-        http get --raw $url | save --raw -f $file
-    }
-    let digest = (open --raw $file | hash sha256)
-    if $digest != $sha256 { error make {msg: $"($file): sha256 ($digest), where the manifest says ($sha256)"} }
-    $file
-}
-
 # The ports, each of one virtio-serial-device: DEBUG in the build puts
 # the kernel's debug channel on port 1 with the host's end a file,
 # debug.log in `out`; `api` puts the API on port 2 with the host's end
@@ -1168,7 +923,7 @@ export def relays-of [out: path, pipes: list<record<endpoint: string, pipe: any>
 def relay-build [relays: list<any>, ws: oneof<string, nothing>]: nothing -> string {
     if ($relays | is-empty) { return "" }
     if $ws == null { error make {msg: "a Windows run's pipes need their relay, which the workspace builds from shim/crates/pipe, and this run has no workspace"} }
-    shim-build $ws "jabpipe" --bin
+    tool shim $ws "jabpipe" --bin
 }
 
 # The pipe the pad bridge writes, from the pad port's pipe as pipe-pair
@@ -1258,7 +1013,7 @@ def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>,
         return ($none | merge { port: true, header: (pad-port-header) })
     }
     if $ws == null { error make {msg: "a gamepad needs a workspace, above the kernel or the output directory, which holds shim/crates/evdev"} }
-    let shim = (shim-build $ws "jabshim_evdev")
+    let shim = (tool shim $ws "jabshim_evdev")
     let fifo = ($out | path join "pad")
     fifo-at $fifo $root
     {
@@ -1350,65 +1105,6 @@ def profile [names: list<string>]: nothing -> string { if "DEBUG" in $names { "d
 # The symbols as the assembler takes them.
 def defsyms [names: list<string>]: nothing -> list<string> { $names | each {|n| ["--defsym" $"($n)=1"] } | flatten }
 
-# A program's assets as a romfs image, built when the directory it names
-# has moved on: `assets` in its manifest, relative to the manifest, or
-# `target_assets`, a tree the program's content compiles to under its
-# asset shard of the target (program-shard), with the program's own name
-# as the volume's. The image is what `just run` puts on the machine, and
-# the program reads it with jab.sys.romfs.*.
-def assets-image [c: record]: nothing -> string {
-    let declared = ($c.manifest | get -o assets | default "")
-    let compiled = ($c.manifest | get -o target_assets | default "")
-    if $declared == "" and $compiled == "" { return "" }
-    if $declared != "" and $compiled != "" { error make {msg: $"($c.manifest.name): assets and target_assets together; a program's disk is one or the other"} }
-    let dir = (if $compiled != "" { target shard-dir $c "asset" | path join $compiled } else { $c.here | path join $declared | path expand })
-    if not ($dir | path exists) {
-        let named = (if $compiled != "" { $"target_assets = '($compiled)'" } else { $"assets = '($declared)'" })
-        error make {msg: $"($c.manifest.name): ($named) names no directory at ($dir)"}
-    }
-    assets-names $dir
-    let image = ($c.out | path join $"($c.manifest.name).romfs")
-    let stamp = ($c.out | path join "assets.flags")
-    let inputs = (walk tree [$dir])
-    let id = (stamp id $c.manifest.name $inputs)
-    if ($image | path exists) and (not (stamp stale $image $inputs $id $stamp)) { return $image }
-    mkdir $c.out
-    ^genromfs -d $dir -f $image -V (volume-name $c.manifest.name)
-    $id | save -f $stamp
-    $image
-}
-
-# A romfs name is at most 127 bytes of UTF-8, which is what a Linux
-# mount of the same image can read: its driver lists through a
-# 128-byte buffer and works out where a file's data begins from a
-# length that stops there, so a longer name makes it read the wrong
-# bytes. The kernel reports such a name cut rather than wrong, but an
-# image Jab builds never has one. `str length` counts bytes, which is
-# the measure the record and the driver use.
-def assets-names [dir: path]: nothing -> nothing {
-    let long = (walk paths ($dir | path join "**" "*") | each {|p| $p | path basename } | where {|n| ($n | str length) > 127 })
-    if not ($long | is-empty) {
-        error make {msg: $"romfs names are 127 bytes at most, which is what a linux mount can read; too long: ($long | first)"}
-    }
-}
-
-# A volume's name is bound the same way, and a disk's serial by virtio's
-# 20-byte ID string, which carries a terminator only when it fits; each
-# is cut on a character, never inside one.
-def volume-name [name: string]: nothing -> string { cut-bytes $name 127 }
-def disk-serial [name: string]: nothing -> string { cut-bytes $name 19 }
-
-# The longest prefix of `name` within `limit` bytes of UTF-8 that ends
-# on a whole character.
-def cut-bytes [name: string, limit: int]: nothing -> string {
-    mut out = ""
-    for g in ($name | split chars --grapheme-clusters) {
-        if (($out + $g) | str length) > $limit { break }
-        $out = ($out + $g)
-    }
-    $out
-}
-
 # Give the QEMU monitor a command through its pipe (pipe-write) under
 # `bound`, the run's timeout (timeout-binary); true when it went in.
 def monitor-send [monitor: path, command: string, bound: string]: nothing -> bool {
@@ -1449,8 +1145,8 @@ def hmp-quoted [text: string]: nothing -> string {
 # naming the display's size (display_size) and every pixel's three bytes
 # after it, looked at every 50 ms for at most five seconds.
 def screen-whole [path: path]: nothing -> bool {
-    let header = ($"P6\n($display_size.width) ($display_size.height)\n255\n" | into binary)
-    let whole = (($header | bytes length) + $display_size.width * $display_size.height * 3)
+    let header = ($"P6\n($spec.display_size.width) ($spec.display_size.height)\n255\n" | into binary)
+    let whole = (($header | bytes length) + $spec.display_size.width * $spec.display_size.height * 3)
     for _ in 0..100 {
         if ($path | path exists) {
             if (ls -D $path | get 0.size | into int) == $whole {
@@ -1612,99 +1308,6 @@ export def program-kernel [dir: path, tree: string]: nothing -> string {
     kernel-elf (context ($dir | path expand) "program" (target tree-symbols $tree))
 }
 
-# The nearest parent of `dir` holding workspace.jab.toml, or null.
-def workspace-dir [dir: path]: nothing -> oneof<string, nothing> {
-    mut d = ($dir | path expand)
-    loop {
-        if ($d | path join "workspace.jab.toml" | path exists) { return $d }
-        let parent = ($d | path dirname)
-        if $parent == $d { return null }
-        $d = $parent
-    }
-}
-
-# The toolchain's install directory, or null for the tools on PATH.
-def toolchain [here: path, workspace: oneof<string, nothing>]: nothing -> oneof<string, nothing> {
-    let from_env = ($env.RISCV_TOOLCHAIN? | default "")
-    if $from_env != "" { return $from_env }
-    let local = ($here | path join "extern" "riscv")
-    if ($local | path exists) { return $local }
-    if $workspace != null {
-        let shared = ($workspace | path join "extern" "riscv")
-        if ($shared | path exists) { return $shared }
-    }
-    null
-}
-
-# The tools' command prefix: under a toolchain directory, `bin/<triple>`
-# for the first triple whose `as` is there, `as.exe` on Windows; on PATH,
-# the first triple whose `as` `which` finds. Untyped because it ends in
-# an error.
-def tool-prefix [toolchain: oneof<string, nothing>] {
-    let looked = ($triples | each {|t| host exe-name ($t + "as") } | str join ", ")
-    if $toolchain != null {
-        let bin = ($toolchain | path join "bin")
-        for t in $triples {
-            let prefix = ($bin | path join $t)
-            if (host exe-name ($prefix + "as") | path exists) { return $prefix }
-        }
-        error make {msg: $"no riscv64 binutils under ($bin): looked for ($looked)"}
-    }
-    for t in $triples {
-        if not (which ($t + "as") | is-empty) { return $t }
-    }
-    error make {msg: $"no riscv64 binutils on PATH: looked for ($looked); set RISCV_TOOLCHAIN or link extern/riscv to a toolchain"}
-}
-
-# Whether the assembler takes the RVA23 profile `march` names, tried on an
-# empty source under `dir`'s march/ before a build assembles anything,
-# the probe left there for the next; one that does not, binutils before
-# 2.45, is refused with its version, since no other ISA will do. Untyped
-# because it can end in an error.
-def march-check [asm: string, march: string, dir: path] {
-    let probe = ($dir | path join "march")
-    mkdir $probe
-    let source = ($probe | path join "march.S")
-    let object = ($probe | path join "march.o")
-    "" | save -f $source
-    let tried = (^$asm $march $source -o $object | complete)
-    if $tried.exit_code != 0 {
-        let version = (^$asm --version | complete | get stdout | lines | get -o 0 | default "an assembler")
-        let found = (which $asm | get -o 0.path | default $asm)
-        error make {msg: $"($version) at ($found) has no RVA23 profile, ($march), which every Jab build assembles for\nlink extern/riscv, in the workspace or beside the kernel or program, to a toolchain with binutils 2.45 or later, or name one with RISCV_TOOLCHAIN"}
-    }
-}
-
-# The workspace a kernel or a program builds against: the nearest
-# parent holding workspace.jab.toml, else the one the manifest's
-# `workspace` names, relative to the manifest, for a program that lives
-# outside any. Its kernel is built there with the same symbols and
-# found in that workspace's tree, and its generic disk, its toolchain
-# link, its shims, and discovery come from there, and the program's own
-# output lands in that workspace's target at the program's path
-# (shard-of). Under a workspace the key is not read. Null with neither.
-def workspace-of [here: path, manifest: record]: nothing -> oneof<string, nothing> {
-    let above = (workspace-dir $here)
-    if $above != null { return $above }
-    let declared = ($manifest | get -o workspace | default "")
-    if $declared == "" { return null }
-    let ws = ($here | path join $declared | path expand)
-    if not ($ws | path join "workspace.jab.toml" | path exists) {
-        error make {msg: $"($manifest.name): workspace = '($declared)' names no workspace at ($ws), which would hold workspace.jab.toml"}
-    }
-    $ws
-}
-
-# Whether `dir` is one of the workspace's own, its kernel or a program
-# workspace.jab.toml lists, by its workspace-relative path, which is how
-# an image built before its `home` marker is placed (image-home).
-def member-of [dir: path, ws: path]: nothing -> bool {
-    if not (target under $dir $ws) { return false }
-    let relative = ($dir | path relative-to $ws | str replace --all "\\" "/")
-    let listed = (open ($ws | path join "workspace.jab.toml"))
-    $relative == $listed.kernel or ($relative in $listed.programs)
-}
-
 # The kernel's or a program's context for a build with `names` set:
 # manifest, workspace (workspace-of), toolchain, symbols, the target
 # (target-root, the workspace's or a lone program's own), the tree in
@@ -1714,7 +1317,7 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
     let here = ($dir | path expand)
     let manifest_path = ($here | path join $"($kind).jab.toml")
     let manifest = (open $manifest_path)
-    let workspace = (workspace-of $here $manifest)
+    let workspace = (workspace workspace-of $here $manifest)
     let tree = (profile $names)
     let root = (target root (if $workspace == null { $here } else { $workspace }))
     let place = (target shard-of $here $workspace $root $manifest.name)
@@ -1726,7 +1329,7 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
         manifest_path: $manifest_path,
         workspace: $workspace,
         toolchain: $tc,
-        prefix: (tool-prefix $tc),
+        prefix: (toolchain tool-prefix $tc),
         symbols: $names,
         profile: $tree,
         root: $root,
@@ -1787,7 +1390,7 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objdump = ($c.prefix + "objdump")
-    march-check $asm $march_kernel $c.out
+    toolchain march-check $asm $march_kernel $c.out
     # only the objects of the sources there are go into the link, so an
     # object left by a source since deleted or renamed never rides along
     let objects = (walk paths ("src" | path join "*.S") | sort | each {|f|
@@ -1814,7 +1417,7 @@ const feature_roles = [io_harts]
 export def demand-of [dir: path] {
     let here = ($dir | path expand)
     let manifest = (open ($here | path join "program.jab.toml"))
-    program-demand $manifest (workspace-of $here $manifest)
+    program-demand $manifest (workspace workspace-of $here $manifest)
 }
 
 # A manifest's declared demand, validated. `specs` is a nonempty list of
@@ -1844,7 +1447,7 @@ def program-demand [m: record, ws: oneof<string, nothing>] {
     let unnamed = ($specs | where {|s| ($s | describe) != "string" or ($s | str trim) == "" })
     if not ($unnamed | is-empty) { error make {msg: $"($name): `specs` holds ($unnamed | each {|u| $u | to nuon } | str join ', '), no spec's name"} }
     if $ws == null { error make {msg: $"($name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
-    let table = (specs-of $ws)
+    let table = (spec data $ws)
     let picked = ($specs | each {|s| { asked: $s, row: ($table | where {|r| ($r.name | str trim | str lowercase) == ($s | str trim | str lowercase) } | get -o 0) } })
     let unknown = ($picked | where {|p| $p.row == null } | each {|p| $p.asked })
     if not ($unknown | is-empty) { error make {msg: $"($name): `specs` names ($unknown | str join ', '), which its workspace's asset/spec.nuon does not define; it defines ($table | get name | str join ', ')"} }
@@ -1924,12 +1527,12 @@ def image-declaration [d: any, ws: any, program: string] {
     if $d == null { return { flags: 0, offset: 0, length: 0, crc: 0, bytes: 0x[] } }
     let count = ($d.specs | length)
     if $count > $decl_specs_max { error make {msg: $"($program) lists ($count) specs, and an image declares ($decl_specs_max) at most"} }
-    let table = (specs-of $ws)
+    let table = (spec data $ws)
     let entries = ($d.specs | each {|listed|
         let r = ($table | where {|row| ($row.name | str lowercase) == ($listed | str lowercase) } | first)
         let name = ($r.name | str lowercase)
         if not ($name =~ '^[a-z0-9]+$') or ($name | str length) > $decl_name_bytes { error make {msg: $"($program) lists ($r.name), whose name an image declares in ($decl_name_bytes) letters and digits at most"} }
-        if $r.display != $display_size { error make {msg: $"($program) lists ($r.name), whose display is ($r.display.width) by ($r.display.height), and an image renders at the ABI's ($display_size.width) by ($display_size.height)"} }
+        if $r.display != $spec.display_size { error make {msg: $"($program) lists ($r.name), whose display is ($r.display.width) by ($r.display.height), and an image renders at the ABI's ($spec.display_size.width) by ($spec.display_size.height)"} }
         let isa = ($decl_isas | get -o $r.isa_profile)
         if $isa == null { error make {msg: $"($program) lists ($r.name), whose ISA profile ($r.isa_profile) an image cannot declare; it declares ($decl_isas | columns | str join ', ')"} }
         if ($r.ram mod 1GiB) != 0B { error make {msg: $"($program) lists ($r.name), whose RAM, ($r.ram), is no whole number of GiB"} }
@@ -2239,7 +1842,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objcopy = ($c.prefix + "objcopy")
-    march-check $asm $march_program $c.out
+    toolchain march-check $asm $march_program $c.out
     let obj = ($c.out | path join $"($m.name).o")
     let header_obj = ($c.out | path join "jab_header.o")
     let elf = ($c.out | path join $"($m.name).elf")
@@ -2273,7 +1876,7 @@ def prepared [dir: path, names: list<string>]: nothing -> record {
 def test-args [ready: record]: nothing -> list<string> {
     let script = ($ready.context.here | path join "test" "test.nu")
     if not ($script | path exists) { error make {msg: $"($ready.context.manifest.name) has no test/test.nu"} }
-    let assets = (assets-image $ready.context)
+    let assets = (disk assets-image $ready.context)
     let set = ($ready.context.symbols | str join ",")
     let common = [$script "--kernel" $ready.kernel "--image" $ready.image "--out" $ready.context.out "--set" $set]
     if $assets == "" { $common } else { $common ++ ["--assets" $assets] }
@@ -2302,13 +1905,13 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let qemu = (qemu-binary $c.here $c.workspace)
     let line = (spec-bootargs $m "")
     let machine = ((machine-args $qemu $m) ++ (if $line == "" { [] } else { ["-append" $line] }))
-    let assets = (assets-image $c)
+    let assets = (disk assets-image $c)
     let disk = (if $assets == "" {
         let blank = ($c.target | path join "disk.img")
         if not ($blank | path exists) { ^truncate -s 64M $blank }
         $blank
     } else { $assets })
-    let disk_serial = (if $assets == "" { "disk0" } else { disk-serial ($c.manifest | get -o serial | default $c.manifest.name) })
+    let disk_serial = (if $assets == "" { "disk0" } else { disk disk-serial ($c.manifest | get -o serial | default $c.manifest.name) })
     let shown = (if $window == null { display $c.manifest } else { $window })
     let found = (if (discovery-wanted $pad $sound) { discover $c.workspace } else { { gamepad: null, audio: null } })
     let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
@@ -2321,7 +1924,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let relay_binary = (relay-build $relays $c.workspace)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
-    let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
+    let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($program_base),force-raw=on"
         "-display" $shown "-serial" $serial "-monitor" "none"
@@ -2447,35 +2050,10 @@ def discovery-wanted [pad: bool, sound: bool]: nothing -> bool {
 # record is empty.
 def discover [ws: oneof<string, nothing>]: nothing -> record {
     if $ws == null { return { gamepad: null, audio: null } }
-    let disco = (disco-build $ws)
+    let disco = (tool disco-build $ws)
     let found = (^$disco | complete)
     if $found.exit_code != 0 { error make {msg: $"jabdisco failed:\n($found.stderr)"} }
     $found.stdout | from nuon
-}
-
-# The jabdisco binary, one package of the tool workspace (tool-build).
-def disco-build [ws: path]: nothing -> string {
-    tool-build $ws "jabdisco" "JAB_PAD names a pad's evdev path outright and --no-pad leaves the pad off; JAB_AUDIO names the audio backend outright and --no-sound leaves the sound device off"
-}
-
-# The robojab binary, the play harness, one package of the tool workspace
-# (tool-build): its path, for a script that serves a planned machine to
-# an agent.
-export def robo-build [ws: path]: nothing -> string {
-    tool-build $ws "robojab" "the harness needs it"
-}
-
-# A package of the tool workspace, tool/ in the jab workspace, built with
-# cargo into its own target/ on first use and whenever it changes, so a
-# `cargo build --release` there is the same build: the binary's path,
-# named as the package is. `without` says what to do with no workspace.
-def tool-build [ws: path, package: string, without: string]: nothing -> string {
-    let tool = ($ws | path join "tool")
-    let manifest = ($tool | path join "Cargo.toml")
-    if not ($manifest | path exists) { error make {msg: $"no tool workspace in this one at ($tool); ($without)"} }
-    let built = (^cargo build --release --quiet --manifest-path $manifest -p $package | complete)
-    if $built.exit_code != 0 { error make {msg: $"building ($package) failed:\n($built.stderr)"} }
-    $tool | path join "target" "release" $package
 }
 
 # Run a program with the console window, the UART on stdio; QEMU's exit
@@ -2493,7 +2071,7 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
         print "no display server here, so this is a development run: the display is served over VNC on 127.0.0.1:5930; tunnel it with `ssh -N -L 5930:127.0.0.1:5930 <this host>` and view it with `vncviewer 127.0.0.1:5930`"
     }
     let bridge = (if $line.bridge == null { null } else {
-        let bin = (shim-build $line.context.workspace "jabshim_pad" --bin)
+        let bin = (tool shim $line.context.workspace "jabshim_pad" --bin)
         let pipe = $line.bridge_pipe
         let b = $line.bridge
         let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
@@ -2508,24 +2086,6 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
     for r in ($relayed | where {|r| $r.exit != null and $r.exit != 0 }) {
         print -e $"jab: the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)"
     }
-}
-
-# A shim, one package of the workspace's shim/ workspace, built with
-# cargo into the target's shim/ on first use and whenever it changes:
-# the path of its shared library, to preload into QEMU, or with --bin
-# of its binary, named as the host names an executable (exe-name);
-# --static builds a binary non-PIE, through `cargo rustc` with the
-# static relocation model.
-export def shim-build [ws: path, name: string, --bin, --static]: nothing -> string {
-    let manifest = ($ws | path join "shim" "Cargo.toml")
-    let target = (target root $ws | path join "shim")
-    let built = (if $static {
-        ^cargo rustc --release --quiet --manifest-path $manifest -p $name --bin $name --target-dir $target -- -C relocation-model=static | complete
-    } else {
-        ^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete
-    })
-    if $built.exit_code != 0 { error make {msg: $"building the shim package ($name) failed:\n($built.stderr)"} }
-    if $bin or $static { $target | path join "release" (host exe-name $name) } else { $target | path join "release" $"lib($name).so" }
 }
 
 # Probe a program under a window. `sdl`: run it under SDL with OpenGL
@@ -2562,7 +2122,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let c = (context $dir "program" $names)
     if $c.workspace == null { error make {msg: "the sdl probe needs the program's workspace, above it or named by its manifest, which holds shim/crates/sdl"} }
     if $send != "" and not ($send | path exists) { error make {msg: $"--send ($send): no such file"} }
-    let shim = (shim-build $c.workspace "jabshim_sdl")
+    let shim = (tool shim $c.workspace "jabshim_sdl")
     let nonce = (nonce mint 0 true)
     let planned = (probe-plan $c.manifest $names $nonce --api=$api --send (if $send == "" { 0x[] } else { open --raw $send | into binary }))
     let sends = $planned.sends
@@ -2687,141 +2247,6 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
         }
     }
     { exit: $result.exit_code, stderr: $result.stderr, qemu_pid: $qemu_pid, send_seconds: $written }
-}
-
-# The shim's log as written (shim/crates/sdl): the object table, each
-# object by index with its path and the inode, size, and modification
-# time in nanoseconds its file had as its line was written, null where it
-# had no file, as the vDSO has none; and the events in order, each
-# make_current with its frames past the leading ones in the shim's own
-# library, object 1, which it counts, a frame by its object's index (null
-# for none) and its address as written and as a number, and whether the
-# timing rule makes it a render: a window-size call the next event,
-# within 2 ms; every event with its stamp as the log wrote it. A last line
-# the run's end cut short is left out. The run's lines are events too, and
-# their values come back apart: `process`, QEMU's pid, and `nonce`, the
-# capture nonce as its sixteen hex digits, each null where the log has
-# none, as a log written before them has neither. Every complete line is
-# held to the lines the shim writes (sdl_line) before any is read, and a
-# log the shim could not have written is refused, in order: a line outside
-# them, counted in lines with up to four shown by number; a notice the
-# shim wrote as it stopped the run, by name; a run's line given twice,
-# malformed, or out of its place (sdl-run-lines); then no object table,
-# an index given twice, a frame naming an index with no line ahead of it,
-# or a make_current whose frames do not start in the shim's library.
-export def sdl-log [log: path]: nothing -> record<objects: table, events: table, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
-    let text = (open --raw $log | into binary | decode)
-    let whole = ($text | split row (char nl) | drop 1)
-    if ($whole | is-empty) { error make {msg: "the shim log is empty; the window made no SDL calls"} }
-    let unwritten = ($whole | enumerate | where {|l| not ($l.item =~ $sdl_line) })
-    if not ($unwritten | is-empty) {
-        let shown = ($unwritten | first 4 | each {|l| $"line ($l.index + 1): ($l.item | str substring --grapheme-clusters 0..<80)" })
-        error make {msg: (refusal sdl-refusal [{ fault: "the log has a line the shim does not write", held: ($unwritten | length), unit: "line", examples: $shown }])}
-    }
-    let notices = ($whole | each {|l| $l | str replace --regex '^[0-9]+\.[0-9]{6} ' '' } | where {|l| $l in $sdl_notices })
-    if not ($notices | is-empty) {
-        let stops = ($notices | uniq --count | each {|n| { fault: $"the shim stopped the run: ($n.value)", held: $n.count, unit: "line", examples: [] } })
-        error make {msg: (refusal sdl-refusal $stops)}
-    }
-    let run = (sdl-run-lines ($whole | enumerate | each {|l| { line: ($l.index + 1), text: ($l.item | str replace --regex '^[0-9]+\.[0-9]{6} ' '') } } | where {|l| not ($l.text | str starts-with "object ") }))
-    if $run.fault != "" { error make {msg: (refusal sdl-refusal [{ fault: $run.fault, held: $run.held, unit: "line", examples: $run.examples }])} }
-    let rows = ($whole
-        | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+) ?(?P<rest>.*)$'
-        | enumerate
-        | each {|r| { at: $r.index, stamp: $r.item.ts, ts: ($r.item.ts | into float), name: $r.item.name, rest: $r.item.rest } })
-    let objects = ($rows | where name == "object" | each {|r|
-        let o = ($r.rest | parse --regex '^(?P<index>\d+) (?P<inode>\d+|-) (?P<size>\d+|-) (?P<mtime>-?\d+|-) (?P<path>.*)$' | first)
-        {
-            at: $r.at,
-            index: ($o.index | into int),
-            inode: (if $o.inode == "-" { null } else { $o.inode | into int }),
-            size: (if $o.size == "-" { null } else { $o.size | into int }),
-            mtime: (if $o.mtime == "-" { null } else { $o.mtime | into int }),
-            path: $o.path,
-        }
-    })
-    let first = ($objects | reduce --fold {} {|o, seen|
-        let key = ($o.index | into string)
-        if ($seen | get -o $key) == null { $seen | insert $key $o.at } else { $seen }
-    })
-    let happened = ($rows | where name != "object")
-    let events = ($happened | enumerate | each {|r|
-        let e = $r.item
-        if $e.name != "make_current" {
-            { at: $e.at, stamp: $e.stamp, ts: $e.ts, name: $e.name, render: false, shim_frames: 0, frames: [], fault: "", example: "" }
-        } else {
-            let frames = ($e.rest
-                | str trim
-                | split row " "
-                | compact --empty
-                | parse --regex '^(?P<object>\d+|\?)\+(?P<hex>[0-9a-f]+)$'
-                | each {|f| { object: (if $f.object == "?" { null } else { $f.object | into int }), hex: $f.hex, address: ($f.hex | into int --radix 16) } })
-            let shim = ($frames | take while {|f| $f.object == 1 } | length)
-            let next = ($happened | get -o ($r.index + 1))
-            let render = ($next != null and $next.name == "size" and ($next.ts - $e.ts) < 0.002)
-            let unnamed = ($frames | where {|f| $f.object != null and (($first | get -o ($f.object | into string)) == null or ($first | get ($f.object | into string)) > $e.at) })
-            let fault = (if not ($unnamed | is-empty) { "unnamed" } else if $shim == 0 { "outside" } else { "" })
-            let example = (if $fault == "unnamed" {
-                let f = ($unnamed | first)
-                $"($f.object)+($f.hex)"
-            } else if $fault == "outside" and ($frames | is-empty) {
-                "no frames"
-            } else if $fault == "outside" {
-                let f = ($frames | first)
-                let file = (if $f.object == null { "?" } else { $objects | where index == $f.object | get -o 0.path | default "" | path basename })
-                $"($file)+($f.hex)"
-            } else { "" })
-            { at: $e.at, stamp: $e.stamp, ts: $e.ts, name: $e.name, render: $render, shim_frames: $shim, frames: ($frames | skip $shim), fault: $fault, example: $example }
-        }
-    })
-    let made = ($events | where name == "make_current")
-    let total = ($made | length)
-    if ($objects | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: "the log has no object table", held: $total, unit: "make_current", examples: [] }])} }
-    let twice = ($objects | get index | uniq --repeated)
-    if not ($twice | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: "the object table gives an index twice", held: $total, unit: "make_current", examples: ($twice | each {|i| $"object ($i)" }) }])} }
-    for fault in [
-        ["unnamed" "a frame names an object the table has no line for ahead of it"]
-        ["outside" "a make_current's frames do not start in the shim's own library"]
-    ] {
-        let held = ($made | where fault == $fault.0)
-        if not ($held | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: $fault.1, held: ($held | length), unit: "make_current", examples: ($held | get example | uniq) }])} }
-    }
-    { objects: ($objects | reject at), events: ($events | reject fault example), process: $run.process, nonce: $run.nonce }
-}
-
-# A shim log's run lines (sdl-log), from its events in order, each its
-# line number and its text past the stamp: the process as the first event,
-# `process` and QEMU's pid in ASCII digits, and the capture nonce as the
-# second, `nonce` and sixteen lowercase hex digits, not all zero, a run's
-# line at most once each. The pid and the nonce, null where the log has
-# none; or the first fault, a process line before a nonce line: one given
-# twice, one malformed, a nonce with no process line ahead of it, then one
-# out of its place, with how many lines hold it and up to four.
-def sdl-run-lines [events: list<record<line: int, text: string>>]: nothing -> record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, fault: string, held: int, examples: list<string>> {
-    let process = ($events | enumerate | where {|e| $e.item.text =~ '^process(?: |$)' })
-    let nonce = ($events | enumerate | where {|e| $e.item.text =~ '^nonce(?: |$)' })
-    let refused = {|fault: string, rows: list<any>|
-        { process: null, nonce: null, fault: $fault, held: ($rows | length), examples: ($rows | first 4 | each {|r| $"line ($r.item.line): ($r.item.text | str substring --grapheme-clusters 0..<80)" }) }
-    }
-    if ($process | length) > 1 { return (do $refused "the log gives its process line twice" $process) }
-    if ($nonce | length) > 1 { return (do $refused "the log gives its nonce line twice" $nonce) }
-    let bad_process = ($process | where {|e| not ($e.item.text =~ '^process [1-9][0-9]{0,9}$') })
-    if not ($bad_process | is-empty) { return (do $refused "the log's process line is malformed, where `process` and a pid in ASCII digits are wanted" $bad_process) }
-    let bad_nonce = ($nonce | where {|e| not ($e.item.text =~ '^nonce [0-9a-f]{16}$') or $e.item.text == "nonce 0000000000000000" })
-    if not ($bad_nonce | is-empty) { return (do $refused "the log's nonce line is malformed, where `nonce` and sixteen lowercase hex digits, not all zero, are wanted" $bad_nonce) }
-    let ahead = ($nonce | where {|e| ($process | is-empty) or $e.index < ($process | first | get index) })
-    if not ($ahead | is-empty) { return (do $refused "the log's nonce line comes with no process line ahead of it" $ahead) }
-    let early = ($process | where {|e| $e.index != 0 })
-    if not ($early | is-empty) { return (do $refused "the log's process line is out of its place, the first event" $early) }
-    let astray = ($nonce | where {|e| $e.index != 1 })
-    if not ($astray | is-empty) { return (do $refused "the log's nonce line is out of its place, the second event after the process line" $astray) }
-    {
-        process: (if ($process | is-empty) { null } else { $process | first | get item.text | str substring 8.. | into int }),
-        nonce: (if ($nonce | is-empty) { null } else { $nonce | first | get item.text | str substring 6.. }),
-        fault: "",
-        held: 0,
-        examples: [],
-    }
 }
 
 # An object's table left unread, with the state that kept it so.
@@ -2956,7 +2381,7 @@ export def sdl-resolve [log: path, --every, --tables: string = ""]: nothing -> r
 # (sdl-table), by index, and the run's lines (sdl-log); `bundle` the
 # tables' bundle, "" for nm.
 def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
-    let read = (sdl-log $log)
+    let read = (log $log)
     let modules = ($read.objects | where {|o| $o.path | path basename | str starts-with $device_module } | get index)
     let device_in = (if ($modules | is-empty) { "executable" } else { "module" })
     let made = ($read.events | where name == "make_current")
@@ -3454,7 +2879,7 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     }
     let required = (["sdl.log" "classified.nuon"] ++ (if $profile == "paired" { ["api.out" "identity.nuon"] } else { [] }))
     for r in $required { if $r not-in $names { do $refuse 1 "the inventory" $"the manifest lists no ($r), which a ($profile) bundle holds" } }
-    let read = (try { sdl-log ($dir | path join "sdl.log") } catch {|e| do $refuse 2 "the correspondence" $"the reader refuses the log: ($e.msg)" })
+    let read = (try { log ($dir | path join "sdl.log") } catch {|e| do $refuse 2 "the correspondence" $"the reader refuses the log: ($e.msg)" })
     let objects = ($m | get -o objects | default [])
     if ($objects | length) != ($read.objects | length) { do $refuse 2 "the correspondence" $"the manifest lists ($objects | length) objects and the log's table ($read.objects | length)" }
     for pair in ($read.objects | zip $objects) {
@@ -3517,158 +2942,6 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($host == $box) }, trace: $trace, events: $cls.events }
 }
 
-# The pairing's limits, printed with every reading (sdl-pair).
-const pair_limits = "the pairing assumes the run binding, which ties the guest's records to the log, and that the log records every upload once and that every flush the device accepted makes one upload; under those assumptions it is exact, and the oracle's flush trace rechecks them run by run on the box. The residual is a consistency check: it proves no absence of a loss and an addition that compensate inside the window, and it catches a uniform shift only where the paired intervals are irregular past half a period. The fit gives intervals and jitter, and no absolute guest-to-SDL latency."
-
-# A probed run's presents paired one for one with the host's flip uploads
-# (ProbeRuns), from the run's classified events, a validated paired
-# bundle's (sdl-bundle-check) or sdl-classify's on the host with the run's
-# binding checked there, and the guest's flips in its window in order,
-# each its status, its present ordinal, and its end in microseconds on the
-# guest's clock: 1, the presented flips' ordinals each one past the one
-# before (ordinal-violations), a gap refusing the run; 2, the host's flip
-# uploads numbered from the log's first, 1 on, the shim logging from
-# QEMU's start; 3, the present of ordinal k paired with upload k, the log
-# holding every ordinal through the window's last present and going on at
-# least 1 s of host time past its upload, uploads past the window read for
-# nothing; 4, the fit, least squares for the offset and the drift of the
-# paired uploads' stamps against the presents' ends, every residual under
-# half the period. Refused, each named and counted, all of them found: an
-# ordinal gap; the log short of an ordinal; a duplicated event, two in a
-# row alike in stamp, name, and chain; a stamp going backwards; a residual
-# past half the period; a device error in the window; the log ending under
-# 1 s past the window's last upload; fewer than two presents to fit. A
-# refused run is unresolved and never trimmed to make counts agree. `ok`,
-# the refusals, the pairs with their residuals, the fit, the window's
-# ordinals, and the limits (pair_limits), printed with every reading.
-export def sdl-pair [events: list<any>, flips: list<record<status: int, ordinal: int, end_us: number>>, --period: float = 0.016666666666666666]: nothing -> record<ok: bool, refusals: list<record<refusal: string, count: int>>, pairs: list<any>, fit: oneof<record, nothing>, window: oneof<record, nothing>, limits: string> {
-    let host = ($events | each {|e| { ts: (if ($e | get -o ts) != null { $e.ts } else { $e.stamp | into float }), name: $e.name, kind: ($e | get -o kind | default $e.name), key: ($e | get -o key | default "") } })
-    let presented = ($flips | where status == 0)
-    let uploads = ($host | where kind == "upload")
-    mut refusals = []
-    let gaps = (if ($presented | is-empty) { [] } else { present ordinal-violations (($presented | first | get ordinal) - 1) ($presented | each {|p| { presented: true, ordinal: $p.ordinal } }) })
-    if not ($gaps | is-empty) { $refusals = ($refusals | append { refusal: "an ordinal gap in the guest's presents", count: ($gaps | length) }) }
-    let last = (if ($presented | is-empty) { 0 } else { $presented | last | get ordinal })
-    let short = ($last - ($uploads | length))
-    if $short > 0 { $refusals = ($refusals | append { refusal: "the log short of an ordinal", count: $short }) }
-    let duplicated = ($host | window 2 | where {|w| $w.0 == $w.1 } | length)
-    if $duplicated > 0 { $refusals = ($refusals | append { refusal: "a duplicated event", count: $duplicated }) }
-    let backwards = ($host | window 2 | where {|w| $w.1.ts < $w.0.ts } | length)
-    if $backwards > 0 { $refusals = ($refusals | append { refusal: "a stamp going backwards", count: $backwards }) }
-    let errors = ($flips | where status == 3 | length)
-    if $errors > 0 { $refusals = ($refusals | append { refusal: "a device error in the window", count: $errors }) }
-    if ($presented | length) < 2 { $refusals = ($refusals | append { refusal: "fewer than two presents to fit", count: ($presented | length) }) }
-    let held = ($short <= 0 and $last >= 1)
-    if $held {
-        let after = (($host | last | get ts) - ($uploads | get ($last - 1) | get ts))
-        if $after < 1.0 { $refusals = ($refusals | append { refusal: "the log ending under 1 s past the window's last upload", count: 1 }) }
-    }
-    let paired = (if (not $held) or ($presented | length) < 2 { [] } else { $presented | each {|p| { ordinal: $p.ordinal, end_us: $p.end_us, upload: ($uploads | get ($p.ordinal - 1) | get ts) } } })
-    let fit = (if ($paired | is-empty) { null } else {
-        let base = ($paired | first | get upload)
-        let xs = ($paired | each {|p| $p.end_us / 1e6 })
-        let ys = ($paired | each {|p| $p.upload - $base })
-        let mx = ($xs | math avg)
-        let my = ($ys | math avg)
-        let sxx = ($xs | each {|x| ($x - $mx) * ($x - $mx) } | math sum)
-        let sxy = ($xs | zip $ys | each {|p| ($p.0 - $mx) * ($p.1 - $my) } | math sum)
-        let drift = (if $sxx == 0.0 { 1.0 } else { $sxy / $sxx })
-        let offset = ($my - $drift * $mx)
-        let residuals = ($xs | zip $ys | each {|p| ($p.1 - ($offset + $drift * $p.0)) * 1000.0 })
-        { base: $base, offset: $offset, drift: $drift, residuals_ms: $residuals }
-    })
-    let pairs = (if $fit == null { [] } else { $paired | zip $fit.residuals_ms | each {|p| $p.0 | insert residual_ms $p.1 } })
-    let past = ($pairs | where {|p| ($p.residual_ms | math abs) >= ($period * 500.0) } | length)
-    if $past > 0 { $refusals = ($refusals | append { refusal: "a residual past half the period", count: $past }) }
-    {
-        ok: ($refusals | is-empty),
-        refusals: $refusals,
-        pairs: $pairs,
-        fit: (if $fit == null { null } else { { offset_s: ($fit.base + $fit.offset), drift: $fit.drift, max_residual_ms: ($fit.residuals_ms | each {|r| $r | math abs } | math max) } }),
-        window: (if ($presented | is-empty) { null } else { { first: ($presented | first | get ordinal), last: $last, presents: ($presented | length), uploads: ($uploads | length) } }),
-        limits: $pair_limits,
-    }
-}
-
-# Whether `dir` is a workspace's root, holding workspace.jab.toml.
-def is-workspace [dir: path]: nothing -> bool {
-    $dir | path expand | path join "workspace.jab.toml" | path exists
-}
-
-# Every program of the workspace at `ws` by its path from it: the members
-# workspace.jab.toml lists, then the programs under its directory it does
-# not list, the game's among them, found by their manifests outside the
-# target, the cargo trees, and extern/.
-def programs-of [ws: path]: nothing -> list<string> {
-    let ws = ($ws | path expand)
-    let listed = (open ($ws | path join "workspace.jab.toml") | get programs)
-    let root = (target root $ws)
-    # glob's exclusions as a filter on each path's words below the workspace
-    let found = (walk paths ($ws | path join "**" "program.jab.toml")
-        | where {|f| not ($f | path relative-to $ws | path split | any {|w| $w in [".git" ".target" "target" "extern"] }) }
-        | each {|f| $f | path dirname }
-        | where {|d| not (target under $d $root) }
-        | each {|d| $d | path relative-to $ws | str replace --all "\\" "/" }
-        | where {|p| $p not-in $listed }
-        | sort)
-    $listed ++ $found
-}
-
-# A path given as words, each split on its slashes, so `example bounce`,
-# `example/bounce`, and `kit/fierce` all read; "" for none.
-def path-words [words: list<string>]: nothing -> string {
-    $words | each {|w| $w | split row "/" } | flatten | where {|w| $w != "" and $w != "." } | str join "/"
-}
-
-# A program's path in the workspace from words (path-words), a word the
-# workspace's `shortcuts` table names standing for its path: `fierce` for
-# kit/fierce.
-def program-path [ws: path, words: list<string>]: nothing -> string {
-    let at = (path-words $words)
-    let shortcuts = (open ($ws | path expand | path join "workspace.jab.toml") | get -o shortcuts | default {})
-    $shortcuts | get -o $at | default $at
-}
-
-# The programs at or under a path in the workspace, every program for no
-# path; a path matching none is an error naming them all. Untyped because
-# it ends in an error.
-def programs-under [ws: path, words: list<string>] {
-    let at = (program-path $ws $words)
-    let all = (programs-of $ws)
-    let picked = (if $at == "" { $all } else { $all | where {|p| $p == $at or ($p | str starts-with $"($at)/") } })
-    if ($picked | is-empty) { error make {msg: $"no program at or under ($at); the programs: ($all | str join ', ')"} }
-    $picked
-}
-
-# The one program at a path in the workspace, its directory. Untyped
-# because it ends in an error.
-def program-at [ws: path, words: list<string>] {
-    let at = (program-path $ws $words)
-    if $at == "" { error make {msg: "a program by its path from the workspace, or its shortcut: example/bounce, kit/fierce, fierce"} }
-    let all = (programs-of $ws)
-    if $at not-in $all { error make {msg: $"no program at ($at); the programs: ($all | str join ', ')"} }
-    $ws | path expand | path join $at
-}
-
-# Whether a program, by its path from the workspace, is a test: one under
-# a `test` directory, which `just test` runs and `just run` does not.
-def is-test [at: string]: nothing -> bool {
-    "test" in ($at | split row "/")
-}
-
-# The one program `just run` takes at a path in the workspace, its
-# directory: any program but a test (is-test). Untyped because it ends
-# in an error.
-def run-target [ws: path, words: list<string>] {
-    let at = (program-path $ws $words)
-    let all = (programs-of $ws)
-    let runnable = ($all | where {|p| not (is-test $p) })
-    if $at == "" { error make {msg: $"a program to run by its path from the workspace, or its shortcut: ($runnable | str join ', ')"} }
-    if $at in $all and (is-test $at) { error make {msg: $"($at) is a test; `just test ($at)` runs it"} }
-    if $at not-in $runnable { error make {msg: $"no program to run at ($at); the programs: ($runnable | str join ', ')"} }
-    $ws | path expand | path join $at
-}
-
 # A program's preparation before it is built, tested, or run: the script
 # its manifest's `prepare` names, relative to the manifest, run from the
 # program's directory with the phase, build, test, or run; nothing
@@ -3689,7 +2962,7 @@ def build-under [ws: path, words: list<string>, names: list<string>]: nothing ->
     let ws = ($ws | path expand)
     let m = (open ($ws | path join "workspace.jab.toml"))
     build-kernel ($ws | path join $m.kernel) $names
-    for p in (programs-under $ws $words) {
+    for p in (workspace programs-under $ws $words) {
         let dir = ($ws | path join $p)
         prepare $dir "build"
         build-program $dir $names
@@ -3704,7 +2977,7 @@ def build-under [ws: path, words: list<string>, names: list<string>]: nothing ->
 def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> nothing {
     let ws = ($ws | path expand)
     let names = (with-debug $names)
-    let selected = (programs-under $ws $words)
+    let selected = (workspace programs-under $ws $words)
     let m = (open ($ws | path join "workspace.jab.toml"))
     build-kernel ($ws | path join $m.kernel) $names
     let results = ($selected | each {|p|
@@ -3729,7 +3002,7 @@ def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> 
 # given in, so a relative path among them is the caller's.
 def --wrapped "main do" [dir: path, ...words: string] {
     let ws = ($dir | path expand)
-    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     let commands = (do-commands $ws)
     if ($words | is-empty) { print (do-list $commands); return }
     let name = ($words | first)
@@ -3747,7 +3020,7 @@ def --wrapped "main do" [dir: path, ...words: string] {
 # owner's path and directory.
 def do-commands [ws: path]: nothing -> table<command: string, usage: string, owner: string, home: string, script: string, summary: string> {
     let m = (open ($ws | path join "workspace.jab.toml"))
-    let owners = ([{ path: $m.kernel, manifest: "kernel.jab.toml" }] ++ (programs-of $ws | each {|p| { path: $p, manifest: "program.jab.toml" } }))
+    let owners = ([{ path: $m.kernel, manifest: "kernel.jab.toml" }] ++ (workspace programs-of $ws | each {|p| { path: $p, manifest: "program.jab.toml" } }))
     $owners | each {|o|
         let home = ($ws | path join $o.path)
         let declared = (open ($home | path join $o.manifest) | get -o "do" | default "")
@@ -3807,11 +3080,11 @@ def do-clean [ws: path, words: list<string>]: nothing -> nothing {
     if ($words | is-empty) { target clean $ws; return }
     let target = (target root $ws)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let dirs = (if (path-words $words) == "kernel" {
+    let dirs = (if (workspace path-words $words) == "kernel" {
         let m = (open ($ws | path join "workspace.jab.toml"))
         $trees | each {|t| (context ($ws | path join $m.kernel) "kernel" (target tree-symbols $t)).out }
     } else {
-        programs-under $ws $words | each {|p| $trees | each {|t| program-out ($ws | path join $p) $t } } | flatten
+        workspace programs-under $ws $words | each {|p| $trees | each {|t| program-out ($ws | path join $p) $t } } | flatten
     })
     mut retired = []
     for d in $dirs {
@@ -3826,7 +3099,7 @@ def do-clean [ws: path, words: list<string>]: nothing -> nothing {
 # The benches of the workspace's programs, `<program>/<bench>` each: the
 # NUON files under a program's bench/ directory.
 def benches-of [ws: path]: nothing -> list<string> {
-    programs-of $ws | each {|p|
+    workspace programs-of $ws | each {|p|
         walk paths ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
     } | flatten
 }
@@ -3841,7 +3114,7 @@ def bench-at [ws: path, name: string] {
     let all = (benches-of $ws)
     if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `just bench <program>/<bench>`: ($all | str join ', ')"} }
     let bench = ($words | last)
-    let program = (program-path $ws ($words | drop 1))
+    let program = (workspace program-path $ws ($words | drop 1))
     let file = ($ws | path expand | path join $program "bench" $"($bench).nuon")
     if not ($file | path exists) { error make {msg: $"no bench ($bench) in ($program); the benches: ($all | str join ', ')"} }
     let def = (open $file)
@@ -3925,7 +3198,7 @@ def bench-tar [home: path, stamp: string, name: string, root: path] {
 # and the state.
 def "main bench" [ws: path, name?: string, --only: string = ""] {
     let ws = ($ws | path expand)
-    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     if $name == null { print (bench-list $ws); return }
     let b = (bench-at $ws $name)
     let labels = ($b.def.steps | get label)
@@ -4066,7 +3339,7 @@ def watch-rates [file: path, span: int]: nothing -> string {
 def "main watch bench" [...words: string, --skip: float = 5.0] {
     if ($words | is-empty) { error make {msg: "nu jab.nu watch bench <program>/<bench> <workspace>"} }
     let ws = ($words | last | path expand)
-    if not (is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
+    if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     let named = ($words | drop 1)
     if ($named | is-empty) { print (bench-list $ws); return }
     let b = (bench-at $ws ($named | first))
@@ -4191,7 +3464,7 @@ def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: s
 # unless --set says otherwise.
 def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {
     let names = (symbols $set)
-    if (is-workspace $dir) { build-under $dir $words $names; return }
+    if (workspace is-workspace $dir) { build-under $dir $words $names; return }
     if $kernel { build-kernel $dir $names } else {
         prepare $dir "build"
         build-program $dir $names
@@ -4207,7 +3480,7 @@ def "main test" [dir: path, ...words: string, --set: string = "", --spec (-s): s
     let names = (symbols $set)
     let forced = (if $spec == "" { {} } else { { JAB_SPEC: $spec } })
     with-env $forced {
-        if (is-workspace $dir) { test-under $dir $words $names; return }
+        if (workspace is-workspace $dir) { test-under $dir $words $names; return }
         prepare $dir "test"
         ^nu ...(test-args (prepared $dir (with-debug $names)))
     }
@@ -4224,7 +3497,7 @@ def "main test" [dir: path, ...words: string, --set: string = "", --spec (-s): s
 # the two together refused.
 # QEMU's exit code is the program's status.
 def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0] {
-    let program = (if (is-workspace $dir) { run-target $dir $words } else { $dir | path expand })
+    let program = (if (workspace is-workspace $dir) { workspace run-target $dir $words } else { $dir | path expand })
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
     if $harts != 0 { machine-of $harts | ignore }
     prepare $program "run"
@@ -4237,7 +3510,7 @@ def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, -
 # unless --set says otherwise. `sdl` is the one probe; `--api`, `--send
 # <file>`, and `--trace` are probe-sdl's.
 def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = "", --api, --send: string = "", --trace] {
-    let program = (if (is-workspace $dir) { program-at $dir $words } else { $dir | path expand })
+    let program = (if (workspace is-workspace $dir) { workspace program-at $dir $words } else { $dir | path expand })
     let send = (if $send == "" { "" } else { $send | path expand })
     prepare $program "run"
     probe $program $kind (symbols $set) $seconds --api=$api --send $send --trace=$trace
@@ -4245,13 +3518,13 @@ def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12
 
 # Retire the workspace's whole target (clean-target): `just clean`.
 def "main clean" [ws: path] {
-    if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
+    if not (workspace is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
     target clean ($ws | path expand)
 }
 
 # Delete everything retired (retire-all): `just retire`.
 def "main retire" [ws: path] {
-    if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
+    if not (workspace is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
     target retire-all ($ws | path expand)
 }
 

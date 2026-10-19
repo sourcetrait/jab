@@ -45,6 +45,7 @@
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/process
 use ../../../nu/mod/target
+use ../../../nu/mod/spec
 use std/assert
 
 const PAST_MAX = 9
@@ -88,11 +89,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let debug = ($set | str contains "DEBUG")
     let threads = ($nu.os-info.name == "linux")
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
-    let machines = (([1 2 3 4 $max] | each {|n| { name: $"harts_($n)", harts: $n, spec: "" } }) ++ (["1ka1" "1kb1"] | each {|s| { name: $"spec_($s)", harts: (jab spec-row $ws $s | get cores), spec: $s } }))
+    let machines = (([1 2 3 4 $max] | each {|n| { name: $"harts_($n)", harts: $n, spec: "" } }) ++ (["1ka1" "1kb1"] | each {|s| { name: $"spec_($s)", harts: (spec row $ws $s | get cores), spec: $s } }))
     mut seen = []
     for m in $machines {
         let n = $m.harts
-        let ram_gib = (if $m.spec == "" { 4 } else { jab spec-row $ws $m.spec | get ram | $in / 1GiB | into int })
+        let ram_gib = (if $m.spec == "" { 4 } else { spec row $ws $m.spec | get ram | $in / 1GiB | into int })
         for boot in 1..3 {
             let asked = (if $m.spec == "" { { harts: $n } } else { { spec: $m.spec } })
             let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"($m.name)_($boot)") --set $set --spec ($asked | get -o spec | default "") --harts ($asked | get -o harts | default 0) --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
@@ -227,7 +228,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal $late.status 0 $"the program runs past a late hart: ($late.serial)"
         assert equal ($late.serial | lines) ["harts 7 3 4" "window 261888 0"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
         let lines = ($late.debug | lines)
-        for line in [$"jab: bootargs jab.late=2 jab.spec=(jab spec-default $ws)" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
+        for line in [$"jab: bootargs jab.late=2 jab.spec=(spec configured $ws)" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
             assert ($lines | any {|l| $l == $line }) $"($line): ($late.debug)"
         }
         if $threads { idle-harts $late [1 2] "the late check-in" }

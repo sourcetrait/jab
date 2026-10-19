@@ -22,6 +22,7 @@
 # and so does a change to the data alone.
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
+use ../../../nu/mod/spec
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -30,7 +31,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let type = ($asset | path join "spec.nutype")
 
     # the positive control: the workspace's data as SPEC.md defines it
-    let specs = (jab specs-of $ws)
+    let specs = (spec data $ws)
     let wanted = (spec-md ($ws | path join "doc" "SPEC.md"))
     assert equal ($specs | get name) ($wanted | get name) $"every spec SPEC.md defines, in its order: ($specs | get name)"
     for w in $wanted {
@@ -68,19 +69,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     for c in $cases {
         let file = ($fixtures | path join $"($c.name).nuon")
         $c.data | to nuon | save -f $file
-        let said = (try { jab spec-table $file $type; "" } catch {|e| $e.msg })
+        let said = (try { spec read $file $type; "" } catch {|e| $e.msg })
         assert ($said != "") $"($c.name): refused: the loader took it"
         for s in $c.says { assert ($said | str contains $s) $"($c.name): ($s): ($said)" }
     }
     # a field given twice in one record, which NUON's parse refuses
     let doubled = ($fixtures | path join "doubled.nuon")
     $"[{name: '($first.name)', cores: ($first.cores), cores: ($first.cores)}]" | save -f $doubled
-    let said = (try { jab spec-table $doubled $type; "" } catch {|e| $e.msg })
+    let said = (try { spec read $doubled $type; "" } catch {|e| $e.msg })
     assert ($said | str starts-with $"($doubled): not NUON the tools can read") $"doubled: refused naming its file: ($said)"
     # a GPU named and its VRAM sized holds
     let gpu_file = ($fixtures | path join "gpu.nuon")
     do $with {|r| $r | update gpu "fixture" | update vram 2GiB } | to nuon | save -f $gpu_file
-    let gpu = (jab spec-table $gpu_file $type | first)
+    let gpu = (spec read $gpu_file $type | first)
     assert equal [$gpu.gpu $gpu.vram] ["fixture" 2GiB] $"a GPU named and its VRAM sized hold: ($gpu)"
 
     # copies of the type the loader cannot read
@@ -91,7 +92,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     for t in $types {
         let file = ($fixtures | path join $"($t.name).nutype")
         $t.text | save -f $file
-        let said = (try { jab spec-table ($asset | path join "spec.nuon") $file; "" } catch {|e| $e.msg })
+        let said = (try { spec read ($asset | path join "spec.nuon") $file; "" } catch {|e| $e.msg })
         assert ($said | str starts-with $"($file): ($t.says)") $"($t.name): refused naming its file: ($said)"
     }
 

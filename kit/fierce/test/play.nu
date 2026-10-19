@@ -9,6 +9,7 @@
 # resolved to its routine from the ELF beside the image through the
 # toolchain the build's flags name. `just do play` builds and runs it.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/tool
 
 def main [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
@@ -25,7 +26,7 @@ def main [--kernel: path, --image: path, --out: path, --map: string = "render_0"
     let elf = ($image | path parse | update extension "elf" | path join)
     let flags = ($elf | path dirname | path join "flags")
     let prefix = (if ($flags | path exists) { open --raw $flags | decode | lines | get 0 | split row " " | last } else { "" })
-    let robo = (jab robo-build $workspace)
+    let robo = (tool robojab $workspace)
     let common = ["--plan" $plan "--elf" $elf "--prefix" $prefix "--seconds" ($seconds | into string)]
     if $target == "mcp" {
         print $"plan: ($plan)"

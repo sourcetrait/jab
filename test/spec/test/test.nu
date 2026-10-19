@@ -34,6 +34,7 @@ use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/bound
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/spec
 use std/assert
 
 const GIB = 1073741824
@@ -80,7 +81,7 @@ SECTIONS
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
-    let specs = (jab specs-of $ws)
+    let specs = (spec data $ws)
 
     # each spec provisioned: the line and the tree from the table
     let provisioned = ($specs | where {|s| $s.cores <= 8 and $s.display == { width: 1920, height: 1080 } })
@@ -326,21 +327,21 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let seed = ($ws | path join "asset" "default" "config.toml")
     let config = ($xdg | path join "jab" "config.toml")
     let in_xdg = {|task: closure| with-env { XDG_CONFIG_HOME: $xdg, JAB_SPEC: "" } { do $task } }
-    let seeded = (do $in_xdg { jab spec-default $ws })
+    let seeded = (do $in_xdg { spec configured $ws })
     assert equal $seeded (open $seed | get spec) $"the default seeded from the asset: ($seeded)"
     assert equal (open --raw $config | into binary) (open --raw $seed | into binary) "the config seeded byte for byte"
     "spec = '1kb1'\n" | save --raw -f $config
-    assert equal (do $in_xdg { jab spec-default $ws }) "1kb1" "a config there read as it is"
+    assert equal (do $in_xdg { spec configured $ws }) "1kb1" "a config there read as it is"
     assert equal (open --raw $config | into binary | decode) "spec = '1kb1'\n" "a config there never written over"
     let unflagged = (do $in_xdg { jab plan --kernel $kernel --image $image --out ($out | path join "unflagged") })
     assert equal $unflagged.machine.spec.name "1kb1" $"a launch naming neither flag on the configured spec: ($unflagged.machine)"
-    assert equal (with-env { XDG_CONFIG_HOME: $xdg, JAB_SPEC: "1ka1" } { jab spec-default $ws }) "1ka1" "JAB_SPEC ahead of the config"
+    assert equal (with-env { XDG_CONFIG_HOME: $xdg, JAB_SPEC: "1ka1" } { spec configured $ws }) "1ka1" "JAB_SPEC ahead of the config"
     "other = 1\n" | save --raw -f $config
-    let unnamed = (refusal { do $in_xdg { jab spec-default $ws } })
+    let unnamed = (refusal { do $in_xdg { spec configured $ws } })
     assert ($unnamed | str contains "names no `spec`") $"a config naming no spec refused: ($unnamed)"
     let gone = ($out | path join "xdg_gone")
     target retire $gone
-    let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { jab spec-default $ws } })
+    let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { spec configured $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
     print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path); Windows' pipes and their relays"
