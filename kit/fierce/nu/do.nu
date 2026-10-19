@@ -91,11 +91,11 @@ def "main play" [target: string = "mcp", map: string = "render_0", seconds: int 
 # records, gauge.nuon written and the summary printed: `just do gauge`,
 # the release build three times at the program's own cadence, 1; `just
 # do gauge debug 1`; `--host` in the host's window and audio; `--cadence
-# 0`, `1`, or `2`; `--out` and `--label` as gauge.nu takes them
+# 0`, `1`, or `2`; `--out` and `--label` as `nuance.nu gauge run` takes them
 def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
     build (if $tree == "debug" { "debug" } else { "" })
     let p = (places)
-    ^nu ($p.game | path join "test" "gauge.nu") run --tree $tree --runs $runs ...$rest
+    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge run --tree $tree --runs $runs ...$rest
 }
 
 # Build, then put Render Zero in the host's window, with its audio and
@@ -105,14 +105,14 @@ def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
 def --wrapped "main gauge-play" [seconds: int = 120, tree: string = "release", ...rest] {
     build (if $tree == "debug" { "debug" } else { "" })
     let p = (places)
-    ^nu ($p.game | path join "test" "gauge.nu") play --tree $tree --seconds $seconds ...$rest
+    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge play --tree $tree --seconds $seconds ...$rest
 }
 
 # Read a run's capture as the gauge reads its own, the identity its
 # launch wrote beside it taken up: `just do gauge-read <run>/api.out`
 def --wrapped "main gauge-read" [api: path, ...rest] {
     let p = (places)
-    ^nu ($p.game | path join "test" "gauge.nu") read ($api | path expand) ...$rest
+    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge read ($api | path expand) ...$rest
 }
 
 # Set builds' gauge.nuon files side by side, each walked leg per half
@@ -123,5 +123,5 @@ def --wrapped "main gauge-read" [api: path, ...rest] {
 # refused even then
 def --wrapped "main gauge-compare" [...rest] {
     let p = (places)
-    ^nu ($p.game | path join "test" "gauge.nu") compare ...$rest
+    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge compare ...$rest
 }
