@@ -47,6 +47,7 @@ use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/spec
+use ../../../nu/mod/demand
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -332,7 +333,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $keyed_made.exit_code 0 $"the keyed program builds: ($keyed_made.stderr)"
     let keyed_image = (jab program-out $program release | path join "fixture.jab")
     let first = ($specs | first)
-    let declared_cores = {|| jab check-image $keyed_image | get declaration.specs.0.cores }
+    let declared_cores = {|| demand check-image $keyed_image | get declaration.specs.0.cores }
     assert equal (do $declared_cores) $first.cores $"its image declares ($first.name)'s cores"
     let original = (open --raw $data | decode)
     let edited = ($original | str replace $"cores: ($first.cores)," $"cores: ($first.cores + 1),")
@@ -371,7 +372,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # A program's declared demand (jab demand-of), or its refusal as text,
 # `refused: ` and the message.
 def read-demand [dir: path] {
-    try { jab demand-of $dir } catch {|e| $"refused: ($e.msg)" }
+    try { demand of $dir } catch {|e| $"refused: ($e.msg)" }
 }
 
 # What a build left in its output directory `out` of a declared demand:
@@ -409,7 +410,7 @@ def written [image: path]: nothing -> datetime {
 # The demand recorded with an image (jab image-demand), or its refusal as
 # text, `refused: ` and the message.
 def read-recorded [image: path] {
-    try { jab image-demand $image } catch {|e| $"refused: ($e.msg)" }
+    try { demand image $image } catch {|e| $"refused: ($e.msg)" }
 }
 
 # A program built again through the tool, held to have built whole: the

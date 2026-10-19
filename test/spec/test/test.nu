@@ -35,6 +35,8 @@ use ../../../nu/mod/bound
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/spec
+use ../../../nu/mod/chardev
+use ../../../nu/mod/demand
 use std/assert
 
 const GIB = 1073741824
@@ -145,7 +147,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the startup check: this program's first page, its declaration the
     # spec data's for both specs it lists and its base demand the main hart
-    let own = (jab check-image $image)
+    let own = (demand check-image $image)
     assert equal [$own.kind $own.declaration.base] ["declared" 1] $"this program's image declared, its base demand one hart: ($own | to nuon)"
     let declared = ($provisioned | each {|s| { name: ($s.name | str lowercase), cores: $s.cores, ram_gib: ($s.ram / 1GiB | into int), display: $s.display, fps: $s.fps, isa: $s.isa_profile } })
     assert equal $own.declaration.specs $declared $"its declaration's entries the spec data's: ($own.declaration.specs | to nuon)"
@@ -162,7 +164,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # minimum on the debug kernel by its knob, the run recorded below it; and
     # the release kernel, reading no knob, refusing it still
     let reserving = (fixture $ws ($out | path join "fixtures" "reserving") "reserving" "specs = ['1ka1']\n\n[reserved]\ngfx_harts = 2\n")
-    assert equal (jab check-image $reserving | get declaration.base) 3 "the reserving program's base demand three harts"
+    assert equal (demand check-image $reserving | get declaration.base) 3 "the reserving program's base demand three harts"
     let short = (jab launch --kernel $kernel --image $reserving --out ($out | path join "short") --set $set --harts 2 --seconds 20)
     assert equal [$short.status ($short.serial | lines)] [1 [$SHORT]] $"two harts short of the base demand refused: ($short.serial)"
     let held = (jab launch --kernel $kernel --image $reserving --out ($out | path join "held") --set $set --harts 3 --seconds 20)
@@ -180,9 +182,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the window's base; each runs on the legacy path, on a named machine its
     # kernel checks nothing of
     let undeclared = (fixture $ws ($out | path join "fixtures" "undeclared") "undeclared" "")
-    assert equal (jab check-image $undeclared | get kind) "undeclared" "a program listing no specs has its header undeclared"
+    assert equal (demand check-image $undeclared | get kind) "undeclared" "a program listing no specs has its header undeclared"
     let legacy = (legacy-image $ws ($out | path join "fixtures" "undeclared") ($undeclared | path dirname) ($out | path join "legacy"))
-    assert equal (jab check-image $legacy | get kind) "legacy" "an image built before the header reads as legacy"
+    assert equal (demand check-image $legacy | get kind) "legacy" "an image built before the header reads as legacy"
     for c in [{ name: "undeclared", image: $undeclared } { name: "legacy", image: $legacy }] {
         let run = (jab launch --kernel $kernel --image $c.image --out ($out | path join $"($c.name)_run") --set $set --spec 1kb1 --seconds 20)
         assert equal [$run.status ($run.serial | lines) $run.declared $run.diagnostic] [0 [] false true] $"the ($c.name) image on 1KB1, undeclared and diagnostic: ($run.serial)"
@@ -213,7 +215,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     mut copies = []
     for m in $malformed {
         let copy = (patched $bytes $m ($out | path join "malformed" $m.name) ($env.FILE_PWD | path join ".." | path expand))
-        let checked = (refusal { jab check-image $copy })
+        let checked = (refusal { demand check-image $copy })
         assert ($checked | str contains $"declaration refused: ($m.why)") $"($m.name): check-image refuses it, ($m.why): ($checked)"
         let run = (jab launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [1 [$"jab: declaration refused: ($m.why)"]] $"($m.name): the kernel refuses it, ($m.why): ($run.serial)"
@@ -253,7 +255,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let fifo = ($stand | path join "nobody")
         ^mkfifo $fifo
         let w0 = (date now)
-        let wrote = (jab fifo-write $fifo "x" $real.path)
+        let wrote = (chardev fifo-write $fifo "x" $real.path)
         let waited = (((date now) - $w0) / 1sec)
         assert ((not $wrote) and $waited < 2) $"fifo-write into a fifo nobody reads gives up within two seconds: ($wrote) in ($waited) s"
     }
@@ -280,16 +282,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     target retire $pipes
     mkdir $pipes
     for os in ["linux" "macos"] {
-        assert equal (jab pipe-path $pipes "api" 42 $os) ($pipes | path join "api") $"($os): the chardev's path the pair's base"
+        assert equal (chardev pipe-path $pipes "api" 42 $os) ($pipes | path join "api") $"($os): the chardev's path the pair's base"
     }
-    assert equal (jab pipe-path $pipes "monitor" 42 "windows") "jab-000000000000002a-monitor" "windows: the pipe's bare name by the run's nonce"
-    let nameless = (refusal { jab pipe-path $pipes "api" 0 "windows" })
+    assert equal (chardev pipe-path $pipes "monitor" 42 "windows") "jab-000000000000002a-monitor" "windows: the pipe's bare name by the run's nonce"
+    let nameless = (refusal { chardev pipe-path $pipes "api" 0 "windows" })
     assert ($nameless | str contains "named by its nonce") $"windows: a pipe with no nonce refused: ($nameless)"
-    let windows = (jab pipe-pair $pipes "padport" 42 "windows" $root)
+    let windows = (chardev pipe-pair $pipes "padport" 42 "windows" $root)
     assert equal [$windows.name ($windows.inward | path type) ($windows.outward | path type)] ["jab-000000000000002a-padport" "file" "file"] $"Windows' pair, two plain files: ($windows)"
     "header" | save --raw --append $windows.inward
     "guest" | save --raw --append $windows.outward
-    let renewed = (jab pipe-pair $pipes "padport" 42 "windows" $root)
+    let renewed = (chardev pipe-pair $pipes "padport" 42 "windows" $root)
     assert equal [(ls $renewed.inward | get 0.size) (ls $renewed.outward | get 0.size)] [0B 0B] "a previous run's pair retired, the new one empty"
     let piped = (jab plan --kernel $kernel --image $image --out ($pipes | path join "plan") --spec 1ka1 --api)
     if $nu.os-info.name == "windows" {
@@ -297,23 +299,23 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert ((after $piped.qemu "-monitor") | str starts-with "pipe:jab-") $"the monitor on a named pipe: ($piped.qemu)"
         assert equal [($piped.api_in | path type) ($piped.relay_binary | path type)] ["file" "file"] $"the API's in-file a plain file, the relay built: ($piped.api_in), ($piped.relay_binary)"
     } else {
-        let here = (jab pipe-pair $pipes "api" 0 $nu.os-info.name $root)
+        let here = (chardev pipe-pair $pipes "api" 0 $nu.os-info.name $root)
         assert equal [$here.name ($here.inward | path type) ($here.outward | path type) (ls $here.outward | get 0.size)] [($pipes | path join "api") "pipe" "file" 0B] $"this host's pair, a fifo in and an empty file out: ($here)"
         assert equal [$piped.relays $piped.relay_binary $piped.bridge_pipe] [[] "" ""] $"no relay and no bridge's pipe: ($piped.relays), ($piped.relay_binary), ($piped.bridge_pipe)"
         assert equal [(after $piped.qemu "-monitor") ($piped.api_in | path type)] [$"pipe:($piped.monitor)" "pipe"] $"the monitor's pair and the API's fifo as before: ($piped.qemu)"
-        let watched = (jab pipe-pair $pipes "monitor" 42 "windows" $root)
-        let relays = (jab relays-of $pipes [{ endpoint: "monitor", pipe: $watched } { endpoint: "padport", pipe: null }])
+        let watched = (chardev pipe-pair $pipes "monitor" 42 "windows" $root)
+        let relays = (chardev relays-of $pipes [{ endpoint: "monitor", pipe: $watched } { endpoint: "padport", pipe: null }])
         assert equal ($relays | each {|r| [$r.endpoint $r.name $r.done] }) [["monitor" "jab-000000000000002a-monitor" ($pipes | path join "monitor.relay.nuon")]] $"a relay for each pipe the machine has: ($relays)"
         let stands = ($pipes | path join "stands")
         mkdir $stands
-        let ended = (jab relays-stop (jab relays-start $relays (stand-in $stands "ending" "exit 0") $root))
+        let ended = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "ending" "exit 0") $root))
         assert equal ($ended | each {|r| [$r.endpoint $r.exit $r.said] }) [["monitor" 0 ""]] $"a relay ending on its own: ($ended)"
-        jab relays-held $ended { exit_code: 0, stderr: "" }
-        let failed = (jab relays-stop (jab relays-start $relays (stand-in $stands "failing" "echo 'no connection within 10 s' >&2\nexit 1") $root))
-        let held = (refusal { jab relays-held $failed { exit_code: 124, stderr: "" } })
+        chardev relays-held $ended { exit_code: 0, stderr: "" }
+        let failed = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "failing" "echo 'no connection within 10 s' >&2\nexit 1") $root))
+        let held = (refusal { chardev relays-held $failed { exit_code: 124, stderr: "" } })
         assert ($held | str contains "the monitor pipe's relay, for jab-000000000000002a-monitor, ended with 1: no connection within 10 s; QEMU ended with 124") $"a relay ending in failure fails the launch, naming its pipe: ($held)"
         let s0 = (date now)
-        let stopped = (jab relays-stop (jab relays-start $relays (stand-in $stands "staying" "exec sleep 31.4159") $root))
+        let stopped = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "staying" "exec sleep 31.4159") $root))
         let took = (((date now) - $s0) / 1sec)
         assert ($stopped.0.exit == null and $took < 3) $"a relay still running a second after QEMU's end stopped: ($stopped) in ($took) s"
         sleep 200ms
@@ -369,7 +371,7 @@ def patched [bytes: binary, m: record, dir: path, home: path]: nothing -> string
     if $count != null {
         let length = ($b | bytes at 20..<24 | into int --endian little)
         $b = (($b | bytes at 0..<66) ++ ($count | into binary --endian little | bytes at 0..<1) ++ ($b | bytes at 67..))
-        $b = (put-word $b 24 (jab crc32 ($b | bytes at 64..<(64 + $length))))
+        $b = (put-word $b 24 (demand crc32 ($b | bytes at 64..<(64 + $length))))
     }
     let file = ($dir | path join "spec.jab")
     $b | save -f $file

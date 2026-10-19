@@ -109,7 +109,7 @@ def reading [log: path]: nothing -> record<flips: int, console: int, switches: i
 # the device's code reads, and each object's table by index.
 def first-made [log: path]: nothing -> record<shim_frames: int, functions: list<any>, virtio_gpu_in: string, sources: record> {
     try {
-        let read = (jab sdl-resolve $log)
+        let read = (sdl resolve $log)
         let made = ($read.events | where name == "make_current" | first)
         {
             shim_frames: $made.shim_frames,
@@ -603,7 +603,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let harness_log = ($dir | path join "harness.log")
     let ran = (with-env { LD_PRELOAD: $library, SDL_SHIM_LOG: $harness_log } { ^$harness | complete })
     assert equal $ran.exit_code 0 $"harness: it runs under the shim: ($ran.stdout)($ran.stderr)"
-    let read = (jab sdl-resolve $harness_log)
+    let read = (sdl resolve $harness_log)
     let captured = ($read.events | where name == "make_current")
     assert equal ($captured | length) 1 $"harness: the shim logs its one make_current: ($read.events | to nuon)"
     let caller = ($captured | first | get frames | get -o 0)

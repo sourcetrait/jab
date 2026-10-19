@@ -48,12 +48,17 @@
 
 use ../../nu/mod/audio
 use ../../nu/mod/bound
+use ../../nu/mod/chardev
+use ../../nu/mod/demand
+use ../../nu/mod/disco
 use ../../nu/mod/disk
 use ../../nu/mod/host
+use ../../nu/mod/image
 use ../../nu/mod/nonce
 use ../../nu/mod/process
 use ../../nu/mod/sdl/log
 use ../../nu/mod/sdl/refusal
+use ../../nu/mod/sdl/symbols
 use ../../nu/mod/spec
 use ../../nu/mod/stamp
 use ../../nu/mod/target
@@ -75,27 +80,6 @@ const custom_ram_gib = 4
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
-# The image's first page (jab.inc's JAB_IMAGE_* and JAB_DECL_*), which the
-# kernel reads before the program starts (start_check): at the window's
-# base one uncompressed `jal x0` to the code at the second page,
-# image_jump; the header after it, image_header bytes from the base, the
-# magic `JABD` as a little-endian word, the version, the flags, bit 0
-# declared, and the declaration's offset, length, and CRC-32; the
-# declaration at decl_offset, never executed: the base demand, the count
-# of the specs listed, at most decl_specs_max, and an entry of
-# decl_spec_bytes a spec, its name zero padded to decl_name_bytes.
-const image_code = 4096
-const image_header = 64
-const image_magic = 0x4442414a
-const image_version = 1
-const image_declared = 1
-const image_jump = 0x0000106f
-const decl_offset = 64
-const decl_specs_max = 16
-const decl_spec_bytes = 32
-const decl_name_bytes = 8
-# The ISAs a declaration names, by the spec data's profile: RVA23 is 1.
-const decl_isas = { RVA23: 1 }
 # RVA23 is the profile Jab pins, so everything it mandates is on whether
 # or not Jab itself uses it; the supervisor profile is the one carrying
 # an MMU mode and the supervisor timer the frame clock needs. RVA23 says
@@ -125,16 +109,6 @@ const machine_rest = [
     "-global" "virtio-mmio.force-legacy=false"
     "-parallel" "none"
 ]
-# The console's rectangle update in QEMU's two families, the function a
-# device's flush calls and its whole-surface form: 11.1.2's names, then
-# 10.2.2's, which a modular build exports to its modules.
-const console_updates = [
-    ["qemu_console_update" "qemu_console_update_full"]
-    ["dpy_gfx_update" "dpy_gfx_update_full"]
-]
-# How a virtio-gpu module's file name starts in a modular QEMU's
-# packages: hw-display-virtio-gpu.so and its -gl and -pci kin.
-const device_module = "hw-display-virtio-gpu"
 # The QEMU a machine runs on: an extern when there is one, else PATH.
 # `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
 # top, where the Windows installer puts it, looked for as the
@@ -156,28 +130,6 @@ def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> stri
         }
     }
     $process.qemu_name
-}
-
-# Where a launch looks for extern/qemu before the workspace, as a run
-# does: the directory of the program a built image came from, which the
-# build writes beside the image as `home`. An image built before that
-# is read from its path: a member's under the workspace's .target at the
-# member's path, any other program's under the program's own .target,
-# and an image under no .target is taken to sit beside its program.
-def image-home [image: path]: nothing -> string {
-    let marker = ($image | path expand | path dirname | path join "home")
-    if ($marker | path exists) { return (open --raw $marker | decode | str trim) }
-    let parts = ($image | path expand | path split)
-    let marks = ($parts | enumerate | where item == ".target" | get index)
-    if ($marks | is-empty) { return ($image | path expand | path dirname) }
-    let mark = ($marks | last)
-    let base = ($parts | first $mark | path join)
-    # past .target: the tree, debug or release, then the program's
-    # workspace-relative path or its name, then the image
-    let relative = ($parts | skip ($mark + 2) | drop 1)
-    if ($relative | is-empty) or not ($base | path join "workspace.jab.toml" | path exists) { return $base }
-    let program = ($base | path join ...$relative)
-    if (workspace member-of $program $base) { $program } else { $base }
 }
 
 # The CPU every machine runs, the RVA23 profile, once the QEMU it runs on
@@ -364,13 +316,13 @@ export def plan [
     --profile: string = ""
 ]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
-    let ws = (launch-workspace $kernel $image $out)
+    let ws = (image workspace $kernel $image $out)
     # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
     # is recorded below it, where a release kernel reads no knob and refuses
     let asked = (machine-for $ws $spec $harts)
     let machine = (if (knob-of $bootargs "jab.nominimum") == 1 { $asked | insert below_minimum true } else { $asked })
-    let demand = (image-demand $image)
-    spec-listed $machine $demand ($image | path parse | get stem)
+    let demand = (demand image $image)
+    demand spec-listed $machine $demand ($image | path parse | get stem)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
     if $host_pad and ($gamepad or $pad_port) { error make {msg: "--host-pad with a scripted pad: the host's own gamepad or a table, one or the other"} }
     let probed = ($sdl_probe != "")
@@ -381,7 +333,7 @@ export def plan [
     if $profile == "generic" and not $probed { error make {msg: "--profile generic is a probing launch's, classification alone; it needs --sdl-probe"} }
     if $profile == "paired" and $capture_nonce == 0 { error make {msg: "--profile paired needs the run's --capture-nonce, minted by the caller that makes the request"} }
     mkdir $out
-    let root = (target root (if $ws != null { $ws } else { image-home $image }))
+    let root = (target root (if $ws != null { $ws } else { image home $image }))
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
@@ -391,26 +343,26 @@ export def plan [
     # a Windows run's pipes are named pipes, named by a nonce of its own
     let windows = ($nu.os-info.name == "windows")
     let nonce = (if $windows { random int 1.. } else { 0 })
-    let watch = (if $windows { pipe-pair $out "monitor" $nonce "windows" $root } else {
-        fifo-at ($monitor + ".in") $root
-        fifo-at ($monitor + ".out") $root
+    let watch = (if $windows { chardev pipe-pair $out "monitor" $nonce "windows" $root } else {
+        chardev fifo-at ($monitor + ".in") $root
+        chardev fifo-at ($monitor + ".out") $root
         { name: $monitor, inward: ($monitor + ".in"), outward: ($monitor + ".out") }
     })
-    let qemu = (qemu-binary (image-home $image) $ws)
+    let qemu = (qemu-binary (image home $image) $ws)
     let bound = (bound timeout)
-    let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
+    let found = (if (disco discovery-wanted $host_pad $live_sound) { disco discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws $root)
     let api_on = ($api or (not ($send | is-empty)))
-    let ports = (ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
+    let ports = (chardev ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
     # Windows' relays, one a pipe with no client of its own: the monitor's,
     # the API's, and a scripted pad's port, the host's pad's client being
     # the bridge
     let piped = (if not $windows { [] } else {
         [{ endpoint: "monitor", pipe: $watch } { endpoint: "api", pipe: $ports.api }] ++ (if $hosted.port { [] } else { [{ endpoint: "padport", pipe: $ports.pad }] })
     })
-    let relays = (relays-of $out $piped)
-    let relay_binary = (relay-build $relays $ws)
+    let relays = (chardev relays-of $out $piped)
+    let relay_binary = (chardev relay-build $relays $ws)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" { target retire $wav $root }
@@ -420,7 +372,7 @@ export def plan [
     let shim = (if $probed { tool shim $ws "jabshim_sdl" } else { "" })
     let sdl_log = (if $probed { $sdl_probe | path expand } else { "" })
     if $probed { target retire $sdl_log $root }
-    let shown = (if $probed { "sdl,gl=on" } else if $window { display (image-manifest $image) } else { "none" })
+    let shown = (if $probed { "sdl,gl=on" } else if $window { display (image manifest $image) } else { "none" })
     let run_env = (if not $probed { $pad.env } else {
         let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
         let preload = ([($pad.env | get -o LD_PRELOAD | default "") $shim] | where {|p| $p != "" } | str join " ")
@@ -461,7 +413,7 @@ export def plan [
         window: $shown,
         audio: $backend,
         bridge: $hosted.bridge,
-        bridge_pipe: (bridge-pipe $ports.pad),
+        bridge_pipe: (chardev bridge-pipe $ports.pad),
         relays: $relays,
         relay_binary: $relay_binary,
         machine: $machine,
@@ -494,26 +446,6 @@ export def capture-identity [machine: record, pid: oneof<int, nothing>]: nothing
         api: ($machine.api_in != ""),
         sends: ($machine.sends | each {|s| { at: ($s.at / 1sec), length: ($s.bytes | bytes length), sha256: ($s.bytes | hash sha256) } }),
     }
-}
-
-# The workspace a launch belongs to, whose generic disk rides along and
-# whose shims play a pad: the one the image's program builds against
-# (workspace-of, through the manifest at the image's home), since the
-# target an image and a kernel sit in can lie outside every workspace;
-# else the one above the kernel's ELF, else the one above `out`.
-def launch-workspace [kernel: path, image: path, out: path]: nothing -> oneof<string, nothing> {
-    let home = (image-home $image)
-    let manifest = ($home | path join "program.jab.toml")
-    let found = (if ($manifest | path exists) { try { workspace workspace-of $home (open $manifest) } catch { null } } else { null })
-    if $found != null { return $found }
-    workspace workspace-dir ($kernel | path expand) | default (workspace workspace-dir $out)
-}
-
-# The manifest of the program an image was built from (image-home), for
-# the window it names; an empty record when there is none.
-def image-manifest [image: path]: nothing -> record {
-    let manifest = (image-home $image | path join "program.jab.toml")
-    if ($manifest | path exists) { open $manifest } else { {} }
 }
 
 # Run a program on the kernel under QEMU with no window, the UART to
@@ -664,7 +596,7 @@ export def launch [
     let started = (date now)
     let bound = $machine.timeout_binary
     job spawn { with-env $gamepad.env { ^$bound ...$disked | complete } | job send 0 }
-    let relays = (relays-start $machine.relays $machine.relay_binary $machine.target)
+    let relays = (chardev relays-start $machine.relays $machine.relay_binary $machine.target)
     mut result: any = null
     mut cpu = 0.0
     mut events_taken = 0
@@ -696,7 +628,7 @@ export def launch [
         # every write into QEMU's pipes is bounded (pipe-write), since QEMU
         # can end between the check that it runs and the write
         if (not $header_sent) and $alive {
-            pipe-write $pad_in $gamepad.header $bound | ignore
+            chardev pipe-write $pad_in $gamepad.header $bound | ignore
             $header_sent = true
         }
         # every due action in due-order's order: a screen that fails holds
@@ -706,27 +638,27 @@ export def launch [
             for action in (due-order ($events | skip $events_taken) $screen_due $elapsed) {
                 if $action.kind == "screen" {
                     $screen_started = (((date now) - $started) / 1sec)
-                    let asked = (if $alive { monitor-send $monitor $"screendump (hmp-quoted $screen_file)" $bound } else { false })
-                    if not ($asked and (screen-whole $screen_file)) {
+                    let asked = (if $alive { chardev monitor-send $monitor $"screendump (chardev hmp-quoted $screen_file)" $bound } else { false })
+                    if not ($asked and (chardev screen-whole $screen_file)) {
                         $held = true
                         break
                     }
                     $screen_completed = (((date now) - $started) / 1sec)
                     $screen_due = null
                     if $capture != 0sec {
-                        if (process process-alive $pid) { monitor-send $monitor "quit" $bound | ignore }
+                        if (process process-alive $pid) { chardev monitor-send $monitor "quit" $bound | ignore }
                         $held = true
                         break
                     }
                 } else {
                     let written = (if not $alive { false } else if $action.kind == "key" {
                         let k = ($keys | get $action.index)
-                        monitor-send $monitor $"sendkey ($k.key) ($k.hold)" $bound
+                        chardev monitor-send $monitor $"sendkey ($k.key) ($k.hold)" $bound
                     } else if $action.kind == "send" {
-                        if $api_in == "" { false } else { pipe-write $api_in ($send | get $action.index | get bytes) $bound }
+                        if $api_in == "" { false } else { chardev pipe-write $api_in ($send | get $action.index | get bytes) $bound }
                     } else {
                         let g = ($gamepad.groups | get $action.index)
-                        if $gamepad.port { pipe-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
+                        if $gamepad.port { chardev pipe-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { chardev fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
                     })
                     if $written and $action.kind == "send" {
                         $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
@@ -757,9 +689,9 @@ export def launch [
         }
     }
     let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
-    let relayed = (relays-stop $relays)
+    let relayed = (chardev relays-stop $relays)
     if $bridge != null { try { job kill $bridge } }
-    relays-held $relayed $result
+    chardev relays-held $relayed $result
     let ran_on = ($machine.machine | update overrides $qemu)
     {
         status: $result.exit_code,
@@ -822,180 +754,18 @@ export def due-order [events: table<kind: string, index: int, at: duration>, scr
 export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string = "", --harts: int = 0, --bootargs: string = ""]: nothing -> string {
     let file = ($out | path expand)
     let dir = ($file | path dirname)
-    let ws = (launch-workspace $kernel $image $dir)
+    let ws = (image workspace $kernel $image $dir)
     let machine = (machine-for $ws $spec $harts)
     mkdir $dir
-    let root = (target root (if $ws != null { $ws } else { image-home $image }))
+    let root = (target root (if $ws != null { $ws } else { image home $image }))
     target retire $file $root
-    let qemu = (qemu-binary (image-home $image) $ws)
+    let qemu = (qemu-binary (image home $image) $ws)
     let line = (spec-bootargs $machine $bootargs)
     let append = (if $line == "" { [] } else { ["-append" $line] })
     let args = ((machine-args $qemu $machine --options $"dumpdtb=($file)") ++ (memory-args $machine) ++ ["-bios" "none" "-kernel" ($kernel | path expand) "-display" "none"] ++ $append)
     let made = (^$qemu ...$args | complete)
     if $made.exit_code != 0 or not ($file | path exists) { error make {msg: $"QEMU wrote no device tree to ($file): ($made.stderr | str trim)"} }
     $file
-}
-
-# The ports, each of one virtio-serial-device: DEBUG in the build puts
-# the kernel's debug channel on port 1 with the host's end a file,
-# debug.log in `out`; `api` puts the API on port 2 with the host's end
-# QEMU's pipe chardev over the pipe pair api.in and api.out (pipe-pair),
-# api.in what the host writes into and api.out a plain file the
-# program's bytes land in as they are sent, both made here. A file
-# rather than a second pipe, so nothing has to hold a pipe open for the
-# run and a program is never held by a host that stopped reading.
-# `pad_port` puts the pad's port on port 3 the same way, over padport.in,
-# which the host writes the pad's header and events into
-# (doc/padport.md). Nothing at all with none, so the machine carries no
-# serial device. The console keeps the UART in every build, since a fault
-# line has to reach the host when a port has not come up. A previous
-# run's debug.log is retired into `root`'s retire home (retire). `nonce`
-# names a Windows run's pipes (pipe-path). Each port's pipe comes back as
-# pipe-pair made it, null for a port the machine lacks.
-def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path, nonce: int]: nothing -> record<args: list<string>, debug_log: string, api: oneof<record<name: string, inward: string, outward: string>, nothing>, pad: oneof<record<name: string, inward: string, outward: string>, nothing>> {
-    mkdir $out
-    let debug = (if "DEBUG" in $names {
-        let log = ($out | path join "debug.log")
-        target retire $log $root
-        { args: ["-chardev" $"file,id=jabdebug,path=($log)" "-device" "virtserialport,chardev=jabdebug,nr=1,name=jab.debug"], log: $log }
-    } else { { args: [], log: "" } })
-    let port = (if $api { pipe-pair $out "api" $nonce $nu.os-info.name $root } else { null })
-    let pad = (if $pad_port { pipe-pair $out "padport" $nonce $nu.os-info.name $root } else { null })
-    let port_args = (if $port == null { [] } else { ["-chardev" $"pipe,id=jabapi,path=($port.name)" "-device" "virtserialport,chardev=jabapi,nr=2,name=jab.api"] })
-    let pad_args = (if $pad == null { [] } else { ["-chardev" $"pipe,id=jabpad,path=($pad.name)" "-device" "virtserialport,chardev=jabpad,nr=3,name=jab.pad"] })
-    let device = (if ($debug.args | is-empty) and ($port_args | is-empty) and ($pad_args | is-empty) { [] } else { ["-device" "virtio-serial-device"] })
-    { args: ($device ++ $debug.args ++ $port_args ++ $pad_args), debug_log: $debug.log, api: $port, pad: $pad }
-}
-
-# The path QEMU's pipe chardev takes for a pipe of `endpoint` beside a
-# run's other files in `out`, on the host `os` names as $nu.os-info.name
-# does (PipeShape): on every host but Windows `<out>/<endpoint>`, whose
-# `<endpoint>.in` and `<endpoint>.out` QEMU opens itself; on Windows a
-# bare name, `jab-<nonce>-<endpoint>`, the run's nonce in sixteen hex
-# digits (nonce-hex), since QEMU makes one duplex named pipe of the option
-# there, `\\.\pipe\` and the option as given, a filesystem path being no
-# pipe's name, and the nonce keeps one run's pipes apart from another's. A
-# Windows pipe with no nonce, under 1, is refused.
-export def pipe-path [out: path, endpoint: string, nonce: int, os: string]: nothing -> string {
-    if $os != "windows" { return ($out | path join $endpoint) }
-    if $nonce < 1 { error make {msg: $"a Windows run's pipes are named by its nonce, 1 to 2^63 - 1, not ($nonce)"} }
-    $"jab-(nonce hex $nonce)-($endpoint)"
-}
-
-# A pipe of `endpoint` for QEMU's pipe chardev, made in `out` as the host
-# `os` names takes it (pipe-path): `name`, the chardev's path, with
-# `inward`, `<endpoint>.in`, what the host writes into, and `outward`,
-# `<endpoint>.out`, a plain file made empty, where the guest's bytes land.
-# On every host but Windows QEMU opens the two itself, inward a named pipe
-# (fifo-at); on Windows, where the pipe is one named pipe and a relay or
-# the pad bridge its client (relays-start), inward is a plain file made
-# empty too, which a writer appends to (pipe-write) and the relay forwards
-# into the pipe, as outward takes what the relay reads from it. A previous
-# run's files are retired first into `root`'s retire home (retire).
-export def pipe-pair [out: path, endpoint: string, nonce: int, os: string, root: path]: nothing -> record<name: string, inward: string, outward: string> {
-    let name = (pipe-path $out $endpoint $nonce $os)
-    let inward = ($out | path join $"($endpoint).in")
-    let outward = ($out | path join $"($endpoint).out")
-    if $os == "windows" {
-        target retire $inward $root
-        "" | save $inward
-    } else {
-        fifo-at $inward $root
-    }
-    target retire $outward $root
-    "" | save $outward
-    { name: $name, inward: $inward, outward: $outward }
-}
-
-# The relays a Windows machine's pipes take (PipeShape), one for each of
-# `pipes`, its endpoint with its pipe as pipe-pair made it, null for a
-# port the machine lacks, which takes none: the pipe's name, its in-file
-# and its out-file, and `done`, `<endpoint>.relay.nuon` in `out`, where
-# the relay's job saves how it ended (relays-start).
-export def relays-of [out: path, pipes: list<record<endpoint: string, pipe: any>>]: nothing -> list<record<endpoint: string, name: string, inward: string, outward: string, done: string>> {
-    $pipes | where {|p| $p.pipe != null } | each {|p|
-        { endpoint: $p.endpoint, name: $p.pipe.name, inward: $p.pipe.inward, outward: $p.pipe.outward, done: ($out | path join $"($p.endpoint).relay.nuon") }
-    }
-}
-
-# The relay's binary for a machine with relays (relays-of), built from
-# the workspace's shim/crates/pipe (shim-build), "" for one with none; a
-# machine with relays and no workspace to build it in is refused.
-def relay-build [relays: list<any>, ws: oneof<string, nothing>]: nothing -> string {
-    if ($relays | is-empty) { return "" }
-    if $ws == null { error make {msg: "a Windows run's pipes need their relay, which the workspace builds from shim/crates/pipe, and this run has no workspace"} }
-    tool shim $ws "jabpipe" --bin
-}
-
-# The pipe the pad bridge writes, from the pad port's pipe as pipe-pair
-# made it, "" for none: its in-file, a fifo QEMU holds open, on every host
-# but Windows, where the bridge is the pipe's client and takes its name.
-def bridge-pipe [pad: oneof<record<name: string, inward: string, outward: string>, nothing>]: nothing -> string {
-    if $pad == null { "" } else if $nu.os-info.name == "windows" { $pad.name } else { $pad.inward }
-}
-
-# A Windows machine's relays started beside its QEMU, one job each
-# (PipeShape): `jabpipe <name> <inward> <outward>`, each connecting to its
-# pipe as soon as QEMU makes it and holding the run's one connection,
-# then forwarding what is appended to the in-file into the pipe and
-# writing what the pipe gives into the out-file, until QEMU closes it.
-# Each saves its exit and what it said to its `done` file as it ends,
-# through a file beside it moved over it, so a read never takes half of
-# one; a `done` file already there, an earlier start's, is retired first
-# into `root`'s retire home (retire), so the record read back is this
-# start's own. Each relay started with its job's id; none for a machine
-# with none.
-export def relays-start [relays: list<any>, binary: string, root: path]: nothing -> list<record<job: int, relay: record>> {
-    mut started = []
-    for r in $relays {
-        target retire $r.done $root
-        target retire $"($r.done).next" $root
-        let id = (job spawn {
-            let next = $"($r.done).next"
-            ^$binary $r.name $r.inward $r.outward | complete | to nuon | save -f $next
-            mv -f $next $r.done
-        })
-        $started = ($started | append { job: $id, relay: $r })
-    }
-    $started
-}
-
-# A machine's relays once its QEMU has ended (relays-start): each given a
-# second to end on its own, its pipe closed with QEMU, then any still
-# running stopped (job kill). How each ended: its endpoint, its pipe's
-# name, its exit, null for one stopped, and what it said.
-export def relays-stop [started: list<record<job: int, relay: record>>]: nothing -> list<record<endpoint: string, name: string, exit: oneof<int, nothing>, said: string>> {
-    if ($started | is-empty) { return [] }
-    let deadline = ((date now) + 1sec)
-    while ((date now) < $deadline) and ($started | any {|s| not ($s.relay.done | path exists) }) { sleep 50ms }
-    $started | each {|s|
-        let done = (if ($s.relay.done | path exists) { try { open --raw $s.relay.done | decode | from nuon } catch { null } } else { null })
-        if $done == null { try { job kill $s.job } }
-        { endpoint: $s.relay.endpoint, name: $s.relay.name, exit: (if $done == null { null } else { $done.exit_code }), said: (if $done == null { "" } else { $done.stderr }) }
-    }
-}
-
-# A launch's relays held to how they ended (relays-stop): one that ended
-# on its own in failure, a pipe it never connected to or a pipe or a file
-# that failed it, fails the launch once QEMU has ended, naming its pipe
-# and what it said, beside QEMU's exit and its stderr; one stopped after
-# QEMU ended, its pipe never made, leaves QEMU's own record to say why.
-# Untyped because it ends in an error.
-export def relays-held [relayed: list<any>, qemu: record] {
-    let failed = ($relayed | where {|r| $r.exit != null and $r.exit != 0 })
-    if ($failed | is-empty) { return }
-    let told = ($failed | each {|r| $"the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)" } | str join "; ")
-    let said = ($qemu.stderr | str trim)
-    error make {msg: $"($told); QEMU ended with ($qemu.exit_code)(if $said == '' { '' } else { $', saying: ($said)' })"}
-}
-
-# A named pipe at `path`: one already there is kept, since a pipe holds
-# nothing once every end has closed, and anything else there is retired
-# into `root`'s retire home (retire) before a fresh pipe is made.
-def fifo-at [path: path, root: path]: nothing -> nothing {
-    if ($path | path type) == "pipe" { return }
-    target retire $path $root
-    ^mkfifo $path
 }
 
 # The gamepad a machine carries: nothing at all unless asked. Asked, on
@@ -1016,7 +786,7 @@ def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>,
     if $ws == null { error make {msg: "a gamepad needs a workspace, above the kernel or the output directory, which holds shim/crates/evdev"} }
     let shim = (tool shim $ws "jabshim_evdev")
     let fifo = ($out | path join "pad")
-    fifo-at $fifo $root
+    chardev fifo-at $fifo $root
     {
         args: ["-device" $"virtio-input-host-device,evdev=($fifo)"],
         env: { LD_PRELOAD: $shim, EVDEV_SHIM_FIFO: $fifo },
@@ -1105,59 +875,6 @@ def profile [names: list<string>]: nothing -> string { if "DEBUG" in $names { "d
 
 # The symbols as the assembler takes them.
 def defsyms [names: list<string>]: nothing -> list<string> { $names | each {|n| ["--defsym" $"($n)=1"] } | flatten }
-
-# Give the QEMU monitor a command through its pipe (pipe-write) under
-# `bound`, the run's timeout (timeout-binary); true when it went in.
-def monitor-send [monitor: path, command: string, bound: string]: nothing -> bool {
-    pipe-write ($monitor + ".in") $"($command)\n" $bound
-}
-
-# Bytes into one of QEMU's pipes as this host's pipes take them, `inward`
-# the pipe's in-file (pipe-pair): on Windows appended to the file, which
-# never waits and which the pipe's relay forwards (relays-start); on every
-# other host into the named pipe itself under `bound` (fifo-write). True
-# when they went in.
-def pipe-write [inward: path, data: any, bound: string]: nothing -> bool {
-    if $nu.os-info.name != "windows" { return (fifo-write $inward $data $bound) }
-    $data | save --raw --append $inward
-    true
-}
-
-# Bytes into one of QEMU's named pipes without waiting on a reader that is
-# gone: opening a pipe to write waits until some process reads it, and
-# QEMU can end between any check that it runs and the open, so `tee`
-# appends the bytes under a one-second bound, `bound` the run's timeout
-# (timeout-binary). True when they went in; false when no reader came
-# within the second.
-export def fifo-write [fifo: path, data: any, bound: string]: nothing -> bool {
-    let r = ($data | ^$bound 1 tee -a $fifo | complete)
-    $r.exit_code == 0
-}
-
-# A word for the QEMU monitor's command line, which splits on spaces: in
-# double quotes, a backslash and a double quote inside escaped, so a
-# path with spaces in it stays one argument.
-def hmp-quoted [text: string]: nothing -> string {
-    let escaped = ($text | str replace --all '\' '\\' | str replace --all '"' '\"')
-    $"\"($escaped)\""
-}
-
-# Whether a screen QEMU writes comes whole: its file the PPM header
-# naming the display's size (display_size) and every pixel's three bytes
-# after it, looked at every 50 ms for at most five seconds.
-def screen-whole [path: path]: nothing -> bool {
-    let header = ($"P6\n($spec.display_size.width) ($spec.display_size.height)\n255\n" | into binary)
-    let whole = (($header | bytes length) + $spec.display_size.width * $spec.display_size.height * 3)
-    for _ in 0..100 {
-        if ($path | path exists) {
-            if (ls -D $path | get 0.size | into int) == $whole {
-                return ((open --raw $path | into binary | bytes at 0..<($header | bytes length)) == $header)
-            }
-        }
-        sleep 50ms
-    }
-    false
-}
 
 # Where `watch` records: watch.nuonl in the workspace's target.
 def watch-file [ws: path]: nothing -> string {
@@ -1405,385 +1122,6 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     $id | save -f $stamp
 }
 
-# The roles a manifest's sections may name, each a count of harts: those
-# `[reserved]` may reserve, and those a `[feature.<name>]` may demand.
-const reserved_roles = [gfx_harts]
-const feature_roles = [io_harts]
-
-# A program's declared demand, from the manifest in its directory
-# (program-demand): the specs it supports as asset/spec.nuon names them,
-# its reservation by role, each feature's demand, and its base demand.
-# Null for the legacy path, a manifest with no `specs`. Untyped because it
-# ends in an error.
-export def demand-of [dir: path] {
-    let here = ($dir | path expand)
-    let manifest = (open ($here | path join "program.jab.toml"))
-    program-demand $manifest (workspace workspace-of $here $manifest)
-}
-
-# A manifest's declared demand, validated. `specs` is a nonempty list of
-# names the workspace's spec data defines, matched without regard to case
-# and none twice; either section stands only beside it; `[reserved]` names
-# only the roles a program reserves, and each `[feature.<name>]` has a
-# snake_case name and demands at least one of the roles a feature may,
-# every count a whole number of one or more. The base demand, the main
-# hart and every hart reserved, is held against every listed spec's
-# harts, its `cores`, a spec that cannot hold it refused by name; a
-# feature's demand refuses nothing, since a spec it does not fit runs the
-# program without the feature. The specs come back by their names in the
-# spec data, the reservation with every role, 0 for one not reserved.
-# Null for the legacy path, a manifest with no `specs` and neither
-# section, which builds and launches as before, its runs recorded
-# undeclared. Untyped because it ends in an error.
-def program-demand [m: record, ws: oneof<string, nothing>] {
-    let name = $m.name
-    let specs = ($m | get -o specs)
-    if $specs == null {
-        let sections = ([reserved feature] | where {|k| ($m | get -o $k) != null } | each {|k| $"[($k)]" })
-        if not ($sections | is-empty) { error make {msg: $"($name): ($sections | str join ' and ') beside no `specs`; a reservation or a feature's demand holds only on the specs a program lists"} }
-        return null
-    }
-    if not ($specs | describe | str starts-with "list") { error make {msg: $"($name): `specs` is a list of spec names, not ($specs | describe)"} }
-    if ($specs | is-empty) { error make {msg: $"($name): `specs` names no spec; list the specs it supports, or leave `specs` out for the legacy path"} }
-    let unnamed = ($specs | where {|s| ($s | describe) != "string" or ($s | str trim) == "" })
-    if not ($unnamed | is-empty) { error make {msg: $"($name): `specs` holds ($unnamed | each {|u| $u | to nuon } | str join ', '), no spec's name"} }
-    if $ws == null { error make {msg: $"($name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
-    let table = (spec data $ws)
-    let picked = ($specs | each {|s| { asked: $s, row: ($table | where {|r| ($r.name | str trim | str lowercase) == ($s | str trim | str lowercase) } | get -o 0) } })
-    let unknown = ($picked | where {|p| $p.row == null } | each {|p| $p.asked })
-    if not ($unknown | is-empty) { error make {msg: $"($name): `specs` names ($unknown | str join ', '), which its workspace's asset/spec.nuon does not define; it defines ($table | get name | str join ', ')"} }
-    let twice = ($picked | group-by {|p| $p.row.name } | transpose spec asked | where {|g| ($g.asked | length) > 1 } | each {|g| $g.spec })
-    if not ($twice | is-empty) { error make {msg: $"($name): `specs` names ($twice | str join ', ') twice, without regard to case"} }
-    let uncounted = ($picked | where {|p| ($p.row | get -o cores | describe) != "int" } | each {|p| $p.row.name })
-    if not ($uncounted | is-empty) { error make {msg: $"($name): ($uncounted | str join ', ') gives no `cores: int`, the harts a base demand is held against"} }
-    let held = (section-counts $name "reserved" ($m | get -o reserved) $reserved_roles)
-    let feature = ($m | get -o feature)
-    if $feature != null and not ($feature | describe | str starts-with "record") { error make {msg: $"($name): `feature` holds a [feature.<name>] table for each feature, not ($feature | describe)"} }
-    mut features = []
-    for f in (if $feature == null { [] } else { $feature | transpose feature demand }) {
-        if not ($f.feature =~ '^[a-z][a-z0-9_]*$') { error make {msg: $"($name): [feature.($f.feature)]: a feature's name is snake_case, a lowercase letter, then lowercase letters, digits, and underscores"} }
-        let counts = (section-counts $name $"feature.($f.feature)" $f.demand $feature_roles)
-        if ($counts | is-empty) { error make {msg: $"($name): [feature.($f.feature)] demands no hart; it names ($feature_roles | str join ' or ')"} }
-        $features = ($features | append ({ name: $f.feature } | merge $counts))
-    }
-    let reservation = ($reserved_roles | reduce --fold {} {|r, acc| $acc | insert $r ($held | get -o $r | default 0) })
-    let reserving = ($reservation | values | math sum)
-    let base = (1 + $reserving)
-    let short = ($picked | where {|p| $p.row.cores < $base } | each {|p| $"($p.row.name)'s ($p.row.cores)" })
-    if not ($short | is-empty) { error make {msg: $"($name): its base demand, the main hart and the ($reserving) its [reserved] holds, is ($base) harts, more than ($short | str join ' and ')"} }
-    { specs: ($picked | each {|p| $p.row.name }), reserved: $reservation, features: $features, base: $base }
-}
-
-# A section's counts as given, a record of role and harts, each role one
-# of `roles` and each count a whole number of one or more; an empty
-# record for a section left out. Untyped because it ends in an error.
-def section-counts [name: string, section: string, value: any, roles: list<string>] {
-    if $value == null { return {} }
-    if not ($value | describe | str starts-with "record") { error make {msg: $"($name): [($section)] is a table of roles and their harts, not ($value | describe)"} }
-    for k in ($value | columns) {
-        if $k not-in $roles { error make {msg: $"($name): [($section)] names ($k); it names ($roles | str join ' or ')"} }
-        let n = ($value | get $k)
-        if ($n | describe) != "int" or $n < 1 { error make {msg: $"($name): ($section).($k) is ($n | to nuon), where a whole number of harts, one or more, is wanted"} }
-    }
-    $value
-}
-
-# A declared demand as the assembly takes it, generated at every build of
-# the program ahead of its staleness check: `jab_manifest.inc` in the
-# build's output directory, which the build carries among its includes
-# and its inputs, so a program reads its numbers with `.include
-# "jab_manifest.inc"` and keeps no copy of them: JAB_BASE_HARTS;
-# JAB_RESERVED_<ROLE> for every role a program may reserve, 0 where it
-# reserves none; and JAB_FEATURE_<NAME>_<ROLE> for every role each feature
-# demands. The file is written only when its text differs from what is
-# there, so its time moves with its text alone. Its path.
-def demand-include [d: record, out: path]: nothing -> string {
-    let reserved = ($d.reserved | transpose role harts | each {|r| $".set JAB_RESERVED_($r.role | str uppercase), ($r.harts)" })
-    let features = ($d.features | each {|f| $f | reject name | transpose role harts | each {|r| $".set JAB_FEATURE_($f.name | str uppercase)_($r.role | str uppercase), ($r.harts)" } } | flatten)
-    let file = ($out | path join "jab_manifest.inc")
-    let text = (([$".set JAB_BASE_HARTS, ($d.base)"] ++ $reserved ++ $features | str join "\n") + "\n")
-    let held = (if ($file | path exists) { open --raw $file | into binary | decode } else { "" })
-    if $held != $text { $text | save -f $file }
-    $file
-}
-
-# A program's declaration, the bytes its image's first page carries at
-# decl_offset for the kernel to hold the machine to before the program
-# starts (start_check), from its declared demand (program-demand) and its
-# workspace's spec data: the base demand (u16), the count of the specs it
-# lists (u8), a zero byte, then each spec's entry, decl_spec_bytes long, in
-# the demand's order: its name in lowercase ASCII, zero padded to
-# decl_name_bytes, then its cores, its RAM in GiB, its display's width and
-# height, its frame rate, and its ISA (decl_isas), each u16, the rest zero;
-# little-endian throughout. A listed spec an image cannot declare is
-# refused naming the program, the spec, and why: a display other than the
-# ABI's, display_size, the one every image renders at; an ISA profile
-# decl_isas gives no number; RAM in no whole number of GiB; a name past
-# decl_name_bytes or of other than letters and digits; a count past a u16.
-# More specs than decl_specs_max are refused too. Beside the bytes the
-# header's flags, offset, length, and CRC-32 (crc32): 1, decl_offset, the
-# bytes' length, and their CRC for a declared program; every one 0 and no
-# bytes for one declaring no demand. Untyped because it ends in an error.
-def image-declaration [d: any, ws: any, program: string] {
-    if $d == null { return { flags: 0, offset: 0, length: 0, crc: 0, bytes: 0x[] } }
-    let count = ($d.specs | length)
-    if $count > $decl_specs_max { error make {msg: $"($program) lists ($count) specs, and an image declares ($decl_specs_max) at most"} }
-    let table = (spec data $ws)
-    let entries = ($d.specs | each {|listed|
-        let r = ($table | where {|row| ($row.name | str lowercase) == ($listed | str lowercase) } | first)
-        let name = ($r.name | str lowercase)
-        if not ($name =~ '^[a-z0-9]+$') or ($name | str length) > $decl_name_bytes { error make {msg: $"($program) lists ($r.name), whose name an image declares in ($decl_name_bytes) letters and digits at most"} }
-        if $r.display != $spec.display_size { error make {msg: $"($program) lists ($r.name), whose display is ($r.display.width) by ($r.display.height), and an image renders at the ABI's ($spec.display_size.width) by ($spec.display_size.height)"} }
-        let isa = ($decl_isas | get -o $r.isa_profile)
-        if $isa == null { error make {msg: $"($program) lists ($r.name), whose ISA profile ($r.isa_profile) an image cannot declare; it declares ($decl_isas | columns | str join ', ')"} }
-        if ($r.ram mod 1GiB) != 0B { error make {msg: $"($program) lists ($r.name), whose RAM, ($r.ram), is no whole number of GiB"} }
-        let fields = [$r.cores ($r.ram / 1GiB | into int) $r.display.width $r.display.height $r.fps $isa]
-        if ($fields | any {|f| $f < 0 or $f > 0xffff }) { error make {msg: $"($program) lists ($r.name), a count of which an image's u16 cannot hold: ($fields | str join ', ')"} }
-        let named = ($name | into binary)
-        $named ++ (word zeros ($decl_name_bytes - ($named | bytes length))) ++ ($fields | each {|f| word le $f 2 } | bytes collect) ++ (word zeros ($decl_spec_bytes - $decl_name_bytes - 2 * ($fields | length)))
-    })
-    let bytes = ((word le $d.base 2) ++ (word le $count 1) ++ 0x[00] ++ ($entries | bytes collect))
-    { flags: $image_declared, offset: $decl_offset, length: ($bytes | bytes length), crc: (crc32 $bytes), bytes: $bytes }
-}
-
-# The CRC-32 gzip and PNG carry, as the kernel's gz.S computes it over an
-# image's declaration: the reflected polynomial 0xedb88320 through a
-# table, the register starting all ones and inverted at the end.
-export def crc32 [bytes: binary]: nothing -> int {
-    let table = (0..255 | each {|n|
-        mut c = $n
-        for _ in 1..8 {
-            $c = (if ($c bit-and 1) == 1 { ($c bit-shr 1) bit-xor 0xedb88320 } else { $c bit-shr 1 })
-        }
-        $c
-    })
-    mut crc = 0xffffffff
-    for b in ($bytes | chunks 1) {
-        let i = (($crc bit-xor ($b | into int)) bit-and 0xff)
-        $crc = (($table | get $i) bit-xor ($crc bit-shr 8))
-    }
-    $crc bit-xor 0xffffffff
-}
-
-# The image's first page as the assembly takes it: `jab_header.S` in the
-# build's output directory, generated at every build of a program ahead of
-# its staleness check and counted among its inputs, its sections placed by
-# program.ld, `.jab.header` at the window's base and `.jab.decl`
-# decl_offset bytes on: the jump to `__jab_code`, the code's first byte at
-# the second page, assembled uncompressed and unrelaxed so it is the four
-# bytes of image_jump; the magic, the version, and the declaration's
-# flags, offset, length, and CRC (image-declaration), then zeros to
-# image_header bytes; then the declaration's bytes, none for a program
-# declaring no demand. The file is written only when its text differs from
-# what is there, so its time moves with its text alone. Its path.
-def header-source [decl: record, out: path]: nothing -> string {
-    let hex = {|v: int| $v | format number | get lowerhex }
-    let rows = ($decl.bytes | chunks 16 | each {|row| "    .byte " + ($row | chunks 1 | each {|b| $"0x($b | encode hex | str lowercase)" } | str join ", ") })
-    # the jump and six words, then zeros to the header's end
-    let text = (([
-        ".section .jab.header, \"ax\""
-        ".option push"
-        ".option norvc"
-        ".option norelax"
-        "    jal x0, __jab_code"
-        ".option pop"
-        $"    .4byte (do $hex $image_magic), ($image_version), ($decl.flags), ($decl.offset), ($decl.length), (do $hex $decl.crc)"
-        $"    .zero ($image_header - 7 * 4)"
-        ".section .jab.decl, \"a\""
-    ] ++ $rows | str join "\n") + "\n")
-    let file = ($out | path join "jab_header.S")
-    let there = (if ($file | path exists) { open --raw $file | into binary | decode } else { "" })
-    if $there != $text { $text | save -f $file }
-    $file
-}
-
-# An image's first page, read as the kernel reads it before the program
-# starts (start_check) and held to the rules the build writes it by
-# (header-source): `legacy`, no magic at offset 4, an image built before
-# the header, its first page its own code; `undeclared`, the header with
-# flags 0 and the offset, the length, and the CRC 0, a program declaring no
-# demand; `declared`, flags 1, the declaration at decl_offset, its length
-# from one spec's to the first page's end and exactly its list's, its CRC
-# holding. Where the kernel refuses an image, so does this, by the kernel's
-# own reason (`declaration refused: <reason>`); past the kernel's rules, the
-# jump at offset 0 is image_jump, the image holds its whole first page and
-# code after it, and each entry is a name of lowercase letters and digits
-# zero padded, an ISA decl_isas numbers, and zeros past its fields. The
-# record: `kind`; `header`, the magic, version, flags, offset, length, and
-# CRC, null for a legacy image; and `declaration`, the base demand and each
-# spec with its cores, RAM in GiB, display, frame rate, and ISA, null but
-# for a declared image. Each refusal names the image. Untyped because it
-# ends in an error.
-export def check-image [image: path] {
-    let image = ($image | path expand)
-    let b = (open --raw $image | into binary)
-    let size = ($b | bytes length)
-    let word = {|at: int| $b | bytes at $at..<($at + 4) | into int --endian little }
-    let half = {|at: int| $b | bytes at $at..<($at + 2) | into int --endian little }
-    let hex = {|v: int| $"0x($v | into binary --endian big | encode hex | str lowercase)" }
-    if $size < 8 or (do $word 4) != $image_magic { return { kind: "legacy", header: null, declaration: null } }
-    if $size < $image_header { error make {msg: $"($image): its header ends at ($size) bytes, short of ($image_header)"} }
-    let header = { magic: (do $word 4), version: (do $word 8), flags: (do $word 12), offset: (do $word 16), length: (do $word 20), crc: (do $word 24) }
-    let refused = {|why: string| $"($image): declaration refused: ($why)" }
-    if $header.version != $image_version { error make {msg: (do $refused $"version ($header.version)")} }
-    if ($header.flags bit-and (bit-not-of $image_declared)) != 0 { error make {msg: (do $refused $"flags (do $hex $header.flags)")} }
-    if $header.flags == 0 {
-        if $header.length != 0 { error make {msg: (do $refused "flags 0 with a length")} }
-        if $header.offset != 0 { error make {msg: (do $refused "flags 0 with an offset")} }
-        if $header.crc != 0 { error make {msg: (do $refused "flags 0 with a CRC")} }
-    } else {
-        if $header.length == 0 { error make {msg: (do $refused "flags 1 with length 0")} }
-        if $header.offset != $decl_offset { error make {msg: (do $refused $"offset ($header.offset)")} }
-        let least = (4 + $decl_spec_bytes)
-        if $header.length < $least or $header.length > ($image_code - $decl_offset) { error make {msg: (do $refused $"length ($header.length)")} }
-        if $size < ($decl_offset + $header.length) { error make {msg: $"($image): its declaration ends at ($decl_offset + $header.length) bytes, past the image's ($size)"} }
-        let computed = (crc32 ($b | bytes at $decl_offset..<($decl_offset + $header.length)))
-        if $computed != $header.crc { error make {msg: (do $refused $"CRC (do $hex $computed) computed, the header's (do $hex $header.crc)")} }
-        let count = ($b | bytes at ($decl_offset + 2)..<($decl_offset + 3) | into int)
-        if $count == 0 or $count > $decl_specs_max { error make {msg: (do $refused $"spec count ($count)")} }
-        if $header.length != (4 + $count * $decl_spec_bytes) { error make {msg: (do $refused $"length ($header.length) for ($count) specs")} }
-    }
-    let jump = (do $word 0)
-    if $jump != $image_jump { error make {msg: $"($image): the jump at offset 0 is (do $hex $jump), where jal x0 to the code, (do $hex $image_jump), belongs"} }
-    if $size <= $image_code { error make {msg: $"($image): it ends at ($size) bytes, where its code begins at ($image_code)"} }
-    let zeroed = {|from: int, to: int| ($b | bytes at $from..<$to | bytes index-of --all 0x[00] | length) == ($to - $from) }
-    if not (do $zeroed 28 $image_header) { error make {msg: $"($image): its header past the CRC is not zero"} }
-    if $header.flags == 0 { return { kind: "undeclared", header: $header, declaration: null } }
-    let count = ($b | bytes at ($decl_offset + 2)..<($decl_offset + 3) | into int)
-    if ($b | bytes at ($decl_offset + 3)..<($decl_offset + 4) | into int) != 0 { error make {msg: $"($image): the declaration's byte after its count is not zero"} }
-    let isas = ($decl_isas | transpose name code)
-    let specs = (0..<$count | each {|k|
-        let at = ($decl_offset + 4 + $k * $decl_spec_bytes)
-        let raw = ($b | bytes at $at..<($at + $decl_name_bytes))
-        let end = ($raw | bytes index-of 0x[00])
-        let used = (if $end < 0 { $decl_name_bytes } else { $end })
-        let name = ($raw | bytes at 0..<$used | decode)
-        if not ($name =~ '^[a-z0-9]+$') { error make {msg: $"($image): spec ($k)'s name, ($name | to nuon), is no lowercase letters and digits"} }
-        if not (do $zeroed ($at + $used) ($at + $decl_name_bytes)) { error make {msg: $"($image): spec ($k)'s name, ($name), is not zero padded"} }
-        let f = ($at + $decl_name_bytes)
-        let isa = (do $half ($f + 10))
-        if ($isas | where code == $isa | is-empty) { error make {msg: $"($image): spec ($name)'s ISA, ($isa), is none a declaration names"} }
-        if not (do $zeroed ($f + 12) ($at + $decl_spec_bytes)) { error make {msg: $"($image): spec ($name)'s entry past its fields is not zero"} }
-        { name: $name, cores: (do $half $f), ram_gib: (do $half ($f + 2)), display: { width: (do $half ($f + 4)), height: (do $half ($f + 6)) }, fps: (do $half ($f + 8)), isa: ($isas | where code == $isa | first | get name) }
-    })
-    { kind: "declared", header: $header, declaration: { base: (do $half $decl_offset), specs: $specs } }
-}
-
-# Every bit of a 32-bit word but those of `mask`.
-def bit-not-of [mask: int]: nothing -> int {
-    0xffffffff bit-xor $mask
-}
-
-# The demand recorded with an image at its build, `demand.nuon` beside it,
-# read and held to its rules (demand-record-problems): exactly `image`, the
-# image's SHA-256, and `demand`, null on the legacy path, else a demand in
-# program-demand's shape. No record beside the image is absent evidence,
-# no declaration, and comes back null as the legacy record's demand does;
-# a record present and unsound, unreadable as NUON, of other fields, of
-# another image, or of a demand off the shape, is refused naming the
-# record and its faults, never read as the legacy path, as is a record
-# beside no image. The demand, or null. Untyped because it can end in an
-# error.
-export def image-demand [image: path] {
-    let image = ($image | path expand)
-    let file = (demand-record-of $image)
-    if not ($file | path exists) { return null }
-    if not ($image | path exists) { error make {msg: $"($file) is the record of an image, and there is none at ($image)"} }
-    let record = (try { open --raw $file | decode | from nuon } catch {|e| error make {msg: $"($file): not NUON the tools can read: ($e.msg)"} })
-    let problems = (demand-record-problems $record (open --raw $image | hash sha256))
-    if not ($problems | is-empty) { error make {msg: ([$"($file) does not hold for ($image):"] ++ ($problems | each {|p| $"  ($p)" }) | str join "\n")} }
-    $record.demand
-}
-
-# Where an image's demand record lies: beside it, demand.nuon.
-def demand-record-of [image: path]: nothing -> string {
-    $image | path expand | path dirname | path join "demand.nuon"
-}
-
-# What is wrong with a demand record for an image of that hash, a line
-# each; none when it holds: a record of exactly `image` and `demand`;
-# `image` the hash; `demand` null, or in program-demand's shape
-# (demand-shape-problems).
-def demand-record-problems [record: any, hash: string]: nothing -> list<string> {
-    let got = ($record | describe)
-    if not ($got | str starts-with "record") { return [$"a record of `image` and `demand` expected, ($got) found"] }
-    let fields = ($record | columns)
-    let missing = ([image demand] | where {|f| $f not-in $fields } | each {|f| $"($f): missing" })
-    let others = ($fields | where {|f| $f not-in [image demand] } | each {|f| $"($f): a field the record does not hold" })
-    let image = (if "image" not-in $fields { [] } else {
-        let i = $record.image
-        if ($i | describe) != "string" { [$"image: string expected, ($i | describe) found"] } else if not ($i =~ '^[0-9a-f]{64}$') { [$"image: ($i | to nuon), no SHA-256"] } else if $i != $hash { [$"image: ($i), where the image's SHA-256 is ($hash)"] } else { [] }
-    })
-    let demand = (if "demand" not-in $fields { [] } else { demand-shape-problems $record.demand })
-    $missing ++ $others ++ $image ++ $demand
-}
-
-# What is wrong with a recorded demand against program-demand's shape, a
-# line each; none for null, the legacy path's: `specs` a nonempty list of
-# names; `reserved` a record of every role reserved_roles names and no
-# other, each an int of 0 or more; `features` a list of records, each a
-# snake_case `name` and at least one role of feature_roles, each an int of
-# 1 or more, and no other field; `base` an int, 1 plus the reserved harts.
-def demand-shape-problems [d: any]: nothing -> list<string> {
-    if $d == null { return [] }
-    let got = ($d | describe)
-    if not ($got | str starts-with "record") { return [$"demand: a record or null expected, ($got) found"] }
-    let fields = ($d | columns)
-    let missing = ([specs reserved features base] | where {|f| $f not-in $fields } | each {|f| $"demand.($f): missing" })
-    let others = ($fields | where {|f| $f not-in [specs reserved features base] } | each {|f| $"demand.($f): a field the demand does not hold" })
-    let specs = (if "specs" not-in $fields { [] } else {
-        let s = $d.specs
-        let kind = ($s | describe)
-        if not ($kind | str starts-with "list") { [$"demand.specs: a list of names expected, ($kind) found"] } else if ($s | is-empty) { ["demand.specs: empty"] } else {
-            $s | enumerate | where {|e| ($e.item | describe) != "string" or ($e.item | str trim) == "" } | each {|e| $"demand.specs.($e.index): ($e.item | to nuon), no spec's name" }
-        }
-    })
-    let reserved = (if "reserved" not-in $fields { [] } else {
-        let r = $d.reserved
-        if not ($r | describe | str starts-with "record") { [$"demand.reserved: a record expected, ($r | describe) found"] } else {
-            let roles = ($r | columns)
-            let absent = ($reserved_roles | where {|k| $k not-in $roles } | each {|k| $"demand.reserved.($k): missing" })
-            let foreign = ($roles | where {|k| $k not-in $reserved_roles } | each {|k| $"demand.reserved.($k): a role no program reserves" })
-            let counts = ($roles | where {|k| $k in $reserved_roles and (($r | get $k | describe) != "int" or ($r | get $k) < 0) } | each {|k| $"demand.reserved.($k): ($r | get $k | to nuon), where a whole number of harts, 0 or more, is wanted" })
-            $absent ++ $foreign ++ $counts
-        }
-    })
-    let features = (if "features" not-in $fields { [] } else {
-        let fs = $d.features
-        let kind = ($fs | describe)
-        if not (($kind | str starts-with "list") or ($kind | str starts-with "table")) { [$"demand.features: a list expected, ($kind) found"] } else {
-            $fs | enumerate | each {|e|
-                let f = $e.item
-                let at = $"demand.features.($e.index)"
-                if not ($f | describe | str starts-with "record") { [$"($at): a record expected, ($f | describe) found"] } else {
-                    let keys = ($f | columns)
-                    let named = (if "name" not-in $keys { [$"($at).name: missing"] } else if ($f.name | describe) != "string" or not ($f.name =~ '^[a-z][a-z0-9_]*$') { [$"($at).name: ($f.name | to nuon), no snake_case name"] } else { [] })
-                    let roles = ($keys | where {|k| $k != "name" })
-                    let foreign = ($roles | where {|k| $k not-in $feature_roles } | each {|k| $"($at).($k): a role no feature demands" })
-                    let none = (if ($roles | where {|k| $k in $feature_roles } | is-empty) { [$"($at): demands no hart"] } else { [] })
-                    let counts = ($roles | where {|k| $k in $feature_roles and (($f | get $k | describe) != "int" or ($f | get $k) < 1) } | each {|k| $"($at).($k): ($f | get $k | to nuon), where a whole number of harts, 1 or more, is wanted" })
-                    $named ++ $foreign ++ $none ++ $counts
-                }
-            } | flatten
-        }
-    })
-    let base = (if "base" not-in $fields { [] } else {
-        let b = $d.base
-        let r = ($d | get -o reserved)
-        let summed = (if ($r | describe | str starts-with "record") and ($reserved_roles | all {|k| ($r | get -o $k | describe) == "int" }) { 1 + ($reserved_roles | each {|k| $r | get $k } | math sum) } else { null })
-        if ($b | describe) != "int" { [$"demand.base: int expected, ($b | describe) found"] } else if $summed != null and $b != $summed { [$"demand.base: ($b), where 1 plus the reserved harts is ($summed)"] } else { [] }
-    })
-    $missing ++ $others ++ $specs ++ $reserved ++ $features ++ $base
-}
-
-# Whether the record beside an image holds (image-demand) and names the
-# demand a build resolved; a record missing, unsound, of another image,
-# or of another demand is false, so the build runs again whole.
-def record-holds [image: path, demand: any]: nothing -> bool {
-    if not (demand-record-of $image | path exists) { return false }
-    try { (image-demand $image) == $demand } catch { false }
-}
-
 # The spec data a program's build reads when its manifest lists `specs`:
 # the workspace's asset/spec.nuon and asset/spec.nutype, inputs of its
 # build, so a changed definition or a changed type alone builds it again
@@ -1820,8 +1158,8 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let c = (context $dir "program" $names)
     let m = $c.manifest
     let specs = (spec-inputs $c)
-    let demand = (program-demand $m $c.workspace)
-    let declaration = (image-declaration $demand $c.workspace $m.name)
+    let demand = (demand program-demand $m $c.workspace)
+    let declaration = (demand image-declaration $demand $c.workspace $m.name)
     let includes = ($m | get -o includes | default [])
     let generated = (if $demand == null { [] } else { [$c.out] })
     let include_flags = (($includes ++ $generated) | each {|i| ["-I" $i] } | flatten)
@@ -1832,12 +1170,12 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     mkdir $c.out
     let home = ($c.out | path join "home")
     if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
-    let constants = (if $demand == null { [] } else { [(demand-include $demand $c.out)] })
-    let header = (header-source $declaration $c.out)
+    let constants = (if $demand == null { [] } else { [(demand demand-include $demand $c.out)] })
+    let header = (demand header-source $declaration $c.out)
     cd $c.here
     let inputs = ((walk files (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants ++ [$header])
     let id = (stamp id $flags $inputs)
-    if (not (stamp stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
+    if (not (stamp stale $image $inputs $id $stamp)) and (demand record-holds $image $demand) { return }
     mkdir $c.out
     if $demand == null { target retire ($c.out | path join "jab_manifest.inc") $c.root }
     let asm = ($c.prefix + "as")
@@ -1851,7 +1189,7 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
     ^$ld -T $m.link -nostdlib $header_obj $obj -o $elf
     ^$objcopy -O binary $elf $image
-    { image: (open --raw $image | hash sha256), demand: $demand } | to nuon | save -f (demand-record-of $image)
+    { image: (open --raw $image | hash sha256), demand: $demand } | to nuon | save -f (demand demand-record-of $image)
     $id | save -f $stamp
 }
 
@@ -1902,7 +1240,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let ready = (prepared $dir $names)
     let c = $ready.context
     let m = (machine-for $c.workspace $spec $harts)
-    spec-listed $m (image-demand $ready.image) $c.manifest.name
+    demand spec-listed $m (demand image $ready.image) $c.manifest.name
     let qemu = (qemu-binary $c.here $c.workspace)
     let line = (spec-bootargs $m "")
     let machine = ((machine-args $qemu $m) ++ (if $line == "" { [] } else { ["-append" $line] }))
@@ -1914,15 +1252,15 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     } else { $assets })
     let disk_serial = (if $assets == "" { "disk0" } else { disk disk-serial ($c.manifest | get -o serial | default $c.manifest.name) })
     let shown = (if $window == null { display $c.manifest } else { $window })
-    let found = (if (discovery-wanted $pad $sound) { discover $c.workspace } else { { gamepad: null, audio: null } })
+    let found = (if (disco discovery-wanted $pad $sound) { disco discover $c.workspace } else { { gamepad: null, audio: null } })
     let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     # a Windows run's pipes are named pipes, named by a nonce of its own,
     # the API's taking a relay and the pad port's client the bridge
     let windows = ($nu.os-info.name == "windows")
     let nonce = (if $windows { random int 1.. } else { 0 })
-    let ports = (ports $c.symbols $c.out $api $gamepad.port $c.root $nonce)
-    let relays = (if $windows { relays-of $c.out [{ endpoint: "api", pipe: $ports.api }] } else { [] })
-    let relay_binary = (relay-build $relays $c.workspace)
+    let ports = (chardev ports $c.symbols $c.out $api $gamepad.port $c.root $nonce)
+    let relays = (if $windows { chardev relays-of $c.out [{ endpoint: "api", pipe: $ports.api }] } else { [] })
+    let relay_binary = (chardev relay-build $relays $c.workspace)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
     let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
@@ -1934,17 +1272,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
-    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (bridge-pipe $ports.pad), relays: $relays, relay_binary: $relay_binary, machine: $m }
-}
-
-# A named spec held to the program's demand: refused naming both when the
-# demand recorded with its image (image-demand) does not list it; a
-# custom machine, and a legacy image, null demand, on any machine, pass.
-# Untyped because it ends in an error.
-def spec-listed [m: record, demand: oneof<record, nothing>, program: string] {
-    if $m.spec == null or $demand == null { return }
-    if $m.spec.name in ($demand.specs | each {|s| $s | str lowercase }) { return }
-    error make {msg: $"($program) does not list ($m.spec.name), the spec this launch names; it lists ($demand.specs | str join ', ')"}
+    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (chardev bridge-pipe $ports.pad), relays: $relays, relay_binary: $relay_binary, machine: $m }
 }
 
 # Whatever JAB_QEMU_ARGS holds, split into words as a shell would read
@@ -2036,27 +1364,6 @@ def gamepad-plan [found: record]: nothing -> record<args: list<string>, port: bo
     }
 }
 
-# Whether a run needs jabdisco's record at all: for the pad, unless
-# JAB_PAD names one or the host takes none; for the sound, unless
-# JAB_AUDIO names the backend. Nothing is discovered that an
-# override already decides.
-def discovery-wanted [pad: bool, sound: bool]: nothing -> bool {
-    let pad_wanted = ($pad and ($env.JAB_PAD? | default "") == "" and ($nu.os-info.name in ["linux" "macos" "windows"]))
-    let sound_wanted = ($sound and ($env.JAB_AUDIO? | default "") == "")
-    $pad_wanted or $sound_wanted
-}
-
-# jabdisco's record: the expected gamepad and the audio output, each
-# null when it finds none. With no workspace to build jabdisco in the
-# record is empty.
-def discover [ws: oneof<string, nothing>]: nothing -> record {
-    if $ws == null { return { gamepad: null, audio: null } }
-    let disco = (tool disco-build $ws)
-    let found = (^$disco | complete)
-    if $found.exit_code != 0 { error make {msg: $"jabdisco failed:\n($found.stderr)"} }
-    $found.stdout | from nuon
-}
-
 # Run a program with the console window, the UART on stdio; QEMU's exit
 # code is the program's exit status. A run says nothing of its own.
 # With a pad on the port, the bridge runs beside QEMU, started first
@@ -2079,10 +1386,10 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
         let product = (if $b.product == null { "" } else { $b.product | into string })
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
-    let relays = (relays-start $line.relays $line.relay_binary $line.context.root)
+    let relays = (chardev relays-start $line.relays $line.relay_binary $line.context.root)
     let qemu = $line.qemu_binary
     ^$qemu ...$line.args
-    let relayed = (relays-stop $relays)
+    let relayed = (chardev relays-stop $relays)
     if $bridge != null { try { job kill $bridge } }
     for r in ($relayed | where {|r| $r.exit != null and $r.exit != 0 }) {
         print -e $"jab: the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)"
@@ -2241,209 +1548,13 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
         if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
         let elapsed = ((date now) - $started)
         while $alive and $taken < ($sends | length) and ($sends | get $taken | get at) <= $elapsed {
-            if $api_in != "" and (fifo-write $api_in ($sends | get $taken | get bytes) $bound) {
+            if $api_in != "" and (chardev fifo-write $api_in ($sends | get $taken | get bytes) $bound) {
                 $written = ($written | update $taken (((date now) - $started) / 1sec))
             }
             $taken += 1
         }
     }
     { exit: $result.exit_code, stderr: $result.stderr, qemu_pid: $qemu_pid, send_seconds: $written }
-}
-
-# An object's table left unread, with the state that kept it so.
-def sdl-unread [state: string, why: string]: nothing -> record {
-    { state: $state, why: $why, source: "", starts: [], ends: [], reach: [], names: [], console: false, nm: "" }
-}
-
-# A file's inode, size, and modification time in nanoseconds as `ls -l`
-# gives them now, the three an object's line records; null where no file
-# is there.
-def sdl-stat [path: string]: nothing -> oneof<record<inode: int, size: int, mtime: int>, nothing> {
-    let now = (try { ls -l $path | get -o 0 } catch { null })
-    if $now == null { return null }
-    { inode: $now.inode, size: ($now.size | into int), mtime: ($now.modified | into int) }
-}
-
-# The symbol table of an object a decision needs, as binutils' nm reads
-# it: its full table, else on "no symbols" its dynamic one, keeping the
-# function symbols that carry a size, each name read up to its first `.`
-# so gcc's parts (.cold, .part.N, .isra.N, .constprop.N, .lto_priv.N)
-# read as their function, sorted by start with the furthest end reached
-# so far beside each, which bounds a search back to an enclosing function
-# (sdl-functions-at). The file is read only while it is the one its line
-# names, the inode, size, and modification time `ls -l` gives now the
-# same, and an executable whose path ends ` (deleted)` never is. `state`
-# says which held: read, no_file, nm_absent, deleted, changed, or
-# unreadable, with nm's own words in `why`; `source` which table
-# answered: symtab, dynsym, or none; `console` whether it holds both of
-# the console's update functions of one family; and `nm`, nm's text as it
-# was read, which a bundle keeps (sdl-bundle).
-def sdl-table [object: record, nm: bool]: nothing -> record {
-    if $object.inode == null or $object.size == null or $object.mtime == null { return (sdl-unread "no_file" "") }
-    if not $nm { return (sdl-unread "nm_absent" "") }
-    if $object.index == 0 and ($object.path | str ends-with " (deleted)") { return (sdl-unread "deleted" "") }
-    let now = (try { ls -l $object.path | get -o 0 } catch { null })
-    if $now == null { return (sdl-unread "changed" "no file is there now") }
-    if $now.inode != $object.inode or ($now.size | into int) != $object.size or ($now.modified | into int) != $object.mtime {
-        return (sdl-unread "changed" "its inode, size, or modification time is not its line's")
-    }
-    let full = (^nm -P -t x --defined-only $object.path | complete)
-    let dynamic = ($full.exit_code == 0 and ($full.stdout | str trim) == "" and ($full.stderr | str contains "no symbols"))
-    let run = (if $dynamic { ^nm -P -t x --defined-only -D $object.path | complete } else { $full })
-    if $run.exit_code != 0 { return (sdl-unread "unreadable" ($run.stderr | str trim | split row $"($object.path): " | last)) }
-    let source = (if not $dynamic { "symtab" } else if ($run.stdout | str trim) == "" { "none" } else { "dynsym" })
-    sdl-table-from $run.stdout $source
-}
-
-# A symbol table read from nm's POSIX text as sdl-table reads it, `source`
-# the table the text came from, the text kept whole as `nm`.
-def sdl-table-from [text: string, source: string]: nothing -> record {
-    let functions = ($text | lines
-        | parse --regex '^(?P<name>\S+) (?P<type>[tTwW]) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$'
-        | into int --radix 16 value size
-        | where size > 0
-        | str replace --regex '^([^.]+)\..*$' '$1' name
-        | sort-by value)
-    let spans = ($functions | generate {|f, most|
-        let end = ($f.value + $f.size)
-        let reach = (if $end > $most { $end } else { $most })
-        { out: { end: $end, reach: $reach }, next: $reach }
-    } 0)
-    let names = ($functions | get name)
-    let console = ($console_updates | any {|family| $family | all {|n| $n in $names } })
-    { state: "read", why: "", source: $source, starts: ($functions | get value), ends: ($spans | get end), reach: ($spans | get reach), names: $names, console: $console, nm: $text }
-}
-
-# A needed object's table out of a bundle (sdl-bundle) in place of nm on
-# its path, the replay's source (sdl-bundle-check): the state its
-# manifest entry records where that is not `read`, else its table file,
-# taken only when the file's raw bytes have the SHA-256 the entry names;
-# `unbundled` where the manifest holds no entry, no table, or another
-# table's bytes.
-def sdl-bundled-table [object: record, manifest: record, bundle: path]: nothing -> record {
-    let entry = ($manifest.objects | where index == $object.index | get -o 0)
-    if $entry == null { return (sdl-unread "unbundled" "the manifest has no entry for it") }
-    if $entry.state != "read" { return (sdl-unread $entry.state $entry.why) }
-    let file = ($bundle | path join $entry.table)
-    if not ($file | path exists) { return (sdl-unread "unbundled" "its table is not in the bundle") }
-    let bytes = (open --raw $file | into binary)
-    if ($bytes | hash sha256) != $entry.table_sha256 { return (sdl-unread "unbundled" "its table's bytes are not those the manifest names") }
-    sdl-table-from ($bytes | decode) $entry.source
-}
-
-# The functions of a table (sdl-table) whose [start, end) holds an
-# address, aliases included: a binary search for the last start at or
-# below it, then back while the furthest end reached so far lies past
-# it. None where the address falls between functions.
-def sdl-functions-at [table: record, address: int]: nothing -> list<string> {
-    let starts = $table.starts
-    let ends = $table.ends
-    let reach = $table.reach
-    let names = $table.names
-    mut low = 0
-    mut high = ($starts | length)
-    while $low < $high {
-        let middle = (($low + $high) // 2)
-        if ($starts | get $middle) <= $address { $low = $middle + 1 } else { $high = $middle }
-    }
-    mut at = $low - 1
-    mut found: list<string> = []
-    while $at >= 0 and ($reach | get $at) > $address {
-        if ($ends | get $at) > $address { $found = ($found ++ [($names | get $at)]) }
-        $at -= 1
-    }
-    $found | uniq | sort
-}
-
-# The shim's log at `log` (sdl-log) with its make_currents' frames
-# resolved: the object table, each object with its file name and the
-# state of its symbol table (sdl-table); `virtio_gpu_in`, module or
-# executable; and every event in order, each frame of a make_current
-# with its object's file name, its table's state, and the functions that
-# hold it. A frame is a return address, so it resolves at the address
-# less one: a call that ends its function returns to the first byte past
-# it. It lies in every function of its object's table whose [value,
-# value + size) holds that address, an alias included, and in none where
-# the address falls between functions. The tables read are the ones a
-# decision needs: the objects of the immediate caller and of its caller
-# in every make_current the timing rule leaves, and the executable's
-# where the device's code is there; with --every, every object a
-# make_current's frame lies in. The device's code lives in a module when
-# the table lists one whose file name starts hw-display-virtio-gpu, else
-# in the executable. With --tables, a bundle's directory (sdl-bundle),
-# each table comes out of the bundle in place of nm on its object's path,
-# as a bundle's check replays it (sdl-bundled-table). A log the shim could
-# not have written is refused.
-export def sdl-resolve [log: path, --every, --tables: string = ""]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
-    sdl-resolved $log $every $tables | reject tables process nonce
-}
-
-# sdl-resolve's reading, beside it each object's table whole as read
-# (sdl-table), by index, and the run's lines (sdl-log); `bundle` the
-# tables' bundle, "" for nm.
-def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
-    let read = (log $log)
-    let modules = ($read.objects | where {|o| $o.path | path basename | str starts-with $device_module } | get index)
-    let device_in = (if ($modules | is-empty) { "executable" } else { "module" })
-    let made = ($read.events | where name == "make_current")
-    let decided = ($made | where render == false)
-    let needed = (if $every {
-        $made | each {|e| $e.frames | each {|f| $f.object } } | flatten | uniq
-    } else {
-        let callers = ($decided | each {|e| $e.frames | first 2 | each {|f| $f.object } } | flatten)
-        let executable = (if $device_in == "executable" and (not ($decided | is-empty)) { [0] } else { [] })
-        $callers ++ $executable | uniq
-    })
-    let manifest = (if $bundle == "" { null } else { open --raw ($bundle | path join "bundle.nuon") | into binary | decode | from nuon })
-    let nm = ($manifest == null and (which nm | where type == "external" | is-not-empty))
-    let tables = ($read.objects | reduce --fold {} {|o, all|
-        let table = (if $o.index not-in $needed { sdl-unread "unread" "" } else if $manifest == null { sdl-table $o $nm } else { sdl-bundled-table $o $manifest $bundle })
-        $all | insert ($o.index | into string) $table
-    })
-    let pairs = ($made | each {|e| $e.frames } | flatten | where object != null | uniq-by object hex)
-    let found = ($pairs | reduce --fold {} {|f, all|
-        let table = ($tables | get ($f.object | into string))
-        let functions = (if $table.state == "read" { sdl-functions-at $table ($f.address - 1) } else { [] })
-        $all | insert $"($f.object)+($f.hex)" $functions
-    })
-    let objects = ($read.objects | each {|o|
-        let table = ($tables | get ($o.index | into string))
-        $o | merge { file: ($o.path | path basename), state: $table.state, source: $table.source, functions: ($table.names | length), console: $table.console, why: $table.why }
-    })
-    let places = ($objects | reduce --fold {} {|o, all| $all | insert ($o.index | into string) { file: $o.file, state: $o.state } })
-    let events = ($read.events | each {|e|
-        if $e.name != "make_current" { $e } else {
-            $e | update frames ($e.frames | each {|f|
-                if $f.object == null { $f | merge { file: "", state: "no_object", functions: [] } } else {
-                    let place = ($places | get ($f.object | into string))
-                    $f | merge { file: $place.file, state: $place.state, functions: ($found | get $"($f.object)+($f.hex)") }
-                }
-            })
-        }
-    })
-    { objects: $objects, virtio_gpu_in: $device_in, events: $events, tables: $tables, process: $read.process, nonce: $read.nonce }
-}
-
-# The refusal a frame's object holds before its symbols can answer: nm
-# absent, the file changed or the executable deleted, a replay's table
-# not in its bundle, or nm unable to read it; null when its table was
-# read or it has none to read.
-def sdl-held [frame: record]: nothing -> oneof<record, nothing> {
-    match $frame.state {
-        "nm_absent" => ({ kind: "refused", class: 2, fault: "nm_absent", at: $frame }),
-        "deleted" => ({ kind: "refused", class: 3, fault: "deleted", at: $frame }),
-        "changed" => ({ kind: "refused", class: 3, fault: "changed", at: $frame }),
-        "unbundled" => ({ kind: "refused", class: 3, fault: "unbundled", at: $frame }),
-        "unreadable" => ({ kind: "refused", class: 4, fault: "unreadable", at: $frame }),
-        _ => null,
-    }
-}
-
-# Whether a frame lies in the device's code: in a virtio-gpu module, or,
-# with the device in the executable, in an executable function named
-# virtio_gpu_*.
-def sdl-device [frame: record, device_in: string, modules: list<int>]: nothing -> bool {
-    if $device_in == "module" { $frame.object in $modules } else { $frame.object == 0 and ($frame.functions | any {|n| $n | str starts-with "virtio_gpu_" }) }
 }
 
 # How a make_current the timing rule leaves reached the window, by its
@@ -2464,7 +1575,7 @@ def sdl-device [frame: record, device_in: string, modules: list<int>]: nothing -
 def sdl-decide [frames: list, device_in: string, modules: list<int>, executable: oneof<record, nothing>]: nothing -> record<kind: string, class: int, fault: string, at: oneof<record, nothing>> {
     let caller = ($frames | get -o 0)
     if $caller == null { return { kind: "refused", class: 5, fault: "anchor", at: null } }
-    let caller_held = (sdl-held $caller)
+    let caller_held = (symbols sdl-held $caller)
     if $caller_held != null { return $caller_held }
     if not ($caller.functions | any {|n| $n | str starts-with "sdl2_" }) { return { kind: "refused", class: 5, fault: "anchor", at: $caller } }
     let switch = ("sdl2_gl_switch" in $caller.functions)
@@ -2474,17 +1585,17 @@ def sdl-decide [frames: list, device_in: string, modules: list<int>, executable:
     let second = ($frames | get -o 1)
     if $second == null { return { kind: "refused", class: 6, fault: "absent", at: $caller } }
     if $second.object == null { return { kind: "refused", class: 6, fault: "nowhere", at: $second } }
-    let second_held = (sdl-held $second)
+    let second_held = (symbols sdl-held $second)
     if $second_held != null { return $second_held }
-    if (sdl-device $second $device_in $modules) { return { kind: "refused", class: 5, fault: "device", at: $second } }
+    if (symbols sdl-device $second $device_in $modules) { return { kind: "refused", class: 5, fault: "device", at: $second } }
     if not ($second.functions | is-empty) {
-        if not ($console_updates | flatten | any {|n| $n in $second.functions }) { return { kind: "console", class: 0, fault: "", at: null } }
+        if not ($symbols.console_updates | flatten | any {|n| $n in $second.functions }) { return { kind: "console", class: 0, fault: "", at: null } }
         let later = ($frames | skip 2)
         if $device_in == "executable" {
-            let later_held = ($later | where {|f| $f.object == 0 } | each {|f| sdl-held $f } | get -o 0)
+            let later_held = ($later | where {|f| $f.object == 0 } | each {|f| symbols sdl-held $f } | get -o 0)
             if $later_held != null { return $later_held }
         }
-        if ($later | any {|f| sdl-device $f $device_in $modules }) { return { kind: "upload", class: 0, fault: "", at: null } }
+        if ($later | any {|f| symbols sdl-device $f $device_in $modules }) { return { kind: "upload", class: 0, fault: "", at: null } }
         return { kind: "refused", class: 6, fault: "cut_short", at: $second }
     }
     if $second.object == 0 and $device_in == "module" and $executable != null and $executable.state == "read" and $executable.console {
@@ -2593,11 +1704,11 @@ def sdl-chain-key [frames: list<any>]: nothing -> string {
 # decision by key, every object's table whole (sdl-resolved), and the
 # run's lines; `bundle` the tables' bundle, "" for nm.
 def sdl-classified [log: path, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, decisions: list<any>, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
-    let resolved = (sdl-resolved $log false $bundle)
+    let resolved = (symbols sdl-resolved $log false $bundle)
     let events = $resolved.events
     if ($events | is-empty) { error make {msg: "the shim log holds no events; the window made no SDL calls"} }
     let executable = ($resolved.objects | where index == 0 | get -o 0)
-    let modules = ($resolved.objects | where {|o| $o.file | str starts-with $device_module } | get index)
+    let modules = ($resolved.objects | where {|o| $o.file | str starts-with $symbols.device_module } | get index)
     let keyed = ($events | each {|e| $e | insert key (sdl-chain-key $e.frames) })
     let made = ($keyed | where name == "make_current")
     let decided = ($made | where render == false)
@@ -2775,10 +1886,10 @@ export def sdl-bundle [probe: path, bundle: path, --profile: string = "", --extr
     let carried = (["api.out" "identity.nuon" "trace.log"] ++ $extra | uniq | where {|f| $probe | path join $f | path exists })
     let read = ($c.objects | where {|o| ($c.tables | get ($o.index | into string) | get state) == "read" })
     let hashed = ($read | each {|o|
-        let before = (sdl-stat $o.path)
+        let before = (symbols sdl-stat $o.path)
         if $before != { inode: $o.inode, size: $o.size, mtime: $o.mtime } { error make {msg: $"($o.path) changed while bundling: it is no longer the file its line names"} }
         let sha256 = (open --raw $o.path | hash sha256)
-        if (sdl-stat $o.path) != $before { error make {msg: $"($o.path) changed while bundling, during its hash"} }
+        if (symbols sdl-stat $o.path) != $before { error make {msg: $"($o.path) changed while bundling, during its hash"} }
         { index: $o.index, sha256: $sha256 }
     })
     mkdir ($bundle | path join "tables")
@@ -2829,7 +1940,7 @@ def sdl-reader []: nothing -> record<jab: oneof<string, nothing>, jab_nu_sha256:
 # `sha256` where it was taken already; null fields otherwise.
 def sdl-qemu-of [exe: oneof<record, nothing>, sha256: oneof<string, nothing>]: nothing -> record<path: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>> {
     if $exe == null { return { path: "", version: null, sha256: null } }
-    if (sdl-stat $exe.path) != { inode: $exe.inode, size: $exe.size, mtime: $exe.mtime } { return { path: $exe.path, version: null, sha256: null } }
+    if (symbols sdl-stat $exe.path) != { inode: $exe.inode, size: $exe.size, mtime: $exe.mtime } { return { path: $exe.path, version: null, sha256: null } }
     let version = (try { ^$exe.path --version | complete | get stdout | lines | get -o 0 } catch { null })
     { path: $exe.path, version: $version, sha256: (if $sha256 != null { $sha256 } else { open --raw $exe.path | hash sha256 }) }
 }

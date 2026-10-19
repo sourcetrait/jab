@@ -6,3 +6,4 @@ No child imports it; each imports its siblings by path.
 
 - `sdl log`: sdl/log's `main`.
 - `sdl pair`: sdl/pair's `main`.
+- `sdl resolve`: sdl/symbols's `resolve`.
