@@ -44,6 +44,9 @@ const KIND_RECEIPT = 20
 # The load's record kind: its two presents and the capture nonce
 const KIND_LOAD = 21
 
+# The load's bounds record kind, from schema 8: its calls' bounds and the origin
+const KIND_BOUNDS = 22
+
 # A seed's command byte, R, as console records name it
 const CONSOLE_R = 82
 
@@ -65,6 +68,7 @@ const PHASES = {
     "5": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "6": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
     "7": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
+    "8": [game_us draw_us hud_us mix_us pacing_us flip_us report_us],
 }
 
 # The drawing's parts at each schema
@@ -76,6 +80,7 @@ const PARTS = {
     "5": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
     "6": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
     "7": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
+    "8": [clear_us portals_us planes_us walls_us sprites_us raster_us tiles_us],
 }
 
 # The phases' class when they hold their rendering
@@ -119,7 +124,7 @@ const PHASE_IMAGES = {
 }
 
 # The clock records' schema the walk and the fixtures are held to
-export const CLOCK_SCHEMA = 7
+export const CLOCK_SCHEMA = 8
 
 # A record's little-endian 32-bit word at a byte offset
 def u32-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 4) | into int --endian little }
@@ -128,7 +133,7 @@ def u32-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 4) 
 def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) | into int --endian little }
 
 # A capture's records read in order by kind through its first end marker
-export def main [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int, receipts: list<any>, loads: list<any>, nonce_set: bool, late_nonce: bool> {
+export def main [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int, receipts: list<any>, loads: list<any>, bounds: list<any>, nonce_set: bool, late_nonce: bool> {
     mut states = []
     mut events = []
     mut frames = []
@@ -149,6 +154,7 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
     mut late_workers = false
     mut receipts = []
     mut loads = []
+    mut bounds = []
     mut nonce_set = false
     mut late_nonce = false
     mut end: any = null
@@ -250,13 +256,19 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
         } else if $kind == $KIND_RECEIPT {
             $receipts = ($receipts | append {
                 frame: (u32-at $r 4), stamp: (u64-at $r 8), tick: (u64-at $r 16), ordinal: (u64-at $r 24),
-                first_ordinal: (u64-at $r 32), schema: (u32-at $r 60),
+                first_ordinal: (u64-at $r 32), call_start: (u64-at $r 40), call_end: (u64-at $r 48), schema: (u32-at $r 60),
             })
         } else if $kind == $KIND_LOAD {
             $loads = ($loads | append {
                 title_stamp: (u64-at $r 8), title_end_us: (u64-at $r 16), clear_stamp: (u64-at $r 24), clear_end_us: (u64-at $r 32),
                 title_ordinal: (u32-at $r 40), clear_ordinal: (u32-at $r 44), nonce: (u64-at $r 48), schema: (u32-at $r 60),
                 arrival_states: ($states | length),
+            })
+        } else if $kind == $KIND_BOUNDS {
+            $bounds = ($bounds | append {
+                title_start: (u64-at $r 8), title_end: (u64-at $r 16), clear_start: (u64-at $r 24), clear_end: (u64-at $r 32),
+                origin: (u64-at $r 40), schema: (u32-at $r 60),
+                arrival_states: ($states | length), arrival_loads: ($loads | length),
             })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
@@ -266,7 +278,7 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
         states: $states, events: $events, seeded: $seeded, late_seed: $late_seed, cadence_set: $cadence_set,
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
         draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
-        harts: $harts, rounds: $rounds, end: $end, past: $past, receipts: $receipts, loads: $loads,
+        harts: $harts, rounds: $rounds, end: $end, past: $past, receipts: $receipts, loads: $loads, bounds: $bounds,
         nonce_set: $nonce_set, late_nonce: $late_nonce,
     }
 }
@@ -290,9 +302,9 @@ export def parts-of [schema: oneof<int, nothing>]: nothing -> list<string> {
 
 # What a run's moved parts measure, by schema or listed image, with evidence
 export def parts-meaning [schema: any, image: any]: nothing -> record<phases: string, remainder: string, tiles: string, evidence: string> {
-    let tiles = (if $schema in [5 6 7] { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
+    let tiles = (if $schema in [5 6 7 8] { $BUILT_AT_BOUNDARY } else if $schema in [1 2 3 4] { $BUILT_IN_PHASES } else { $UNKNOWN_PARTS })
     if $schema == 1 { return { phases: $WITH_RENDERING, remainder: $NO_RENDERING, tiles: $tiles, evidence: "schema 1" } }
-    if $schema in [3 4 5 6 7] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
+    if $schema in [3 4 5 6 7 8] { return { phases: $PREPARATION_ALONE, remainder: $NO_RENDERING, tiles: $tiles, evidence: $"schema ($schema)" } }
     let listed = (if $schema == 2 and $image != null { $PHASE_IMAGES | transpose image entry | where image == $image | get -o 0.entry } else { null })
     if $listed != null {
         return { phases: $listed.phases, remainder: $listed.remainder, tiles: $tiles, evidence: $"the listed image of ($listed.commit | str substring 0..<7), ($listed.set)" }

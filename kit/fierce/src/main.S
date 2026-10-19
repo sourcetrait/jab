@@ -50,7 +50,8 @@
 .set CLOCK_FLIP_TICK, 160
 .set CLOCK_FLIP_ORDINAL, 168
 .set CLOCK_FIRST_ORDINAL, 176
-.set CLOCK_SIZE, 184
+.set CLOCK_FLIP_START, 184
+.set CLOCK_SIZE, 192
 .set FLIP_EARLY, 1
 .set FLIP_NONE, 255
 
@@ -107,6 +108,7 @@ _start:
     li a7, JAB_SYS_DISPLAY_TEXT
     ecall
     jab.sys.display.await
+    rdtime t3                       # the title's flip call's start
     jab.sys.display.flip
     rdtime t1                       # the title's flip end
     la t0, load_record
@@ -114,6 +116,9 @@ _start:
     sw a3, LOAD_TITLE_ORDINAL(t0)   # and the present ordinal
     la t2, known_ordinal
     sd a3, 0(t2)
+    la t2, bounds_record
+    sd t3, BOUNDS_TITLE_START(t2)   # the call's bounds in ticks
+    sd t1, BOUNDS_TITLE_END(t2)
     sub t1, t1, s11
     li t2, US_TICKS
     divu t1, t1, t2
@@ -146,6 +151,7 @@ _start:
     call camera_axes
     call clear_screen
     jab.sys.display.await
+    rdtime t3                       # the cleared screen's flip call's start
     jab.sys.display.flip
     rdtime t1                       # the cleared screen's flip end
     la t0, load_record
@@ -153,6 +159,9 @@ _start:
     sw a3, LOAD_CLEAR_ORDINAL(t0)
     la t2, known_ordinal
     sd a3, 0(t2)
+    la t2, bounds_record
+    sd t3, BOUNDS_CLEAR_START(t2)   # the call's bounds in ticks
+    sd t1, BOUNDS_CLEAR_END(t2)
     sub t1, t1, s11
     li t2, US_TICKS
     divu t1, t1, t2
@@ -748,9 +757,18 @@ frame_records:
     sd t2, RECEIPT_ORDINAL(t1)      # the present ordinal the final attempt returned
     ld t2, CLOCK_FIRST_ORDINAL(t0)
     sd t2, RECEIPT_FIRST(t1)        # the ordinal the first attempt found
-    sd zero, 40(t1)                 # zeros to the schema
-    sd zero, 48(t1)
-    sw zero, 56(t1)
+    ld t2, CLOCK_ATTEMPTS(t0)
+    beqz t2, 4f                     # no attempt, no call to bound
+    ld t2, CLOCK_FLIP_START(t0)
+    sd t2, RECEIPT_CALL_START(t1)   # the final attempt's call, its start in ticks
+    ld t2, CLOCK_FLIP_DONE(t0)
+    sd t2, RECEIPT_CALL_END(t1)     # and its end
+    j 5f
+4:
+    sd zero, RECEIPT_CALL_START(t1)
+    sd zero, RECEIPT_CALL_END(t1)
+5:
+    sw zero, 56(t1)                 # zeros to the schema
     la t0, clock_records
     li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
@@ -796,8 +814,16 @@ load_send:
     sd t1, LOAD_NONCE(t0)           # the I's nonce, 0 where none came before this frame's state
     li t1, REPORT_SCHEMA_VERSION
     sw t1, REPORT_SCHEMA(t0)
-    li t1, REPORT_SIZE
-    jab.sys.api.write t0, t1
+    la t2, bounds_record            # the load's calls' bounds, the record after it
+    li t1, REPORT_BOUNDS
+    sw t1, REPORT_KIND(t2)
+    la t1, frame_clock
+    ld t1, CLOCK_ORIGIN(t1)
+    sd t1, BOUNDS_ORIGIN(t2)        # the frame records' origin, the program's start
+    li t1, REPORT_SCHEMA_VERSION
+    sw t1, REPORT_SCHEMA(t2)
+    li t1, (REPORT_SIZE * 2)
+    jab.sys.api.write t0, t1        # the load record, then its bounds
 9:
     ret
 
@@ -817,6 +843,7 @@ flip_attempt:
     add t4, t4, t3
     sd t4, CLOCK_FLIP(t2)           # every attempt's call
     sd t1, CLOCK_FLIP_DONE(t2)
+    sd t0, CLOCK_FLIP_START(t2)     # this attempt's call's start, the final's kept
     ld t4, CLOCK_ATTEMPTS(t2)
     bnez t4, 3f
     sd a3, CLOCK_FIRST_ORDINAL(t2)  # the ordinal the frame's first attempt found
@@ -1631,6 +1658,8 @@ clock_records:
 end_record:
     .skip REPORT_SIZE
 load_record:
+    .skip REPORT_SIZE
+bounds_record:
     .skip REPORT_SIZE
 known_ordinal:
     .skip 8

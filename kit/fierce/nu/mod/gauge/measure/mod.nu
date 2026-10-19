@@ -33,7 +33,7 @@ const RESIDUAL_US = 4
 const SPAN_RECORDS = 65536
 
 # A packet command's bytes by schema, the polygon record copied whole
-const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232, "6": 232, "7": 232 }
+const COMMAND_BYTES = { "3": 312, "4": 312, "5": 232, "6": 232, "7": 232, "8": 232 }
 
 # A span record's bytes in a packet
 const SPAN_BYTES = 16
@@ -59,6 +59,9 @@ const FLIP_VALID = [0 1]
 # The guest clock's ticks a microsecond, its 10 MHz, a receipt's stamps' unit
 const TICKS_PER_US = 10.0
 
+# A flip's status preset at a frame's start, kept when it reaches no flip
+const FLIP_NONE = 255
+
 # The android events' names, indexed as the program reports them
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
@@ -82,7 +85,9 @@ export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> reco
     let last = (if not $clocked { ($s.states | length) - 1 } else if $final == null { ($s.frames | length) - 1 } else { $final })
     let framed = (rows-of $s $legs $last $schema)
     let anchor = ($s.loads | get -o 0.clear_ordinal)
-    let receipted = (if $complete and ($schema | default 1) >= 7 { receipt-invalidity $framed $anchor } else { [] })
+    let sequenced = (if $complete and ($schema | default 1) >= 7 { receipt-invalidity $framed $anchor } else { [] })
+    let bracketed = (if $complete and ($schema | default 1) >= 8 { bracket-invalidity $framed ($s.loads | get -o 0) ($s.bounds | get -o 0) } else { [] })
+    let receipted = ($sequenced ++ $bracketed)
     let invalid = (if $complete { (invalidity $framed $schema) ++ $receipted } else { [] })
     let valid = ($complete and ($invalid | is-empty))
     let acceptance = (acceptance-of $clocked $schema $complete $receipted)
@@ -109,6 +114,7 @@ export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> reco
         nonce_set: $s.nonce_set,
         late_nonce: $s.late_nonce,
         load: ($s.loads | get -o 0),
+        bounds: ($s.bounds | get -o 0),
         acceptance: $acceptance,
         workers: ($rows | get -o workers | compact | uniq | sort),
         grains: ($rows | get -o grain | compact | uniq | sort),
@@ -242,8 +248,16 @@ def window-problems [s: record, schema: oneof<int, nothing>]: nothing -> list<st
         if ($s.loads | length) > 1 { $problems = ($problems | append $"($s.loads | length) load records, where the program writes one") }
         if ($before | length) != ($s.loads | length) { $problems = ($problems | append "a load record after the first state, where the program writes it before") }
     }
+    if $at >= 8 {
+        if ($s.bounds | is-empty) { $problems = ($problems | append "no bounds record: the load's calls' bounds never came") }
+        if ($s.bounds | length) > 1 { $problems = ($problems | append $"($s.bounds | length) bounds records, where the program writes one") }
+        if ($s.bounds | any {|b| $b.arrival_states != 0 }) { $problems = ($problems | append "a bounds record after the first state, where the program writes it before") }
+        if ($s.bounds | any {|b| $b.arrival_loads == 0 }) { $problems = ($problems | append "a bounds record before the load record, where the program writes it after") }
+    } else if ($s.bounds | is-not-empty) {
+        $problems = ($problems | append $"a bounds record in a capture at schema ($schema), which carries none")
+    }
     let marker = (if $s.end == null { [] } else { [$s.end.schema] })
-    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | append $s.receipts | append $s.loads | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
+    let others = ($s.frames | append $s.draws | append $s.presents | append $s.packets | append $s.tiles | append $s.storages | append $s.configs | append $s.harts | append $s.receipts | append $s.loads | append $s.bounds | each {|r| $r.schema } | append $marker | uniq | where {|v| $v != $schema })
     if not ($others | is-empty) { $problems = ($problems | append $"clock records at schemas ($others | str join ', ') in a capture at schema ($schema)") }
     $problems
 }
@@ -330,6 +344,26 @@ def receipt-invalidity [rows: list<any>, anchor: oneof<int, nothing>]: nothing -
         (if ($violations | is-empty) { null } else { $"($violations | length) frames whose present ordinal breaks the sequence: ($violations | first 4 | each {|v| $'frame ($v.index) ($v.rule), ($v.ordinal) where ($v.wanted)' } | str join '; ')" }),
         (if ($firsts | is-empty) { null } else { $"($firsts | length) presented frames whose first attempt's ordinal is neither their own presented at once nor the last before a refusal" }),
         (if ($early | is-empty) { null } else { $"($early | length) presented frames whose decision's stamp comes before their eligibility tick" }),
+    ] | compact
+}
+
+# What makes a schema 8 window invalid in its recorded calls' bounds, at the
+# receipt stage: the origin, the load's two calls, and every attempted frame's
+def bracket-invalidity [rows: list<any>, load: any, bounds: any]: nothing -> list<string> {
+    if $load == null or $bounds == null { return ["the load's calls unbounded: no load record or no bounds record to read"] }
+    let b = $bounds
+    let receipted = ($rows | where {|r| $r.receipt_stamp != null })
+    let attempted = ($receipted | where {|r| $r.flip_status != $FLIP_NONE })
+    let idle = ($receipted | where {|r| $r.flip_status == $FLIP_NONE and ($r.call_start != 0 or $r.call_end != 0) })
+    let outside = ($attempted | where {|r| $r.call_start > $r.receipt_stamp or $r.receipt_stamp > $r.call_end })
+    let starts = ([$b.title_start $b.clear_start] ++ ($attempted | get call_start))
+    [
+        (if ($starts | any {|t| $t < $b.origin }) { "the bounds' origin after a stamp the run records" }),
+        (if not ($b.title_start <= $b.title_end and $b.title_end < $b.clear_start and $b.clear_start <= $b.clear_end) { $"the load's calls out of order: the title's ($b.title_start) to ($b.title_end), the cleared screen's ($b.clear_start) to ($b.clear_end)" }),
+        (if $load.title_stamp < $b.title_start or $load.title_stamp > $b.title_end { $"the title's decision ($load.title_stamp) outside its call, ($b.title_start) to ($b.title_end)" }),
+        (if $load.clear_stamp < $b.clear_start or $load.clear_stamp > $b.clear_end { $"the cleared screen's decision ($load.clear_stamp) outside its call, ($b.clear_start) to ($b.clear_end)" }),
+        (if ($outside | is-empty) { null } else { $"($outside | length) frames whose decision lies outside their final attempt's call: ($outside | first 3 | each {|r| $'frame ($r.frame) at ($r.receipt_stamp) in ($r.call_start) to ($r.call_end)' } | str join '; ')" }),
+        (if ($idle | is-empty) { null } else { $"($idle | length) frames that made no attempt carrying a call's bounds" }),
     ] | compact
 }
 
@@ -458,7 +492,10 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
         let h = (if $at >= 6 { $s.harts | get -o $st.frame } else { null })
         let masks = (if $h == null { hartsless } else { $h | reject frame schema })
         let rc = (if $at >= 7 { $s.receipts | get -o $st.frame } else { null })
-        let receipt = (if $rc == null { receiptless } else { { receipt_stamp: $rc.stamp, receipt_tick: $rc.tick, ordinal: $rc.ordinal, first_ordinal: $rc.first_ordinal } })
+        let receipt = (if $rc == null { receiptless } else {
+            let bounded = ($at >= 8)
+            { receipt_stamp: $rc.stamp, receipt_tick: $rc.tick, ordinal: $rc.ordinal, first_ordinal: $rc.first_ordinal, call_start: (if $bounded { $rc.call_start } else { null }), call_end: (if $bounded { $rc.call_end } else { null }) }
+        })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, pitch: $st.pitch, roll: $st.roll,
@@ -508,7 +545,7 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
 
 # A row's receipt columns, all null, below schema 7 or without its record
 def receiptless []: nothing -> record {
-    [receipt_stamp receipt_tick ordinal first_ordinal]
+    [receipt_stamp receipt_tick ordinal first_ordinal call_start call_end]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 

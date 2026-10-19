@@ -231,6 +231,12 @@ The time ticks a microsecond.
 
 `u64`: the present ordinal the frame's first attempt returned, so a present landing between two frames' flips shows; for a frame with no attempt the last the program knows.
 
+## .set CLOCK_FLIP_START
+
+`u64`: the final attempt's call's start, the tick flip_attempt reads before
+its flip, kept by every attempt so the last one's stands; the receipt
+record's call start beside CLOCK_FLIP_DONE, its end (PairBracket).
+
 ## .set CLOCK_SIZE
 
 frame_clock's bytes.
@@ -257,6 +263,9 @@ its flip returns: the decision's stamp and the present ordinal as the kernel
 answers them and the flip's end in microseconds from the program's start,
 the frame records' origin; the ordinal goes to known_ordinal too, so frame
 0's receipt starts from the cleared screen's. Their gap is the load itself.
+Each load flip's call is bounded in bounds_record, in ticks: its start one
+rdtime between its await and its flip, its end the rdtime its end already
+reads, kept before its conversion (PairBracket, schema 8).
 
 ## frame
 
@@ -331,7 +340,9 @@ next drawing. The receipt record takes the frame's flips as the kernel
 answered them, from the frame's clock: the final attempt's decision stamp,
 its eligibility tick, and its present ordinal, and the ordinal its first
 attempt found, the frame before's at this frame's start, since this frame's
-reset follows the records. The eight records go in one write, the API's
+reset follows the records; and from schema 8 the final attempt's call, its
+start and end in ticks, 0 and 0 for a frame that made no attempt, which
+carries no call to bound. The eight records go in one write, the API's
 write being the one call besides the await that can wait, and its cost is
 the reporting's. On a debug build, while the console's J cancel stands
 (job_cancel), the frame's witness follows its records, REPORT_ROUNDS with
@@ -339,8 +350,8 @@ the stats' rounds and cancelled rounds: a round whose workers finished
 before the cancel landed counts in the rounds and not the cancelled, and a
 serial frame takes no round, so its witness reads 0 and 0. An E the
 console read in the frame just recorded set measure_end, and the end marker
-goes out right after that frame's records and its witness, so every record of the
-measurement precedes it and the frames past it are outside.
+goes out right after that frame's records and its witness, so every record
+of the measurement precedes it and the frames past it are outside.
 
 ## load_send
 
@@ -350,6 +361,8 @@ two presents as load_record kept them, and the capture's nonce as the
 console's I left it (console.S's capture_nonce), 0 when no I was read by
 then. A gauge run sends its I at 200 ms beside R and C, so the I's answer
 before the first state record is the proof the record carries its nonce.
+bounds_record follows it in the same write, REPORT_BOUNDS: the load's two
+calls' bounds and the frame records' origin, read from the frame clock.
 
 ## flip_attempt
 
@@ -360,7 +373,10 @@ its own; a refusal or a failure leaves it. Each attempt keeps the kernel's
 receipt into the frame's clock before a1 is handed the flip's end, a1 the
 decision's stamp, a2 the eligibility tick, and a3 the present ordinal, the
 final attempt's standing; the frame's first attempt keeps its ordinal apart,
-and every attempt's ordinal goes to known_ordinal.
+and every attempt's ordinal goes to known_ordinal. Each attempt keeps its
+call's start beside its end, the final attempt's bounding the receipt's
+decision with no timer read added, the start the rdtime the call already
+takes.
 
 ## pacing_step
 
@@ -561,6 +577,10 @@ carries none.
 ## load_record
 
 `REPORT_SIZE u8`: the load record, REPORT_LOAD: its presents' fields kept as each load flip returns, its kind, nonce, and schema written by load_send.
+
+## bounds_record
+
+`REPORT_SIZE u8`: the load's bounds record, REPORT_BOUNDS, directly after load_record so load_send writes the two at once: each load flip's call's start and end in ticks as it returns, the origin, kind, and schema written by load_send.
 
 ## known_ordinal
 

@@ -51,13 +51,14 @@ present and for the first that did.
 
 ## receipts
 
-the receipts on Render One (ProbeRuns): the load record before the
-first state with the title's ordinal 2, the cleared screen's 3, and
-the nonce the I sent; a receipt a frame, the presented frames'
-ordinals one past the last from 4 (jab ordinal-violations); each
-presented frame's decision at or past its tick and inside its flip
-call's bracket, one offset from the guest's ticks to the records'
-microseconds fitting every presented frame's calls
+the receipts on Render One (ProbeRuns, PairBracket): the load record
+before the first state with the title's ordinal 2, the cleared screen's
+3, and the nonce the I sent; its bounds record after it, before the
+first state, at the program's schema, each load decision inside its
+recorded call, the two calls in order after the origin; a receipt a
+frame, the presented frames' ordinals one past the last from 4 (jab
+ordinal-violations); each presented frame's decision at or past its tick
+and inside its final attempt's recorded call
 
 ## walk
 

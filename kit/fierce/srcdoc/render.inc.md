@@ -1789,13 +1789,17 @@ and uniqueness itself.
 
 `u32`: the load's presents and the capture's nonce, LOAD_* fields, once in frame 0 before its state record: the title's flip and the cleared screen's, each its decision's stamp, its end, and its present ordinal, so the frames' ordinals run on from the cleared screen's and the gap between the two is the load's; at the clock records' schema, outside a frame's records.
 
+## .set REPORT_BOUNDS
+
+`u32`: the load's calls' bounds, BOUNDS_* fields, from schema 8, once, right after the load record in frame 0 and before its state record: each load flip's call's start and end in ticks and the frame records' origin, so the pairing brackets the load's two uploads on recorded bounds (PairBracket).
+
 ## .set REPORT_FRAME_RECORDS
 
 `u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, harts, and receipt records, 512 bytes.
 
 ## .set REPORT_SCHEMA_VERSION
 
-`u32`: the clock records' layout as this source lays them out, 7 with the receipt and load records, every record at it; 6 added the harts record, 5 the tile pool's records.
+`u32`: the clock records' layout as this source lays them out, 8 with the receipt's call bounds and the load's bounds record, every record at it; 7 added the receipt and load records, 6 the harts record, 5 the tile pool's records.
 
 ## .set TIME_START
 
@@ -2219,6 +2223,14 @@ frame, the first it governs. 36 to 56 are free.
 
 `u64`: the present ordinal the frame's first attempt returned, CLOCK_FIRST_ORDINAL; for a frame with no attempt the last the program knows.
 
+## .set RECEIPT_CALL_START
+
+`u64`: the final attempt's call's start in ticks, CLOCK_FLIP_START, from schema 8; 0 for a frame with no attempt, never a call's bound.
+
+## .set RECEIPT_CALL_END
+
+`u64`: the final attempt's call's end in ticks, CLOCK_FLIP_DONE, from schema 8; 0 for a frame with no attempt.
+
 ## .set LOAD_TITLE_STAMP
 
 `u64`: the title flip's decision stamp, in ticks.
@@ -2246,6 +2258,26 @@ frame, the first it governs. 36 to 56 are free.
 ## .set LOAD_NONCE
 
 `u64`: the capture's nonce the console's I sent, 0 when no I was read before frame 0's state.
+
+## .set BOUNDS_TITLE_START
+
+`u64`: the title flip's call's start in ticks, an rdtime between its await and its flip.
+
+## .set BOUNDS_TITLE_END
+
+`u64`: the title flip's call's end in ticks, the read its end already makes, before its conversion.
+
+## .set BOUNDS_CLEAR_START
+
+`u64`: the cleared screen's flip's call's start in ticks.
+
+## .set BOUNDS_CLEAR_END
+
+`u64`: the cleared screen's flip's call's end in ticks.
+
+## .set BOUNDS_ORIGIN
+
+`u64`: the frame records' origin in ticks, the program's start, s11 as CLOCK_ORIGIN keeps it, so every microsecond field of the records maps back to the ticks.
 
 ## .set DUMP_SLOT
 

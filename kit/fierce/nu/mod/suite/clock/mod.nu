@@ -209,26 +209,28 @@ def submitted [rows: list<any>]: nothing -> list<any> {
     $out
 }
 
-# Receipts on Render One: the load record, ordinals in sequence, decisions timed
+# Receipts on Render One: the load record and its bounds, ordinals in sequence,
+# each decision timed inside its recorded call
 export def receipts [context: record, records: record]: nothing -> record {
     let render_1_run = $records."render_one launched".render_1_run
-    let game = $context.game
     let r1 = (stream $render_1_run.api)
     assert equal ($r1.loads | length) 1 $"render_1_receipts: one load record: ($r1.loads | length)"
     let r1_load = ($r1.loads | first)
     assert equal [$r1_load.arrival_states $r1_load.title_ordinal $r1_load.clear_ordinal $r1_load.nonce] [0 2 3 $RECEIPT_NONCE] $"render_1_receipts: the load record before the first state, ordinals 2 and 3, the I's nonce: ($r1_load)"
+    assert equal ($r1.bounds | length) 1 $"render_1_receipts: one bounds record: ($r1.bounds | length)"
+    let b = ($r1.bounds | first)
+    assert ($b.arrival_states == 0 and $b.arrival_loads == 1 and $b.schema == $CLOCK_SCHEMA) $"render_1_receipts: the bounds record after the load record, before the first state, at schema ($CLOCK_SCHEMA): ($b)"
+    let ordered = ($b.origin <= $b.title_start and $b.title_start <= $r1_load.title_stamp and $r1_load.title_stamp <= $b.title_end and $b.title_end < $b.clear_start and $b.clear_start <= $r1_load.clear_stamp and $r1_load.clear_stamp <= $b.clear_end)
+    assert $ordered $"render_1_receipts: each load decision inside its call, the calls in order after the origin: ($b), the title's at ($r1_load.title_stamp), the cleared screen's at ($r1_load.clear_stamp)"
     let r1_frames = ($r1.frames | length)
     assert (($r1.receipts | length) == $r1_frames and $r1_frames > 10) $"render_1_receipts: a receipt a frame: ($r1.receipts | length) for ($r1_frames)"
-    let r1_rows = ($r1.frames | zip $r1.receipts | each {|p| { presented: ($p.0.flip_status == 0), ordinal: $p.1.ordinal, stamp: $p.1.stamp, tick: $p.1.tick, done: $p.0.flip_done_us, call: $p.0.flip_us } })
+    let r1_rows = ($r1.frames | zip $r1.receipts | each {|p| { frame: $p.0.frame, presented: ($p.0.flip_status == 0), ordinal: $p.1.ordinal, stamp: $p.1.stamp, tick: $p.1.tick, start: $p.1.call_start, end: $p.1.call_end } })
     let r1_broken = (present ordinal-violations 3 ($r1_rows | select presented ordinal))
     assert equal $r1_broken [] $"render_1_receipts: the presented frames' ordinals consecutive from 4: ($r1_broken | first 3)"
     let r1_presented = ($r1_rows | where presented)
     assert ($r1_presented | all {|r| $r.stamp >= $r.tick }) "render_1_receipts: each presented frame's decision at or past its tick"
-    let time_hz = (open --raw ($game | path join ".." ".." "sdk" "src" "jab.inc") | into binary | decode | parse --regex '\.set JAB_TIME_HZ, (?P<hz>\d+)' | get 0.hz | into int)
-    let tick_us = ($time_hz // 1000000)
-    let lows = ($r1_presented | each {|r| ($r.stamp // $tick_us) - $r.done })
-    let highs = ($r1_presented | each {|r| ($r.stamp // $tick_us) - $r.done + $r.call })
-    assert (($lows | math max) <= (($highs | math min) + 2)) $"render_1_receipts: one offset fits every presented frame's flip call: ($lows | math max) to ($highs | math min)"
+    let outside = ($r1_presented | where {|r| $r.stamp < $r.start or $r.stamp > $r.end })
+    assert ($outside | is-empty) $"render_1_receipts: each presented frame's decision inside its final attempt's recorded call: ($outside | first 3)"
     {}
 }
 

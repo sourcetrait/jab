@@ -28,7 +28,8 @@ the span records a frame holds before its spans go unrecorded
 
 a command's bytes in a packet by schema, the polygon's record copied
 whole, 312 while it carried its tile bindings and 232 from the pool on,
-and a span record's (render.inc's POLY_SIZE and SPAN_RECORD_SIZE)
+schema 8's too, and a span record's (render.inc's POLY_SIZE and
+SPAN_RECORD_SIZE)
 
 ## PACKET_RESIDUAL_US
 
@@ -105,7 +106,10 @@ as its cadence requires, a phase or a part sums past its whole, a
 frame's clock disagrees with its state, or from schema 2 a frame's
 presentation, from schema 3 its packets, from schema 4 its workers, or
 at schema 5 its tile pool break their rules (invalidity), or from schema
-7 its receipts break the receipt stage (receipt-invalidity). The
+7 its receipts break the receipt stage (receipt-invalidity), and from
+schema 8 their recorded calls' bounds (bracket-invalidity); complete at
+8 besides holds exactly one bounds record, after the load record and
+before the first state. The
 measurement carries `nonce_set` and `late_nonce`, an I answered before
 the first state or after it, `load`, the load record, and `acceptance`,
 whether its rows' acceptance intervals stand and why not where not
@@ -212,6 +216,23 @@ anchor, no load record before the frames, the sequence is named
 unanchored and read no further; the window's completeness refuses such
 a capture first.
 
+## FLIP_NONE
+
+the status a frame's flip is preset to, 255, kept by a frame that made no
+attempt, whose receipt carries no call to bound
+
+## bracket-invalidity
+
+What makes a complete window at schema 8 invalid in its recorded calls'
+bounds, at the receipt stage beside receipt-invalidity (PairBracket): the
+load's bounds record missing; the origin after any call's start; the
+load's calls out of order, the title's start at or before its end, its
+end before the cleared screen's start, that at or before its end; a load
+decision outside its call; an attempted frame's decision outside its
+final attempt's call, its start at or before the stamp and the stamp at
+or before its end; and a frame that made no attempt carrying a call's
+bounds. A schema 7 window is read under its own rules, never with these.
+
 ## acceptance-of
 
 Whether a measurement's acceptance intervals stand (AcceptanceInterval):
@@ -298,7 +319,8 @@ theirs, and the masks below schema 6 or without theirs.
 ## receiptless
 
 The receipt record's columns of a row below schema 7 or without its
-record, all null.
+record, all null, the call's bounds among them, which a row below schema
+8 keeps null too.
 
 ## hartsless
 

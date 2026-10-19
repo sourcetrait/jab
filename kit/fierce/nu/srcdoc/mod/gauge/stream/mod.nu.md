@@ -9,7 +9,15 @@ the clock kinds and their schema (render.inc's REPORT_ROUNDS)
 
 from schema 7 each frame's receipt, its flips as the kernel answered
 them, and once before the first state the load's two presents with the
-run's capture nonce (render.inc's REPORT_RECEIPT and REPORT_LOAD)
+run's capture nonce (render.inc's REPORT_RECEIPT and REPORT_LOAD); from
+schema 8 the receipt's final attempt's call bounds and the load's bounds
+record, KIND_BOUNDS, right after the load record (REPORT_BOUNDS,
+PairBracket)
+
+## CLOCK_SCHEMA
+
+the program's clock records' schema, 8, the fixtures and the walk held to
+it
 
 ## PHASES
 
@@ -52,7 +60,11 @@ eligibility tick in ticks, its present ordinal, and the ordinal its first
 attempt found, and the load's records, kind 21, each the title's and the
 cleared screen's acceptance in ticks and flip end in microseconds, their
 ordinals, and the run's capture nonce, with the state records before it;
-an I's answer before the first state sets `nonce_set`, a later one
+from schema 8 each receipt's `call_start` and `call_end`, its final
+attempt's call in ticks, and the load's bounds records, kind 22, each the
+title's and the cleared screen's call start and end in ticks and the
+origin, with the state and load records before it; an I's answer before
+the first state sets `nonce_set`, a later one
 `late_nonce`. A state carries its pose, the eye's x, y, and z and the
 yaw, pitch, and roll in degrees. What follows the marker is outside the
 measurement: its state records are counted as `past` and nothing else in

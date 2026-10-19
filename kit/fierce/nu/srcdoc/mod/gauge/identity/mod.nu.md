@@ -2,7 +2,8 @@
 
 ## SCHEMAS
 
-the clock records' layouts this reader takes; a capture's sit at one
+the clock records' layouts this reader takes, 1 to 8; a capture's sit at
+one
 
 ## AUTOMATIC
 
