@@ -219,7 +219,11 @@ further than that.
 
 ## .set TRAIL_PERIODS
 
-`u64`: the waits with no flip after the window, a second of log past its last upload.
+`u64`: the waits with no flip after the window, a second and a half, so the
+host's log runs at least the pairing's second past the window's last upload:
+the trail counts from that flip's tick, its upload lands inside its call
+after the acceptance, and the shim logs an idle window every 30 ms, so sixty
+waits left a probed run's log 0.995 s past it.
 
 ## .set WINDOW_TICKS
 
