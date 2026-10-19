@@ -41,17 +41,24 @@ and config record printed, or a socket served.
 
 `gauge play route`: the route played on a build `--runs` times, every
 frame of each run read from the program's records, each run's files and
-the batch's gauge.nuon kept.
+the batch's gauge.nuon kept; `--assets` a compiled map tree in place of
+the checkout's shard.
 
 ## main gauge play
 
 `gauge play host`: the build in the host's window, audio, and gamepad for
-a person to play, measured for `--seconds`.
+a person to play, measured for `--seconds`; `--assets` as `run` takes it.
 
 ## main gauge read
 
 `gauge read`: a capture made either way, read under the identity it
 resolves.
+
+## main gauge read batch
+
+`gauge read batch <step>`: a kept bench step's report made again from
+its runs, each run's stream measured anew, written beside the step or in
+`--out` with its reader's revision.
 
 ## main gauge compare
 

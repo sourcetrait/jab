@@ -35,7 +35,10 @@ less its rows, its effective identity and correction provenance, the
 SHA-256 of its identity file as recorded, null where none is, and from
 a read where the identity came from, its binding, the directories
 passed over, and the reports read, and its CPU windows, null without
-readings, and every row with its run.
+readings, and every row with its run. A report made again from kept runs
+(read's batch) carries `reread`, the reader's revision, the step it read,
+and when, so its bytes name their own analysis and the old report's
+SHA-256 the old one.
 
 ## under-ceiling
 
@@ -61,7 +64,8 @@ and the most unattributed.
 
 The report: every run's measurement and outcome under the identity
 (report-doc), written as gauge.nuon in `out`, a previous one there
-retired, its legs (leg-text) and its outliers printed.
+retired, its legs (leg-text) and its outliers printed; `--reread` the
+revision of a report made again (report-doc).
 
 ## legs-for
 

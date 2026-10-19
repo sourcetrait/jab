@@ -28,8 +28,8 @@ def "main run" [--set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --n
 }
 
 # A bench of fierce's run step by step, then its report and its tar
-def "main bench" [name: string, --only: string = ""] {
-    bench $WORKSPACE $"kit/fierce/($name)" --only $only
+def "main bench" [name: string, --only: string = "", --package: string = ""] {
+    bench $WORKSPACE $"kit/fierce/($name)" --only $only --package $package
 }
 
 def main [] { help main }

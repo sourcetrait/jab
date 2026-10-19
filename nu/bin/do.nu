@@ -33,8 +33,8 @@ def "main run" [...words: string, --set: string = "", --api, --kbm, --no-kbm, --
 }
 
 # A program's bench run step by step, then its report and its tar; no name lists
-def "main bench" [name?: string, --only: string = ""] {
-    bench $WORKSPACE $name --only $only
+def "main bench" [name?: string, --only: string = "", --package: string = ""] {
+    bench $WORKSPACE $name --only $only --package $package
 }
 
 # The running Jab QEMU recorded per thread each second, reported when it ends

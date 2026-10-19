@@ -56,7 +56,11 @@ when the measurement closes. The build's flags are null, unknown, with
 no `flags` beside the image, and its provenance the `provenance.nuon`
 beside the image (ImageProvenance), null without one. The QEMU, the
 machine, and the words are the launch's, written in when it returns
-(launched-identity).
+(launched-identity). The assets are the tree the run's disk was made
+from, `at`'s `assets` where the run names one (play's assets-of), else
+the checkout's asset shard's; a packaged image, which carries its
+`source.nuon` beside it and no `home`, records its program's source
+from that file (program-of, program-source).
 
 ## qemu-of
 
@@ -260,7 +264,8 @@ both reports.
 ## repo-of
 
 The workspace's commit and whether its tree held changes: where the
-SDK and the kernel came from.
+SDK and the kernel came from, and the revision a reread names as its
+reader's (read's batch).
 
 ## moved
 

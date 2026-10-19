@@ -5,13 +5,25 @@
 The benches of the workspace's programs, `<program>/<bench>` each: the
 NUON files under a program's bench/ directory.
 
+## packaged-words
+
+A packaged bench names its package's files as `{package}/<path>`, since
+where a package lies is known only where it is extracted; the run reads
+each word with the package's directory in its place.
+
 ## bench-at
 
 The bench `name` names, `<program>/<bench>`, the program by its path
 or a shortcut (program-path): the program's path and directory, the
 bench's name and file, and its definition, held to its shape: a
 summary, and steps each with a label of its own and the script it runs
-with its arguments. Untyped because it ends in an error.
+with its arguments; `build`, when given, tree or none. With `--package`
+the bench is the package's own, `<package>/bench/<bench>.nuon`, its
+words read at the package's directory (packaged-words), and it must say
+`build: none`, since a packaged bench runs the frozen guest bytes the
+package carries and a tree build beside them could stand in for them.
+The program still names the scripts, which come from the checkout.
+Untyped because it ends in an error.
 
 ## bench-home
 
@@ -70,6 +82,14 @@ report exits 1 once everything is recorded, reported, packed, and said.
 `--only` runs the steps its comma-separated labels name; with no bench,
 the list. Nothing is deleted: a run writes its own directory, its tar,
 and the state.
+
+A bench saying `build: none` builds nothing before its steps, its steps
+naming every image they run; a packaged bench says so (`--package`,
+bench-at). A step marked `gate: true` ends the bench when it fails: no
+step after it runs, each recorded `not run`, and the run fails, so a
+package's preflight refuses before the long battery. bench.nuon records
+the bench file's SHA-256, the build, the package's directory, and each
+step's gate beside the rest.
 
 ## bench-qemus
 

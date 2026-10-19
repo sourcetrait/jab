@@ -39,6 +39,7 @@ export def route [
     --image: string = ""
     --route: string = ""
     --map: string = ""
+    --assets: string = ""
     --runs: int = 3
     --seeds: string = "[]"
     --cadence: int = 1
@@ -67,7 +68,8 @@ export def route [
     let r = ($route_bytes | decode utf-8 | from nuon)
     let requests = (if $cpu { cpu requests $r.legs $r.end } else { [] })
     let map_name = (if $map == "" { $r.map } else { $map })
-    let disk = (romfs-of $at.game $map_name $at.out)
+    let at = ($at | insert assets (assets-of $at.game $map_name $assets))
+    let disk = (romfs-of $at.assets $map_name $at.out)
     let pad = ($at.out | path join "pad.nuon")
     $r.legs | each {|l| $l.pad } | flatten | sort-by at | to nuon | save --raw -f $pad
     let capture = ($r.end + $DRAIN)
@@ -90,9 +92,9 @@ export def route [
         let id = (identity new $at $set $map_name $route_file $mode $machine $words | merge { profile: "paired", capture_nonce: $nonce })
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
         } else {
-            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
         })
         let ran = (cpu outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
@@ -118,6 +120,7 @@ export def host [
     --cadence: int = 1
     --workers: int = -1
     --grain: int = 32
+    --assets: string = ""
     --out: string = ""
     --label: string = ""
     --spec (-s): string = ""
@@ -131,7 +134,8 @@ export def host [
     let machine = (machine resolve $at.workspace $spec $harts)
     let contradiction = (identity contradiction (identity image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
-    let disk = (romfs-of $at.game "render_0" $at.out)
+    let at = ($at | insert assets (assets-of $at.game "render_0" $assets))
+    let disk = (romfs-of $at.assets "render_0" $at.out)
     let set = (if $at.tree == "debug" { "debug" } else { "" })
     let end = ($seconds * 1sec)
     let capture = ($end + $DRAIN)
@@ -145,7 +149,7 @@ export def host [
     let id = (identity new $at $set "render_0" null $mode $machine $qemu)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu)
+    let launched = (launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu --workspace $at.workspace)
     let ran = (cpu outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
     let ran_id = (identity launched-identity $id $launched)
@@ -177,9 +181,18 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     }
 }
 
+# A map's compiled tree: the one `assets` names, else the checkout's shard's, held to the map
+def assets-of [game: path, map: string, assets: string]: nothing -> string {
+    let tree = (if $assets == "" { build program-shard $game "asset" | path join $map } else { $assets | path expand })
+    let named = ($tree | path join "map" "name")
+    if not ($named | path exists) { error make { msg: $"no compiled map tree at ($tree): it holds no map/name" } }
+    let name = (open --raw $named | decode | str trim)
+    if $name != $map { error make { msg: $"the tree at ($tree) holds the map ($name), where the run plays ($map)" } }
+    $tree
+}
+
 # A map's tree built in `out` as the romfs image the program reads
-def romfs-of [game: path, map: string, out: path]: nothing -> string {
-    let tree = (build program-shard $game "asset" | path join $map)
+def romfs-of [tree: path, map: string, out: path]: nothing -> string {
     if not ($tree | path join "map.nuon" | path exists) { error make { msg: $"no tree for ($map) at ($tree)" } }
     let disk = ($out | path join $"($map).romfs")
     let made = (^genromfs -d $tree -f $disk -V "fps" | complete)

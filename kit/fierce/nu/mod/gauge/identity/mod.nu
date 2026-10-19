@@ -51,7 +51,7 @@ export def new [at: record, set: string, map: string, route: oneof<string, nothi
     let provenance_file = ($built | path join "provenance.nuon")
     let jab_inc = ($at.workspace | path join "sdk" "src" "jab.inc")
     let cap = (open --raw $jab_inc | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get -o 0.cap)
-    let tree = (build program-shard $at.game "asset" | path join $map)
+    let tree = ($at | get -o assets | default (build program-shard $at.game "asset" | path join $map))
     let host = (sys host)
     let cpus = (sys cpu)
     {
@@ -416,7 +416,7 @@ def reconcile [a: record, b: record, here: string]: nothing -> record {
 }
 
 # The workspace's commit and whether its tree held changes
-def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, dirty: bool> {
+export def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, dirty: bool> {
     let commit = (^git -C $workspace rev-parse --short HEAD | complete | get stdout | str trim)
     let status = (^git -C $workspace status --porcelain | complete | get stdout | str trim)
     { dir: $workspace, commit: $commit, dirty: ($status != "") }

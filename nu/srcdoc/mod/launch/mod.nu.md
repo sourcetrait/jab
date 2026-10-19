@@ -63,7 +63,11 @@ display server is. `capture_nonce` is the caller's, never minted here,
 sixteen hex digits (nonce hex); `profile` the capture's, `paired` only
 with a nonce, `generic` for a probe that names none, "" for a run that
 claims none; `capture` the run's capture identity as it stands before
-QEMU starts (launch capture-identity).
+QEMU starts (launch capture-identity). The workspace, which holds the
+QEMU link, the shims, and the generic disk, is the image's program's
+(image workspace) unless `--workspace` names it: a packaged image
+carries no `home` marker, its program's source beside it, so the run
+that takes it names the checkout it runs from.
 
 - a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
   is recorded below it, where a release kernel reads no knob and refuses

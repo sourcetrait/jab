@@ -63,8 +63,8 @@ export def ms [us: any]: nothing -> string {
 }
 
 # A report's document: label, identity, ceiling, every run, every row
-def report-doc [label: string, id: record, runs: list<any>]: nothing -> record {
-    {
+def report-doc [label: string, id: record, runs: list<any>, reread: any]: nothing -> record {
+    let doc = {
         label: $label,
         identity: $id,
         ceiling_us: $CEILING_US,
@@ -76,6 +76,7 @@ def report-doc [label: string, id: record, runs: list<any>]: nothing -> record {
         } }),
         rows: ($runs | each {|r| $r.measured.rows | each {|row| $row | insert run $r.run } } | flatten),
     }
+    if $reread == null { $doc } else { $doc | insert reread $reread }
 }
 
 # Whether a critical path's median lies under CEILING_US
@@ -99,10 +100,10 @@ def leg-text [run: int, schema: any, l: record]: nothing -> string {
 }
 
 # The report saved as gauge.nuon in `out`, the old one retired, legs printed
-export def write [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
+export def write [label: string, id: record, runs: list<any>, out: path, --reread: record]: nothing -> nothing {
     let file = ($out | path join "gauge.nuon")
     target retire $file (target root $WORKSPACE)
-    report-doc $label $id $runs | to nuon | save --raw $file
+    report-doc $label $id $runs $reread | to nuon | save --raw $file
     for r in $runs {
         for l in $r.measured.legs {
             print (leg-text $r.run ($r.measured | get -o schema) $l)

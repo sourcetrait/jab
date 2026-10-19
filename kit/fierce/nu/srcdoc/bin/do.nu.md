@@ -25,4 +25,5 @@ UART on stdio, its flags the root's `run`'s.
 
 The SDK's `bench`: one of fierce's benches by its name, `cadence`,
 `qual_1ka1`, or `qual_1kb1`, every step in order, then its report and its
-tar.
+tar; with `--package` the bench of that name the package holds, run
+from it, nothing built.

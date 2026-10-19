@@ -53,8 +53,9 @@ says. QEMU's exit code is the program's status.
 workspace's benches, else the bench `<program>/<bench>` built in its
 tree and run step by step, its report after, the run packed into one tar
 whose path the last line names; `--only` the steps its comma-separated
-labels name. A run with a failed step or report exits 1 once everything
-is recorded.
+labels name; `--package` the bench the package at that directory holds,
+its words read there and nothing built. A run with a failed step or
+report exits 1 once everything is recorded.
 
 ## main watch
 

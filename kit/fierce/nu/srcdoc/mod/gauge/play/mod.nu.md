@@ -44,6 +44,8 @@ launch's own words, which makes the run diagnostic, the oracle set.
 - `--image`: the program's image, the tree's own unless given
 - `--route`: the route, route_render_0.nuon unless given
 - `--map`: the map tree the route plays on, the route's unless given
+- `--assets`: the compiled map tree the disk is made from, the checkout's
+  asset shard's unless given, a package's on a host
 - `--runs`: the route's runs
 - `--seeds`: each run's seed, a NUON list such as "[3 2 1]", run n's n unless
   given
@@ -89,6 +91,8 @@ tree asked is refused as `run` refuses it.
   asked, no W, unless given
 - `--grain`: the rows a band asked with the workers, the program's own 32 unless
   given, 0 for a band a worker
+- `--assets`: the compiled map tree the disk is made from, the checkout's
+  asset shard's unless given
 - `--out`: where the run lands, a stamped directory under the tree's unless
   given
 - `--label`: a name for the build in the summary
@@ -104,6 +108,16 @@ tree asked is refused as `run` refuses it.
 Where a run's pieces are: the game, the workspace, the tree, the
 kernel and the image (the tree's own unless given), and the output
 directory, a stamped one under the tree's gauge unless given, made.
+
+## assets-of
+
+The compiled map tree a run's disk is made from: `assets` when given, a
+package's tree on a host, else the checkout's asset shard's; its
+`map/name` must be the map the run plays. Every launch names the gauge's
+own workspace (launch's `--workspace`), so an image with no `home`
+marker, a packaged one, still finds the checkout's QEMU, shims, and
+generic disk; for a tree's or an export's image it is the workspace its
+home names already.
 
 ## romfs-of
 

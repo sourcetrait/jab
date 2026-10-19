@@ -5,6 +5,9 @@ use (path self ../report)
 use (path self ../identity) [FROM_EMBEDDED FROM_FILE]
 use (path self ../measure) [CAP]
 
+# The workspace's root, resolved from this file's own path
+const WORKSPACE = path self ../../../../../..
+
 # A run's capture, its api.out, read and reported by read-capture
 export def main [
     api: path
@@ -35,6 +38,36 @@ def read-capture [api: path, route: string, out: string, label: string]: nothing
     mkdir $target
     let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu windows $ran.thread_readings $legs ($id | get -o mode.end | default 0sec) })
     report write $label $id [(read-run $read_id $dir $ran $measured $windows)] $target
+}
+
+# A kept bench step's report made again from its runs, each stream measured anew
+export def batch [step: path, --label: string = "", --out: string = ""] {
+    let dir = ($step | path expand)
+    let kept = (glob ($dir | path join "run_*") | where {|d| ($d | path type) == "dir" and (($d | path basename) =~ '^run_[0-9]+$') })
+    if ($kept | is-empty) { error make { msg: $"($dir) holds no run_<n> directory, so it is no kept step" } }
+    let name = (if $label == "" { $dir | path basename } else { $label })
+    let runs = ($kept | each {|d| { n: ($d | path basename | str substring 4.. | into int), dir: $d } } | sort-by n | each {|r| batch-run $name $r.n $r.dir })
+    let target = (if $out == "" { $dir } else { $out | path expand })
+    mkdir $target
+    let revision = { reader: (identity repo-of $WORKSPACE), from: $dir, written: (date now | format date "%Y-%m-%dT%H:%M:%S%z") }
+    report write $name ($runs | first | get identity) $runs $target --reread $revision
+}
+
+# One kept run read anew: its identity, route, run record, stream, and CPU
+def batch-run [label: string, n: int, dir: string]: nothing -> record {
+    let needed = ([identity.nuon run.nuon api.out] | where {|f| not ($dir | path join $f | path exists) })
+    if not ($needed | is-empty) { error make { msg: $"($dir) holds no ($needed | str join ', '), so it is no kept run" } }
+    let file = ($dir | path join "identity.nuon")
+    let raw = (open --raw $file | into binary)
+    let read = (identity corrected $file)
+    let id = $read.identity
+    let chosen = (report legs-for $dir $id "")
+    let ran = (open ($dir | path join "run.nuon"))
+    let measured = (measure (open --raw ($dir | path join "api.out") | into binary) $chosen.legs --cap ($id | get -o cap | default $CAP))
+    print (report run-line $label $n $measured $ran)
+    print (report outcome-line $n $measured $ran)
+    let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu windows $ran.thread_readings $chosen.legs ($id | get -o mode.end | default 0sec) })
+    { run: $n, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured, identity: $id, corrections: $read.corrections, identity_sha256: ($raw | hash sha256), cpu: $windows }
 }
 
 # The run record a read writes: its seed, own identity, provenance, and result

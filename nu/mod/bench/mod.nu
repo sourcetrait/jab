@@ -12,21 +12,29 @@ def benches-of [ws: path]: nothing -> list<string> {
     } | flatten
 }
 
-# The bench a name names, its program and definition held to its shape
-export def bench-at [ws: path, name: string] {
+# A packaged bench's words, every `{package}` the package's directory
+def packaged-words [words: list<string>, package: path]: nothing -> list<string> {
+    $words | each {|w| $w | str replace --all "{package}" $package }
+}
+
+# The bench a name names, its program and definition held to its shape; a package's own when given
+export def bench-at [ws: path, name: string, --package: string = ""] {
     let words = ($name | split row "/" | where {|w| $w != "" })
     let all = (benches-of $ws)
     if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `./do bench <program>/<bench>`: ($all | str join ', ')"} }
     let bench = ($words | last)
     let program = (workspace program-path $ws ($words | drop 1))
-    let file = ($ws | path expand | path join $program "bench" $"($bench).nuon")
-    if not ($file | path exists) { error make {msg: $"no bench ($bench) in ($program); the benches: ($all | str join ', ')"} }
-    let def = (open $file)
+    let file = (if $package == "" { $ws | path expand | path join $program "bench" $"($bench).nuon" } else { $package | path expand | path join "bench" $"($bench).nuon" })
+    if not ($file | path exists) { error make {msg: (if $package == "" { $"no bench ($bench) in ($program); the benches: ($all | str join ', ')" } else { $"the package at ($package) holds no bench ($bench)" })} }
+    let read = (open $file)
+    let def = (if $package == "" { $read } else { $read | update steps ($read.steps | each {|s| $s | update run (packaged-words $s.run ($package | path expand)) }) })
     if ($def | get -o summary) == null or ($def | get -o steps) == null { error make {msg: $"($file) needs a summary and steps"} }
     let labels = ($def.steps | each {|s| $s | get -o label | default "" })
     if ($labels | any {|l| $l == "" }) or ($labels | uniq | length) != ($labels | length) { error make {msg: $"($file): every step needs a label of its own"} }
     if ($def.steps | any {|s| ($s | get -o run | default [] | is-empty) }) { error make {msg: $"($file): every step needs `run`, its script and the script's arguments"} }
-    { name: $"($program)/($bench)", program: $program, dir: ($ws | path expand | path join $program), bench: $bench, file: $file, def: $def }
+    if ($def | get -o build | default "tree") not-in [tree none] { error make {msg: $"($file): `build` is tree, the program built in the tree first, or none"} }
+    if $package != "" and ($def | get -o build) != "none" { error make {msg: $"($file): a packaged bench runs the package's artifacts, so it builds nothing, `build: none`"} }
+    { name: $"($program)/($bench)", program: $program, dir: ($ws | path expand | path join $program), bench: $bench, file: $file, def: $def, package: (if $package == "" { null } else { $package | path expand }) }
 }
 
 # Where a bench's runs land, beside the state file a watch reads
@@ -71,11 +79,11 @@ export def bench-tar [home: path, stamp: string, name: string, root: path] {
 }
 
 # A program's bench, every step in order, then its report and its tar
-export def main [ws: path, name?: string, --only: string = ""] {
+export def main [ws: path, name?: string, --only: string = "", --package: string = ""] {
     let ws = ($ws | path expand)
     if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     if $name == null { print (bench-list $ws); return }
-    let b = (bench-at $ws $name)
+    let b = (bench-at $ws $name --package $package)
     let labels = ($b.def.steps | get label)
     let picked = ($only | split row "," | each {|l| $l | str trim } | where {|l| $l != "" })
     let unknown = ($picked | where {|l| $l not-in $labels })
@@ -92,30 +100,39 @@ export def main [ws: path, name?: string, --only: string = ""] {
     let record_file = ($dir | path join "bench.nuon")
     let total = ($steps | length)
     let base = { bench: $b.name, stamp: $stamp, dir: $dir, pid: $nu.pid, started: (date now | format date "%Y-%m-%dT%H:%M:%S"), total: $total }
+    let built = (($b.def | get -o build | default "tree") == "tree")
     mut record: record = {
         bench: $b.name, summary: $b.def.summary, tree: $tree, stamp: $stamp, started: $base.started, file: $b.file,
-        steps: ($steps | each {|s| { label: $s.label, attend: ($s | get -o attend), run: $s.run, state: "pending", exit: null, seconds: null } }),
-        report: null, state: "building",
+        file_sha256: (open --raw $b.file | hash sha256), build: (if $built { "tree" } else { "none" }), package: $b.package,
+        steps: ($steps | each {|s| { label: $s.label, attend: ($s | get -o attend), gate: ($s | get -o gate | default false), run: $s.run, state: "pending", exit: null, seconds: null } }),
+        report: null, state: (if $built { "building" } else { "running" }),
     }
     $record | to nuon --indent 2 | save --raw $record_file
-    bench-save-state $state_file ($base | merge { step: 0, label: "", state: "building" })
+    bench-save-state $state_file ($base | merge { step: 0, label: "", state: $record.state })
     print $"jab bench: ($b.name), ($total) steps, into ($dir): ($b.def.summary)"
-    let broken = (try {
+    let broken = (if not $built { null } else { try {
         let m = (open ($ws | path join "workspace.jab.toml"))
         build build-kernel ($ws | path join $m.kernel) $names
         build prepare $b.dir "build"
         build build-program $b.dir $names
         null
-    } catch {|e| $e.msg })
+    } catch {|e| $e.msg } })
     if $broken != null {
         $record = ($record | merge { state: "failed" })
         $record | to nuon --indent 2 | save --raw -f $record_file
         bench-save-state $state_file ($base | merge { step: 0, label: "", state: "failed" })
         error make {msg: $"($b.name): the build failed: ($broken)"}
     }
+    mut gated = false
     for entry in ($steps | enumerate) {
         let s = $entry.item
         let n = ($entry.index + 1)
+        if $gated {
+            let i = $entry.index
+            $record = ($record | merge { steps: ($record.steps | enumerate | each {|e| if $e.index == $i { $e.item | merge { state: "not run" } } else { $e.item } }) })
+            $record | to nuon --indent 2 | save --raw -f $record_file
+            continue
+        }
         bench-save-state $state_file ($base | merge { step: $n, label: $s.label, state: "running" })
         let attend = ($s | get -o attend)
         if $attend != null {
@@ -137,7 +154,10 @@ export def main [ws: path, name?: string, --only: string = ""] {
         let updated = ($record.steps | enumerate | each {|e| if $e.index == $i { $e.item | merge $outcome } else { $e.item } })
         $record = ($record | merge { steps: $updated })
         $record | to nuon --indent 2 | save --raw -f $record_file
-        if $code != 0 { print $"jab bench: ($s.label) failed with exit ($code); on to the next step" }
+        if $code != 0 and ($s | get -o gate | default false) {
+            print $"jab bench: ($s.label), a gate, failed with exit ($code); no step after it runs"
+            $gated = true
+        } else if $code != 0 { print $"jab bench: ($s.label) failed with exit ($code); on to the next step" }
     }
     bench-save-state $state_file ($base | merge { step: $total, label: "", state: "reporting" })
     let report = ($b.def | get -o report)
