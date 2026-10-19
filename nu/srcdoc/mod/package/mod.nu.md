@@ -42,6 +42,11 @@ modification time, since a correctly extracted file can be newer than
 its archive; and every file the package holds an artifact of the
 manifest, so a stray file is never taken for one.
 
+## verify
+
+The bin's check (check): each problem printed, the call refused when there
+is one, else the artifacts counted.
+
 ## artifact
 
 ## rebuild-problems

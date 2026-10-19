@@ -20,7 +20,7 @@ def file-of [file: path]: nothing -> record<bytes: int, sha256: string> {
     { bytes: (ls -D $file | get 0.size | into int), sha256: (open --raw $file | hash sha256) }
 }
 
-# A package made from its spec: every artifact laid at its path, identical files stored once, one tar
+# A package made from its spec into one tar, identical files stored once
 export def make [spec: path, stage: path, out: path]: nothing -> record {
     let s = (open $spec)
     let stage = ($stage | path expand)
@@ -81,6 +81,14 @@ export def check [dir: path]: nothing -> record<artifacts: int, problems: list<s
     { artifacts: ($m.artifacts | length), problems: ($problems ++ $foreign) }
 }
 
+# A package held to its manifest, every problem printed, refused when any
+export def verify [dir: path]: nothing -> nothing {
+    let c = (check $dir)
+    for p in $c.problems { print $"package: ($p)" }
+    if not ($c.problems | is-empty) { error make {msg: $"($dir): ($c.problems | length) problems"} }
+    print $"package: ($dir) holds its ($c.artifacts) artifacts"
+}
+
 # A packaged artifact of a role at a path in the package, or why it is none
 def artifact [root: string, m: record, rel: string, role: string]: nothing -> record<path: string, problems: list<string>> {
     let row = ($m.artifacts | where path == $rel | get -o 0)
@@ -90,7 +98,7 @@ def artifact [root: string, m: record, rel: string, role: string]: nothing -> re
     { path: $path, problems: [] }
 }
 
-# Every step of a packaged bench taking its guest inputs from the package, else each named
+# A packaged bench's steps whose guest inputs are not the package's, each named
 def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
     let b = (open $bench)
     $b.steps | where {|s| not ($s | get -o gate | default false) } | each {|s|
@@ -109,7 +117,7 @@ def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
     } | flatten
 }
 
-# The bench's preflight: the package, the spec on this host, the launch as it will run, the capture path, no rebuild
+# The bench's preflight: package, host, launch, capture path, and no rebuild
 export def preflight [dir: path, --spec: string, --image: string, --kernel: string, --tree: string, --serial: string, --bench: string, --out: string, --label: string = ""] {
     let root = ($dir | path expand)
     let out = ($out | path expand)

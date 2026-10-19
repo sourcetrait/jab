@@ -17,7 +17,7 @@ def packaged-words [words: list<string>, package: path]: nothing -> list<string>
     $words | each {|w| $w | str replace --all "{package}" $package }
 }
 
-# The bench a name names, its program and definition held to its shape; a package's own when given
+# The bench a name names, held to its shape; a package's own when one is given
 export def bench-at [ws: path, name: string, --package: string = ""] {
     let words = ($name | split row "/" | where {|w| $w != "" })
     let all = (benches-of $ws)

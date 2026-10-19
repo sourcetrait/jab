@@ -10,10 +10,7 @@ def "main make" [spec: path, stage: path, out: path] {
 
 # A package's files held to its manifest by SHA-256 and role
 def "main check" [dir: path] {
-    let c = (package check $dir)
-    for p in $c.problems { print $"package: ($p)" }
-    if not ($c.problems | is-empty) { error make {msg: $"($dir): ($c.problems | length) problems"} }
-    print $"package: ($dir) holds its ($c.artifacts) artifacts"
+    package verify $dir
 }
 
 # A packaged bench's preflight, its first step, refusing before any run

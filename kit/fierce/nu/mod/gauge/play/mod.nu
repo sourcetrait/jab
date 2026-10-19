@@ -181,7 +181,7 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     }
 }
 
-# A map's compiled tree: the one `assets` names, else the checkout's shard's, held to the map
+# A map's compiled tree, `assets` or else the checkout's shard's, held to the map
 def assets-of [game: path, map: string, assets: string]: nothing -> string {
     let tree = (if $assets == "" { build program-shard $game "asset" | path join $map } else { $assets | path expand })
     let named = ($tree | path join "map" "name")
