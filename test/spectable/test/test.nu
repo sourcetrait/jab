@@ -1,7 +1,7 @@
-# spectable's integration test: the SDK's spec data loader, `jab
-# spec-table` and `jab specs-of`, on the host; the program itself is never
-# launched. First the positive control: the workspace's asset/spec.nuon
-# through specs-of, every spec and every field of it equal to
+# spectable's integration test: the SDK's spec data loader, `spec read` and
+# `spec data`, on the host; the program itself is never launched. First the
+# positive control: the workspace's asset/spec.nuon through `spec data`,
+# every spec and every field of it equal to
 # doc/SPEC.md's, a section a spec and a line a field, its GB read as GiB,
 # its GHz an int, its None as null, and the display's pixels from its
 # parenthesis, so a definition the NUON has lost, gained, or left behind
@@ -15,7 +15,9 @@
 # and the VRAM at zero where a spec gives one; and a record where the table
 # belongs. A spec with a GPU named and its VRAM sized holds. Then copies of
 # the type the loader cannot read, one unclosed and one naming `any`, each
-# refused naming its file. Last, the build: a workspace of the test's own,
+# refused naming its file; and the checker the data models share, `nutype
+# problems`, over a record holding its type and one with a field of another
+# type. Last, the build: a workspace of the test's own,
 # a copy of the spec data in its asset/ and two programs, one listing specs
 # and one not; a second build of each does nothing, a change to the type
 # alone builds the one listing specs again and leaves the other as it was,
@@ -23,6 +25,7 @@
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
 use ../../../nu/mod/build
+use ../../../nu/mod/nutype
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -95,6 +98,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let said = (try { spec read ($asset | path join "spec.nuon") $file; "" } catch {|e| $e.msg })
         assert ($said | str starts-with $"($file): ($t.says)") $"($t.name): refused naming its file: ($said)"
     }
+
+    # the checker the data models share: a value held to a type's text alone
+    let model = "record<name: string, cores: int>"
+    assert equal (nutype problems { name: "fixture", cores: 3 } $model "inline") [] "nutype problems: a record holding its type has none"
+    assert equal (nutype problems { name: "fixture", cores: "3" } $model "inline") ["cores: int expected, string found"] "nutype problems: a field of another type named"
 
     # the build: the spec data an input of a build listing specs alone
     let built = (spec-builds $ws $asset ($out | path join "build"))
