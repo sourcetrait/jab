@@ -260,6 +260,24 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let wrote = (chardev fifo-write $fifo "x" $real.path)
         let waited = (((date now) - $w0) / 1sec)
         assert ((not $wrote) and $waited < 2) $"fifo-write into a fifo nobody reads gives up within two seconds: ($wrote) in ($waited) s"
+        # the override resolved once (ResolvedOverride): an absolute path, a
+        # path relative to another working directory, and a bare name on PATH
+        # each resolved to GNU's one absolute path and recorded as given; a
+        # bare name finding the stand-in first on PATH refused, no fall to
+        # GNU's beside it; a path to no file refused naming it
+        let up = ($out | path split | skip 1 | each { ".." } | path join)
+        let relative = ($up | path join ($real.path | path split | skip 1 | path join))
+        let resolved = [
+            (with-env { JAB_TIMEOUT: $real.path } { bound timeout })
+            (with-env { JAB_TIMEOUT: $relative } { cd $out; bound timeout })
+            (with-env { JAB_TIMEOUT: ($real.path | path basename) } { bound timeout })
+        ]
+        assert equal ($resolved | get path) [$real.path $real.path $real.path] $"each override resolved to GNU's absolute path: ($resolved | to nuon)"
+        assert equal ($resolved | get override) [$real.path $relative ($real.path | path basename)] $"each override recorded as given: ($resolved | to nuon)"
+        let found = (refusal { with-env { JAB_TIMEOUT: "timeout", PATH: ([$stand] ++ $env.PATH) } { bound timeout } })
+        assert ($found | str contains $"resolved to ($fake)") $"a bare name finding the stand-in first refused, no fall to GNU's: ($found)"
+        let missing = (refusal { with-env { JAB_TIMEOUT: ($stand | path join "absent") } { bound timeout } })
+        assert ($missing | str contains "resolves to no file") $"an override naming no file refused: ($missing)"
     }
     let t0 = (date now)
     let bounded = (^$real.path 1 sleep 30 | complete)
@@ -267,7 +285,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($bounded.exit_code == 124 and $took < 2) $"sleep 30 under a one-second bound: ($bounded.exit_code) in ($took) s"
     let forever = (fixture $ws ($out | path join "fixtures" "forever") "forever" "" --forever)
     let bound_run = (launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
-    assert equal [$bound_run.status $bound_run.timeout_binary] [124 $real.path] $"a program that never exits ends at its bound, the resolved timeout in its record: ($bound_run.status), ($bound_run.timeout_binary)"
+    assert equal [$bound_run.status $bound_run.timeout_binary $bound_run.timeout_override] [124 $real.path ""] $"a program that never exits ends at its bound, the resolved timeout in its record, no override: ($bound_run.status), ($bound_run.timeout_binary), ($bound_run.timeout_override)"
 
     # Windows' pipes (PipeShape): the chardev's path on each host, a POSIX
     # host's `<out>/<endpoint>` and Windows' bare name by the run's nonce,
