@@ -59,6 +59,11 @@ the guest clock's ticks a microsecond, its 10 MHz, the unit of a
 receipt's acceptance stamps; an acceptance interval keeps the tenth of a
 microsecond
 
+## US_TICKS
+
+the program's own US_TICKS, the same ten as an integer, which a
+microsecond field multiplies back to ticks for bounds kept exact
+
 ## ANDROID_EVENTS
 
 the android events and what a round met, as the program reports them
@@ -148,6 +153,40 @@ its counts agree or conflict, a worker mode's reading rounds above 0 and
 cancelled equal to rounds, the serial backend's rounds and cancelled 0.
 N, null when no frame of the window is named, and every refusal, each
 named.
+
+## flips
+
+A measurement's presents in order with each one's call bounds in ticks on
+the guest's clock, the flips `sdl pair` takes (PairBracket): the load's
+two, the title and the cleared screen, then every frame, each its status,
+its present ordinal, `lo` and `hi`, and `bound`, what the bounds are.
+
+At schema 8 they are recorded: the load's calls from the bounds record,
+each attempted frame's final attempt from its receipt, the origin the
+bounds record's.
+
+At schema 7 they are derived. The origin, the program's start (s11), is
+written to no record there, and every end and every call's length is a
+microsecond count truncated from ticks, so a field f stands for ticks
+10 f to 10 f + 9 past the origin. The origin is the interval every receipt
+the run records admits, each decision stamp inside its call: the title's
+call lies after the origin, read before the display opens, and ends by its
+end's 10 E + 9; the cleared screen's lies after the title's end; and an
+attempted frame's, presented or refused, ends by its end's 10 F + 9 and
+starts no earlier than that end less 10 D + 9, D every attempt's call. The
+interval is kept whole, its width the uncertainty of where on the guest's
+clock the bounds lie, and an empty one is refused as receipts admitting no
+common origin, the two presents binding it named. The bounds sit on its
+least value, a common shift the bracket's free offset absorbs, so they are
+widened by the truncation alone: a single attempt's call `derived`, its end
+less its call; a retried frame's `outer`, its end less every attempt's
+call, which holds the final attempt with the awaits between; the title's
+`outer`, from the origin, since the display's open before it records no
+end; the cleared screen's `outer`, from the title's end.
+
+A frame that made no attempt carries no call, `none` with 0 and 0. Refused
+with its reason and no presents: a schema below 7, or a capture whose
+present sequence is not whole (acceptance-of).
 
 ## window-problems
 

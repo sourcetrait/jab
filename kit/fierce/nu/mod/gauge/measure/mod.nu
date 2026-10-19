@@ -59,6 +59,9 @@ const FLIP_VALID = [0 1]
 # The guest clock's ticks a microsecond, its 10 MHz, a receipt's stamps' unit
 const TICKS_PER_US = 10.0
 
+# The program's US_TICKS, the guest clock's ticks a microsecond as an integer
+const US_TICKS = 10
+
 # A flip's status preset at a frame's start, kept when it reaches no flip
 const FLIP_NONE = 255
 
@@ -207,6 +210,66 @@ export def screen-frame [m: record, stamp: any, from: int, expect: record]: noth
         }
     }
     { frame: $n, problems: $problems }
+}
+
+# A measurement's presents in order, the load's two and every frame's, each its
+# status, ordinal, and call's bounds in ticks: recorded, or derived at schema 7
+export def flips [m: record]: nothing -> record<source: oneof<string, nothing>, reason: oneof<string, nothing>, origin: oneof<record<lo: int, hi: int, width: int>, nothing>, flips: list<any>> {
+    let at = ($m.schema | default 1)
+    if $at < 7 { return { source: null, reason: $"schema ($at) carries no receipt", origin: null, flips: [] } }
+    if not $m.acceptance.available { return { source: null, reason: $m.acceptance.reason, origin: null, flips: [] } }
+    let load = $m.load
+    if $at >= 8 {
+        let b = $m.bounds
+        let loads = [
+            { present: "title", frame: null, status: $FLIP_PRESENTED, ordinal: $load.title_ordinal, lo: $b.title_start, hi: $b.title_end, bound: "recorded" }
+            { present: "cleared", frame: null, status: $FLIP_PRESENTED, ordinal: $load.clear_ordinal, lo: $b.clear_start, hi: $b.clear_end, bound: "recorded" }
+        ]
+        let frames = ($m.rows | each {|r|
+            let none = ($r.flip_status == $FLIP_NONE)
+            {
+                present: "frame", frame: $r.frame, status: $r.flip_status, ordinal: $r.ordinal,
+                lo: (if $none { 0 } else { $r.call_start }), hi: (if $none { 0 } else { $r.call_end }),
+                bound: (if $none { "none" } else { "recorded" }),
+            }
+        })
+        return { source: "recorded", reason: null, origin: { lo: $b.origin, hi: $b.origin, width: 0 }, flips: ($loads ++ $frames) }
+    }
+    let slack = ($US_TICKS - 1)
+    let title_end = ($load.title_end_us * $US_TICKS)
+    let clear_end = ($load.clear_end_us * $US_TICKS)
+    let stamped = ($m.rows | where {|r| $r.flip_status in $FLIP_VALID and $r.receipt_stamp > 0 })
+    let admits = ([
+        { present: "the title", lo: ($load.title_stamp - $title_end - $slack), hi: $load.title_stamp }
+        { present: "the cleared screen", lo: ($load.clear_stamp - $clear_end - $slack), hi: ($load.clear_stamp - $title_end) }
+    ] ++ ($stamped | each {|r|
+        let end = ($r.flip_done_us * $US_TICKS)
+        { present: $"frame ($r.frame)", lo: ($r.receipt_stamp - $end - $slack), hi: ($r.receipt_stamp - $end + $r.flip_us * $US_TICKS + $slack) }
+    }))
+    let floor = ($admits | sort-by lo | last)
+    let ceiling = ($admits | sort-by hi | first)
+    if $floor.lo > $ceiling.hi {
+        let gap = ($floor.lo - $ceiling.hi)
+        return { source: null, reason: $"the receipts admit no common origin: ($floor.present)'s least passes ($ceiling.present)'s greatest by ($gap) ticks", origin: null, flips: [] }
+    }
+    let o = $floor.lo
+    let loads = [
+        { present: "title", frame: null, status: $FLIP_PRESENTED, ordinal: $load.title_ordinal, lo: $o, hi: ($o + $title_end + $slack), bound: "outer" }
+        { present: "cleared", frame: null, status: $FLIP_PRESENTED, ordinal: $load.clear_ordinal, lo: ($o + $title_end), hi: ($o + $clear_end + $slack), bound: "outer" }
+    ]
+    let frames = ($m.rows | each {|r|
+        if $r.flip_status == $FLIP_NONE {
+            { present: "frame", frame: $r.frame, status: $r.flip_status, ordinal: $r.ordinal, lo: 0, hi: 0, bound: "none" }
+        } else {
+            let end = ($o + $r.flip_done_us * $US_TICKS)
+            {
+                present: "frame", frame: $r.frame, status: $r.flip_status, ordinal: $r.ordinal,
+                lo: ($end - $r.flip_us * $US_TICKS - $slack), hi: ($end + $slack),
+                bound: (if $r.flip_attempts == 1 { "derived" } else { "outer" }),
+            }
+        }
+    })
+    { source: "derived", reason: null, origin: { lo: $floor.lo, hi: $ceiling.hi, width: ($ceiling.hi - $floor.lo) }, flips: ($loads ++ $frames) }
 }
 
 # What keeps a window from complete, from the records before its marker
