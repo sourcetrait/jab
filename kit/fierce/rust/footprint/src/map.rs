@@ -4,6 +4,8 @@ use crate::*;
 pub(crate) const MAP_MAGIC: u32 = 0x0042_414a;
 /// A surface flag: the surface shows the sky.
 pub(crate) const SURFACE_SKY: u32 = 4;
+/// An entity class: a light.
+pub(crate) const CLASS_LIGHT: u32 = 1;
 /// An entity class: a sprite.
 pub(crate) const CLASS_SPRITE: u32 = 2;
 /// An entity flag: the sprite faces the camera.
@@ -30,20 +32,22 @@ pub(crate) struct Plane {
     pub(crate) c: f64,
 }
 
-/// A sector's floor and ceiling, each a plane with its surface.
+/// A sector's floor and ceiling, each a plane with its surface, and its bounds.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Sector {
     pub(crate) floor: Plane,
     pub(crate) ceiling: Plane,
     pub(crate) floor_surface: Surface,
     pub(crate) ceiling_surface: Surface,
+    pub(crate) bounds: [f64; 4],
 }
 
-/// A wall: its two vertices, its surface, and the height its v counts down from.
+/// A wall: its vertices, its sector, its surface, and its v's anchor height.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Wall {
     pub(crate) a: usize,
     pub(crate) b: usize,
+    pub(crate) sector: usize,
     pub(crate) surface: Surface,
     pub(crate) anchor: f64,
 }
@@ -151,16 +155,25 @@ pub(crate) fn parse_map(bytes: &[u8]) -> Result<Map, String> {
     let sectors = (0..n)
         .map(|i| {
             let r = at + i * 112;
-            Ok(Sector { floor: plane(bytes, r)?, ceiling: plane(bytes, r + 12)?, floor_surface: surface(bytes, r + 24)?, ceiling_surface: surface(bytes, r + 48)? })
+            Ok(Sector {
+                floor: plane(bytes, r)?,
+                ceiling: plane(bytes, r + 12)?,
+                floor_surface: surface(bytes, r + 24)?,
+                ceiling_surface: surface(bytes, r + 48)?,
+                bounds: [single(bytes, r + 80)?, single(bytes, r + 84)?, single(bytes, r + 88)?, single(bytes, r + 92)?],
+            })
         })
         .collect::<Result<Vec<_>, String>>()?;
     let (at, n) = section(6)?;
     let walls = (0..n)
         .map(|i| {
             let r = at + i * 52;
-            let wall = Wall { a: word(bytes, r)? as usize, b: word(bytes, r + 4)? as usize, surface: surface(bytes, r + 12)?, anchor: single(bytes, r + 36)? };
+            let wall = Wall { a: word(bytes, r)? as usize, b: word(bytes, r + 4)? as usize, sector: word(bytes, r + 8)? as usize, surface: surface(bytes, r + 12)?, anchor: single(bytes, r + 36)? };
             if wall.a >= vertices.len() || wall.b >= vertices.len() {
                 return Err(format!("wall {i}'s vertices lie past the {} the map holds", vertices.len()));
+            }
+            if wall.sector >= sectors.len() {
+                return Err(format!("wall {i}'s sector lies past the {} the map holds", sectors.len()));
             }
             Ok(wall)
         })

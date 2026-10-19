@@ -70,10 +70,10 @@ fn quantile(sorted: &[f64], q: f64) -> f64 {
 }
 
 /// The clamp's plan over a capture's blocks of one surface.
-pub(crate) fn clamp_plan(map: &Map, textures: &Textures, camera: &Camera, owner: &Image, capture: &Capture, surface: u32) -> Result<Nuon, String> {
+pub(crate) fn clamp_plan(map: &Map, textures: &Textures, lumels: &Lumels, camera: &Camera, owner: &Image, capture: &Capture, surface: u32) -> Result<Nuon, String> {
     let captures = std::slice::from_ref(capture);
     let surfaces = span_surfaces(owner, captures)?;
-    let Owned::Mapped(m) = owned(map, textures, &BTreeMap::new(), camera, surface) else {
+    let Owned::Mapped(m) = owned(map, textures, lumels, &BTreeMap::new(), camera, surface) else {
         return Err(format!("surface {surface} has no texture mapping"));
     };
     let found = blocks(&capture.image)?;

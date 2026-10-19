@@ -307,6 +307,13 @@ takes every frame's census after the state report, inside the reporting,
 every round joined by then; its lines are every frame's, not the reported
 frames' alone.
 
+A SNAPSHOTS build (snapshot.S, a LEVELS build and a debug OWNER build) lays
+its ring out at the load, opens each frame's snapshot with the frame's
+count as the drawing is given it, the number the screen's stamp names, and
+after the flip hands a presented frame's snapshot to the ring
+(snapshot_present) before the state report, so the console's X reads the
+last SNAPSHOT_RING frames presented.
+
 ## frame_records
 
 Built from frame_clock and the stats, which world_draw zeroes only when the

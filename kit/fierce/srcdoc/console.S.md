@@ -10,9 +10,24 @@ cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
 build the tile pool's knobs, B on a debug build every tile of a surface built
 at the next boundary, D on a debug build a surface's tiles read back over the
 API, M on a debug build every block's level raised, H on a debug build the
-graphics grant's harts taken or given back, J on a debug build the jobs'
-hold, cancel, and fault, Q on a CENSUS build the census's chunk, each
-reported back as REPORT_CONSOLE.
+graphics grant's harts taken or given back, A on a debug build the actors
+held at their spawn state, X on a LEVELS or debug OWNER build the presented
+frames' snapshots written, J on a debug build the jobs' hold, cancel, and
+fault, Q on a CENSUS build the census's chunk, each reported back as
+REPORT_CONSOLE.
+
+A is the actor fixture's knob, a debug build's alone (JudgedPopulation):
+byte 4 set places every actor at its spawn state again (actor.S's
+actors_place) and holds it there, actors_tick ticking none while
+actors_held stands, so an android stands in its first row's first frame,
+no thought and no motion, and the OWNER and LEVELS launches of one pose
+draw it alike; byte 4 clear releases them where they stand.
+
+X is SpanEndpoint's export, on a SNAPSHOTS build alone: every presented
+frame the ring holds written to the API at once, its span records, its
+actor records, and its end (snapshot.S's snapshot_export), the answer after
+them. The capture sends it after the screen, and the reader binds the
+frame the screen's stamp names.
 
 B and D are the builder's assertion's hands, a debug build's alone. B takes
 bytes 4 to 7 as a surface, kept plus one in tile_build_surface, and the next
@@ -181,7 +196,8 @@ marked changed, the trace set or cleared, and a cold start asked when byte
 6 is set. B: the surface plus one pending for the next boundary's build. D:
 the dump written before the answer. M: byte 4 into raster.S's level_raise
 and byte 5 into hud.S's hud_stamp at once, the frame's drawing after the
-read taking them. I: bytes 4 to 11 into capture_nonce, two words joined
+read taking them. A: byte 4 set calls actors_place and sets actors_held, clear
+only clears it. X: the export written before the answer. I: bytes 4 to 11 into capture_nonce, two words joined
 low first. Q: the census's
 chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past

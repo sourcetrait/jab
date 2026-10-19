@@ -117,9 +117,16 @@ has a waypoint, else it stands.
 
 ## actors_tick
 
+On a debug build an A's hold sets the count of actors the loop visits to
+none, branch-free, so every actor keeps its row, its timer, and its feet
+while actors_held stands.
+
 A walking row steps toward its target before its timer runs.
 
 ## actors_draw
+
+On a SNAPSHOTS build each actor drawn goes into the frame's snapshot after
+its draw, as the scratch entity holds it (snapshot.S's snapshot_actor).
 
 An actor's surface index is after the map sprites, by index.
 
@@ -211,3 +218,7 @@ chance, then made unit again.
 ## aim
 
 `7 f64`: the line from an actor's eye to the player's, the eye, the unit direction, the distance, AIM_* fields.
+
+## actors_held
+
+`u8`: an A's byte 4, every actor held at its spawn state while set; a debug build's alone.

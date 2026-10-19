@@ -751,7 +751,14 @@ A span block's pixels.
 
 ## .set IZ_MIN
 
-`u32`: the least 1/z a divide takes, a smaller one clamped to it.
+`u32`: the least 1/z a divide takes, a smaller one clamped to it: 4096,
+1/z of 16,384 m, past every view the content holds. Under IZ_TEST, a debug
+build's symbol allowed with LEVELS and OWNER (ClampedReference),
+12,201,612, 1/z of 5.5 m, the depth the clamp's plan chose over garage_far's
+floor, so the drawn mapping's hold and FOOTPRINT's clamp branch are
+exercised on real geometry; the OWNER capture and both LEVELS captures of
+the clamp pose share it. An image's provenance carries the integer it was
+assembled with, read from its ELF's absolute symbol.
 
 ## .set SKY_DEPTH
 
@@ -1572,6 +1579,11 @@ A census slot's bytes.
 
 `u64`: the raster contexts the census reads, hart 0's and a slot's each, GFX_SLOTS plus one, a context's index its hart; a tile's entry holds a bit a context from CENSUS_CONTEXT_SHIFT, and the directory line names the count.
 
+## .set SNAPSHOTS
+
+Set on a LEVELS build and on a debug OWNER build: the presented frames'
+snapshots (`snapshot.S`) and the console's X are assembled.
+
 ## .set SCRATCH_POISON
 
 `u64`: the word a debug build writes over the producer's scratch once the packet is published, an address no page maps.
@@ -1792,6 +1804,25 @@ and uniqueness itself.
 ## .set REPORT_BOUNDS
 
 `u32`: the load's calls' bounds, BOUNDS_* fields, from schema 8, once, right after the load record in frame 0 and before its state record: each load flip's call's start and end in ticks and the frame records' origin, so the pairing brackets the load's two uploads on recorded bounds (PairBracket).
+
+## .set REPORT_SPANS
+
+`u32`: a snapshot's span records under X (SpanEndpoint), outside the clock
+kinds and their schema: the frame at 4, the first entry's index at 8
+(SPANS_FIRST), and eight entries of x0, x1, and row from 12
+(SPANS_ENTRIES).
+
+## .set REPORT_SNAPSHOT
+
+`u32`: a snapshot's end under X: the frame, the packet's sequence in its
+frame at 8, the span count at 12, the table's CRC-32 at 16, the actor
+count at 20.
+
+## .set REPORT_ACTOR
+
+`u32`: an actor a snapshot holds (JudgedPopulation): the frame, then from 8
+the snapshot's actor entry, its index and the scratch entity's fields as
+sprite_draw drew it, and its row.
 
 ## .set REPORT_FRAME_RECORDS
 
@@ -2860,6 +2891,96 @@ A trace's answer's bytes.
 ## .set SOUND_COUNT
 
 The engine's stems.
+
+## .set SPANS_FIRST
+
+## .set SPANS_ENTRIES
+
+## .set SPANS_A_RECORD
+
+## .set SPAN_ENTRY
+
+A span record's layout: the first entry's index, then eight entries of six
+bytes, x0, x1, and row as the packet's span record holds them, ending at
+byte 60 before the schema, which assembly holds.
+
+## .set SNAPSHOT_SEQUENCE
+
+## .set SNAPSHOT_COUNT
+
+## .set SNAPSHOT_CRC
+
+## .set SNAPSHOT_ACTORS
+
+The snapshot end record's fields.
+
+## .set ACTOR_RECORD
+
+Where an actor record's entry begins, its 40 bytes ending before the
+schema, which assembly holds.
+
+## .set SNAP_FRAME
+
+## .set SNAP_SEQUENCE
+
+## .set SNAP_SPAN_COUNT
+
+## .set SNAP_ACTOR_COUNT
+
+## .set SNAP_ACTORS
+
+A snapshot buffer's head: the frame's number, all ones for an empty slot;
+the packet's sequence in its frame, all ones before the first packet, so a
+frame drawn from one packet reads 0; the counts; then the actors.
+
+## .set SNAP_ACTOR_SIZE
+
+## .set SNAP_ACTOR_INDEX
+
+## .set SNAP_ACTOR_X
+
+## .set SNAP_ACTOR_Y
+
+## .set SNAP_ACTOR_Z
+
+## .set SNAP_ACTOR_YAW
+
+## .set SNAP_ACTOR_WIDTH
+
+## .set SNAP_ACTOR_HEIGHT
+
+## .set SNAP_ACTOR_MATERIAL
+
+## .set SNAP_ACTOR_FLAGS
+
+## .set SNAP_ACTOR_ROW
+
+An actor entry, the record's bytes from ACTOR_RECORD: the actor's index,
+the index its OWNER surface carries past SURFACE_ACTORS, then the scratch
+entity's feet, yaw in degrees, width, height, material, and flags, the
+reference's sprite mapping's inputs, and the actor's row.
+
+## .set SNAP_SPANS
+
+## .set SNAP_SPAN_BYTES
+
+A buffer's span table follows its actors, six bytes an entry, room for
+SPAN_RECORDS on a LEVELS build and none on an OWNER one.
+
+## .set SNAPSHOT_SIZE
+
+## .set SNAPSHOT_RING
+
+The presented frames held, sixteen, about 267 ms at 60: the launch sends X
+once the screen's file is whole, polled every 50 ms, and the frame the
+screen shows must still be held when X is read.
+
+## .set SNAPSHOT_NONE
+
+## .set SNAPSHOT_STAGE
+
+The records one snapshot writes at most: its span records, an actor each,
+and its end.
 
 ## .macro owner_pixel
 

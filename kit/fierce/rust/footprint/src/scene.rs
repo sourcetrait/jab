@@ -132,7 +132,7 @@ pub(crate) struct Textures {
 
 impl Textures {
     /// A material's texture size, the engine's images following the map's materials.
-    fn of(&self, material: i32) -> Option<&Result<(u32, u32), String>> {
+    pub(crate) fn of(&self, material: i32) -> Option<&Result<(u32, u32), String>> {
         let index = usize::try_from(material).ok()?;
         self.materials.get(index).or_else(|| self.frames.get(index - self.materials.len()))
     }
@@ -162,11 +162,11 @@ fn textured(textures: &Textures, material: i32) -> Result<(f64, f64, u8), Owned>
 }
 
 /// The mapping of the surface an OWNER index names, an actor's as it was drawn.
-pub(crate) fn owned(map: &Map, textures: &Textures, actors: &BTreeMap<u32, Entity>, camera: &Camera, index: u32) -> Owned {
+pub(crate) fn owned(map: &Map, textures: &Textures, lumels: &Lumels, actors: &BTreeMap<u32, Entity>, camera: &Camera, index: u32) -> Owned {
     let mapped = if index < LUMAP_PLANES {
-        plane_mapping(map, textures, index)
+        plane_mapping(map, textures, index).and_then(|m| folded(m, lumels.of(index)))
     } else if index < SURFACE_SPRITES {
-        wall_mapping(map, textures, index - LUMAP_PLANES)
+        wall_mapping(map, textures, index - LUMAP_PLANES).and_then(|m| folded(m, lumels.of(index)))
     } else if index < SURFACE_ACTORS {
         sprite_mapping(map, textures, camera, index - SURFACE_SPRITES)
     } else {
@@ -222,6 +222,15 @@ fn wall_mapping(map: &Map, textures: &Textures, index: u32) -> Result<Mapping, O
         v0: h * (s.v_offset + s.v_scale * wall.anchor),
         levels,
     })
+}
+
+/// A plane's or wall's mapping as drawn: a lit one counts from its map's origin.
+fn folded(m: Mapping, lumel: &Lumel) -> Result<Mapping, Owned> {
+    match lumel {
+        Lumel::Mapped { u0, v0 } => Ok(Mapping { u0: m.u0 - *u0 as f64, v0: m.v0 - *v0 as f64, ..m }),
+        Lumel::Unmapped => Ok(m),
+        Lumel::Uncertain(why) => Err(Owned::Unsized(why.clone())),
+    }
 }
 
 /// A map sprite's quad as sprite_draw lays it, pulled toward the eye.

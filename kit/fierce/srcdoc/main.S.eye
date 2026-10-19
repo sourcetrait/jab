@@ -1,68 +1,68 @@
-j _start > disk s0 u64 [60:186] :the program, the map loaded and held to its format, the title drawn, the raster's workers started, then the frame loop
+j _start > disk s0 u64 [60:189] :the program, the map loaded and held to its format, the title drawn, the raster's workers started, then the frame loop
  disk :the program's disk, held for the whole run and read by the loaders
-j local frame before s7 u64,count s8 u64 > seconds frame_seconds f32,game game_us u32,drawing frame_us u32,clock frame_clock 23 u64,reported tick_reported u8 [187:335] :a frame and every frame after, never returning; at its start the frame before's records over the API; presented under the cadence in force, awaiting the display's tick or the pad after the reporting under cadence 0 alone
+j local frame before s7 u64,count s8 u64 > seconds frame_seconds f32,game game_us u32,drawing frame_us u32,clock frame_clock 23 u64,reported tick_reported u8 [190:345] :a frame and every frame after, never returning; at its start the frame before's records over the API; presented under the cadence in force, awaiting the display's tick or the pad after the reporting under cadence 0 alone
  before :the frame before's time
  count :the frames drawn
-j local no_display [337:339] :exits 1, the machine having no display
-j local no_sound [341:343] :exits 2, the machine having no sound device
-j local no_disk [345:347] :exits 3, no disk carrying serial fps
-j local no_name [349:351] :exits 4, the disk having no /map/name
-j local no_map [353:358] :exits 5, the map not on the disk
-j local bad_magic [360:365] :exits 6, the file not a Jab FPS map
-j local short_file [367:377] :exits 7, the file ending before its structures do
-j local map_too_big [379:388] :exits 7, the map not fitting its buffer
-j local too_many word a1 addr [390:400] :exits 8, the map holding more of a kind than this build does
+j local no_display [347:349] :exits 1, the machine having no display
+j local no_sound [351:353] :exits 2, the machine having no sound device
+j local no_disk [355:357] :exits 3, no disk carrying serial fps
+j local no_name [359:361] :exits 4, the disk having no /map/name
+j local no_map [363:368] :exits 5, the map not on the disk
+j local bad_magic [370:375] :exits 6, the file not a Jab FPS map
+j local short_file [377:387] :exits 7, the file ending before its structures do
+j local map_too_big [389:398] :exits 7, the map not fitting its buffer
+j local too_many word a1 addr [400:410] :exits 8, the map holding more of a kind than this build does
  word :the kind's word, NUL-terminated
-j local path_too_long material u32 [402:412] :exits 9, a material's name too long for a path
-j local load_failed material u32,code u64 [414:427] :exits 10, a material's texture failing to load
+j local path_too_long material u32 [412:422] :exits 9, a material's name too long for a path
+j local load_failed material u32,code u64 [424:437] :exits 10, a material's texture failing to load
  code :a JAB_PNG_* or a LOAD_*
-j local check_failed word a1 addr,index a2 u32,what a3 addr [429:443] :exits 11, a record breaking a rule of the format
+j local check_failed word a1 addr,index a2 u32,what a3 addr [439:453] :exits 11, a record breaking a rule of the format
  word :the record's word, NUL-terminated
  what :what is wrong with it, NUL-terminated
-j local map_lacks lack a1 addr [445:451] :exits 11, the map lacking something it must hold
+j local map_lacks lack a1 addr [455:461] :exits 11, the map lacking something it must hold
  lack :the lack, NUL-terminated
-j local bad_directory how a1 addr [453:461] :exits 12, the section directory broken
+j local bad_directory how a1 addr [463:471] :exits 12, the section directory broken
  how :how it is broken, NUL-terminated
-call local line_map > cursor a0 addr,text line u8,clobber a1 [463:471] :begins the UART line with the prefix and the map's path
-call local line_end cursor addr > clobber a0,a7 [473:478] :ends the line at the cursor with a newline and prints it on the UART
-call local frame_records end u64,frame u32 > records clock_records REPORT_SIZE*REPORT_FRAME_RECORDS u8,marker end_record REPORT_SIZE u8,closed measure_end u8,clobber a0-a1,a7 [480:805] :the frame's eight records over the API, its clock, its drawing, its presentation, its packets, its tile pool's activity, its storage, its harts, and its receipt, then the end marker when an E closed the measurement on it
+call local line_map > cursor a0 addr,text line u8,clobber a1 [473:481] :begins the UART line with the prefix and the map's path
+call local line_end cursor addr > clobber a0,a7 [483:488] :ends the line at the cursor with a newline and prints it on the UART
+call local frame_records end u64,frame u32 > records clock_records REPORT_SIZE*REPORT_FRAME_RECORDS u8,marker end_record REPORT_SIZE u8,closed measure_end u8,clobber a0-a1,a7 [490:815] :the frame's eight records over the API, its clock, its drawing, its presentation, its packets, its tile pool's activity, its storage, its harts, and its receipt, then the end marker when an E closed the measurement on it
  end :the tick its await ended, the next frame's start
  frame :its number, from 0
-call local load_send count s8 u64 > record load_record REPORT_SIZE u8,bounds bounds_record REPORT_SIZE u8,clobber a0-a1,a7 [807:828] :frame 0 alone, the load record and its bounds record over the API in one write, the load's two presents, their calls' bounds, and the capture's nonce
-call local flip_attempt > status a0 u64,end a1 u64,clock frame_clock 24 u64,known known_ordinal u64,reported tick_reported u8,clobber a2-a3,a7 [830:864] :one jab.sys.display.flip, its call's ticks added to the frame's flip, its status, its call's start and end, and its receipt kept, the first attempt's ordinal apart, counted, a refusal when answered as early; a presented flip ends the reported tick
+call local load_send count s8 u64 > record load_record REPORT_SIZE u8,bounds bounds_record REPORT_SIZE u8,clobber a0-a1,a7 [817:838] :frame 0 alone, the load record and its bounds record over the API in one write, the load's two presents, their calls' bounds, and the capture's nonce
+call local flip_attempt > status a0 u64,end a1 u64,clock frame_clock 24 u64,known known_ordinal u64,reported tick_reported u8,clobber a2-a3,a7 [840:874] :one jab.sys.display.flip, its call's ticks added to the frame's flip, its status, its call's start and end, and its receipt kept, the first attempt's ordinal apart, counted, a refusal when answered as early; a presented flip ends the reported tick
  status :jab.sys.display.flip's code
  end :the tick the call returned
-call local pacing_step start u64,cadence u32 > end a0 u64,clock frame_clock 23 u64,known known_ordinal u64,reported tick_reported u8,latched pad_latched u32,clobber a1-a3,a7 [866:912] :cadences 1 and 2: the frame flipped once presenting it is no longer early, the display's tick or the pad awaited meanwhile, a wake on the pad alone consumed and the wait taken again, a refusal waited out and the flip tried again; under 2 a frame ready after its tick waits for the next
+call local pacing_step start u64,cadence u32 > end a0 u64,clock frame_clock 23 u64,known known_ordinal u64,reported tick_reported u8,latched pad_latched u32,clobber a1-a3,a7 [876:922] :cadences 1 and 2: the frame flipped once presenting it is no longer early, the display's tick or the pad awaited meanwhile, a wake on the pad alone consumed and the wait taken again, a refusal waited out and the flip tried again; under 2 a frame ready after its tick waits for the next
  start :the step's first tick, the mix's end
  end :the step's last tick; the step less its awaits and its flips is the pacing
-call local pacing_await > events a0 u64,clock frame_clock 23 u64,reported tick_reported u8,latched pad_latched u32,clobber a1-a2,a7 [914:938] :one of the pacing step's awaits, the display's tick or the pad, its ticks added to the wait; a display wake reports the tick, a wake on the pad alone is consumed
+call local pacing_await > events a0 u64,clock frame_clock 23 u64,reported tick_reported u8,latched pad_latched u32,clobber a1-a2,a7 [924:948] :one of the pacing step's awaits, the display's tick or the pad, its ticks added to the wait; a display wake reports the tick, a wake on the pad alone is consumed
  events :jab.sys.await's bits
-call local pad_consume > latched pad_latched u32,clock frame_clock 23 u64,clobber a0-a2,a7 [940:982] :a wake on the pad in the pacing step counted and every event the pad has delivered taken, each gamepad press latched for camera_look and counted; on a debug build an S's spin after
-call local draw_or_stall > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 44 u64,clobber a0-a7,fa0-fa7 [983:1026] :on a debug build, world_draw unless an S stands a stall or set this frame's own, which zeroes the drawing's statistics as world_draw does, discards the tile pool's batch (tile_stall), and spins on rdtime for its microseconds
-call local load_report ms s5 u64 > clobber a0-a1,a7 [1027:1093] :a debug build's load line on the UART, the counts of what loaded
+call local pad_consume > latched pad_latched u32,clock frame_clock 23 u64,clobber a0-a2,a7 [950:992] :a wake on the pad in the pacing step counted and every event the pad has delivered taken, each gamepad press latched for camera_look and counted; on a debug build an S's spin after
+call local draw_or_stall > screen JAB_DISPLAY_BASE u32,depth zbuf SCREEN_W*SCREEN_H u32,stats stats 44 u64,clobber a0-a7,fa0-fa7 [993:1036] :on a debug build, world_draw unless an S stands a stall or set this frame's own, which zeroes the drawing's statistics as world_draw does, discards the tile pool's batch (tile_stall), and spins on rdtime for its microseconds
+call local load_report ms s5 u64 > clobber a0-a1,a7 [1037:1103] :a debug build's load line on the UART, the counts of what loaded
  ms :the load's milliseconds
-call local frame_report ticks s10 u64 > clobber a0-a1,a7 [1095:1323] :a debug build's frame line on the UART, the counts, the ticks by phase with the raster's, the spans and pixels, the light, the rejected pixels, the samples, the tiles with the slots in use, the packet's commands and flushes, and the workers' count, grain, rounds, bands a hart, and times
+call local frame_report ticks s10 u64 > clobber a0-a1,a7 [1105:1333] :a debug build's frame line on the UART, the counts, the ticks by phase with the raster's, the spans and pixels, the light, the rejected pixels, the samples, the tiles with the slots in use, the packet's commands and flushes, and the workers' count, grain, rounds, bands a hart, and times
  ticks :the frame's drawing ticks
-call local count_report > clobber a0-a1,a7 [1324:1396] :a COUNT build's count line on the UART after the frame line: the divides span_fill made and avoided, the blocks shifted and short, the negative steps off sixteen in u and v, the flat spans, the mismatches, and the re-entries into intervals of two blocks, of four, and cut short, every count the frame's own
-call local sectors_report > clobber a0-a1,a7 [1398:1427] :a debug build's sectors line on the UART, the last frame's walk in order
-call local sector_at index u32 > record a0 addr [1429:1434]
-call local loop_at index u32 > record a0 addr [1436:1441]
-call local wall_at index u32 > record a0 addr [1443:1448]
-call local vertex_at index u32 > record a0 addr [1450:1455]
-call local portal_at index u32 > record a0 addr [1457:1462]
-call local entity_at index u32 > record a0 addr [1464:1469]
-call local material_at index u32 > record a0 addr [1471:1476]
-call local name_at offset u32 > name a0 addr [1478:1481] :a name in the names table
-call local clear_screen > screen JAB_DISPLAY_BASE u32,clobber a0 [1483:1484] :the framebuffer black
-call local fill_screen colour u32 > screen JAB_DISPLAY_BASE u32 [1485:1496] :the framebuffer one colour
-call local read_file buffer addr,capacity u64,disk u64,path addr > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [1498:1550] :a file off a disk read whole, a page at a time, as much as the buffer holds
+call local count_report > clobber a0-a1,a7 [1334:1406] :a COUNT build's count line on the UART after the frame line: the divides span_fill made and avoided, the blocks shifted and short, the negative steps off sixteen in u and v, the flat spans, the mismatches, and the re-entries into intervals of two blocks, of four, and cut short, every count the frame's own
+call local sectors_report > clobber a0-a1,a7 [1408:1437] :a debug build's sectors line on the UART, the last frame's walk in order
+call local sector_at index u32 > record a0 addr [1439:1444]
+call local loop_at index u32 > record a0 addr [1446:1451]
+call local wall_at index u32 > record a0 addr [1453:1458]
+call local vertex_at index u32 > record a0 addr [1460:1465]
+call local portal_at index u32 > record a0 addr [1467:1472]
+call local entity_at index u32 > record a0 addr [1474:1479]
+call local material_at index u32 > record a0 addr [1481:1486]
+call local name_at offset u32 > name a0 addr [1488:1491] :a name in the names table
+call local clear_screen > screen JAB_DISPLAY_BASE u32,clobber a0 [1493:1494] :the framebuffer black
+call local fill_screen colour u32 > screen JAB_DISPLAY_BASE u32 [1495:1506] :the framebuffer one colour
+call local read_file buffer addr,capacity u64,disk u64,path addr > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [1508:1560] :a file off a disk read whole, a page at a time, as much as the buffer holds
  path :the path from the root, NUL-terminated
  bytes :the bytes read, 0 when the file is not there
-call local str_len string addr > length a1 u64 [1552:1561]
+call local str_len string addr > length a1 u64 [1562:1571]
  string :NUL-terminated, kept in a0
-call local text_trim text addr,count u64 > length a1 u64,contents 0(text) u8 [1563:1576] :the text ended after its last byte that is not whitespace
+call local text_trim text addr,count u64 > length a1 u64,contents 0(text) u8 [1573:1586] :the text ended after its last byte that is not whitespace
  text :kept in a0
  count :the bytes the text holds, a terminator written after them first
-call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [1578:1587] :appends a string at the cursor
+call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [1588:1597] :appends a string at the cursor
  string :NUL-terminated
-call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [1589:1608] :appends a number in decimal at the cursor
+call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [1599:1618] :appends a number in decimal at the cursor

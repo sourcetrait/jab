@@ -54,11 +54,24 @@ are exact, a difference of parts in ten million.
 
 ## struct Mapping
 
-The texel coordinates' world gradients at level 0, the texture's size
-folded in as surface_axis folds it. The offsets, the lumel map's origin
-among them, move no derivative and are left out.
+The texel coordinates' world gradients at level 0 and their values at the
+world origin, u = u.p + u0, the texture's size folded in as surface_axis
+folds it, and for a lit plane or wall its lumel map's origin taken off, as
+the engine draws it (`folded`). The intercepts move no unclamped derivative;
+the drawn mapping's derivative past the floor carries them
+(ClampedReference).
 
 ## enum Owned
+
+## const FRAME_SETS
+
+## const FRAME_SINGLES
+
+frames_load's table: the sets stand to struck, eight rotations each at
+`android/<set>_<r>`, index set times 8 plus r, then fallen, the three
+sparks, and the magazine at 64 to 68.
+
+## fn frame_stem
 
 ## fn chain_levels
 
@@ -71,29 +84,65 @@ mips line's totals say whether one did.
 
 ## fn png_size
 
-## fn texture_sizes
+## struct Textures
 
-Each material's PNG in the tree, `<name>.png`, as the loader composes it.
+## fn Textures::of
+
+The engine loads its images into the material records after the map's,
+frame_base being the map's material count, so a material index past the
+map's names an image by its distance past them.
+
+## fn Textures::unread
+
+## fn textures
+
+Each material's PNG in the tree, `<name>.png`, and each image's,
+`sprite/<stem>.png`, as the loader composes them.
 
 ## fn textured
 
 ## fn owned
 
+An actor's surface maps by the entity its frame's export carries for it, the
+scratch entity sprite_draw drew; without one it is unresolved. A plane or a
+wall takes its lumel map's origin from the bake's replication (lumel.rs); a
+sprite and an actor name no map, POLY_LUMAP 0, and keep their own.
+
 ## fn plane_mapping
 
 plane_draw's: the normal (-a, -b, 1) through (0, 0, c), u = u_offset +
-u_scale x and v = v_offset + v_scale y in repeats.
+u_scale x and v = v_offset + v_scale y in repeats, so the intercepts are
+the offsets in texels.
 
 ## fn wall_mapping
 
 wall_surface's: the normal (ay - by, bx - ax, 0) through vertex a, u along
-the unit run from a, v down from the anchor.
+the unit run from a, v down from the anchor; the intercepts u_offset -
+u_scale a.e and v_offset + v_scale anchor, in texels.
+
+## fn folded
+
+lumap_bind's fold: a lit polygon with a map has u/z less U0 times 1/z, and
+v/z less V0 times it, on all three coefficients, so its drawn coordinate is
+the texture's less the origin, a constant the unclamped derivative cancels
+and the held one keeps. The engine shifts the 6.26 1/z coefficient's product
+down ten for the 48.16 u/z, a truncation of under a unit there, which the
+reference leaves out. Without the fold, the clamp pose's floor read the held
+down term at 6.21 texels a row, level 2, where both captures drew level 1
+on every clamped block: the garage floor's v, 1,075 to 2,406 texels over its
+bounds, counted from the world origin rather than from its map's V0 of
+1,024, its U0 being 0. A map the bake could not lay is unmapped, the surface
+drawn unlit and unfolded; one past an unread texture is unresolved, its fold
+unknown.
 
 ## fn sprite_mapping
+
+## fn quad_mapping
 
 sprite_draw's: facing the camera, the camera's right kept level and scaled
 to half the width, the centre half the height up; fixed, (-sin yaw, cos
 yaw, 0); flat, the centre the feet and the quad along its yaw face up; then
 the quad scaled about the eye by k_pull, its gradients r over twice its
-length squared and d likewise. The pull moves no screen derivative, since
-scaling about the eye keeps every ray's texel.
+length squared and d likewise, its intercepts a half at the pulled centre,
+1/2 - c.a_u (PLANE_U0). The pull moves no screen derivative, since scaling
+about the eye keeps every ray's texel.

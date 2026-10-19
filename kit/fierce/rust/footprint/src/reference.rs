@@ -237,6 +237,7 @@ pub(crate) struct Capture {
 pub(crate) struct Scene<'a> {
     pub(crate) map: &'a Map,
     pub(crate) textures: &'a Textures,
+    pub(crate) lumels: &'a Lumels,
     pub(crate) actors: &'a BTreeMap<u32, Entity>,
     pub(crate) camera: &'a Camera,
     pub(crate) floor: f64,
@@ -395,7 +396,7 @@ fn classify(scene: &Scene, owners: &mut BTreeMap<u32, Owned>, block: &Block, row
     let Some(surface) = row.surface else {
         return Class::Unknown;
     };
-    let mapping = match owners.entry(surface).or_insert_with(|| owned(scene.map, scene.textures, scene.actors, camera, surface)) {
+    let mapping = match owners.entry(surface).or_insert_with(|| owned(scene.map, scene.textures, scene.lumels, scene.actors, camera, surface)) {
         Owned::Mapped(mapping) => *mapping,
         Owned::Sky => return Class::Sky,
         Owned::Actor => return Class::Actor,

@@ -186,13 +186,6 @@ actor_ms:
     ret
 
 actors_tick:
-.ifdef DEBUG
-    la t0, actors_held
-    lbu t0, 0(t0)
-    beqz t0, actors_tick_free
-    ret                             # held at their spawn state by an A
-actors_tick_free:
-.endif
     addi sp, sp, -48
     sd ra, 40(sp)
     sd s2, 32(sp)
@@ -203,6 +196,13 @@ actors_tick_free:
     flw fs0, 0(t0)
     la s2, actors
     li s3, MAX_ACTORS
+.ifdef DEBUG
+    la t0, actors_held
+    lbu t0, 0(t0)
+    seqz t0, t0
+    neg t0, t0
+    and s3, s3, t0                  # none ticked while an A holds them
+.endif
 1:
     beqz s3, 9f
     lwu t0, ACTOR_CLASS(s2)

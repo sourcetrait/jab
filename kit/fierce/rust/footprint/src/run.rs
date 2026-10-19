@@ -128,14 +128,14 @@ fn invocation(args: &[String]) -> FootprintResult<Invocation> {
     Ok(found)
 }
 
-/// The snapshot a capture's export holds for its frame, held whole.
-fn snapshot_for(named: &Named, height: usize) -> FootprintResult<Option<Snapshot>> {
+/// The snapshot of a capture's frame from its export, a LEVELS table held whole.
+fn snapshot_for(named: &Named, height: usize, tabled: bool) -> FootprintResult<Option<Snapshot>> {
     let Some((api, frame)) = &named.export else {
         return Ok(None);
     };
     let bytes = fs::read(api).map_err(FootprintError::io(api))?;
     let held = snapshots(&bytes).map_err(|message| FootprintError::refused(api, message))?;
-    snapshot_of(&held, *frame, height).map(Some).map_err(|message| FootprintError::refused(api, message))
+    snapshot_of(&held, *frame, height, tabled).map(Some).map_err(|message| FootprintError::refused(api, message))
 }
 
 /// A population's classes as NUON.
@@ -208,15 +208,16 @@ fn reference_command(args: &[String]) -> FootprintResult<Nuon> {
     }
     let map = read_map(&call.map)?;
     let textures = textures(&map, &call.tree);
+    let lumels = lumels(&map, &textures);
     let [x, y, z, yaw, pitch, roll] = call.pose;
     let camera = Camera::from_angles([x, y, z], yaw, pitch, roll);
     let owner = read_ppm(&owner_named.picture)?;
-    let owner_snapshot = snapshot_for(owner_named, owner.height)?;
+    let owner_snapshot = snapshot_for(owner_named, owner.height, false)?;
     let mut captures = Vec::new();
     let mut snapshots = Vec::new();
     for named in &call.levels {
         let image = read_ppm(&named.picture)?;
-        let snapshot = snapshot_for(named, image.height)?;
+        let snapshot = snapshot_for(named, image.height, true)?;
         captures.push(Capture { image, spans: snapshot.as_ref().map(|s| s.spans.clone()) });
         snapshots.push(snapshot);
     }
@@ -230,7 +231,7 @@ fn reference_command(args: &[String]) -> FootprintResult<Nuon> {
         }
     }
     let first = &call.levels[0].picture;
-    let scene = Scene { map: &map, textures: &textures, actors: &actors, camera: &camera, floor: depth_floor(iz_min) };
+    let scene = Scene { map: &map, textures: &textures, lumels: &lumels, actors: &actors, camera: &camera, floor: depth_floor(iz_min) };
     let (population, tallies, rows) = compare(&scene, &owner, &captures).map_err(|message| FootprintError::refused(first, message))?;
     if let Some(out) = &call.rows {
         let table = Nuon::List(rows.iter().map(row_nuon).collect());
@@ -242,6 +243,7 @@ fn reference_command(args: &[String]) -> FootprintResult<Nuon> {
         ("iz_min", Nuon::Int(iz_min)),
         ("floor_depth", Nuon::Float(1.0 / depth_floor(iz_min))),
         ("rows", count(rows.len() as u64)),
+        ("lumels", lumels_nuon(&lumels)),
         ("unread_materials", Nuon::List(unread)),
         ("owner", owner_snapshot.as_ref().map(snapshot_nuon).unwrap_or(Nuon::Null)),
         ("population", population_nuon(&population)),
@@ -260,11 +262,17 @@ fn clamp_plan_command(args: &[String]) -> FootprintResult<Nuon> {
     };
     let map = read_map(&call.map)?;
     let textures = textures(&map, &call.tree);
+    let lumels = lumels(&map, &textures);
     let [x, y, z, yaw, pitch, roll] = call.pose;
     let camera = Camera::from_angles([x, y, z], yaw, pitch, roll);
     let owner = read_ppm(&owner_named.picture)?;
     let capture = Capture { image: read_ppm(&levels_named.picture)?, spans: None };
-    clamp_plan(&map, &textures, &camera, &owner, &capture, surface).map_err(|message| FootprintError::refused(&levels_named.picture, message))
+    clamp_plan(&map, &textures, &lumels, &camera, &owner, &capture, surface).map_err(|message| FootprintError::refused(&levels_named.picture, message))
+}
+
+/// The bake's counts as the engine's load line gives them.
+fn lumels_nuon(lumels: &Lumels) -> Nuon {
+    record(vec![("maps", count(lumels.maps)), ("lumels", count(lumels.lumels)), ("unmapped", count(lumels.unmapped))])
 }
 
 /// A region's fields as NUON.

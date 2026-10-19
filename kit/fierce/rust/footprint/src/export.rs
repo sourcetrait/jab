@@ -122,15 +122,15 @@ pub(crate) fn snapshots(api: &[u8]) -> Result<Vec<Snapshot>, String> {
     Ok(done)
 }
 
-/// One frame's snapshot, its table held whole: one packet, ends on screen.
-pub(crate) fn snapshot_of(snapshots: &[Snapshot], frame: u32, height: usize) -> Result<Snapshot, String> {
+/// One frame's snapshot, a table it carries held whole: one packet, ends on screen.
+pub(crate) fn snapshot_of(snapshots: &[Snapshot], frame: u32, height: usize, tabled: bool) -> Result<Snapshot, String> {
     let held: Vec<u32> = snapshots.iter().map(|s| s.frame).collect();
     let mut found = snapshots.iter().filter(|s| s.frame == frame);
     let snapshot = found.next().ok_or_else(|| format!("the export holds no snapshot of frame {frame}, only of {held:?}"))?;
     if found.next().is_some() {
         return Err(format!("the export holds frame {frame}'s snapshot twice"));
     }
-    if snapshot.sequence != 0 {
+    if tabled && snapshot.sequence != 0 {
         return Err(format!("frame {frame}'s table is its packet {}'s, where a LEVELS frame is drawn from one packet", snapshot.sequence));
     }
     if let Some((index, end)) = snapshot.spans.iter().enumerate().find(|(_, end)| end.x0 > end.x1 || end.row as usize >= height) {

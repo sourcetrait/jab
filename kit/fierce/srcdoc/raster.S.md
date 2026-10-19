@@ -368,7 +368,12 @@ the packet is emptied and the ticks taken the same way. A debug build
 checks the tile pool frozen at the render's start and after its joins
 (tile.S's tile_check), so every flush, round, and the last join holds it.
 Under LEVELS the span's index in the packet, its record's offset from
-span_records over 16, rides a3 into span_fill.
+span_records over 16, rides a3 into span_fill, and before the packet is
+emptied its span table goes into the frame's snapshot (snapshot.S's
+snapshot_spans), each span's x0, x1, and row by its index, so the
+reference reads every span's true end however its tail was hidden
+(SpanEndpoint); a frame drawn from a second packet carries the last
+packet's table and a sequence past 0, which the reader refuses.
 
 ## band_render
 
