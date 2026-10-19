@@ -59,10 +59,22 @@ because it ends in an error.
 ## is-test
 
 Whether a program, by its path from the workspace, is a test: one under
-a `test` directory, which `just test` runs and `just run` does not.
+a `test` directory, which `./do test` runs and `./do run` does not.
 
 ## run-target
 
-The one program `just run` takes at a path in the workspace, its
+The one program `./do run` takes at a path in the workspace, its
 directory: any program but a test (is-test). Untyped because it ends
 in an error.
+
+## subject
+
+A command's directory and the words left: the first word's directory
+when it is an absolute path, a workspace's, the kernel's, or a
+program's, refused when it holds none of their manifests; else the
+workspace given with every word, a path from its root. An absolute path
+is told by its first component, a root, `/` or a drive's, so a relative
+word is never read as a directory and `kit/fierce` stays a path in the
+workspace. The root's bins bind their workspace, so the end user names a
+program by its path while a caller of the earlier `build <dir>` form, an
+export or a candidate's copy or another checkout, keeps its directory.

@@ -2,4 +2,3 @@ name = 'jab'
 sdk = '../sdk'
 includes = ['src/include', '../sdk/src']
 link = 'src/link.ld'
-do = 'font/spleen.nu'

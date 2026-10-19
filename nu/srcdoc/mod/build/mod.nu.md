@@ -105,8 +105,8 @@ workspace, every program for none, each prepared first, with `names`.
 
 ## clean
 
-`just clean` and `just do clean`, one verb with or without a path, the
-SDK's `main clean` merged into it: the workspace checked first, then with
+`nu/bin/nuance.nu clean`, one verb with or without a path, the SDK's
+earlier `main clean` merged into it: the workspace checked first, then with
 no path the whole target (`target clean`); with one, the build outputs of
 the programs at or under it, or the kernel's with `kernel`, in both trees
 or the one `--tree` names, each retired (`target retire`) under one stamp.
@@ -119,10 +119,12 @@ through by `--wrapped`.
 Build: at a workspace's root the kernel and every program, or the
 programs at or under a path (`example`, `example/bounce`,
 `kit/fierce`), each prepared first; at a program's directory that
-program, prepared; with --kernel at the kernel's, the kernel. Release
-unless --set says otherwise.
+program, prepared; with --kernel at the kernel's, the kernel. A first
+word that is an absolute path names the directory in place of `dir`
+(workspace subject), as the bins binding their workspace pass it.
+Release unless --set says otherwise.
 
 ## retire
 
-Delete everything retired (`target retire-all`): `just retire`, the
-workspace checked first.
+Delete everything retired (`target retire-all`): `nu/bin/nuance.nu
+retire`, the workspace checked first.

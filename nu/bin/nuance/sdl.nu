@@ -1,5 +1,7 @@
 #!/usr/bin/env nu
-use ../../mod/sdl
+# The SDK's sdl module's path, bound at parse time
+const SDL = path self ../../mod/sdl
+use $SDL
 
 # A probe directory's run bundled into a new directory, its extra files named
 def "main bundle" [probe: path, bundle: path, ...extra: string, --profile: string = ""] {

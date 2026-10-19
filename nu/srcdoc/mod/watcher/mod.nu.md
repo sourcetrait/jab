@@ -60,10 +60,12 @@ busiest first, as one short line; "" while it holds too few.
 
 ## bench
 
-Record every QEMU of a bench's run, `just watch bench
-<program>/<bench>` in a second terminal: it waits for the bench's next
-run, or takes up one under way, then records each QEMU of the run per
-thread once a second, under the step its own command line names as the
+Record every QEMU of a bench's run, `nu/bin/nuance.nu watch bench
+<program>/<bench>` in a second terminal, the root's nuance.nu binding the
+workspace; with no bench, the benches listed (bench-list). It waits for
+the bench's next run, or takes up one under way, then records each QEMU
+of the run per thread once a second, under the step its own command line
+names as the
 process table showed it, or `unknown` (bench-step-of), to
 watch/<step>-<n>.nuonl in the run's directory, a
 line printed as each

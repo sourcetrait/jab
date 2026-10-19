@@ -219,10 +219,11 @@ export def clean [ws: path, ...words: string]: nothing -> nothing {
 # The kernel and every program, or those at or under a path, or one program
 export def main [dir: path, ...words: string, --kernel, --set: string = ""] {
     let names = (symbols $set)
-    if (workspace is-workspace $dir) { build-under $dir $words $names; return }
-    if $kernel { build-kernel $dir $names } else {
-        prepare $dir "build"
-        build-program $dir $names
+    let s = (workspace subject $dir $words)
+    if (workspace is-workspace $s.dir) { build-under $s.dir $s.words $names; return }
+    if $kernel { build-kernel $s.dir $names } else {
+        prepare $s.dir "build"
+        build-program $s.dir $names
     }
 }
 

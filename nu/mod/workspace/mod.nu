@@ -94,7 +94,18 @@ export def run-target [ws: path, words: list<string>] {
     let all = (programs-of $ws)
     let runnable = ($all | where {|p| not (is-test $p) })
     if $at == "" { error make {msg: $"a program to run by its path from the workspace, or its shortcut: ($runnable | str join ', ')"} }
-    if $at in $all and (is-test $at) { error make {msg: $"($at) is a test; `just test ($at)` runs it"} }
+    if $at in $all and (is-test $at) { error make {msg: $"($at) is a test; `./do test ($at)` runs it"} }
     if $at not-in $runnable { error make {msg: $"no program to run at ($at); the programs: ($runnable | str join ', ')"} }
     $ws | path expand | path join $at
+}
+
+# A command's directory and words: an absolute first word's, else the workspace's
+export def subject [ws: path, words: list<string>]: nothing -> record<dir: string, words: list<string>> {
+    let first = ($words | get -o 0 | default "")
+    let root = ($first | path split | get -o 0 | default "")
+    if not (($root | str ends-with "/") or ($root | str ends-with "\\")) { return { dir: $ws, words: $words } }
+    let dir = ($first | path expand)
+    let manifests = ["workspace.jab.toml" "kernel.jab.toml" "program.jab.toml"]
+    if not ($manifests | any {|m| $dir | path join $m | path exists }) { error make {msg: $"($dir) holds no workspace's, kernel's, or program's manifest"} }
+    { dir: $dir, words: ($words | skip 1) }
 }

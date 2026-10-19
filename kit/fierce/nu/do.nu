@@ -1,9 +1,9 @@
 # This file's directory, fierce's nu tree
 const here = (path self | path dirname)
 
-# The commands' usage; `just do` at the repository's root lists them
+# The commands' usage, with their old arguments; fierce's bins hold them
 def main [] {
-    print "nu do.nu <command> [args]; `just do` at the repository's root lists the commands"
+    print "nu do.nu <command> [args]: fierce's commands with their old arguments, `just do <command>`'s; kit/fierce/nu/bin/do.nu and nuance.nu hold them"
 }
 
 # Every content asset rendered by nuance.nu's render

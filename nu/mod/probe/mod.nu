@@ -134,7 +134,8 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
 
 # One program probed under a window, one NUON record on how its flips reached it
 export def main [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = "", --api, --send: string = "", --trace] {
-    let program = (if (workspace is-workspace $dir) { workspace program-at $dir $words } else { $dir | path expand })
+    let s = (workspace subject $dir $words)
+    let program = (if (workspace is-workspace $s.dir) { workspace program-at $s.dir $s.words } else { $s.dir | path expand })
     let send = (if $send == "" { "" } else { $send | path expand })
     build prepare $program "run"
     probe-kind $program $kind (build symbols $set) $seconds --api=$api --send $send --trace=$trace

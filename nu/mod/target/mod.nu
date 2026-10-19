@@ -88,7 +88,7 @@ export def clean [ws: path]: nothing -> nothing {
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let entries = (if $home.base == $target { ls -a $target | get name | where {|e| ($e | path basename) != "tmp" } } else { [$target] })
     for e in $entries { retire $e $target --stamp $stamp }
-    print $"jab: retired ($target) to ($home.tmp | path join 'retired' $stamp); `just retire` deletes everything retired"
+    print $"jab: retired ($target) to ($home.tmp | path join 'retired' $stamp); `nu/bin/nuance.nu retire` deletes everything retired"
 }
 
 # The retire home's tmp deleted, the one deletion this tool makes

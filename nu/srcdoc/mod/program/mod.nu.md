@@ -72,14 +72,17 @@ unless given, `--spec`, `--harts`, and `--bootargs` plan's.
 Test with DEBUG set beside whatever --set names: at a workspace's root
 every program's test, or those at or under a path, with a summary,
 failing if any fails; at a program's directory its test/test.nu on the
-debug kernel. `--spec` names the spec every launch of the tests runs
-that names none of its own, JAB_SPEC for them (spec configured).
+debug kernel, the directory in place of `dir` when the first word is
+its absolute path (workspace subject). `--spec` names the spec every
+launch of the tests runs that names none of its own, JAB_SPEC for them
+(spec configured).
 
 ## boot
 
 Build, then run one program with its window and the UART on stdio: at
 a workspace's root the program at a path, never a test (run-target),
-at a program's directory that program. Release unless --set says
+at a program's directory that program, named by its absolute path as
+the first word too (workspace subject). Release unless --set says
 otherwise; the API's port on the machine with --api; the keyboard and
 the tablet off with --no-kbm, the gamepad the host has off with
 --no-pad, the sound device off with --no-sound; the machine the spec

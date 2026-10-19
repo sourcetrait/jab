@@ -136,17 +136,19 @@ export def plan [dir: path, --out: string = "", --disk: string = "", --serial: s
 # A workspace's tests, or one program's, built with DEBUG, then a summary
 export def test [dir: path, ...words: string, --set: string = "", --spec (-s): string = ""] {
     let names = (build symbols $set)
+    let s = (workspace subject $dir $words)
     let forced = (if $spec == "" { {} } else { { JAB_SPEC: $spec } })
     with-env $forced {
-        if (workspace is-workspace $dir) { test-under $dir $words $names; return }
-        build prepare $dir "test"
-        ^nu ...(test-args (prepared $dir (build with-debug $names)))
+        if (workspace is-workspace $s.dir) { test-under $s.dir $s.words $names; return }
+        build prepare $s.dir "test"
+        ^nu ...(test-args (prepared $s.dir (build with-debug $names)))
     }
 }
 
 # A program built, then run in its window with the UART on stdio
 export def boot [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0] {
-    let program = (if (workspace is-workspace $dir) { workspace run-target $dir $words } else { $dir | path expand })
+    let s = (workspace subject $dir $words)
+    let program = (if (workspace is-workspace $s.dir) { workspace run-target $s.dir $s.words } else { $s.dir | path expand })
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
     if $harts != 0 { machine of $harts | ignore }
     build prepare $program "run"

@@ -1,7 +1,7 @@
-# Jab. The repository's one justfile: every recipe hands off to the SDK's
-# nushell, its bins under nu/bin and sdk/nu/jab.nu while it stands, which
-# read workspace.jab.toml and do every lookup and up-to-date check in one
-# process. Needs nushell, just
+# Jab. The repository's one justfile, a shim while the campaign moves its
+# consumers to nushell: every recipe hands off to the bins under nu/bin,
+# the root's do and nuance.nu, which read workspace.jab.toml and do every
+# lookup and up-to-date check in one process. Needs nushell, just
 # 1.32 or later for script recipes, a riscv64 GNU toolchain, and a QEMU
 # with the RVA23 model, rva23s64. Script recipes are stable from just
 # 1.44; `set unstable` below runs them on 1.32 to 1.43 without
@@ -15,7 +15,7 @@
 # where that is set, but for the cargo builds of tool/ and fierce's
 # rust/, which keep cargo's own. Nothing is deleted but by `just retire`:
 # what the tools clear away is retired to the tmp beside the targets.
-# `just do` lists the commands for development.
+# `just do <command>` runs a command for development where it lives.
 
 set shell := ["nu", "-c"]
 set windows-shell := ["nu", "-c"]
@@ -24,9 +24,11 @@ set positional-arguments := true
 set unstable := true
 
 here := justfile_directory()
-jab := here / "sdk" / "nu" / "jab.nu"
 do_bin := here / "nu" / "bin" / "do.nu"
 nuance_bin := here / "nu" / "bin" / "nuance.nu"
+probe_bin := here / "nu" / "bin" / "nuance" / "probe.nu"
+kernel_bin := here / "kernel" / "nu" / "bin" / "nuance.nu"
+fierce_do := here / "kit" / "fierce" / "nu" / "do.nu"
 
 default: build
 
@@ -35,7 +37,7 @@ default: build
 # Build the kernel and every program, or the programs under a path
 [script("nu")]
 build *args:
-    def --wrapped main [...args] { ^nu '{{do_bin}}' build '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' build ...$args }
 
 # `just test`, `just test example/pad`, `just test kit/fierce`; each
 # test's output, then a summary, failing if any fails; `--spec 1kb1`
@@ -43,7 +45,7 @@ build *args:
 # Build with DEBUG set, then test every program, or those under a path
 [script("nu")]
 test *args:
-    def --wrapped main [...args] { ^nu '{{do_bin}}' test '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' test ...$args }
 
 # `just run example/bounce`, `just run fierce`; release, or `--set
 # debug`; `--api` puts the API's port on the machine; the host's gamepad
@@ -54,7 +56,7 @@ test *args:
 # Build, then run one program in its window
 [script("nu")]
 run +args:
-    def --wrapped main [...args] { ^nu '{{do_bin}}' run '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' run ...$args }
 
 # From any shell while a program runs; when the run ends, one NUON record
 # on it to paste, per thread the steady CPU seconds a second after the
@@ -65,7 +67,7 @@ run +args:
 # Record the running Jab QEMU per thread, once a second
 [script("nu")]
 watch *args:
-    def --wrapped main [...args] { if ($args | get -o 0) == 'bench' { ^nu '{{nuance_bin}}' watch ...$args '{{here}}' } else { ^nu '{{do_bin}}' watch ...$args '{{here}}' } }
+    def --wrapped main [...args] { if ($args | get -o 0) == 'bench' { ^nu '{{nuance_bin}}' watch ...$args } else { ^nu '{{do_bin}}' watch ...$args } }
 
 # `just bench` lists them; `just bench kit/fierce/cadence` runs one,
 # `--only play0,cadence0_1` the steps named; nothing is deleted, and
@@ -75,25 +77,26 @@ watch *args:
 # Run a program's bench, every step one after another, then its report
 [script("nu")]
 bench *args:
-    def --wrapped main [...args] { ^nu '{{do_bin}}' bench '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' bench ...$args }
 
 # Every build, test, run, and bench here moved aside, so the next build
 # starts from nothing; `just retire` deletes what it moved
 # Retire the whole target
 clean:
-    ^nu '{{nuance_bin}}' clean '{{here}}'
+    ^nu '{{nuance_bin}}' clean
 
 # The one command that deletes: the tmp beside the targets,
 # $XDG_CACHE_HOME/jab/target/tmp, or .target/tmp, where everything
 # retired waits
 # Delete everything retired
 retire:
-    ^nu '{{nuance_bin}}' retire '{{here}}'
+    ^nu '{{nuance_bin}}' retire
 
-# `just do` lists them; `just do <command> [args]` runs one, a relative
-# path among its args taken from where you are
-# The commands for development
+# `just do <command> [args]` runs one where it lives: `font` the kernel's,
+# `probe` and `clean` the SDK's, every other fierce's with its old
+# arguments; a relative path among its args taken from where you are
+# Run a command for development
 [no-cd]
 [script("nu")]
 do *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' do '{{here}}' ...$args }
+    def --wrapped main [...args] { let rest = ($args | skip 1); match ($args | get -o 0 | default '') { '' => { print "the commands for development: kernel/nu/bin/nuance.nu font, nu/bin/nuance/probe.nu, nu/bin/nuance.nu clean, and fierce's kit/fierce/nu/bin/nuance.nu" }, 'font' => { ^nu '{{kernel_bin}}' ...$args }, 'probe' => { ^nu '{{probe_bin}}' ...$rest }, 'clean' => { ^nu '{{nuance_bin}}' clean ...$rest }, _ => { ^nu '{{fierce_do}}' ...$args } } }

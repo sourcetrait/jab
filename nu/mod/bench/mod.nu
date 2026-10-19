@@ -16,7 +16,7 @@ def benches-of [ws: path]: nothing -> list<string> {
 export def bench-at [ws: path, name: string] {
     let words = ($name | split row "/" | where {|w| $w != "" })
     let all = (benches-of $ws)
-    if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `just bench <program>/<bench>`: ($all | str join ', ')"} }
+    if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `./do bench <program>/<bench>`: ($all | str join ', ')"} }
     let bench = ($words | last)
     let program = (workspace program-path $ws ($words | drop 1))
     let file = ($ws | path expand | path join $program "bench" $"($bench).nuon")
@@ -34,13 +34,13 @@ export def bench-home [b: record]: nothing -> string {
     build program-shard $b.dir "bench" | path join $b.bench
 }
 
-# The list `just bench` prints: each bench with its summary
+# The list `./do bench` prints: each bench with its summary
 export def bench-list [ws: path]: nothing -> string {
     let shown = (benches-of $ws | each {|n|
         let b = (bench-at $ws $n)
-        $"  just bench ($n)\n      ($b.def.summary)"
+        $"  ./do bench ($n)\n      ($b.def.summary)"
     })
-    (["the benches, `just bench <program>/<bench>` with `just watch bench <program>/<bench>` in a second terminal:"] ++ $shown) | str join "\n"
+    (["the benches, `./do bench <program>/<bench>` with `nu/bin/nuance.nu watch bench <program>/<bench>` in a second terminal:"] ++ $shown) | str join "\n"
 }
 
 # A bench's state file as its run last wrote it; null when there is none

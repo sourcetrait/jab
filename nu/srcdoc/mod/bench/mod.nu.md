@@ -21,7 +21,7 @@ state.nuon, which says what the latest run is doing for `watch bench`.
 
 ## bench-list
 
-The list `just bench` prints: each bench with its summary.
+The list `./do bench` prints: each bench with its summary.
 
 ## bench-state
 
@@ -50,7 +50,7 @@ error.
 
 ## main
 
-Run a bench, `just bench <program>/<bench>`: the NUON file of that name
+Run a bench, `./do bench <program>/<bench>`: the NUON file of that name
 under the program's bench/ directory, with a summary, the tree, the
 steps, each a label and the program's script with its arguments and,
 for a step a person attends, `attend`, what they do; and the report, a
@@ -61,8 +61,9 @@ counted down first, a step that fails recorded and the rest run; then
 the report. A run is a stamped directory in the program's bench shard
 of the target, its bench.nuon recording every step's outcome as it
 lands, and state.nuon beside the stamps says what the run is doing,
-for `just watch bench`. At the end the run is packed whole into one tar
-beside its directory (bench-tar), the file to copy off the host, and
+for `nu/bin/nuance.nu watch bench`. At the end the run is packed whole
+into one tar beside its directory (bench-tar), the file to copy off the
+host, and
 the last line names it; a watch recording the run packs it again when
 it ends, its recording included. A run with a failed step or a failed
 report exits 1 once everything is recorded, reported, packed, and said.

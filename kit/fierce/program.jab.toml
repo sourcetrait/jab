@@ -6,7 +6,6 @@ includes = ['../../sdk/src']
 link = '../../sdk/src/program.ld'
 target_assets = 'render_0'
 prepare = 'nu/bin/nuance/prepare.nu'
-do = 'nu/do.nu'
 specs = [ '1ka1', '1kb1' ]
 
 [reserved]

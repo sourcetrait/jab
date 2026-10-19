@@ -123,17 +123,15 @@ def watch-rates [file: path, span: int]: nothing -> string {
 }
 
 # Every QEMU of a bench's run recorded per step, reported and packed at its end
-export def bench [...words: string, --skip: float = 5.0] {
-    if ($words | is-empty) { error make {msg: "nu/bin/nuance.nu watch bench <program>/<bench> <workspace>"} }
-    let ws = ($words | last | path expand)
+export def bench [ws: path, name?: string, --skip: float = 5.0] {
+    let ws = ($ws | path expand)
     if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
-    let named = ($words | drop 1)
-    if ($named | is-empty) { print (bench bench-list $ws); return }
-    let b = (bench bench-at $ws ($named | first))
+    if $name == null { print (bench bench-list $ws); return }
+    let b = (bench bench-at $ws $name)
     let state_file = (bench bench-home $b | path join "state.nuon")
     let before = (bench bench-state $state_file)
     mut state: any = (if $before != null and (bench bench-live $before) { $before } else { null })
-    if $state == null { print $"jab watch: waiting for ($b.name) to start: `just bench ($b.name)` in another terminal" }
+    if $state == null { print $"jab watch: waiting for ($b.name) to start: `./do bench ($b.name)` in another terminal" }
     while $state == null {
         sleep 1sec
         let s = (bench bench-state $state_file)

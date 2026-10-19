@@ -22,7 +22,7 @@ The target a path lies in, the nearest of its parents that is one
 
 ## retire-home
 
-Where a target's retirements go: `tmp`, which `just retire` empties,
+Where a target's retirements go: `tmp`, which `nu/bin/nuance.nu retire` empties,
 beside every checkout's target under `jab/target` in the XDG cache,
 else in the `.target` itself; `base` is the directory a retired path
 keeps its place under, so a checkout's name rides along in the shared
@@ -61,7 +61,7 @@ Whether `dir` is `root` or lies under it.
 
 ## clean
 
-`just clean`: the workspace's target retired whole under one stamp
+`nu/bin/nuance.nu clean`: the workspace's target retired whole under one stamp
 (retire), so the next build starts from nothing while nothing is
 deleted: a checkout's target under the XDG cache moved as one into the
 shared tmp beside it, a `.target`'s entries but its own tmp into that
@@ -69,7 +69,7 @@ tmp; only a directory that is a target this tool makes (is-target).
 
 ## retire-all
 
-`just retire`: everything retired deleted, the retire home's tmp
+`nu/bin/nuance.nu retire`: everything retired deleted, the retire home's tmp
 (retire-home) removed whole, the one thing this tool deletes; only a
 directory named tmp in a `.target` or beside the checkouts under
 `jab/target`, never a link, and nothing when it is not there.

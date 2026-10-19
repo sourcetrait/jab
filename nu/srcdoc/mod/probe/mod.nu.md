@@ -71,6 +71,7 @@ null where it never went in.
 
 Probe one program under a window for --seconds and print one NUON
 record on how its flips reached the window, at a workspace's root the
-program at a path, at a program's directory that program; release
-unless --set says otherwise. `sdl` is the one probe; `--api`, `--send
+program at a path, at a program's directory that program, named by its
+absolute path as the first word too (workspace subject); release unless
+--set says otherwise. `sdl` is the one probe; `--api`, `--send
 <file>`, and `--trace` are probe-sdl's.

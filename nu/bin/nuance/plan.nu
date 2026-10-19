@@ -1,5 +1,7 @@
 #!/usr/bin/env nu
-use ../../mod/program
+# The SDK's program module's path, bound at parse time
+const PROGRAM = path self ../../mod/program
+use $PROGRAM
 
 # A program's headless machine prepared and printed as JSON for a harness
 def main [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --spec (-s): string = "", --harts: int = 0, --bootargs: string = ""] {
