@@ -69,8 +69,9 @@ def sdl-bundled-table [object: record, manifest: record, bundle: path]: nothing 
     sdl-table-from ($bytes | decode) $entry.source
 }
 
-# The functions of a table holding an address, aliases included
-def sdl-functions-at [table: record, address: int]: nothing -> list<string> {
+# The functions of a table holding an address, aliases included, and whether
+# symbols of more than one extent hold it
+def sdl-functions-at [table: record, address: int]: nothing -> record<functions: list<string>, overlap: bool> {
     let starts = $table.starts
     let ends = $table.ends
     let reach = $table.reach
@@ -83,11 +84,15 @@ def sdl-functions-at [table: record, address: int]: nothing -> list<string> {
     }
     mut at = $low - 1
     mut found: list<string> = []
+    mut extents: list<string> = []
     while $at >= 0 and ($reach | get $at) > $address {
-        if ($ends | get $at) > $address { $found = ($found ++ [($names | get $at)]) }
+        if ($ends | get $at) > $address {
+            $found = ($found ++ [($names | get $at)])
+            $extents = ($extents ++ [$"($starts | get $at)-($ends | get $at)"])
+        }
         $at -= 1
     }
-    $found | uniq | sort
+    { functions: ($found | uniq | sort), overlap: (($extents | uniq | length) > 1) }
 }
 
 # The shim's log with its make_currents' frames resolved to their functions
@@ -101,12 +106,11 @@ export def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> rec
     let modules = ($read.objects | where {|o| $o.path | path basename | str starts-with $device_module } | get index)
     let device_in = (if ($modules | is-empty) { "executable" } else { "module" })
     let made = ($read.events | where name == "make_current")
-    let decided = ($made | where render == false)
     let needed = (if $every {
         $made | each {|e| $e.frames | each {|f| $f.object } } | flatten | uniq
     } else {
-        let callers = ($decided | each {|e| $e.frames | first 2 | each {|f| $f.object } } | flatten)
-        let executable = (if $device_in == "executable" and (not ($decided | is-empty)) { [0] } else { [] })
+        let callers = ($made | each {|e| $e.frames | first 2 | each {|f| $f.object } } | flatten)
+        let executable = (if $device_in == "executable" and (not ($made | is-empty)) { [0] } else { [] })
         $callers ++ $executable | uniq
     })
     let manifest = (if $bundle == "" { null } else { open --raw ($bundle | path join "bundle.nuon") | into binary | decode | from nuon })
@@ -118,8 +122,8 @@ export def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> rec
     let pairs = ($made | each {|e| $e.frames } | flatten | where object != null | uniq-by object hex)
     let found = ($pairs | reduce --fold {} {|f, all|
         let table = ($tables | get ($f.object | into string))
-        let functions = (if $table.state == "read" { sdl-functions-at $table ($f.address - 1) } else { [] })
-        $all | insert $"($f.object)+($f.hex)" $functions
+        let held = (if $table.state == "read" { sdl-functions-at $table ($f.address - 1) } else { { functions: [], overlap: false } })
+        $all | insert $"($f.object)+($f.hex)" $held
     })
     let objects = ($read.objects | each {|o|
         let table = ($tables | get ($o.index | into string))
@@ -129,9 +133,10 @@ export def sdl-resolved [log: path, every: bool, bundle: string]: nothing -> rec
     let events = ($read.events | each {|e|
         if $e.name != "make_current" { $e } else {
             $e | update frames ($e.frames | each {|f|
-                if $f.object == null { $f | merge { file: "", state: "no_object", functions: [] } } else {
+                if $f.object == null { $f | merge { file: "", state: "no_object", functions: [], overlap: false } } else {
                     let place = ($places | get ($f.object | into string))
-                    $f | merge { file: $place.file, state: $place.state, functions: ($found | get $"($f.object)+($f.hex)") }
+                    let held = ($found | get $"($f.object)+($f.hex)")
+                    $f | merge { file: $place.file, state: $place.state, functions: $held.functions, overlap: $held.overlap }
                 }
             })
         }

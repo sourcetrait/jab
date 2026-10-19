@@ -11,15 +11,20 @@
 # Every address comes from nm's reading of the fixture, which is checked
 # first. Each log is read against its own assertion: the shim's own
 # leading frames, one and two, dropped; a flip's upload, the console's
-# own, a switch, a redraw, and a render whose callers resolve nowhere; a
-# log ending in a fragment its run's end cut short, read without it; a
-# return address at a function's end, an address in the gap, a .cold
-# part, and an alias; a modular QEMU's flip, its executable's exception,
-# and its front end read through .dynsym; lines the shim does not write,
-# among them that fragment given its newline, and the notices the shim
-# writes as it stops a run, each refused ahead of the rest; every refusal
-# in turn, and the first refusal alone when two are held; a valid zero;
-# and the record's fields. The run's lines, the process and the nonce,
+# own, a switch, a redraw, and a render by its anchor, its size call on
+# time or 3 ms late with the gap reported; a render read by timing
+# through a front end's dynamic symbols alone, labelled so; a log ending
+# in a fragment its run's end cut short, read without it; a return
+# address at a function's end, an address in the gap, a .cold part, and
+# an alias; a modular QEMU's flip, its executable's exception, and its
+# front end read through .dynsym; lines the shim does not write, among
+# them that fragment given its newline, and the notices the shim writes
+# as it stops a run, each refused ahead of the rest; every refusal in
+# turn, a render in no object, the inlined renders, a return address in
+# two functions' symbols, a render read by timing with its size call
+# late, and a render's table gone, unreadable, or changed among them, and
+# the first refusal alone when two are held; a valid zero; and the
+# record's fields. The run's lines, the process and the nonce,
 # read apart, and each refused by name given twice, malformed, or out of
 # its place; a probing launch's machine as plan makes it, no QEMU run: its
 # port and its sends as its caller asks, the nonce handed in reaching the
@@ -200,11 +205,12 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     cp $stripped $front
     let text = ($dir | path join "text.so")
     "a text file, no object\n" | save -f $text
+    let gone = ($dir | path join "gone.so")
 
     # nm reads the fixture's names back: every function once and sized, the
     # hidden ones in .symtab alone, the rest in the stripped copy's .dynsym
     let exported = ["sdl2_gl_update" "sdl2_gl_switch" "qemu_console_update" "dpy_gfx_update" "qemu_console_register_listener" "displaychangelistener_gfx_switch" "virtio_gpu_simple_process_cmd" "virtio_gpu_process_cmdq" "virtio_gpu_ctrl_bh" "gpu_ctrl_entry"]
-    let hidden = ["sdl2_gl_render_surface" "qemu_console_update_full" "dpy_gfx_update_full" "virtio_gpu_reset_bh" "virtio_gpu_process_cmdq.cold"]
+    let hidden = ["sdl2_gl_render_surface" "qemu_console_update_full" "dpy_gfx_update_full" "virtio_gpu_reset_bh" "virtio_gpu_process_cmdq.cold" "sdl2_gl_refresh" "sdl2_gl_redraw" "sdl2_gl_scanout_flush" "overlap_outer" "overlap_inner"]
     let full = (symbols-of $fixture [])
     let dynamic = (symbols-of $stripped ["-D"] | get name)
     for name in ($exported ++ $hidden) {
@@ -234,7 +240,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let flip_chain = (do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd") (do $inside 0 "virtio_gpu_process_cmdq")])
     let registration_chain = (do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])
     let switch_chain = (do $made [$shim (do $inside 0 "sdl2_gl_switch") (do $inside 0 "displaychangelistener_gfx_switch")])
-    let render_chain = (do $made [$shim "?+7f0000001000" "?+7f0000002000"])
+    let render_chain = (do $made [$shim (do $inside 0 "sdl2_gl_render_surface") (do $inside 0 "sdl2_gl_refresh")])
+    let front_render = (do $made [$shim (do $inside 2 "sdl2_gl_render_surface") (do $inside 0 "sdl2_gl_refresh")])
     let log = {|name: string, lines: list<oneof<string, record<written: string>, record<fragment: string>>>|
         let file = ($dir | path join $"($name).log")
         write-log $file $lines
@@ -256,7 +263,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "registration", what: "the console's own", read: $console, lines: ($exe ++ [$registration_chain]) }
         { name: "switch", what: "a switch", read: $switched, lines: ($exe ++ [$switch_chain]) }
         { name: "redraw", what: "the console's own", read: $console, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "displaychangelistener_gfx_switch") (do $inside 0 "virtio_gpu_reset_bh")])]) }
-        { name: "render_nowhere", what: "a render", read: $rendered, lines: ($exe ++ [$render_chain "size"]) }
+        { name: "render_anchor", what: "a render by its anchor", read: $rendered, lines: ($exe ++ [$render_chain "size"]) }
+        { name: "render_late", what: "a render by its anchor, its size call 3 ms late", read: $rendered, lines: ($exe ++ [$render_chain { written: "1792000000.033000 size" }]) }
+        { name: "render_timed", what: "a render read by timing through a front end's dynamic symbols alone", read: $rendered, lines: ($modular ++ [$front_render "size"]), resolve: { frame: 0, functions: [], source: { object: "2", is: "dynsym" } } }
         { name: "function_end", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $ending 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), resolve: { frame: 1, functions: ["qemu_console_update"] } }
         { name: "gap", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $at 0 $gap) (do $inside 0 "virtio_gpu_simple_process_cmd")])]), resolve: { frame: 2, functions: [] } }
         { name: "cold", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_process_cmdq.cold")])]), resolve: { frame: 2, functions: ["virtio_gpu_process_cmdq"] } }
@@ -277,6 +286,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
             if ($wanted | get -o source) != null { assert equal ($got.sources | get -o $wanted.source.object) $wanted.source.is $"($c.name): object ($wanted.source.object)'s table is its ($wanted.source.is)" }
         }
     }
+
+    # the renders' gaps to their size calls and their evidence: the late
+    # render's 3 ms reported past the 2 ms window with its line, and the one
+    # read by timing labelled so
+    let late = (sdl classify ($dir | path join "render_late.log"))
+    assert equal $late.gaps { renders: 1, by_timing: 0, sizeless: 0, median_ms: 3.0, p99_ms: null, max_ms: 3.0, past: [{ line: 3, ms: 3.0 }] } $"render_late: its gap reported past the window with its line: ($late.gaps | to nuon)"
+    let timed = (sdl classify ($dir | path join "render_timed.log"))
+    assert equal ($timed.events | where kind == "render" | get evidence) ["timing"] $"render_timed: the render labelled read by timing: ($timed.events | where kind == 'render' | to nuon)"
+    assert equal [$timed.gaps.renders $timed.gaps.by_timing] [1 1] $"render_timed: the gaps count it read by timing: ($timed.gaps | to nuon)"
 
     # refused logs, each naming its fault, in the order the probe checks:
     # the lines the shim writes and its stop notices first, the third line
@@ -304,7 +322,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "unreadable", lines: [(object-line 0 $text) $shim_line (do $made [$shim "0+10"])], says: $"nm cannot read ($text)" }
         { name: "anchor_console", lines: ($exe ++ [(do $made [$shim (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), says: "a make_current's immediate caller is not in the SDL front end" }
         { name: "anchor_stripped", lines: [(object-line 0 $stripped) $shim_line (do $made [$shim (do $inside 0 "sdl2_gl_render_surface")])], says: $"the executable at ($stripped) keeps no symbol table" }
-        { name: "unmodelled", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_render_surface")])]), says: "a make_current comes from a front-end function the probe does not model" }
+        { name: "unmodelled", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_scanout_flush")]) "size"]), says: "a make_current comes from a front-end function the probe does not model" }
+        { name: "render_nowhere", lines: ($exe ++ [(do $made [$shim "?+7f0000001000" "?+7f0000002000"]) "size"]), says: "a make_current's immediate caller is not in the SDL front end, and it lies in no object" }
+        { name: "inlined_refresh", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_refresh")]) "size"]), says: "a make_current comes from sdl2_gl_refresh or sdl2_gl_redraw" }
+        { name: "inlined_redraw", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_redraw")]) "size"]), says: "a make_current comes from sdl2_gl_refresh or sdl2_gl_redraw" }
+        { name: "overlap", lines: ($exe ++ [(do $made [$shim (do $inside 0 "overlap_inner")]) "size"]), says: $"a frame's return address lies in the symbols of more than one function, which no reading tells apart, in ($fixture)" }
+        { name: "timed_late", lines: ($modular ++ [$front_render { written: "1792000000.053000 size" }]), says: "its size call comes past the 2 ms a render read by timing allows" }
+        { name: "render_changed", lines: [(object-line 0 $fixture --later 1) $shim_line $render_chain "size"], says: $"($fixture) is not the file its line in the object table names" }
+        { name: "render_unreadable", lines: [(object-line 0 $text) $shim_line (do $made [$shim "0+10"]) "size"], says: $"nm cannot read ($text)" }
+        { name: "render_gone", lines: [$"object 0 1 100 1000 ($gone)" $shim_line $render_chain "size"], says: $"($gone) is not the file its line in the object table names" }
         { name: "device_after", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), says: "an upload's second frame is the device's own code" }
         { name: "exe_unresolved", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $at 0 $gap)])]), says: "an upload's second frame resolves in no table" }
         { name: "absent", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update")])]), says: "an upload's chain ends at its immediate caller" }
@@ -341,7 +367,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal ($record | get -o upload_callers) [{ callers: "sdl2_gl_update < qemu_console_update < virtio_gpu_simple_process_cmd < virtio_gpu_process_cmdq", count: 1 }] "record: upload_callers by function, the immediate caller first"
     assert equal ($record | get -o other_upload_callers) [{ callers: "sdl2_gl_update < qemu_console_register_listener", count: 1 }] "record: other_upload_callers holds the console's own"
     assert equal ($record | get -o switch_callers) [{ callers: "sdl2_gl_switch < displaychangelistener_gfx_switch", count: 1 }] "record: switch_callers holds the switch"
-    assert equal ($record | get -o render_callers) [{ callers: "?+7f0000001000 < ?+7f0000002000", count: 1 }] "record: render_callers by address where nothing resolves"
+    assert equal ($record | get -o render_callers) [{ callers: "sdl2_gl_render_surface < sdl2_gl_refresh", count: 1 }] "record: render_callers by function, the render's anchor first"
+    assert equal ($record | get -o render_gaps) { renders: 1, by_timing: 0, sizeless: 0, median_ms: 0.5, p99_ms: null, max_ms: 0.5, past: [] } $"record: render_gaps, the one render's size call half a millisecond on: ($record | get -o render_gaps | to nuon)"
 
     # the run's lines, the shim's first two events, its process and then
     # its nonce: read apart, each refused by name given twice, malformed,

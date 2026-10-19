@@ -41,7 +41,7 @@ export def main [probe: path, bundle: path, --profile: string = "", --extra: lis
     mkdir ($bundle | path join "tables")
     cp $log ($bundle | path join "sdl.log")
     for x in $hashed { $c.tables | get ($x.index | into string) | get nm | save --raw ($bundle | path join "tables" $"($x.index).nm") }
-    let events = ($c.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: $e.key, kind: $e.kind, callers: $e.callers } })
+    let events = ($c.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: $e.key, kind: $e.kind, callers: $e.callers, evidence: $e.evidence } })
     let counts = ($events | get kind | uniq --count | reduce --fold {} {|k, acc| $acc | insert $k.value $k.count })
     { events: $events, decisions: $c.decisions, counts: $counts } | to nuon --indent 1 | save --raw ($bundle | path join "classified.nuon")
     for f in $carried {
@@ -133,10 +133,12 @@ export def bundle-check [bundle: path, --guest: closure] {
     }
     let replay = (try { classify sdl-classified ($dir | path join "sdl.log") $dir } catch {|e| do $refuse 4 "the replay" $"the log classified from the bundle's tables is refused: ($e.msg)" })
     for pair in ($replay.events | zip $cls.events) {
-        let got = { kind: $pair.0.kind, callers: $pair.0.callers }
-        let want = { kind: $pair.1.kind, callers: $pair.1.callers }
+        let carried = (($pair.1 | get -o evidence) != null)
+        let got = { kind: $pair.0.kind, callers: $pair.0.callers } | merge (if $carried { { evidence: $pair.0.evidence } } else { {} })
+        let want = { kind: $pair.1.kind, callers: $pair.1.callers } | merge (if $carried { { evidence: $pair.1.evidence } } else { {} })
         if $got != $want { do $refuse 4 "the replay" $"the event at line ($pair.1.line) replays as ($got | to nuon), where classified.nuon holds ($want | to nuon)" }
     }
+    let read_events = ($cls.events | zip $replay.events | each {|p| $p.0 | upsert evidence $p.1.evidence })
     let run = (match $profile {
         "paired" => {
             let id = (open --raw ($dir | path join "identity.nuon") | into binary | decode | from nuon)
@@ -168,7 +170,7 @@ export def bundle-check [bundle: path, --guest: closure] {
     let box = (sdl-reader)
     let commit_of = {|r| if ($r | describe | str starts-with 'record') { if ($r | get -o repos) != null { $r.repos | get -o 0.commit } else { $r | get -o jab } } }
     let hosted = (do $commit_of $host)
-    { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($hosted != null and $hosted == (do $commit_of $box)) }, trace: $trace, events: $cls.events }
+    { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($hosted != null and $hosted == (do $commit_of $box)) }, trace: $trace, events: $read_events }
 }
 
 # Each flip upload between its traced flush and the next traced command, in us

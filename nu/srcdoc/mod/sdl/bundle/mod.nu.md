@@ -13,8 +13,9 @@ parsed, `tables/<index>.nm`, the file's own SHA-256 taken with its
 inode, size, and modification time its line's before the hash and
 unchanged after it, a change refusing the bundle as changed while
 bundling; `classified.nuon`, every event with its line, stamp, name,
-render flag, chain key, kind, and callers, each chain's decision, and
-the counts by kind; the probe directory's `api.out`, `identity.nuon`,
+render flag, chain key, kind, callers, and a render's evidence, its
+anchor or timing, each chain's decision, and the counts by kind; the
+probe directory's `api.out`, `identity.nuon`,
 `trace.log`, and each file `extra` names, where it has them, copied
 whole; and last `bundle.nuon`, the manifest, bundle_schema 2: the
 profile; the reader (sdl-reader), `identity reader`'s record, the one
@@ -59,7 +60,9 @@ object's table listed and no other's; 3, the sequence, the log's events
 as sdl-log reads them, which reads no object file, classified.nuon's in
 count and line by line in line, stamp, name, render flag, and chain key;
 4, the replay, the log classified again from the bundle's tables
-(sdl classify --tables), every event's kind and callers classified.nuon's;
+(sdl classify --tables), every event's kind and callers classified.nuon's,
+and its evidence where classified.nuon carries one, a bundle written before
+the render's anchor carrying none;
 5, the run by its profile: paired, the log's process the identity's
 qemu_pid, the log's nonce the identity's capture_nonce, and the nonce
 the guest echoed, read from the bundle's api.out by `guest`, the
@@ -73,8 +76,9 @@ reader, the host's set beside this one, `same` whether their jab commits
 agree, read from schema 1's `jab` or schema 2's first repository and
 refusing nothing, the replay's equality being what admits another
 revision. The profile, the run, both readers, the trace's
-bracket, and classified.nuon's events. Untyped because it ends in an
-error.
+bracket, and classified.nuon's events, each with the replay's evidence,
+which the check holds equal where the bundle carries one. Untyped because
+it ends in an error.
 
 ## traced_qemu
 

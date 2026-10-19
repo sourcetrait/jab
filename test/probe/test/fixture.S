@@ -93,3 +93,38 @@ gpu_ctrl_entry:
 virtio_gpu_process_cmdq.cold:
     .skip 0x20
     .size virtio_gpu_process_cmdq.cold, . - virtio_gpu_process_cmdq.cold
+
+    .globl sdl2_gl_refresh
+    .hidden sdl2_gl_refresh
+    .type sdl2_gl_refresh, @function
+sdl2_gl_refresh:
+    .skip 0x40
+    .size sdl2_gl_refresh, . - sdl2_gl_refresh
+
+    .globl sdl2_gl_redraw
+    .hidden sdl2_gl_redraw
+    .type sdl2_gl_redraw, @function
+sdl2_gl_redraw:
+    .skip 0x40
+    .size sdl2_gl_redraw, . - sdl2_gl_redraw
+
+    .globl sdl2_gl_scanout_flush
+    .hidden sdl2_gl_scanout_flush
+    .type sdl2_gl_scanout_flush, @function
+sdl2_gl_scanout_flush:
+    .skip 0x40
+    .size sdl2_gl_scanout_flush, . - sdl2_gl_scanout_flush
+
+    .globl overlap_outer
+    .hidden overlap_outer
+    .type overlap_outer, @function
+    .globl overlap_inner
+    .hidden overlap_inner
+    .type overlap_inner, @function
+overlap_outer:
+    .skip 0x10
+overlap_inner:
+    .skip 0x10
+    .size overlap_inner, . - overlap_inner
+    .skip 0x20
+    .size overlap_outer, . - overlap_outer

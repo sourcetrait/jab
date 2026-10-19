@@ -420,12 +420,17 @@ window makes with a timestamp, and for each time the window takes its
 drawing context, the calls that led there. The log opens with a list of
 the files QEMU has loaded. The probe reads those calls through the
 files' own symbol tables with binutils' `nm`, which must be on PATH,
-and so tells three things apart: a flip's upload, which comes from the
-virtio-gpu device; a switch, the window taking a new surface; and the
-console's own redraws, which are no flip of the program's. Then it
+and so tells four things apart: a flip's upload, which comes from the
+virtio-gpu device; a switch, the window taking a new surface; the
+console's own redraws, which are no flip of the program's; and a drawn
+frame, named by the front-end function that draws it. A QEMU whose front
+end keeps only its dynamic symbols, where that function has no name, has
+its drawn frames read by the window-size call that follows within 2 ms,
+weaker evidence and labelled so. Then it
 prints one NUON record on how the program's flips reached the window,
 ready to paste: the uploads per flip and their spacing, the flip
-cadence, the drawn frames and their interval, the switches, and any
+cadence, the drawn frames and their interval, each drawn frame's gap to
+its size call with any past 2 ms named, the switches, and any
 frame drawn inside a flip, which is a half-drawn tick. When it cannot
 read every call, as on a QEMU stripped of its symbol table, or the log
 holds a line the library never writes, or the library stopped the run

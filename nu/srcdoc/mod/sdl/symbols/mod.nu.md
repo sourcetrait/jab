@@ -57,7 +57,11 @@ table's bytes.
 The functions of a table (sdl-table) whose [start, end) holds an
 address, aliases included: a binary search for the last start at or
 below it, then back while the furthest end reached so far lies past
-it. None where the address falls between functions.
+it. None where the address falls between functions. `overlap` says
+whether the symbols holding it span more than one extent: aliases of one
+function share theirs, so they read as one, while two functions' symbols
+covering one address are an ambiguity no reading tells apart
+(RenderAnchor).
 
 ## resolve
 
@@ -70,11 +74,13 @@ hold it. A frame is a return address, so it resolves at the address
 less one: a call that ends its function returns to the first byte past
 it. It lies in every function of its object's table whose [value,
 value + size) holds that address, an alias included, and in none where
-the address falls between functions. The tables read are the ones a
-decision needs: the objects of the immediate caller and of its caller
-in every make_current the timing rule leaves, and the executable's
-where the device's code is there; with --every, every object a
-make_current's frame lies in. The device's code lives in a module when
+the address falls between functions; a frame also carries `overlap`
+(sdl-functions-at). The tables read are the ones a decision needs, read
+before any rule is chosen: the objects of the immediate caller and of
+its caller in every make_current, a render's included, so a render's
+caller is held to its table like any other (RenderAnchor), and the
+executable's where the device's code is there; with --every, every
+object a make_current's frame lies in. The device's code lives in a module when
 the table lists one whose file name starts hw-display-virtio-gpu, else
 in the executable. With --tables, a bundle's directory (sdl bundle),
 each table comes out of the bundle in place of nm on its object's path,

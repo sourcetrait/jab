@@ -76,6 +76,7 @@ export def main [log: path]: nothing -> record {
         flip_cadence_ms: (do $hist $cadence),
         renders: ($renders | length),
         render_interval_ms: (do $hist $intervals),
+        render_gaps: $classified.gaps,
         frames_shown: { shown: ($showed | where flips == 1 | length), repeated: ($repeats | length), skipped: $skipped, unshown_at_end: ($flip_count - $next_flip) },
         skip_times_s: ($skip_times | first 24 | each {|t| $t | math round -p 3 }),
         skip_interval_ms: (do $range (do $between $skip_times)),

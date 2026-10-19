@@ -15,3 +15,6 @@ half-drawn tick to look for.
   skipped, so a beat between the guest's cadence and the window's
   timer reads as skips or repeats at a steady interval and a stall
   as a burst of them
+- `render_gaps`, the classification's (sdl classify): every render's gap
+  from its make_current to the window's size call, the renders read by
+  timing counted as the weaker evidence they are
