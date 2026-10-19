@@ -17,7 +17,10 @@ no record. Linux only, since it preloads a library into QEMU. With no
 display server SDL runs its offscreen driver, which draws nothing but
 keeps every path the same. Each run mints its capture nonce for the
 shim (nonce mint), keeps QEMU's pid while it lives (probe-launch),
-and writes the run's identity beside the log, `identity.nuon`. Its
+and writes the run's identity beside the log, `identity.nuon`: the
+capture's binding and the build's fields (build-fields), the latter
+taken before QEMU starts, so a REPLAY build probed without a stream is
+refused before it runs. Its
 profile, its port, and its sends are probe-plan's: paired where the
 build sets the manifest's `paired`, the nonce's frame sent first;
 `--api` puts the port on with nothing sent for it; `--send <file>`
@@ -49,6 +52,40 @@ build sets it. Any other probe is generic.
 The capture nonce's frame, what a paired program reads from the API
 before it starts (CaptureBundle): `WNON` as a le32, a zero word, and
 the nonce as a le64, 16 bytes; the nonce 1 to 2^63 - 1.
+
+## cadence_symbols
+
+walk's CADENCE build's symbols, in the order its header's flags name
+them; an identity's `cadence` is the ones its build sets.
+
+## build-fields
+
+A run's build as its identity names it, the one producer of the
+probe's identity and walk's unprobed wrapper
+(`example/walk/test/cadence.nu`), so a reader holds either run's stream
+to the build its identity names: `workload`, the program's path in the
+workspace and
+its loop order, `prepare` where the build sets PREPARE and `await`
+otherwise; `image` and `kernel`, each file's path and SHA-256; `flags`,
+the first line of the `flags` file the build left beside the image,
+whose absence is refused; `cadence`, the CADENCE symbols among the
+flags' `--defsym`s; and `replay`, a REPLAY build's stream as
+replay-stream reads it less its bytes, null for any other build. A
+REPLAY build given no stream, and a stream given for any other build,
+are refused by name.
+
+## file-of
+
+A file as an identity names it, its path and its SHA-256.
+
+## replay-stream
+
+A replay stream as a run sends it, held to the header walk reads: at
+least the 64-byte header, the magic WRPL, frames 1 to replay_frames
+(8,192, walk's frame buffer), and exactly a u32 dt a frame after the
+header; each fault refused by name. Its file, its SHA-256, its frames,
+the window its dt values sum to in seconds, the run's bound, twice that
+window plus 60 s rounded up, and the bytes the run sends.
 
 ## trace-args
 

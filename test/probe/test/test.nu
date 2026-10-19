@@ -30,7 +30,9 @@
 # port and its sends as its caller asks, the nonce handed in reaching the
 # shim and the identity, plan minting none and a launch alone one; the
 # probe's own plan in each profile, the nonce's frame, and a QEMU without
-# the flush trace refused; the present sequence's rules and K's, K held
+# the flush trace refused; the build's fields the probe's identity and
+# walk's wrapper write, and a replay stream refused by each of its rules;
+# the present sequence's rules and K's, K held
 # to the all-pairs check over a generated set; the pairing over synthetic
 # runs, each read admitted, ambiguous, or refused by its rule or by its
 # bracket, the stalls named and the uploads placed in their calls. A
@@ -453,6 +455,62 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
     let untraced = (try { probe trace-args "true" ($plumbing | path join "trace.log") | ignore; "" } catch {|e| $e.msg })
     assert ($untraced | str contains "lists no trace event virtio_gpu_cmd_res_flush or virtio_gpu_cmd_set_scanout") $"probe_untraced: a QEMU listing neither trace event is refused: ($untraced)"
+
+    # the build's fields, the one producer of the probe's identity and
+    # walk's wrapper: the flags beside the image, the CADENCE symbols among
+    # them in the header's order, the loop order by PREPARE, the files'
+    # SHA-256, a REPLAY build's stream with its frames and bound; and each
+    # refusal by name
+    let fields_dir = ($dir | path join "fields")
+    let toolchain = "-march=rva23u64 riscv64-unknown-linux-gnu-"
+    let build_dir = {|name: string, flags: string|
+        let d = ($fields_dir | path join $name)
+        mkdir $d
+        $"($flags)\n" | save --raw ($d | path join "flags")
+        0x[6a 61 62] | save --raw ($d | path join "walk.jab")
+        0x[6b 65 72 6e] | save --raw ($d | path join "jab.elf")
+        $d
+    }
+    let timed_flags = $"-I ../../sdk/src --defsym CADENCE=1 --defsym DEBUG=1 --defsym PREPARE=1 --defsym TIMING=1 ($toolchain)"
+    let timed_dir = (do $build_dir "timed" $timed_flags)
+    let timed = (probe build-fields "example/walk" ($timed_dir | path join "walk.jab") ($timed_dir | path join "jab.elf"))
+    assert equal $timed.cadence [CADENCE TIMING PREPARE] "fields_cadence: the CADENCE symbols its flags carry, in the header's order"
+    assert equal $timed.workload { program: "example/walk", order: "prepare" } "fields_order: the program, and PREPARE's loop order"
+    assert equal [$timed.image.sha256 $timed.kernel.sha256] [(0x[6a 61 62] | hash sha256) (0x[6b 65 72 6e] | hash sha256)] "fields_files: the image's and the kernel's SHA-256"
+    assert equal $timed.flags $timed_flags "fields_flags: the flags file's first line"
+    assert equal $timed.replay null "fields_unreplayed: no stream for a build without REPLAY"
+    let plain_dir = (do $build_dir "plain" $"-I ../../sdk/src --defsym DEBUG=1 ($toolchain)")
+    let plain = (probe build-fields "test/probe" ($plain_dir | path join "walk.jab") ($plain_dir | path join "jab.elf"))
+    assert equal [$plain.cadence $plain.workload.order] [[] "await"] "fields_plain: no CADENCE symbol, the await order"
+    let replayed_dir = (do $build_dir "replayed" $"-I ../../sdk/src --defsym CADENCE=1 --defsym REPLAY=1 --defsym TIMING=1 ($toolchain)")
+    let word = {|v: int, n: int| $v | into binary --endian little | bytes at 0..<$n }
+    let stream = ([(do $word 0x4c505257 4) (do $word 1 4) (do $word 3 4) (do $word 0 4) (do $word 7 8) (do $word 0 8) (0..<32 | each { 0x[00] } | bytes collect) (do $word 166666 4) (do $word 166667 4) (do $word 1000000 4)] | bytes collect)
+    let stream_file = ($fields_dir | path join "stream.wrpl")
+    $stream | save --raw $stream_file
+    let replayed = (probe build-fields "example/walk" ($replayed_dir | path join "walk.jab") ($replayed_dir | path join "jab.elf") --replay $stream_file)
+    assert equal $replayed.replay { file: $stream_file, sha256: ($stream | hash sha256), frames: 3, window_s: 0.1333333, bound: 61 } "fields_replay: the stream's file, SHA-256, frames, dt summed, and bound"
+    let refused = {|run: closure| try { do $run | ignore; "" } catch {|e| $e.msg } }
+    let refusals = [
+        { name: "fields_no_flags", run: {|| probe build-fields "example/walk" ($fields_dir | path join "stream.wrpl") ($timed_dir | path join "jab.elf") }, says: "the image has no build flags beside it" }
+        { name: "fields_replay_unsent", run: {|| probe build-fields "example/walk" ($replayed_dir | path join "walk.jab") ($replayed_dir | path join "jab.elf") }, says: "the image is a REPLAY build and no replay stream was given" }
+        { name: "fields_replay_unwanted", run: {|| probe build-fields "example/walk" ($timed_dir | path join "walk.jab") ($timed_dir | path join "jab.elf") --replay $stream_file }, says: "a replay stream was given and the image is no REPLAY build" }
+    ]
+    for c in $refusals {
+        let said = (do $refused $c.run)
+        assert ($said | str contains $c.says) $"($c.name): refused, saying ($c.says): ($said)"
+    }
+    let stream_cases = [
+        { name: "stream_magic", bytes: ((do $word 0x4c505258 4) ++ ($stream | bytes at 4..)), says: "the replay stream's magic is not WRPL" }
+        { name: "stream_short", bytes: ($stream | bytes at 0..<60), says: "the replay stream is shorter than its header" }
+        { name: "stream_frames", bytes: ($stream | bytes at 0..<72), says: "holds 72 bytes where its 3 frames need 76" }
+        { name: "stream_none", bytes: (($stream | bytes at 0..<8) ++ (do $word 0 4) ++ ($stream | bytes at 12..<64)), says: "the replay stream's frames are 1 to 8192, not 0" }
+    ]
+    for c in $stream_cases {
+        let file = ($fields_dir | path join $"($c.name).wrpl")
+        $c.bytes | save --raw $file
+        let said = (do $refused {|| probe replay-stream $file })
+        assert ($said | str contains $c.says) $"($c.name): refused, saying ($c.says): ($said)"
+    }
 
     # the bundle: a paired capture bundled where it was taken, the fixture
     # then relinked at its path, a new inode, so the raw log is refused as

@@ -10,6 +10,21 @@ use (path self ../target)
 use (path self ../tool)
 use (path self ../workspace)
 
+# walk's CADENCE build's symbols, in the order its header names them
+const cadence_symbols = [CADENCE TIMING REPLAY PREPARE CADENCE_TEST]
+
+# A replay stream's header bytes
+const replay_header = 64
+
+# A replay stream's magic, WRPL little-endian
+const replay_magic = 0x4c505257
+
+# The most frames a replay stream holds, walk's frame buffer
+const replay_frames = 8192
+
+# The guest's clock, ticks a second
+const time_hz = 10_000_000
+
 # A program probed under a window by its kind, `sdl` the one probe
 def probe-kind [dir: path, kind: string, names: list<string>, seconds: int, --api, --send: string = "", --trace]: nothing -> nothing {
     match $kind {
@@ -30,6 +45,8 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let sends = $planned.sends
     let api_on = $planned.api
     let line = (program run-line $dir $names $api_on "sdl,gl=on" "none" true false false)
+    let program_at = ($dir | path relative-to $c.workspace)
+    let fields = (if "REPLAY" in $names and $send != "" { build-fields $program_at $line.image $line.kernel --replay $send } else { build-fields $program_at $line.image $line.kernel })
     let out = ($line.context.out | path join "probe")
     mkdir $out
     let log = ($out | path join "sdl.log")
@@ -53,7 +70,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
     let profile = $planned.profile
     let sent = ($sends | each {|s| { at: ($s.at / 1sec), length: ($s.bytes | bytes length), sha256: ($s.bytes | hash sha256) } })
-    { profile: $profile, capture_nonce: $nonce, qemu_pid: $run.qemu_pid, sdl_log: $log, shim: $shim, window: "sdl,gl=on", api: $api_on, sends: $sent } | to nuon --indent 2 | save --raw $identity_file
+    { profile: $profile, capture_nonce: $nonce, qemu_pid: $run.qemu_pid, sdl_log: $log, shim: $shim, window: "sdl,gl=on", api: $api_on, sends: $sent } | merge $fields | to nuon --indent 2 | save --raw $identity_file
     let report = (report $log)
     bundle $out $bundle | ignore
     let record = ({
@@ -98,6 +115,47 @@ def probe-paired [manifest: record, names: list<string>]: nothing -> bool {
 export def wnon-frame [nonce: int]: nothing -> binary {
     if $nonce < 1 { error make {msg: $"a capture nonce is 1 to 2^63 - 1, not ($nonce)"} }
     0x[57 4e 4f 4e 00 00 00 00] ++ ($nonce | into binary --endian little)
+}
+
+# A run's build as its identity names it: the image, its kernel, and their symbols
+export def build-fields [program: string, image: path, kernel: path, --replay: path]: nothing -> record<workload: record<program: string, order: string>, image: record<file: string, sha256: string>, kernel: record<file: string, sha256: string>, flags: string, cadence: list<string>, replay: oneof<record<file: string, sha256: string, frames: int, window_s: float, bound: int>, nothing>> {
+    let image = ($image | path expand)
+    let kernel = ($kernel | path expand)
+    let stamp = ($image | path dirname | path join "flags")
+    if not ($stamp | path exists) { error make {msg: $"the image has no build flags beside it: ($stamp)"} }
+    let flags = (open --raw $stamp | decode | lines | get 0)
+    let symbols = ($flags | parse --regex '--defsym (?P<name>[A-Z0-9_]+)=1' | get name)
+    let replaying = ("REPLAY" in $symbols)
+    if $replaying and $replay == null { error make {msg: $"the image is a REPLAY build and no replay stream was given: ($image)"} }
+    if (not $replaying) and $replay != null { error make {msg: $"a replay stream was given and the image is no REPLAY build: ($image)"} }
+    {
+        workload: { program: $program, order: (if "PREPARE" in $symbols { "prepare" } else { "await" }) },
+        image: (file-of $image),
+        kernel: (file-of $kernel),
+        flags: $flags,
+        cadence: ($cadence_symbols | where {|s| $s in $symbols }),
+        replay: (if $replaying { replay-stream $replay | reject bytes } else { null }),
+    }
+}
+
+# A file as an identity names it, its path and its SHA-256
+def file-of [file: path]: nothing -> record<file: string, sha256: string> {
+    { file: $file, sha256: (open --raw $file | hash sha256) }
+}
+
+# A replay stream as a run sends it, held to the header walk reads
+export def replay-stream [stream: path]: nothing -> record<file: string, sha256: string, frames: int, window_s: float, bound: int, bytes: binary> {
+    let bytes = (open --raw $stream | into binary)
+    let length = ($bytes | bytes length)
+    if $length < $replay_header { error make {msg: $"the replay stream is shorter than its header: ($stream), ($length) bytes"} }
+    let magic = ($bytes | bytes at 0..<4 | into int --endian little)
+    if $magic != $replay_magic { error make {msg: $"the replay stream's magic is not WRPL: ($stream)"} }
+    let frames = ($bytes | bytes at 8..<12 | into int --endian little)
+    if $frames < 1 or $frames > $replay_frames { error make {msg: $"the replay stream's frames are 1 to ($replay_frames), not ($frames): ($stream)"} }
+    if $length != ($replay_header + $frames * 4) { error make {msg: $"the replay stream holds ($length) bytes where its ($frames) frames need ($replay_header + $frames * 4): ($stream)"} }
+    let ticks = (0..<$frames | each {|i| $bytes | bytes at ($replay_header + $i * 4)..<($replay_header + $i * 4 + 4) | into int --endian little } | math sum)
+    let window_s = ($ticks / $time_hz)
+    { file: ($stream | path expand), sha256: ($bytes | hash sha256), frames: $frames, window_s: $window_s, bound: ((2 * $window_s + 60) | math ceil), bytes: $bytes }
 }
 
 # QEMU's words tracing the GPU's flushes and set_scanouts, stamped, into a log

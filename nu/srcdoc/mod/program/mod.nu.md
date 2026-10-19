@@ -34,7 +34,9 @@ QEMU starts (spec-listed). The ports' files sit beside the build
 output, named in the README. With a pad on the port, `bridge` is the
 pad's identity and `bridge_pipe` the pipe the bridge writes
 (bridge-pipe); on Windows the API's pipe takes a relay, `relays` and
-`relay_binary` as plan names them, none and "" elsewhere.
+`relay_binary` as plan names them, none and "" elsewhere. `image` and
+`kernel` are the files the line loads, which a probe's identity names
+(probe build-fields).
 
 - a Windows run's pipes are named pipes, named by a nonce of its own,
   the API's taking a relay and the pad port's client the bridge
