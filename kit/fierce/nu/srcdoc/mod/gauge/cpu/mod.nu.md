@@ -2,7 +2,7 @@
 
 ## CPU_FROM
 
-the CPU readings' whole window opens here, past the load (cpu-requests)
+the CPU readings' whole window opens here, past the load (gauge cpu requests)
 
 ## outcome
 
@@ -37,5 +37,5 @@ whose bound is missing is missing, never bridged across.
 
 ## cpu-window
 
-One CPU window between two readings (cpu-windows): missing when either
+One CPU window between two readings (gauge cpu windows): missing when either
 reading is absent or was never taken.

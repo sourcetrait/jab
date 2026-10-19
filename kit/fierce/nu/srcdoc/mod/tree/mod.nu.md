@@ -80,7 +80,7 @@ own coordinate and the same pixels vary
 
 ## BUILDER_FIXTURE
 
-The builder's assertion (builder-holds): the fixture's wall given an
+The builder's assertion (suite tiles builder-holds): the fixture's wall given an
 opaque texture of the test's own, 64 square at a quarter repeat a
 metre, 16 texels a metre, so a lumel cell is 8 texels, k 3, and its
 chain of 7 levels holds levels 0 to 2 below k, 3 at it, and 4 to 6
@@ -97,8 +97,8 @@ else, its per-texel loop slowed some fifteenfold inside this module
 
 ## HANDOFF_FIXTURE
 
-The handoff's measurement (handoff-holds), the HANDOFF set running it
-alone: the north room's long wall, HANDOFF_EDGE of its loop, given an
+The handoff's measurement (suite tiles handoff-holds), the HANDOFF set running
+it alone: the north room's long wall, HANDOFF_EDGE of its loop, given an
 opaque white texture of the test's own, 64 square at half a repeat a
 metre, 32 texels a metre, so a lumel cell is 16 texels, k 4, its chain
 of 7 levels holding levels 0 to 3 below k, 4 at it, and 5 and 6 above,

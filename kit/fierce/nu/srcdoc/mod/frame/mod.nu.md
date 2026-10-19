@@ -20,7 +20,7 @@ millimetres); kinds 7, 8, 10, and 12 the frame before's clock, its
 drawing, its presentation, and its packets, 13 and 15 its tile pool's
 activity and storage, and 18 its harts' masks, sent at each frame's
 start, 14 the pool's configuration ahead of the frame it governs, and 9
-the end of a measurement, which gauge.nu reads (`gauge measure`) and
+the end of a measurement, which the gauge reads (`gauge measure`) and
 `records` leaves out
 
 ## CONSOLE_KIND

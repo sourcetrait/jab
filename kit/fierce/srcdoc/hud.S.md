@@ -14,7 +14,7 @@ has its byte 5 set (console.S), a debug build draws the frame's number, as
 its records carry it, over the world's top-left before the crosshair, its
 low STAMP_BITS bits a cell of STAMP_CELL pixels square each, the n-th cell
 from the left the n-th bit, STAMP_WHITE for a one and black for a zero. The
-test's `stamp-of` reads it back from a capture, and a run that binds a
+test's `picture stamp` reads it back from a capture, and a run that binds a
 picture to its frame holds the frame it names inside its records' window
 (the handoff's runs, and the picture contract's: the take fixtures, the
 cancel cases, the workers' parity). hud_stamp_draw draws it: hud_draw

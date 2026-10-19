@@ -9,7 +9,7 @@ framebuffer word's fourth byte never does.
 ## const STAMP_H
 
 The debug HUD's stamp, STAMP_BITS cells of STAMP_CELL pixels along the
-top-left (test.nu's constants, hud.S): 16 cells of 4, so 64 by 4. A white
+top-left (picture's constants, hud.S): 16 cells of 4, so 64 by 4. A white
 cell reads as the sentinel in a LEVELS capture but a black one as level 0
 at span 0, so every reading skips the cells rather than trusting them.
 

@@ -256,7 +256,7 @@ first sight settling, and the rings at the warming frame
 
 ## builder
 
-the builder's assertion (builder-holds): every tile of the builder
+the builder's assertion (suite tiles builder-holds): every tile of the builder
 fixture's wall at every level of its chain, built by the B frame and
 read back by the D frame under the bright, the gradient, and the
 parity lumels, held texel by texel to the host's oracle of the light

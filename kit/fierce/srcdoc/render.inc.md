@@ -1774,7 +1774,12 @@ A record's bytes, zero to the end.
 
 ## .set REPORT_ROUNDS
 
-`u32`: on a debug build while the J frame's cancel stands, the frame before's witness, ROUNDS_* fields, written after its clock records and before the end marker, so a final frame's witness lies inside its measurement; outside the clock kinds and their schema, so the gauge's completeness never counts it and the picture contract's reader (gauge.nu's screen-frame) holds its presence and uniqueness itself.
+`u32`: on a debug build while the J frame's cancel stands, the frame before's
+witness, ROUNDS_* fields, written after its clock records and before the end
+marker, so a final frame's witness lies inside its measurement; outside the
+clock kinds and their schema, so the gauge's completeness never counts it and
+the picture contract's reader (`gauge measure screen-frame`) holds its presence
+and uniqueness itself.
 
 ## .set REPORT_RECEIPT
 
@@ -1961,7 +1966,7 @@ and grain as world_draw took them, and the rounds' times summed over the
 frame's rounds, each converted once, 0 under the serial backend and on a
 frame that took no round, a stall's. The slowest worker, the dispatch, and
 the barrier each lie within the raster, and the busy time is every
-worker's, at least the slowest's (test/gauge.nu's rules).
+worker's, at least the slowest's (gauge/measure's rules).
 
 ## .set PACKET_GRAIN
 

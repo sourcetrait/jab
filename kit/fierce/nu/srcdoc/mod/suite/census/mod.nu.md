@@ -19,8 +19,8 @@ the still copy of Render Zero's spawn view in one launch on eight harts,
 every context the directory counts written each frame: the launch here,
 QEMU silent and no fault, then the run's log read in a nu of its own by
 census_holds.nu's census-fixture-holds, which holds what the census
-writes, since test.nu's modules loaded around that reading slow its
-closures about tenfold.
+writes, since the suite's modules loaded around that reading slowed its
+closures about tenfold (measured on test.nu).
 
 - every worker of the eight harts asked at 32 rows, since the default's
   cap of three would leave five of the census's eight contexts undrawn

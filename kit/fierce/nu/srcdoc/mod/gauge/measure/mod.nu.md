@@ -120,7 +120,7 @@ to before the final frame the marker names, its length the final less
 `from`, shorter than 2^STAMP_BITS frames by the contract so its frames'
 stamps differ, a window of that many frames or more refused before any
 stamp is read; `stamp` the frame number the screen's stamp carries
-(test.nu's stamp-of), its low STAMP_BITS bits, null refused; the stamp
+(`picture stamp`), its low STAMP_BITS bits, null refused; the stamp
 naming one frame N of the window, a stamp naming a frame before the
 opening and one naming the final frame or none each refused; N settled
 by the pool's rule, its missed blocks,

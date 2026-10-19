@@ -44,7 +44,7 @@ A critical path's median under the ceiling, the rule a measurement's
 
 ## against-ceiling
 
-The ceiling's words for a critical path's median (under-ceiling).
+The ceiling's words for a critical path's median (gauge report under-ceiling).
 
 ## leg-text
 

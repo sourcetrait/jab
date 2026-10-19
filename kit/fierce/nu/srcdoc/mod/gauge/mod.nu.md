@@ -80,15 +80,15 @@ every cadence's frames pooled. fierce's `nuance.nu gauge run`, `gauge
 play`, `gauge read`, `gauge compare`, and `gauge bench-report` run
 them, and its cadence bench runs `gauge play`, `gauge run`, and `gauge
 bench-report`.
-A run's identity is read through one reader (identity-of): the run's
+A run's identity is read through one reader (gauge identity of): the run's
 identity.nuon, its directory found beside its report before the path
 the report recorded, with an audited correction beside it applied
-(correction-of); else the copy its report embedded; else the report's
+(gauge identity corrected); else the copy its report embedded; else the report's
 one identity; a comparison names each run's source and corrections.
 `run` and `play` refuse an image whose build flags contradict the tree
 asked. `run --cpu` reads every QEMU thread's CPU at 5 s, at each
 placement, and at the route's end, kept whole in run.nuon and reported
-as host-time windows (cpu-windows).
+as host-time windows (gauge cpu windows).
 
 The gauge parts in one import for a consumer: a `use` of
 `kit/fierce/nu/mod/gauge` by its path from the consumer, then

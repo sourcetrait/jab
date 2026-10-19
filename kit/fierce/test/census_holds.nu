@@ -1,11 +1,12 @@
 # The census fixture's reading of a census build's log (census.nu), apart
 # from the launch so it runs on any capture a census build wrote;
 # census-holds calls it on its run's log in a nu of its own, since
-# test.nu's modules loaded around it slow every closure about tenfold.
+# the suite's modules loaded around it slowed every closure about tenfold
+# (measured on test.nu).
 use ./census.nu
 use std/assert
 
-# The census fixture's reading of its run's log (test.nu's census-holds),
+# The census fixture's reading of its run's log (suite/census's census-holds),
 # its line returned: the clamped edge's case at the load, a tile past a
 # map's last node read shaded by its nodes and by lumel_sample, where nodes
 # clamped to the last column alone read it uniform; every frame valid as

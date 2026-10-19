@@ -1,8 +1,8 @@
 # nuance.nu
 
 Fierce's nuanced commands (NuLayout's bins), each verb one call of a gauge
-part's verb through gauge's aggregator, its arguments and its output those
-of the gauge.nu verb it replaces.
+part's verb through gauge's aggregator, its arguments and its output the
+part's verb's.
 
 ## main gauge run
 

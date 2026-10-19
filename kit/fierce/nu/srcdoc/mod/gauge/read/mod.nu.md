@@ -12,20 +12,20 @@ Read a capture, a run's api.out (read-capture).
 ## read-capture
 
 Read a capture, a run's api.out: under the identity it was launched
-with (read-identity), through the reports it belongs to when there are
+with (gauge identity read), through the reports it belongs to when there are
 any, else its own identity.nuon with its correction applied, else what
 the capture alone says, every directory passed over and every report
 reconciled named, the reading from a report's one identity or no
 evidence the report's identity and never the run's own (read-run); the
 run.nuon its launch wrote beside it; the legs from `route`, else the
 route kept beside the capture, else the one the identity names, refused
-unless it is the route that played (legs-for), and one leg, play, when
-no route is recorded; the report written in `out`, beside the capture
+unless it is the route that played (gauge report legs-for), and one leg, play,
+when no route is recorded; the report written in `out`, beside the capture
 when empty.
 
 ## read-run
 
-The run record `read` writes for a reading (read-identity): the seed
+The run record `read` writes for a reading (gauge identity read): the seed
 its report recorded, else, for the run's own identity, read from its
 file or embedded, that identity's, else null, never a report's one
 identity's; the identity the run's own for a file or an embedded

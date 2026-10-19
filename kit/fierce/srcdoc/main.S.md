@@ -22,7 +22,7 @@ alone; the frame before's eight records go over the API at a frame's start,
 once its await has ended, so a record carries the await that followed its
 frame and the path whole (render.inc's REPORT_FRAME, REPORT_DRAW,
 REPORT_PRESENT, REPORT_PACKET, REPORT_TILE, REPORT_STORAGE, REPORT_HARTS,
-and REPORT_RECEIPT, read by test/gauge.nu), and the load's presents go once
+and REPORT_RECEIPT, read by fierce's gauge), and the load's presents go once
 in frame 0, before its state record (REPORT_LOAD). A frame presents under one of
 three cadences, render.inc's CADENCE_*, the image's CADENCE_DEFAULT until
 a console C chooses another: CADENCE_AFTER_FLIP flips once and awaits

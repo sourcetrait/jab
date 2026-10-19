@@ -23,7 +23,7 @@ one, and writes every READY tile of it to the API at once, a dump record
 and its texel records (tile.S's tile_dump), the pool standing still
 between boundaries, and with byte 8 set the BUILDING tile beside them,
 held unfinished; its answer after the records closes the dump. The
-test's `build-frame` and `dump-frame` build them and tiles.nu's `dumps`
+test's `console build` and `console dump` build them and tiles.nu's `dumps`
 reads the records.
 
 M is the handoff's hand, a debug build's alone: byte 4 the levels every
@@ -32,7 +32,7 @@ own, kept in level_raise and standing from the drawing of the frame that
 reads it (raster.S's The chain's level), so a wall posed head-on at level
 0 is drawn at every level of its chain; byte 5 set, the HUD stamping each
 frame's number from the frame that reads it on (hud.S's hud_stamp), so a
-screen names the frame it shows. The test's `raise-frame` builds it, its
+screen names the frame it shows. The test's `console raise` builds it, its
 `--stamp` setting byte 5.
 
 H is the transitions' driver, a debug build's alone, fps having no feature
@@ -42,12 +42,12 @@ given back to the raster (gfx_give). It acts at the console's read,
 between frames, every round of the frame before joined, so the frame that
 reads it is the first drawn on the grant it leaves. The routines are every
 build's; the frame that drives them is the debug build's. The test's
-`harts-frame` builds it.
+`console harts` builds it.
 
 Q is the census's knob, on a CENSUS build alone: bytes 4 to 7 the bytes a
 census context line holds before its continuation, 0 for the build's own
 bound (census.S's CENSUS_CHUNK), standing from the frame's census lines on,
-so a fixture splits every context's list. The test's `census-frame` builds
+so a fixture splits every context's list. The test's `console census` builds
 it.
 
 J is the jobs' knob, on a debug build alone, read by the rounds after it
@@ -58,7 +58,7 @@ left finished on hart 0; byte 13 the hart whose worker to fault, which on
 the next round alone loads SCRATCH_POISON's address and ends the run
 through the kernel; byte 14 set holds the delayed worker, in fixed bands,
 until the round's join passes its position, JOB_HOLD_US at most
-(workers.S's job_hold_wait). The test's `jobs-frame` builds it, its
+(workers.S's job_hold_wait). The test's `console jobs` builds it, its
 `--hold` setting byte 14.
 
 W takes byte 4 as the frame's workers asked, 0 for the serial backend, and
@@ -91,7 +91,7 @@ K is the packet's knob, on a debug build alone, standing from the frame
 that reads it: bytes 4 to 7 the commands a packet holds and bytes 8 to 11
 the spans, each 0 for the engine's own bound, so a fixture makes a frame
 flush many times (raster.S's command_emit and span_cap). The test's
-`packet-frame` builds it.
+`console packet` builds it.
 
 O is the tile pool's knob, on a debug build alone, a configuration of its
 own the next boundary puts in force and records (tile.S's The knobs): byte
@@ -107,7 +107,7 @@ a boundary's work in texels, in force under every mode, the lift's among
 them; each 0 for the build's own. Byte 5 set traces the pool's passes on
 the UART while it stands; byte 6 set is a cold start at the next
 boundary, every tile forgotten and the frame before's requests
-discarded. The test's `pool-frame` builds it and `pool-trace` reads the
+discarded. The test's `console pool` builds it and `pool-trace` reads the
 trace.
 
 R takes the 64 bits in bytes 4 to 11 as the seed of the generator the

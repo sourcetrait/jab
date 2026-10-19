@@ -51,7 +51,7 @@ The console's I frame: the run's capture nonce as 64 bits in bytes 4 to
 
 A run's sends before its route's: an R with its seed, a C with its
 cadence, and an I with its capture nonce at SEED_AT, then the W its
-asked workers send (workers-sends); every run's alike, probed or not, so
+asked workers send (console workers-sends); every run's alike, probed or not, so
 the shim is a probed run's one difference.
 
 ## workers
@@ -89,7 +89,7 @@ and with `--building` (byte 8) the BUILDING tile beside them.
 The console's M frame, a debug build's: every block's level raised by
 byte 4 from the frame's drawing on, the chain's last at most, 0 for
 the block's own; byte 5 set (`--stamp`) the HUD stamping each frame's
-number from then on (stamp-of).
+number from then on (picture stamp).
 
 ## settled
 

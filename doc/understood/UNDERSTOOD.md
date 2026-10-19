@@ -370,7 +370,7 @@ program's with its arguments and its own output directory; a step a
 person attends is announced and counted down first, and a step that
 fails is recorded and the rest run. The bench's report then reads every
 step, and a bench with a failed step or a failed report exits 1 once
-all of it is recorded. The cadence bench's report, `gauge.nu
+all of it is recorded. The cadence bench's report, `nuance.nu gauge
 bench-report`, names the machine and the QEMU each step ran on, pools
 only the runs a comparison would take as valid, and lists every other
 run apart, as a diagnostic with its reasons, a run on a diagnostic

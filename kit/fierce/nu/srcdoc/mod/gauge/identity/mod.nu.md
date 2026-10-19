@@ -6,8 +6,8 @@ the clock records' layouts this reader takes; a capture's sit at one
 
 ## AUTOMATIC
 
-a run's selection of its raster's workers (run-request): automatic when
-its identity asks none, forced when it asks a count
+a run's selection of its raster's workers (gauge identity request): automatic
+when its identity asks none, forced when it asks a count
 
 ## CORRECTABLE
 
@@ -16,7 +16,7 @@ ELF's SHA-256, each read from beside the image at the run's start
 
 ## FROM_FILE
 
-where a run's effective identity came from (identity-of), none where
+where a run's effective identity came from (gauge identity of), none where
 its report holds no identity evidence (no-evidence)
 
 ## ALONE
@@ -48,8 +48,8 @@ harts and RAM, diagnostic; -machine, the CPU, and the accelerator with
 its thread mode, and the words beside them),
 the QEMU words of the launch's own (`overrides`), the host, the
 toolchain with its as, ld, and objcopy, each the file its prefix resolves
-to with its SHA-256 (resolved-file), and the mode: the window, the
-sound, the pad, the seed, the
+to with its SHA-256 (gauge identity resolved-file), and the mode: the window,
+the sound, the pad, the seed, the
 cadence asked for, the workers and grain asked for, null for none, and
 when the measurement closes. The build's flags are null, unknown, with
 no `flags` beside the image, and its provenance the `provenance.nuon`
@@ -60,7 +60,7 @@ machine, and the words are the launch's, written in when it returns
 ## qemu-of
 
 The QEMU a launch ran, the binary it resolved, that binary's version,
-and the SHA-256 of the file it resolves to (resolved-file).
+and the SHA-256 of the file it resolves to (gauge identity resolved-file).
 
 ## resolved-file
 
@@ -170,10 +170,10 @@ unrecorded.
 ## of
 
 A run's effective identity and where it came from. The run's identity
-file, tried in each of its directories (run-dirs), when it binds to the
-run (binding-of), read with its correction applied (correction-of);
-else the identity the report embedded for the run where it is evidence
-(evidence-of), its correction provenance and its recorded
+file, tried in each of its directories (gauge identity dirs), when it binds to
+the run (binding-of), read with its correction applied (gauge identity
+corrected); else the identity the report embedded for the run where it is
+evidence (evidence-of), its correction provenance and its recorded
 `identity_sha256` with it; else the report's one identity, as a report
 from before per-run identities holds it; else, with no evidence
 (no-evidence), ALONE from `none`, a file found against no evidence
@@ -201,11 +201,11 @@ pad, and the cap.
 
 The identity a capture in `dir` was launched under. The reports it
 belongs to: gauge.nuon beside it and in its parent directory, a report
-belonging when one of its runs' directories (run-dirs) is the capture's,
-two such runs in one report stopping the read. Each belonging run read
-through identity-of, two reconciled (reconcile). With none, the
+belonging when one of its runs' directories (gauge identity dirs) is the
+capture's, two such runs in one report stopping the read. Each belonging run
+read through identity-of, two reconciled (reconcile). With none, the
 capture's own identity.nuon read with its correction applied
-(correction-of), bound to nothing, BOUND_NONE, a parse or correction
+(gauge identity corrected), bound to nothing, BOUND_NONE, a parse or correction
 failure stopping the read; with no file, the capture alone, from
 `none`. Beside the identity-of fields, the reports read.
 
@@ -238,7 +238,7 @@ both readings' passed directories, and both reports.
 
 ## reconcile
 
-Two reports' readings of one capture's run made one (read-identity). A
+Two reports' readings of one capture's run made one (gauge identity read). A
 reading from `none`, no evidence, yields to one with evidence, and of
 two such the report beside the capture is kept. Otherwise, their
 recorded `identity_sha256`, where both hold one, equal; their

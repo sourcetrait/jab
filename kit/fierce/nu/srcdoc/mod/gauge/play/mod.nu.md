@@ -28,10 +28,10 @@ recorded, or with `--host` in the window and the audio a run of the
 program has. `--qemu` words go on each launch's line after its own, and
 each run's identity then takes the machine and the words the launch
 returns, a diagnostic run. An image whose build flags contradict the
-tree asked is refused before any launch (flags-contradiction). With
+tree asked is refused before any launch (gauge identity contradiction). With
 `--cpu`, every QEMU thread's CPU is read at the times cpu-requests
 names, the readings kept whole in run.nuon and each run's windows
-(cpu-windows) in the report. Each run mints its capture nonce before its
+(gauge cpu windows) in the report. Each run mints its capture nonce before its
 sends and its identity, sends it in an I beside the R and the C, and
 launches paired with it (CaptureBundle); with `--sdl-probe` the sdl shim
 logs each run to its sdl.log under sdl,gl=on and the run is bundled as

@@ -39,7 +39,7 @@ a field leaves it.
 
 One step of a bench's run as its gauge.nuon holds it, its label, state,
 and file, and every run of it as its own identity asks it
-(run-request), never the report's summary: a play when that identity
+(gauge identity request), never the report's summary: a play when that identity
 names the host's own pad, else a batch of the route; its selection, its
 cadence, workers, and grain asked, and its period from its cap; the
 machine and the QEMU it records; its standing and reasons as a
@@ -87,6 +87,6 @@ naming the report and its kinds, since compare reads a report whole.
 
 ## report
 
-A bench's report, `nu gauge.nu bench-report <dir>` (bench-doc):
+A bench's report, `nu nuance.nu gauge bench-report <dir>` (`gauge bench doc`):
 report.nuon and report.txt written in `dir`, any there before retired,
 and the text printed.

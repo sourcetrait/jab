@@ -52,7 +52,7 @@ launch's moves the program's lines of them in order (MOVE_PREFIXES), and
 no frame dispatched to a hart outside the started or the grant; every
 launch under the picture contract, stamped from STAMP_AT, its screen
 taken while the run goes on and the E after it, each picture compared
-bound to the frame it shows (gauge.nu's screen-frame), the stamp's cells
+bound to the frame it shows (`gauge measure screen-frame`), the stamp's cells
 skipped:
 - reference: four harts, the same sends without the H frames, its screen
   at GIVE_AT, its window opening at the frame that answered the second

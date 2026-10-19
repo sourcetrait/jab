@@ -29,7 +29,7 @@ of a capture, the capture's bytes whole.
 
 ## records
 
-The records of an API capture, the clock's kinds left to gauge.nu: the
+The records of an API capture, the clock's kinds left to the gauge: the
 kind, the sector, the eye, the angles in degrees, the times, and an
 event's five fields.
 
