@@ -23,7 +23,7 @@ const DUMP_TEXELS = 12
 const DUMP_RECORDS = 342
 
 # The dump records' schema, render.inc's REPORT_SCHEMA_VERSION
-const SCHEMA = 7
+const SCHEMA = 8
 
 # The schema's byte offset in a dump record, render.inc's REPORT_SCHEMA
 const SCHEMA_AT = 60
