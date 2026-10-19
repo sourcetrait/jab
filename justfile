@@ -43,7 +43,7 @@ build *args:
 # Build with DEBUG set, then test every program, or those under a path
 [script("nu")]
 test *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' test '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' test '{{here}}' ...$args }
 
 # `just run example/bounce`, `just run fierce`; release, or `--set
 # debug`; `--api` puts the API's port on the machine; the host's gamepad
@@ -54,7 +54,7 @@ test *args:
 # Build, then run one program in its window
 [script("nu")]
 run +args:
-    def --wrapped main [...args] { ^nu '{{jab}}' run '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' run '{{here}}' ...$args }
 
 # From any shell while a program runs; when the run ends, one NUON record
 # on it to paste, per thread the steady CPU seconds a second after the
@@ -65,7 +65,7 @@ run +args:
 # Record the running Jab QEMU per thread, once a second
 [script("nu")]
 watch *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' watch ...$args '{{here}}' }
+    def --wrapped main [...args] { if ($args | get -o 0) == 'bench' { ^nu '{{nuance_bin}}' watch ...$args '{{here}}' } else { ^nu '{{do_bin}}' watch ...$args '{{here}}' } }
 
 # `just bench` lists them; `just bench kit/fierce/cadence` runs one,
 # `--only play0,cadence0_1` the steps named; nothing is deleted, and
