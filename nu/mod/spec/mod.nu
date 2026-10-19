@@ -1,4 +1,4 @@
-use ../nutype
+use (path self ../nutype)
 
 # The display's size in pixels, jab.inc's JAB_DISPLAY_WIDTH by _HEIGHT
 export const display_size = { width: 1920, height: 1080 }

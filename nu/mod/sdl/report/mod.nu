@@ -1,4 +1,4 @@
-use ../classify
+use (path self ../classify)
 
 # The report on a shim log: how the flips reached the window, or a refusal
 export def main [log: path]: nothing -> record {

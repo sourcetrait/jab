@@ -1,9 +1,9 @@
-use ../../../../../../nu/mod/present
-use ../report
-use ../stream
-use ../identity [SCHEMAS]
-use ../report [CEILING_US]
-use ../../picture [STAMP_BITS]
+use (path self ../../../../../../nu/mod/present)
+use (path self ../report)
+use (path self ../stream)
+use (path self ../identity) [SCHEMAS]
+use (path self ../report) [CEILING_US]
+use (path self ../../picture) [STAMP_BITS]
 
 # The slack on a bound frame's eye position, in metres
 const POSE_SLACK_M = 0.001

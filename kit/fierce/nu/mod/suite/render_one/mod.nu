@@ -1,14 +1,14 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../frame
-use ../../../map.nu
-use ../../picture
-use ../../../../test/pose.nu
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../frame)
+use (path self ../../../map.nu)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../tree)
 use std/assert
-use ../../console [CONSOLE_P RECEIPT_NONCE]
-use ../../frame [CRACKS FRAME FRAMES_LINE LOAD SOUNDS_LINE]
-use ../../tree [ALPHA_CASES EYE_HEIGHT SPRITE_MATERIAL STRADDLE_MATERIAL]
+use (path self ../../console) [CONSOLE_P RECEIPT_NONCE]
+use (path self ../../frame) [CRACKS FRAME FRAMES_LINE LOAD SOUNDS_LINE]
+use (path self ../../tree) [ALPHA_CASES EYE_HEIGHT SPRITE_MATERIAL STRADDLE_MATERIAL]
 
 # The sprite copy's map name, the halves sprite in its hall
 const SPRITE_MAP = "render_1_sprite"

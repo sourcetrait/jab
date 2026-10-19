@@ -1,6 +1,6 @@
-use ../spec
-use ../word
-use ../workspace
+use (path self ../spec)
+use (path self ../word)
+use (path self ../workspace)
 
 # The code's offset in an image, its second page
 const image_code = 4096

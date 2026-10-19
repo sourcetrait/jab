@@ -1,14 +1,14 @@
-use ../bound
-use ../build
-use ../chardev
-use ../nonce
-use ../process
-use ../program
-use ../sdl/bundle
-use ../sdl/report
-use ../target
-use ../tool
-use ../workspace
+use (path self ../bound)
+use (path self ../build)
+use (path self ../chardev)
+use (path self ../nonce)
+use (path self ../process)
+use (path self ../program)
+use (path self ../sdl/bundle)
+use (path self ../sdl/report)
+use (path self ../target)
+use (path self ../tool)
+use (path self ../workspace)
 
 # A program probed under a window by its kind, `sdl` the one probe
 def probe-kind [dir: path, kind: string, names: list<string>, seconds: int, --api, --send: string = "", --trace]: nothing -> nothing {

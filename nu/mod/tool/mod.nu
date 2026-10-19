@@ -1,5 +1,5 @@
-use ../host
-use ../target
+use (path self ../host)
+use (path self ../target)
 
 # The jabdisco binary, built as a package of the tool workspace
 export def disco-build [ws: path]: nothing -> string {

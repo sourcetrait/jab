@@ -1,7 +1,7 @@
-use ../nonce
-use ../spec
-use ../target
-use ../tool
+use (path self ../nonce)
+use (path self ../spec)
+use (path self ../target)
+use (path self ../tool)
 
 # A machine's virtio-serial ports, debug, API, and pad, each its file or pipe
 export def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path, nonce: int]: nothing -> record<args: list<string>, debug_log: string, api: oneof<record<name: string, inward: string, outward: string>, nothing>, pad: oneof<record<name: string, inward: string, outward: string>, nothing>> {

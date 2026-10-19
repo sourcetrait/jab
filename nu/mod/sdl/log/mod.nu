@@ -1,4 +1,4 @@
-use ../refusal
+use (path self ../refusal)
 
 # Every line the sdl shim writes, its stamp first
 const sdl_line = (

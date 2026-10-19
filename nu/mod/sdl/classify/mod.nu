@@ -1,5 +1,5 @@
-use ../refusal
-use ../symbols
+use (path self ../refusal)
+use (path self ../symbols)
 
 # How a make_current reached the window by its frames: switch, upload, console
 def sdl-decide [frames: list, device_in: string, modules: list<int>, executable: oneof<record, nothing>]: nothing -> record<kind: string, class: int, fault: string, at: oneof<record, nothing>> {

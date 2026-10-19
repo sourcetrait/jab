@@ -1,5 +1,5 @@
-use ../../../../../../nu/mod/build
-use ../../../../../../nu/mod/walk
+use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/walk)
 
 # The clock records' schemas this reader takes
 export const SCHEMAS = [1 2 3 4 5 6 7]

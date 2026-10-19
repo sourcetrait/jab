@@ -1,10 +1,10 @@
-use ../../../../../../nu/mod/target
-use ../compare
-use ../identity
-use ../measure
-use ../report
-use ../measure [CAP FLIP_EARLY FLIP_PRESENTED]
-use ../report [CEILING_US]
+use (path self ../../../../../../nu/mod/target)
+use (path self ../compare)
+use (path self ../identity)
+use (path self ../measure)
+use (path self ../report)
+use (path self ../measure) [CAP FLIP_EARLY FLIP_PRESENTED]
+use (path self ../report) [CEILING_US]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

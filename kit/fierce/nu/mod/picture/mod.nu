@@ -1,7 +1,7 @@
-use ../../../../../nu/mod/capture
-use ../../map.nu
+use (path self ../../../../../nu/mod/capture)
+use (path self ../../map.nu)
 use std/assert
-use ../frame [RECORD]
+use (path self ../frame) [RECORD]
 
 # The clock's record kinds, which records leaves to the gauge's stream
 const CLOCK_KINDS = [7 8 9 10 12 13 14 15 18]

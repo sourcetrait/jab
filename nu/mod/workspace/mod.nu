@@ -1,5 +1,5 @@
-use ../target
-use ../walk
+use (path self ../target)
+use (path self ../walk)
 
 # The nearest parent of `dir` holding workspace.jab.toml, or null
 export def workspace-dir [dir: path]: nothing -> oneof<string, nothing> {

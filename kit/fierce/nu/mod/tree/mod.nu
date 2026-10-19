@@ -1,7 +1,7 @@
-use ../../../../../nu/mod/target
-use ../../map.nu
-use ../../png.nu
-use ../../../test/tiles.nu [builder-texel]
+use (path self ../../../../../nu/mod/target)
+use (path self ../../map.nu)
+use (path self ../../png.nu)
+use (path self ../../../test/tiles.nu) [builder-texel]
 use std/assert
 
 # The halves sprite's material, the test's own texture

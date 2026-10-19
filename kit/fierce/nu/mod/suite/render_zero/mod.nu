@@ -1,14 +1,14 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../frame
-use ../../../map.nu
-use ../../picture
-use ../../../../test/pose.nu
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../frame)
+use (path self ../../../map.nu)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../tree)
 use std/assert
-use ../../console [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT CONSOLE_P]
-use ../../frame [CRACKS FRAME FRAMES_LINE LOAD SOUNDS_LINE]
-use ../../tree [EYE_HEIGHT]
+use (path self ../../console) [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT CONSOLE_P]
+use (path self ../../frame) [CRACKS FRAME FRAMES_LINE LOAD SOUNDS_LINE]
+use (path self ../../tree) [EYE_HEIGHT]
 
 # When the walk's E closes its measurement, a second before the capture
 const CLOCK_END_AT = 13500ms

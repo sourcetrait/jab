@@ -1,4 +1,4 @@
-use ../log
+use (path self ../log)
 
 # The console's rectangle update in QEMU's two families, 11.1.2's then 10.2.2's
 export const console_updates = [

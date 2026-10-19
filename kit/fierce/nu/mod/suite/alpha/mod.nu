@@ -1,12 +1,12 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../../map.nu
-use ../../picture
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../../map.nu)
+use (path self ../../picture)
+use (path self ../../tree)
 use std/assert
-use ../../frame [CRACKS FRAME LOAD]
-use ../../picture [FIXTURE_CROSSHAIR]
-use ../../tree [ALPHA_CASES ALPHA_FIXTURE CENTRE_FIXTURE EYE_HEIGHT FIXTURE_BACKDROP FIXTURE_GRID FIXTURE_KINDS FIXTURE_MAP FIXTURE_POSES]
+use (path self ../../frame) [CRACKS FRAME LOAD]
+use (path self ../../picture) [FIXTURE_CROSSHAIR]
+use (path self ../../tree) [ALPHA_CASES ALPHA_FIXTURE CENTRE_FIXTURE EYE_HEIGHT FIXTURE_BACKDROP FIXTURE_GRID FIXTURE_KINDS FIXTURE_MAP FIXTURE_POSES]
 
 # The engine's alpha line form: coverage by level, scale by coarser level
 const ALPHA_LINE = "fps: alpha {name}: coverage {coverage} of 10000, scale {scale} of 65536"

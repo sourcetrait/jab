@@ -1,17 +1,17 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../../map.nu
-use ../../gauge/measure
-use ../../picture
-use ../../../../test/pose.nu
-use ../../gauge/stream
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../../map.nu)
+use (path self ../../gauge/measure)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../gauge/stream)
+use (path self ../../tree)
 use std/assert
-use ../../console [PLACE_AT SETTLE_AT SPAWN_POSE]
-use ../../frame [CRACKS FRAME]
-use ../../gauge/stream [CLOCK_SCHEMA]
-use ../../picture [FIXTURE_CROSSHAIR FIXTURE_INSET STAMP_BITS STAMP_CELL]
-use ../../tree [BUILDER_FIXTURE EYE_HEIGHT FIXTURE_MAP HANDOFF_FIXTURE]
+use (path self ../../console) [PLACE_AT SETTLE_AT SPAWN_POSE]
+use (path self ../../frame) [CRACKS FRAME]
+use (path self ../../gauge/stream) [CLOCK_SCHEMA]
+use (path self ../../picture) [FIXTURE_CROSSHAIR FIXTURE_INSET STAMP_BITS STAMP_CELL]
+use (path self ../../tree) [BUILDER_FIXTURE EYE_HEIGHT FIXTURE_MAP HANDOFF_FIXTURE]
 
 # When the builder's first lighting goes in
 const BUILDER_AT = 1400ms

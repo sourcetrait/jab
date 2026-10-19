@@ -1,9 +1,9 @@
-use ../demand
-use ../stamp
-use ../target
-use ../toolchain
-use ../walk
-use ../workspace
+use (path self ../demand)
+use (path self ../stamp)
+use (path self ../target)
+use (path self ../toolchain)
+use (path self ../walk)
+use (path self ../workspace)
 
 # The assembler's profile for a program, which runs in U-mode
 const march_program = "-march=rva23u64"

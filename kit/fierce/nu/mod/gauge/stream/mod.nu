@@ -1,6 +1,6 @@
-use ../../../map.nu
-use ../../console [CONSOLE_P]
-use ../../frame [RECORD]
+use (path self ../../../map.nu)
+use (path self ../../console) [CONSOLE_P]
+use (path self ../../frame) [RECORD]
 
 # A state record's kind
 const KIND_STATE = 1

@@ -1,14 +1,14 @@
-use ../audio
-use ../build
-use ../chardev
-use ../demand
-use ../disco
-use ../disk
-use ../launch
-use ../machine
-use ../pad
-use ../tool
-use ../workspace
+use (path self ../audio)
+use (path self ../build)
+use (path self ../chardev)
+use (path self ../demand)
+use (path self ../disco)
+use (path self ../disk)
+use (path self ../launch)
+use (path self ../machine)
+use (path self ../pad)
+use (path self ../tool)
+use (path self ../workspace)
 
 # The virtio-mmio transports virt's map holds, a line's hard ceiling
 const transport_limit = 8

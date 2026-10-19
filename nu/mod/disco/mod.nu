@@ -1,4 +1,4 @@
-use ../tool
+use (path self ../tool)
 
 # Whether a run needs jabdisco's record, no override deciding pad or sound
 export def discovery-wanted [pad: bool, sound: bool]: nothing -> bool {

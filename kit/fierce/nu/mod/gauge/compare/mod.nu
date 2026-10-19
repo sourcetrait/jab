@@ -1,12 +1,12 @@
-use ../../../../../../nu/mod/build
-use ../../../../../../nu/mod/target
-use ../identity
-use ../measure
-use ../report
-use ../stream
-use ../identity [FROM_FILE]
-use ../measure [CADENCES CADENCE_AFTER_FLIP]
-use ../stream [UNKNOWN_PARTS]
+use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/target)
+use (path self ../identity)
+use (path self ../measure)
+use (path self ../report)
+use (path self ../stream)
+use (path self ../identity) [FROM_FILE]
+use (path self ../measure) [CADENCES CADENCE_AFTER_FLIP]
+use (path self ../stream) [UNKNOWN_PARTS]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

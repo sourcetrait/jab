@@ -1,9 +1,9 @@
-use ../../identity
-use ../../nonce
-use ../classify
-use ../log
-use ../symbols
-use ../../walk
+use (path self ../../identity)
+use (path self ../../nonce)
+use (path self ../classify)
+use (path self ../log)
+use (path self ../symbols)
+use (path self ../../walk)
 
 # A probed run's capture bundled with its tables and manifest, on its host
 export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []] {

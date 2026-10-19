@@ -1,17 +1,17 @@
-use ../../../../../../nu/mod/build
-use ../../../../../../nu/mod/launch
-use ../../../../../../nu/mod/machine
-use ../../../../../../nu/mod/nonce
-use ../../../../../../nu/mod/sdl/bundle
-use ../../console
-use ../cpu
-use ../identity
-use ../measure
-use ../../../../test/pose.nu
-use ../report
-use ../../console [SEED_AT]
-use ../../frame [GFX_SLOTS]
-use ../measure [CADENCES CAP SCREEN_ROWS]
+use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../../../../../nu/mod/machine)
+use (path self ../../../../../../nu/mod/nonce)
+use (path self ../../../../../../nu/mod/sdl/bundle)
+use (path self ../../console)
+use (path self ../cpu)
+use (path self ../identity)
+use (path self ../measure)
+use (path self ../../../../test/pose.nu)
+use (path self ../report)
+use (path self ../../console) [SEED_AT]
+use (path self ../../frame) [GFX_SLOTS]
+use (path self ../measure) [CADENCES CAP SCREEN_ROWS]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

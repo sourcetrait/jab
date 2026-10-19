@@ -1,4 +1,4 @@
-use ../workspace
+use (path self ../workspace)
 
 # Where a built image's program lives: its `home` file, else read from its path
 export def home [image: path]: nothing -> string {

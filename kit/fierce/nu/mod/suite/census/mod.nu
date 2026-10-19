@@ -1,10 +1,10 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../../../test/pose.nu
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../../../test/pose.nu)
+use (path self ../../tree)
 use std/assert
-use ../../console [GRAIN_DEFAULT SPAWN_POSE]
-use ../../frame [GFX_SLOTS]
+use (path self ../../console) [GRAIN_DEFAULT SPAWN_POSE]
+use (path self ../../frame) [GFX_SLOTS]
 
 # The harts the census fixtures run on
 const CENSUS_HARTS = 8

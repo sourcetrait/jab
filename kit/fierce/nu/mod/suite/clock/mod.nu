@@ -1,19 +1,19 @@
-use ../../../../../../nu/mod/build
-use ../../../../../../nu/mod/launch
-use ../../../../../../nu/mod/present
-use ../../console
-use ../../frame
-use ../../../map.nu
-use ../../gauge/measure
-use ../../picture
-use ../../../../test/pose.nu
-use ../../gauge/stream
-use ../../tree
+use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../../../../../nu/mod/present)
+use (path self ../../console)
+use (path self ../../frame)
+use (path self ../../../map.nu)
+use (path self ../../gauge/measure)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../gauge/stream)
+use (path self ../../tree)
 use std/assert
-use ../../console [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT GRAIN_DEFAULT RECEIPT_NONCE]
-use ../../frame [WORKERS_STARTED]
-use ../../gauge/measure [CADENCES]
-use ../../gauge/stream [CLOCK_SCHEMA]
+use (path self ../../console) [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT GRAIN_DEFAULT RECEIPT_NONCE]
+use (path self ../../frame) [WORKERS_STARTED]
+use (path self ../../gauge/measure) [CADENCES]
+use (path self ../../gauge/stream) [CLOCK_SCHEMA]
 
 # The walk's bound in microseconds on a frame's next start less its parts
 const CLOCK_RESIDUAL = 4

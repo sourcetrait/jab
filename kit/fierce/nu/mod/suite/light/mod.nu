@@ -1,11 +1,11 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../picture
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../picture)
+use (path self ../../tree)
 use std/assert
-use ../../frame [CRACKS FRAME]
-use ../../picture [FIXTURE_CROSSHAIR]
-use ../../tree [FIXTURE_POSES]
+use (path self ../../frame) [CRACKS FRAME]
+use (path self ../../picture) [FIXTURE_CROSSHAIR]
+use (path self ../../tree) [FIXTURE_POSES]
 
 # Under room light, the most a channel may differ tiled against lit, of 255
 const REAL_LIGHT_BOUND = 10

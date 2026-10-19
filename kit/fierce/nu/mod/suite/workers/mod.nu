@@ -1,15 +1,15 @@
-use ../../../../../../nu/mod/launch
-use ../../console
-use ../../frame
-use ../../gauge/measure
-use ../../picture
-use ../../../../test/pose.nu
-use ../../gauge/stream
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../console)
+use (path self ../../frame)
+use (path self ../../gauge/measure)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../gauge/stream)
 use std/assert
-use ../../console [CONSOLE_P GRAIN_DEFAULT SPAWN_POSE]
-use ../../frame [FRAME GFX_SLOTS WORKERS_STARTED]
-use ../../gauge/measure [SCREEN_ROWS]
-use ../../gauge/stream [CLOCK_SCHEMA]
+use (path self ../../console) [CONSOLE_P GRAIN_DEFAULT SPAWN_POSE]
+use (path self ../../frame) [FRAME GFX_SLOTS WORKERS_STARTED]
+use (path self ../../gauge/measure) [SCREEN_ROWS]
+use (path self ../../gauge/stream) [CLOCK_SCHEMA]
 
 # The H frame's command byte as a console record carries it
 const CONSOLE_H = 72

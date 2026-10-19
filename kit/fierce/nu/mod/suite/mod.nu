@@ -1,19 +1,19 @@
-use ../../../../../nu/mod/build
-use ./alpha
-use ./census
-use ./clock
-use ./growth
-use ./light
-use ./load
-use ./render_one
-use ./render_zero
-use ./sound
-use ./tiles
-use ./workers
+use (path self ../../../../../nu/mod/build)
+use (path self ./alpha)
+use (path self ./census)
+use (path self ./clock)
+use (path self ./growth)
+use (path self ./light)
+use (path self ./load)
+use (path self ./render_one)
+use (path self ./render_zero)
+use (path self ./sound)
+use (path self ./tiles)
+use (path self ./workers)
 use std/assert
-use ./light [VIEW_YAWS]
-use ./render_one [SPRITE_LEFT SPRITE_RIGHT]
-use ./render_zero [FIRED]
+use (path self ./light) [VIEW_YAWS]
+use (path self ./render_one) [SPRITE_LEFT SPRITE_RIGHT]
+use (path self ./render_zero) [FIRED]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../..

@@ -72,9 +72,13 @@ module's data and `type/<concept>/<Model>.nutype` its shape; and
 `<file>.md` beside its path. A bin `use`s the modules it fronts and holds
 no logic, each `def "main <verb>"` one call of one module function, its
 result returned as the module returns it. A module imports another by
-its path relative to the importing file, exports its API typed in and
-out, keeps its helpers unexported, and names no definition after a
-builtin. A definition carries one summary line of 80 characters at most
+its path relative to the importing file, named through `path self`, `use
+(path self ../target)`, so nushell, which keeps one module per path as
+written, parses each module file once however many modules import it; a
+bin or a script imports by the plain relative path, since its top level
+runs after its parse, where `path self` refuses. A module exports its API
+typed in and out, keeps its helpers unexported, and names no definition
+after a builtin. A definition carries one summary line of 80 characters at most
 in the source, its usage and reasoning in the mirror. The root's `do`
 links to `nu/bin/do.nu` (`nu nu/bin/do.nu` on Windows, where a symlink
 checks out as a text file). Examples and test programs keep their

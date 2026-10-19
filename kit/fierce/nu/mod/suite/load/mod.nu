@@ -1,9 +1,9 @@
-use ../../../../../../nu/mod/build
-use ../../../../../../nu/mod/capture
-use ../../../../../../nu/mod/launch
-use ../../tree
+use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/capture)
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../tree)
 use std/assert
-use ../../tree [GROW_MAP]
+use (path self ../../tree) [GROW_MAP]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

@@ -1,9 +1,9 @@
-use ../host
-use ../image
-use ../process
-use ../spec
-use ../target
-use ../spec [harts_allowed]
+use (path self ../host)
+use (path self ../image)
+use (path self ../process)
+use (path self ../spec)
+use (path self ../target)
+use (path self ../spec) [harts_allowed]
 
 # A custom machine's RAM in GiB, the 4 every machine had before named specs
 const custom_ram_gib = 4

@@ -1,9 +1,9 @@
-use ../cpu
-use ../identity
-use ../measure
-use ../report
-use ../identity [FROM_EMBEDDED FROM_FILE]
-use ../measure [CAP]
+use (path self ../cpu)
+use (path self ../identity)
+use (path self ../measure)
+use (path self ../report)
+use (path self ../identity) [FROM_EMBEDDED FROM_FILE]
+use (path self ../measure) [CAP]
 
 # A run's capture, its api.out, read and reported by read-capture
 export def main [

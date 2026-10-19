@@ -1,5 +1,5 @@
-use ../../../../../../nu/mod/walk
-use ../../picture
+use (path self ../../../../../../nu/mod/walk)
+use (path self ../../picture)
 use std/assert
 
 # The peak sample under which a recording is silence, of 32767

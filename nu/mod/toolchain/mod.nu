@@ -1,4 +1,4 @@
-use ../host
+use (path self ../host)
 
 # The riscv64 binutils prefixes: the official triple, then the packaged ones
 const triples = [

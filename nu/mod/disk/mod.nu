@@ -1,6 +1,6 @@
-use ../stamp
-use ../target
-use ../walk
+use (path self ../stamp)
+use (path self ../target)
+use (path self ../walk)
 
 # QEMU's arguments for raw images as PCI virtio-blk disks, in the order given
 export def disks-args [disks: table<id: string, file: string, serial: string, readonly: bool>]: nothing -> list<string> {

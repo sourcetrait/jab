@@ -1,7 +1,7 @@
-use ../bench
-use ../process
-use ../target
-use ../workspace
+use (path self ../bench)
+use (path self ../process)
+use (path self ../target)
+use (path self ../workspace)
 
 # Where a watch records: watch.nuonl in the workspace's target
 def watch-file [ws: path]: nothing -> string {

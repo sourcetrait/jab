@@ -1,5 +1,5 @@
-use ../../../../../../nu/mod/target
-use ../identity
+use (path self ../../../../../../nu/mod/target)
+use (path self ../identity)
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

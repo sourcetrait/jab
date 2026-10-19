@@ -1,18 +1,18 @@
-use ../audio
-use ../bound
-use ../build
-use ../chardev
-use ../demand
-use ../disco
-use ../disk
-use ../image
-use ../machine
-use ../nonce
-use ../pad
-use ../process
-use ../target
-use ../tool
-use ../machine [rng_device]
+use (path self ../audio)
+use (path self ../bound)
+use (path self ../build)
+use (path self ../chardev)
+use (path self ../demand)
+use (path self ../disco)
+use (path self ../disk)
+use (path self ../image)
+use (path self ../machine)
+use (path self ../nonce)
+use (path self ../pad)
+use (path self ../process)
+use (path self ../target)
+use (path self ../tool)
+use (path self ../machine) [rng_device]
 
 # The program window's base, past the kernel's and the framebuffer's MiB
 export const program_base = "0x80a00000"

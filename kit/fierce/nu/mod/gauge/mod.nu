@@ -1,8 +1,8 @@
-export use ./bench
-export use ./compare
-export use ./identity
-export use ./measure
-export use ./play
-export use ./read
-export use ./report
-export use ./stream
+export use (path self ./bench)
+export use (path self ./compare)
+export use (path self ./identity)
+export use (path self ./measure)
+export use (path self ./play)
+export use (path self ./read)
+export use (path self ./report)
+export use (path self ./stream)

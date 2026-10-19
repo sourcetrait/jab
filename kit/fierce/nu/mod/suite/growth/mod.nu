@@ -1,10 +1,10 @@
-use ../../../../../../nu/mod/launch
-use ../../picture
-use ../../../../test/pose.nu
-use ../../tree
+use (path self ../../../../../../nu/mod/launch)
+use (path self ../../picture)
+use (path self ../../../../test/pose.nu)
+use (path self ../../tree)
 use std/assert
-use ../../frame [CRACKS FRAME LOAD]
-use ../../tree [FIXTURE_BACKDROP GROW_FAR GROW_MAP]
+use (path self ../../frame) [CRACKS FRAME LOAD]
+use (path self ../../tree) [FIXTURE_BACKDROP GROW_FAR GROW_MAP]
 
 # The growth pose in the camera's room C
 const GROW_POSE = { name: "grow", x: 3.7, y: 0.4, z: 1.6, yaw: 72, pitch: 0 }

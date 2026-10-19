@@ -1,4 +1,4 @@
-use ../../present
+use (path self ../../present)
 
 # The pairing's limits, printed with every reading
 const pair_limits = "the pairing assumes the run binding, which ties the guest's records to the log, and that the log records every upload once and that every flush the device accepted makes one upload; under those assumptions it is exact, and the oracle's flush trace rechecks them run by run on the box. The residual is a consistency check: it proves no absence of a loss and an addition that compensate inside the window, and it catches a uniform shift only where the paired intervals are irregular past half a period. The fit gives intervals and jitter, and no absolute guest-to-SDL latency."

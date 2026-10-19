@@ -1,6 +1,6 @@
-use ../chardev
-use ../tool
-use ../word
+use (path self ../chardev)
+use (path self ../tool)
+use (path self ../word)
 
 # The gamepad a machine carries when asked: the shim's fifo on Linux, or the port
 export def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>, root: path]: nothing -> record<args: list<string>, env: record, fifo: string, port: bool, header: binary> {

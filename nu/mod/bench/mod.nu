@@ -1,9 +1,9 @@
-use ../build
-use ../host
-use ../process
-use ../target
-use ../walk
-use ../workspace
+use (path self ../build)
+use (path self ../host)
+use (path self ../process)
+use (path self ../target)
+use (path self ../walk)
+use (path self ../workspace)
 
 # The benches of a workspace's programs, `<program>/<bench>` each
 def benches-of [ws: path]: nothing -> list<string> {
