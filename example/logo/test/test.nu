@@ -7,6 +7,7 @@
 # the kernel's decode and its blend get an exact oracle on the real
 # GIMP file.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const width = 480
@@ -27,12 +28,12 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
     assert equal [$screen.width $screen.height] [1920 1080] "a 1080p frame"
-    assert equal (jab pixel $screen 0 0) "000000" "black at the top left"
-    assert equal (jab pixel $screen 1919 1079) "000000" "black at the bottom right"
-    assert equal (jab pixel $screen ($x - 1) ($y + 100)) "000000" "black just left of the logo"
-    assert equal (jab pixel $screen ($x + $width) ($y + 100)) "000000" "black just right of it"
+    assert equal (capture pixel $screen 0 0) "000000" "black at the top left"
+    assert equal (capture pixel $screen 1919 1079) "000000" "black at the bottom right"
+    assert equal (capture pixel $screen ($x - 1) ($y + 100)) "000000" "black just left of the logo"
+    assert equal (capture pixel $screen ($x + $width) ($y + 100)) "000000" "black just right of it"
 
     # the drawn rectangle, row by row, against the oracle
     let row_bytes = ($screen.width * 3)
@@ -51,7 +52,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
         let col = (0..<$width | where {|c|
             (($rows | get $r) | bytes at ($c * 3)..<($c * 3 + 3)) != ($want_row | bytes at ($c * 3)..<($c * 3 + 3))
         } | first)
-        assert equal (jab pixel $screen ($x + $col) ($y + $r)) ($want_row | bytes at ($col * 3)..<($col * 3 + 3) | encode hex | str lowercase) $"($bad | length) of ($height) rows differ; the first differing pixel is at ($col), ($r) of the logo"
+        assert equal (capture pixel $screen ($x + $col) ($y + $r)) ($want_row | bytes at ($col * 3)..<($col * 3 + 3) | encode hex | str lowercase) $"($bad | length) of ($height) rows differ; the first differing pixel is at ($col), ($r) of the logo"
     }
     print $"logo: ($width * $height) pixels of the GIMP file held against the host's decode; QEMU used ($run.cpu_seconds) CPU seconds over ($run.wall_seconds | math round -p 2) seconds"
     print "logo: ok"

@@ -13,6 +13,7 @@
 # window, its dt values summed, plus 60 s. A run that does not end with
 # status 0 exits 1 once its records are written, its status named.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/nonce
 
 const cadence_symbols = [CADENCE TIMING REPLAY PREPARE CADENCE_TEST]
 const nonce_at = 200ms
@@ -49,7 +50,7 @@ def main [
     let machine = (jab machine-for $ws $spec 0)
     let stream = (if $replaying { replay-of $replay } else { null })
     let seconds = (if $replaying { $stream.bound } else { $bound })
-    let nonce = (jab launch-nonce 0 true)
+    let nonce = (nonce mint 0 true)
     let sends = ([{ at: $nonce_at, bytes: (jab nonce-frame $nonce) }]
         | append (if $replaying { [{ at: $nonce_at, bytes: $stream.bytes }] } else { [] }))
     let set = (if "DEBUG" in $symbols { "debug" } else { "" })
@@ -76,7 +77,7 @@ def main [
     $id | upsert machine $ran.machine | upsert qemu_binary $ran.qemu_binary | merge $ran.capture | to nuon --indent 2 | save --raw -f $id_file
     $ran | reject api | insert api_bytes ($ran.api | bytes length) | to nuon --indent 2 | save --raw -f ($out | path join "run.nuon")
     let named = (if $label == "" { "" } else { $" ($label)" })
-    print $"walk cadence($named): status ($ran.status), ($ran.api | bytes length) bytes over the API in ($ran.wall_seconds | math round -p 1) s, nonce (jab nonce-hex $nonce), on ($machine.spec.name)"
+    print $"walk cadence($named): status ($ran.status), ($ran.api | bytes length) bytes over the API in ($ran.wall_seconds | math round -p 1) s, nonce (nonce hex $nonce), on ($machine.spec.name)"
     if $ran.status != 0 { print $"walk cadence($named): the run ended with status ($ran.status), not 0"; exit 1 }
 }
 

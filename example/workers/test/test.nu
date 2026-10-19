@@ -23,6 +23,7 @@
 #   at the left in the deal's pattern and nowhere else, the caption's
 #   text inside its black box, the palette on the rest.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use ./scaling.nu
 use std/assert
 
@@ -87,7 +88,7 @@ def hart-cpu [threads: list<record<name: string, delta: float, rate: float>>]: n
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let elf = ($image | path dirname | path join "workers.elf")
-    let hot = (jab hot $elf ["mandel_row"] | first)
+    let hot = (capture hot $elf ["mandel_row"] | first)
     assert $hot.paged $"Hot: mandel_row within one page of code: ($hot)"
     assert equal $hot.ecalls 0 $"Hot: no kernel call in mandel_row: ($hot)"
 
@@ -146,7 +147,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert ($idle <= $IDLE_RATE) $"Animation: hart ($h)'s worker, asleep in its await while one works, ran at ($idle) of a core over the held ($run.threads_span) s, past ($IDLE_RATE)"
     }
     assert ($run.screen != "") "Animation: a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
     assert equal [$screen.width $screen.height] [$WIDTH $HEIGHT] "Animation: a 1080p frame"
     let lines = ($screen.pixels | chunks ($WIDTH * 3))
     let bar = ($lines | each {|r|
@@ -162,15 +163,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let misdealt = ($harts | enumerate | where {|e| $e.item != ((($e.index // $BAND_ROWS) mod $w) + 1) } | get index)
     assert ($misdealt | is-empty) $"Animation: the bars in the deal's pattern for ($w) workers: rows ($misdealt | first 8)"
     for c in ($BARS | columns) {
-        let ink = (jab ink $screen $c)
+        let ink = (capture ink $screen $c)
         assert ($ink.count == 0 or $ink.right < $BAR_WIDTH) $"Animation: ($c) in the bars alone: ($ink)"
     }
-    let text = (jab ink $screen "ffffff")
+    let text = (capture ink $screen "ffffff")
     assert ($text.count > 0) "Animation: the caption's text drawn"
     assert ($text.left > $BOX.left and $text.top > $BOX.top and $text.right < $BOX.right and $text.bottom < $BOX.bottom) $"Animation: the caption's text inside its box: ($text)"
-    assert equal (jab pixel $screen ($BOX.left + 1) ($BOX.top + 1)) "000000" "Animation: the caption's box black at its top left"
-    assert equal (jab pixel $screen $BOX.right $BOX.bottom) "000000" "Animation: the caption's box black at its bottom right"
-    let seen = ($PALETTE | each {|c| jab ink $screen ($c | format number | get lowerhex | str replace "0x" "" | fill --alignment right --character "0" --width 6) | get count } | where {|n| $n > 0 } | length)
+    assert equal (capture pixel $screen ($BOX.left + 1) ($BOX.top + 1)) "000000" "Animation: the caption's box black at its top left"
+    assert equal (capture pixel $screen $BOX.right $BOX.bottom) "000000" "Animation: the caption's box black at its bottom right"
+    let seen = ($PALETTE | each {|c| capture ink $screen ($c | format number | get lowerhex | str replace "0x" "" | fill --alignment right --character "0" --width 6) | get count } | where {|n| $n > 0 } | length)
     assert ($seen >= $PALETTE_SEEN) $"Animation: the palette on the set's outside, ($PALETTE_SEEN) colours at least of 16: ($seen)"
 
     print $"workers: proof hash ($hash); bench ($frames) frames in ($doc.ms) ms with three, the workers' harts at ($doc.worker_cpu | math round --precision 2) cores over the held ($doc.span | math round --precision 2) s, bands at once ($doc.overlap.concurrency | math round --precision 2); animation ($w) workers at nine seconds, hart 1 at ($working | math round --precision 2) of a core"

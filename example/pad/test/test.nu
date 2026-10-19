@@ -18,6 +18,7 @@
 # instead, wasd's own test, and neither the stop nor the colours are
 # asked for.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 # The API's records, as example/pad/src/main.S lays them out
@@ -162,14 +163,14 @@ def exercise [route: string, kernel: path, image: path, out: path, set: string] 
     assert equal ($yours | select x y) ($theirs | select x y) "each meeting is reported for both spheres at the same point"
 
     # the screen agrees
-    let screen = (jab screen $run.screen)
-    let player = (jab ink $screen $player_color)
+    let screen = (capture screen $run.screen)
+    let player = (capture ink $screen $player_color)
     assert ($player.count > 24900 and $player.count < 26000) $"your sphere, a disc of radius 90 in ($player_color), has about 25447 pixels, not ($player.count)"
     if $played {
-        assert equal (jab ink $screen "ff5533" | get count) 0 "and none of its first colour is left"
+        assert equal (capture ink $screen "ff5533" | get count) 0 "and none of its first colour is left"
         # East's name at the top of the screen, bold off-white at the
         # label's scale, four cells wide at most, centred in the strip
-        let label = (jab ink $screen $LABEL_COLOR)
+        let label = (capture ink $screen $LABEL_COLOR)
         assert ($label.count > 200) $"the button's name is on the screen: ($label.count) off-white pixels"
         assert ($label.top >= $LABEL_Y and $label.bottom < $LABEL_Y + $LABEL_HEIGHT) $"inside the label's strip: ($label)"
         assert (($label.right - $label.left + 1) <= 4 * $LABEL_CELL + 1) $"four cells wide at most: ($label)"
@@ -184,7 +185,7 @@ def exercise [route: string, kernel: path, image: path, out: path, set: string] 
     } else {
         assert ($centre_x > 90 and $centre_x < 1830 and $centre_y > 90 and $centre_y < 990) $"after a meeting, your sphere is still whole on the screen: ($centre_x),($centre_y)"
     }
-    let disc = (jab ink $screen "8f00ff")
+    let disc = (capture ink $screen "8f00ff")
     assert ($disc.count > 24900 and $disc.count < 26000) $"the other sphere is whole on the screen, since the two never overlap: ($disc.count) pixels"
     print $"pad: ($reports | length) records, yours at ($centre_x),($centre_y) in ($player_color) peaking at ($peak), ($wall_hits | length) wall hits, ($yours | length) meetings; QEMU used ($run.cpu_seconds) CPU seconds over ($run.wall_seconds | math round -p 2) seconds"
     assert ($run.cpu_seconds < ($run.wall_seconds * 0.5)) "the hart halts between frames"

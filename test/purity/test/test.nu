@@ -12,6 +12,9 @@
 # fence as a full barrier, so no run could show one missing; this check
 # is what keeps them.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use std/assert
 
 # What only a debug kernel says
@@ -162,7 +165,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let tool = ($ws | path join "sdk" "nu" "jab.nu")
 
     # the device ordering, read off the sources before anything is built
-    let sources = (jab paths-of ($kernel_dir | path join "src" "*.S") | sort)
+    let sources = (walk paths ($kernel_dir | path join "src" "*.S") | sort)
     let sites = ($sources | each {|f| order-sites $f } | flatten)
     let doorbells = ($sites | where kind == "doorbell" | length)
     let enabling = ($sites | where kind == "enabling" | length)
@@ -173,18 +176,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     } | flatten | where {|m| $m != "" })
     assert equal $faults [] $"OrderCheck: every doorbell and enabling write after its fence: ($faults | str join '; ')"
     ^nu $tool build --kernel $kernel_dir
-    let release = (jab target-root $ws | path join "release" "kernel" "jab.elf")
+    let release = (target root $ws | path join "release" "kernel" "jab.elf")
     assert ($release | path exists) $"the release kernel was built at ($release)"
 
     # the debug kernel keeps every fault line
-    let debug_found = (jab strings $kernel "jab: ")
+    let debug_found = (capture strings $kernel "jab: ")
     for text in $fault_text {
         assert ($debug_found | any {|s| $s | str starts-with $text }) $"the debug kernel carries the fault line '($text)'"
     }
 
     # no debug line in the release kernel, where every jab: line is a
     # fault line
-    let release_found = (jab strings $release "jab: ")
+    let release_found = (capture strings $release "jab: ")
     for text in $debug_text {
         assert (not ($release_found | any {|s| $s | str starts-with $text })) $"the release kernel carries no '($text)'"
     }

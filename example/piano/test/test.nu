@@ -5,6 +5,7 @@
 # soon after the key lifts; the twelve white keys stand in their row
 # on the screen with their labels cut out of them in black.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const RATE = 48000
@@ -36,7 +37,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($run.screen != "") "a screen was taken"
 
     # the note: middle C on the piano, held four tenths of a second
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })
     let heard = ($left | enumerate | where {|s| ($s.item | math abs) > $HEARD } | get index)
@@ -55,8 +56,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($tail < $peak * 0.7) $"the piano dies away: ($tail) at its end against ($peak)"
 
     # the keys: twelve white rectangles in their row, each less its label
-    let screen = (jab screen $run.screen)
-    let white = (jab ink $screen $KEY_COLOR)
+    let screen = (capture screen $run.screen)
+    let white = (capture ink $screen $KEY_COLOR)
     let whole = ($KEYS * $KEY_WIDTH * $KEY_HEIGHT)
     assert ($white.count <= $whole and $white.count >= ($whole - $KEYS * $LABEL_PIXELS)) $"the keys are white but for their labels: ($white.count) of ($whole)"
     assert ($white.count < $whole) $"the labels are cut out of the keys: ($white.count) of ($whole)"

@@ -13,6 +13,7 @@
 # tick with the stream's room and the pad's event there to be had,
 # the hart halting between frames as before.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 # The API's records, as example/wasd/src/main.S lays them out
@@ -88,8 +89,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal ($yours | select x y) ($theirs | select x y) "each meeting is reported for both spheres at the same point"
 
     # the screen agrees
-    let screen = (jab screen $run.screen)
-    let player = (jab ink $screen "ff5533")
+    let screen = (capture screen $run.screen)
+    let player = (capture ink $screen "ff5533")
     assert ($player.count > 24900 and $player.count < 26000) $"your sphere, a disc of radius 90, has about 25447 pixels, not ($player.count)"
     let centre_x = (($player.left + $player.right) // 2)
     let centre_y = (($player.top + $player.bottom) // 2)
@@ -99,7 +100,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     } else {
         assert ($centre_x > 90 and $centre_x < 1830 and $centre_y > 90 and $centre_y < 990) $"after a meeting, your sphere is still whole on the screen: ($centre_x),($centre_y)"
     }
-    let disc = (jab ink $screen "8f00ff")
+    let disc = (capture ink $screen "8f00ff")
     assert ($disc.count > 24900 and $disc.count < 26000) $"the other sphere is whole on the screen, since the two never overlap: ($disc.count) pixels"
     assert equal ($disc.right - $disc.left + 1) 181 "the other sphere's width"
     assert equal ($disc.bottom - $disc.top + 1) 181 "the other sphere's height"

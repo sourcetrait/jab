@@ -43,6 +43,8 @@
 # at another instruction and address, which ends the run with the
 # kernel fault line rather than being stepped over.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/process
+use ../../../nu/mod/target
 use std/assert
 
 const PAST_MAX = 9
@@ -61,7 +63,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # passed over, and the span carried with the rates
     let first = [[id, name, cpu]; ["1", "CPU 1/TCG", 2.0] ["2", "CPU 2/TCG", 3.5] ["3", "gone", 1.0]]
     let second = [[id, name, cpu]; ["1", "CPU 1/TCG", 2.45] ["2", "CPU 2/TCG", 3.5] ["4", "new", 0.25]]
-    let held = (jab threads-between $first $second 0.9)
+    let held = (process threads-between $first $second 0.9)
     assert equal $held.span 0.9 $"HeldSpan: the span carried with the rates: ($held)"
     assert equal ($held.threads | get name) ["CPU 1/TCG" "CPU 2/TCG"] $"HeldSpan: the threads in both readings, and only those: ($held.threads)"
     let busy = ($held.threads | get 0)
@@ -78,7 +80,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let taken = (try { jab machine-of $max | get harts } catch {|e| $e.msg })
     assert equal $taken $max $"LauncherBound: a machine of JAB_HARTS_MAX's ($max) harts taken: ($taken)"
     let past_out = ($out | path join $"harts_($max + 1)")
-    jab retire $past_out
+    target retire $past_out
     let refused = (try { jab launch --kernel $kernel --image $image --out $past_out --set $set --harts ($max + 1); "" } catch {|e| $e.msg })
     assert ($refused | str contains $"--harts takes 1 to ($max)") $"LauncherBound: ($max + 1) harts refused before QEMU starts: ($refused)"
     assert (($past_out | path join "serial.log" | path type) == null) $"LauncherBound: no QEMU run for ($max + 1) harts: ($past_out)"

@@ -8,7 +8,8 @@
 # is the compiler: `nu map.nu compile <source> <out> [--content <dir>]`
 # writes the tree the engine reads under <out>/<name>/ with a plan view
 # an SVG a storey. src/map.inc spells the same layout.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 
 const magic = 0x0042414a            # JAB and a zero, little-endian
 const header_size = 8
@@ -570,7 +571,7 @@ def lay-out [src: record, m: record, content: string, out: string]: nothing -> s
     let dest = ($out | path join $src.name)
     if ($dest | path exists) {
         if not ((($dest | path join "map" "name") | path exists) or (ls -a $dest | is-empty)) { error make { msg: $"($dest) is not a tree the compiler wrote; not retiring it" } }
-        jab retire $dest
+        target retire $dest
     }
     mkdir ($dest | path join "map")
     let bytes = (write $m)
@@ -606,13 +607,13 @@ def lay-out [src: record, m: record, content: string, out: string]: nothing -> s
     # every sound the content holds, since the game's tables name them
     # rather than the map, and every sprite image likewise, the
     # androids' frames and the gun's among them
-    let sounds = (jab paths-of ($content | path join "sound" "*.pcm"))
+    let sounds = (walk paths ($content | path join "sound" "*.pcm"))
     if not ($sounds | is-empty) { mkdir ($dest | path join "sound") }
     for p in $sounds {
         cp $p ($dest | path join "sound" ($p | path basename))
     }
     let sprite_root = ($content | path join "sprite")
-    let sprites = (jab paths-of ($sprite_root | path join "**" "*.png"))
+    let sprites = (walk paths ($sprite_root | path join "**" "*.png"))
     for p in $sprites {
         let file = ($dest | path join "sprite" ($p | path relative-to $sprite_root))
         mkdir ($file | path dirname)

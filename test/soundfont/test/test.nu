@@ -10,6 +10,8 @@
 # what each font held, the one-sample font's three ones and FluidR3's
 # counts as the pinned file has them.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
+use ../../../nu/mod/target
 use std/assert
 
 const RATE = 48000
@@ -46,7 +48,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let fluid = ($counts | where font == "fluid" | first)
     assert equal [($fluid.presets | into int) ($fluid.instruments | into int) ($fluid.samples | into int)] [$FLUID.presets $FLUID.instruments $FLUID.samples] $"FluidR3 holds what the pinned file holds, with the UART: ($run.serial)"
 
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })
     # the tone: the first stretch above HEARD, up to a silence of GAP_MS,
@@ -86,7 +88,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # sample looped with a fast attack and a short release, one sample
 # header.
 def write-font [stage: path, img: path]: nothing -> nothing {
-    jab retire $stage
+    target retire $stage
     mkdir $stage
     let points = (0..<($CYCLE * $CYCLES) | each {|k| ((($k * 2.0 * 3.141592653589793) / $CYCLE) | math sin) * $AMPLITUDE | math round | into int })
     let samples = (($points | each {|v| le16 $v }) ++ (0..<46 | each {|| le16 0 }) | bytes collect)

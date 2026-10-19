@@ -49,6 +49,7 @@
 #   it, then a start on it answers 0.
 # The word decides each line; an expired hold is evidence of neither.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const RATE = 48000
@@ -86,7 +87,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the note held through the coordinator's join, as midi's through a spin
     assert ($run.sound != "") "CoordinatorWait: the host recorded the sound"
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"CoordinatorWait: the recording is in the one format: ($wave | reject samples)"
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })
     let heard = ($left | enumerate | where {|s| ($s.item | math abs) > $HEARD } | get index)

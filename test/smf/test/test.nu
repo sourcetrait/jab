@@ -9,6 +9,8 @@
 # last event, so the program lingers a moment before it exits and the
 # last release reaches the recording.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
+use ../../../nu/mod/target
 use std/assert
 
 const RATE = 48000
@@ -41,7 +43,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.sound != "") "the host recorded the sound"
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })
 
@@ -94,7 +96,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # The piece, written to piece.mid under `stage` and made into the romfs
 # image at `img`: a tempo track and a note track on channel 0.
 def write-piece [stage: path, img: path]: nothing -> nothing {
-    jab retire $stage
+    target retire $stage
     mkdir $stage
     let half = ($DIVISION // 2)
     # the tempo track: the tempo, a tempo change at the fourth note's

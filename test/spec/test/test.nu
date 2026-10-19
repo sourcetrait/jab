@@ -31,6 +31,9 @@
 # there refused and never made, and a launch naming neither flag on the
 # configured spec.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/bound
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use std/assert
 
 const GIB = 1073741824
@@ -109,7 +112,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # --spec with --harts, refused naming both, no QEMU run
     let both = $"--spec 1ka1 with --harts 3"
     let both_out = ($out | path join "both")
-    jab retire $both_out
+    target retire $both_out
     for c in [
         { name: "plan", call: { jab plan --kernel $kernel --image $image --out $both_out --spec 1ka1 --harts 3 } }
         { name: "launch", call: { jab launch --kernel $kernel --image $image --out $both_out --set $set --spec 1ka1 --harts 3 } }
@@ -167,7 +170,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal [$below.status ($below.machine | get -o below_minimum) $below.diagnostic] [0 true true] $"the knob runs it below the minimum, so recorded and diagnostic: ($below.serial), ($below.machine)"
     let tool = ($ws | path join "sdk" "nu" "jab.nu")
     ^nu $tool build --kernel ($ws | path join "kernel")
-    let release = (jab target-root $ws | path join "release" "kernel" "jab.elf")
+    let release = (target root $ws | path join "release" "kernel" "jab.elf")
     let release_below = (jab launch --kernel $release --image $reserving --out ($out | path join "release_below") --harts 2 --bootargs $NOMINIMUM --seconds 20)
     assert equal [$release_below.status ($release_below.serial | lines)] [1 [$SHORT]] $"the release kernel refuses it under the knob too: ($release_below.serial)"
 
@@ -233,18 +236,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # giving up within two; the stand-ins and the fifo on every host but
     # Windows; and a launch of a program that never exits ending at its
     # --seconds 2 with 124 and the resolved timeout in its result
-    let real = (with-env { JAB_TIMEOUT: "" } { jab timeout-binary })
+    let real = (with-env { JAB_TIMEOUT: "" } { bound timeout })
     assert ($real.version | str starts-with "timeout (GNU coreutils) ") $"the timeout resolved GNU's: ($real)"
     if $nu.os-info.name != "windows" {
         let stand = ($out | path join "timeout_stand")
-        jab retire $stand
+        target retire $stand
         mkdir $stand
         let fake = ($stand | path join "timeout")
         "#!/bin/sh\necho 'timeout (not coreutils) 0.1'\n" | save -f $fake
         ^chmod +x $fake
-        let forced = (refusal { with-env { JAB_TIMEOUT: $fake } { jab timeout-binary } })
+        let forced = (refusal { with-env { JAB_TIMEOUT: $fake } { bound timeout } })
         assert ($forced | str contains $"JAB_TIMEOUT names ($fake)") $"a JAB_TIMEOUT not GNU's refused naming it, GNU's on PATH: ($forced)"
-        let shadowed = (with-env { JAB_TIMEOUT: "", PATH: ([$stand] ++ $env.PATH) } { jab timeout-binary })
+        let shadowed = (with-env { JAB_TIMEOUT: "", PATH: ([$stand] ++ $env.PATH) } { bound timeout })
         assert equal $shadowed.path $real.path $"a stand-in first on PATH passed over for GNU's: ($shadowed)"
         let fifo = ($stand | path join "nobody")
         ^mkfifo $fifo
@@ -272,8 +275,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # own, one ending in failure, which fails the launch naming its pipe,
     # and one still running a second after QEMU's end, stopped
     let pipes = ($out | path join "pipes")
-    let root = (jab target-root $ws)
-    jab retire $pipes
+    let root = (target root $ws)
+    target retire $pipes
     mkdir $pipes
     for os in ["linux" "macos"] {
         assert equal (jab pipe-path $pipes "api" 42 $os) ($pipes | path join "api") $"($os): the chardev's path the pair's base"
@@ -318,7 +321,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the default, in a scratch XDG config home
     let xdg = ($out | path join "xdg")
-    jab retire $xdg
+    target retire $xdg
     mkdir $xdg
     let seed = ($ws | path join "asset" "default" "config.toml")
     let config = ($xdg | path join "jab" "config.toml")
@@ -336,7 +339,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let unnamed = (refusal { do $in_xdg { jab spec-default $ws } })
     assert ($unnamed | str contains "names no `spec`") $"a config naming no spec refused: ($unnamed)"
     let gone = ($out | path join "xdg_gone")
-    jab retire $gone
+    target retire $gone
     let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { jab spec-default $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
@@ -355,7 +358,7 @@ def hex16 [v: int]: nothing -> string {
 # the count alone is wrong. Beside it a `home` naming the program, so a
 # launch finds its workspace. Its path.
 def patched [bytes: binary, m: record, dir: path, home: path]: nothing -> string {
-    jab retire $dir
+    target retire $dir
     mkdir $dir
     mut b = $bytes
     for p in ($m | get -o patches | default []) {
@@ -384,7 +387,7 @@ def put-word [b: binary, at: int, value: int]: nothing -> binary {
 # header; beside it a `home` naming the fixture, so a launch finds its
 # workspace. Its path.
 def legacy-image [ws: path, fixture: path, built: path, dir: path]: nothing -> string {
-    jab retire $dir
+    target retire $dir
     mkdir $dir
     let prefix = (open --raw ($built | path join "flags") | decode | lines | first | split row " " | last)
     let script = ($dir | path join "legacy.ld")
@@ -404,7 +407,7 @@ def legacy-image [ws: path, fixture: path, built: path, dir: path]: nothing -> s
 # start_check taken out, assembled and linked by the tools the test's
 # kernel's flags stamp names, with the build's symbols. Its ELF.
 def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -> string {
-    jab retire $dir
+    target retire $dir
     mkdir $dir
     cp -r ($ws | path join "kernel" "src") $dir
     let main = ($dir | path join "src" "kernel.S")
@@ -414,7 +417,7 @@ def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -
     ($kept | str join "\n") + "\n" | save -f $main
     let prefix = (open --raw ($kernel | path dirname | path join "flags") | decode | lines | first | split row " " | last)
     let symbols = ($set | split row "," | where {|s| $s != "" } | each {|s| ["--defsym" $"($s)=1"] } | flatten)
-    let objects = (jab paths-of ($dir | path join "src" "*.S") | sort | each {|f|
+    let objects = (walk paths ($dir | path join "src" "*.S") | sort | each {|f|
         let o = ($dir | path join (($f | path parse | get stem) + ".o"))
         ^$"($prefix)as" -march=rva23s64 -I ($dir | path join "src" "include") -I ($ws | path join "sdk" "src") ...$symbols $f -o $o
         $o
@@ -453,7 +456,7 @@ def after [words: list<string>, key: string]: nothing -> string {
 # 0, or with `--forever` one that awaits the display's tick forever. Its
 # image.
 def fixture [ws: path, dir: path, name: string, body: string, --forever]: nothing -> string {
-    jab retire $dir
+    target retire $dir
     mkdir ($dir | path join "src")
     let sdk = ($ws | path join "sdk")
     $"name = '($name)'\nsdk = '($sdk)'\nworkspace = '($ws)'\nincludes = ['($sdk | path join src)']\nlink = '($sdk | path join src program.ld)'\ndisplay = 'none'\n($body)" | save -f ($dir | path join "program.jab.toml")

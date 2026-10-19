@@ -46,6 +46,19 @@
 # way. A build is skipped when its output is newer than every input and
 # the flags, symbols included, match the last build.
 
+use ../../nu/mod/audio
+use ../../nu/mod/bound
+use ../../nu/mod/host
+use ../../nu/mod/nonce
+use ../../nu/mod/nutype
+use ../../nu/mod/present
+use ../../nu/mod/process
+use ../../nu/mod/sdl/refusal
+use ../../nu/mod/stamp
+use ../../nu/mod/target
+use ../../nu/mod/walk
+use ../../nu/mod/word
+
 # This tool's own file, which `do` runs again for the SDK's commands.
 const self = (path self)
 # The riscv64 binutils prefixes: the official toolchain's triple first,
@@ -63,8 +76,6 @@ const custom_ram_gib = 4
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
-# The QEMU every machine runs on, by its binary's name.
-const qemu_name = "qemu-system-riscv64"
 # The display's size, jab.inc's JAB_DISPLAY_WIDTH by JAB_DISPLAY_HEIGHT:
 # every screen a launch takes is this many pixels.
 const display_size = { width: 1920, height: 1080 }
@@ -163,7 +174,7 @@ const sdl_notices = ["libSDL2 not found" "symbol not found"]
 # there to prevent. With no extern, the name, for PATH.
 def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> string {
     let places = (if $workspace == null { [$here] } else { [$here $workspace] })
-    let file = (exe-name $qemu_name)
+    let file = (host exe-name $process.qemu_name)
     for place in $places {
         let prefix = ($place | path join "extern" "qemu")
         if ($prefix | path type) != null {
@@ -174,13 +185,7 @@ def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> stri
             return ($found | first)
         }
     }
-    $qemu_name
-}
-
-# An executable's file name on this host: `<name>.exe` on Windows, which
-# a path checked for the file has to name whole.
-def exe-name [name: string]: nothing -> string {
-    if $nu.os-info.name == "windows" { $name + ".exe" } else { $name }
+    $process.qemu_name
 }
 
 # Where a launch looks for extern/qemu before the workspace, as a run
@@ -322,9 +327,6 @@ def memory-args [m: record]: nothing -> list<string> {
     ["-m" $"($m.ram_gib)G"]
 }
 
-# The scalar types a spec's type may name.
-const spec_scalars = [string int float number bool filesize duration datetime binary nothing path directory]
-
 # The system specifications as the tools read them. doc/SPEC.md is the
 # authority, TheUser's, and the workspace's asset/spec.nuon carries its
 # definitions for the tools, a table of one row a spec, held to
@@ -346,8 +348,8 @@ const spec_scalars = [string int float number bool filesize duration datetime bi
 export def spec-table [data: path, type: path] {
     for f in [$type $data] { if not ($f | path exists) { error make {msg: $"($f): no such file"} } }
     let text = (try { open --raw $type | decode } catch {|e| error make {msg: $"($type): unreadable: ($e.msg)"} })
-    let schema = (type-schema $text $type)
-    if $schema.kind != "table" { error make {msg: $"($type): the tools read a table of specs, table<...>, not (type-name $schema)"} }
+    let schema = (nutype model $text $type)
+    if $schema.kind != "table" { error make {msg: $"($type): the tools read a table of specs, table<...>, not (nutype type-name $schema)"} }
     let name_field = ($schema.fields | where name == "name" | get -o 0)
     if $name_field == null or $name_field.schema != { kind: "scalar", name: "string" } { error make {msg: $"($type): `name: string` is the field the tools match a spec by, and the type has none"} }
     let rows = (try { open --raw $data | decode | from nuon } catch {|e| error make {msg: $"($data): not NUON the tools can read: ($e.msg)"} })
@@ -356,7 +358,7 @@ export def spec-table [data: path, type: path] {
     if ($rows | is-empty) { error make {msg: $"($data): no spec in it"} }
     let typed = ($rows | enumerate | each {|r|
         let label = (spec-label $r.index $r.item)
-        record-problems $r.item $schema.fields "" | each {|p| $"  ($label): ($p)" }
+        nutype record-problems $r.item $schema.fields "" | each {|p| $"  ($label): ($p)" }
     } | flatten)
     if not ($typed | is-empty) { error make {msg: ([$"($data) does not hold to ($type):"] ++ $typed | str join "\n")} }
     let meant = (spec-meaning $rows ($schema.fields | get name))
@@ -371,133 +373,11 @@ export def specs-of [ws: path] {
     spec-table ($asset | path join "spec.nuon") ($asset | path join "spec.nutype")
 }
 
-# A type's text as nushell writes it, comment lines aside, as its parts:
-# `table` and `record` with their fields in order, `list` with its
-# element, `oneof` with its members, and a scalar by its name. Only that
-# much of the type grammar is read, and anything else is refused naming
-# it, so a type the tools cannot hold a spec to never passes as one they
-# can. Untyped because it ends in an error.
-def type-schema [text: string, file: string] {
-    let body = ($text | lines | where {|l| not ($l | str trim | str starts-with "#") } | str join " ")
-    let tokens = ($body | str replace --all --regex '([<>,:])' ' $1 ' | split row --regex '\s+' | where {|t| $t != "" })
-    if ($tokens | is-empty) { error make {msg: $"($file): no type in it"} }
-    let parsed = (type-parse $tokens 0 $file)
-    if $parsed.next != ($tokens | length) { error make {msg: $"($file): more after the type: ($tokens | skip $parsed.next | first 3 | str join ' ')"} }
-    $parsed.schema
-}
-
-# The type that starts at word `at` of a type's words, and the word after
-# it. Untyped because it ends in an error.
-def type-parse [tokens: list<string>, at: int, file: string] {
-    let name = ($tokens | get -o $at)
-    if $name == null or $name in ["<" ">" "," ":"] {
-        error make {msg: $"($file): a type expected at word ($at + 1), (if $name == null { 'the end' } else { $name }) found"}
-    }
-    if ($tokens | get -o ($at + 1)) != "<" {
-        if $name not-in $spec_scalars { error make {msg: $"($file): ($name) is no type the tools read; they read ($spec_scalars | str join ', '), oneof, list, record, and table"} }
-        return { schema: { kind: "scalar", name: $name }, next: ($at + 1) }
-    }
-    match $name {
-        "table" | "record" => {
-            mut i = ($at + 2)
-            mut fields = []
-            while ($tokens | get -o $i) != ">" {
-                let field = ($tokens | get -o $i)
-                if $field == null or $field in ["<" ">" "," ":"] or ($tokens | get -o ($i + 1)) != ":" {
-                    error make {msg: $"($file): a field and its type expected in ($name)<...>, (if $field == null { 'the end' } else { $tokens | skip $i | first 3 | str join ' ' }) found"}
-                }
-                if ($fields | any {|f| $f.name == $field }) { error make {msg: $"($file): ($field) named twice in ($name)<...>"} }
-                let inner = (type-parse $tokens ($i + 2) $file)
-                $fields = ($fields | append { name: $field, schema: $inner.schema })
-                $i = $inner.next
-                if ($tokens | get -o $i) == "," { $i += 1 }
-            }
-            { schema: { kind: $name, fields: $fields }, next: ($i + 1) }
-        },
-        "list" => {
-            let inner = (type-parse $tokens ($at + 2) $file)
-            if ($tokens | get -o $inner.next) != ">" { error make {msg: $"($file): list<...> holds one type"} }
-            { schema: { kind: "list", of: $inner.schema }, next: ($inner.next + 1) }
-        },
-        "oneof" => {
-            mut i = ($at + 2)
-            mut members = []
-            while ($tokens | get -o $i) != ">" {
-                let inner = (type-parse $tokens $i $file)
-                $members = ($members | append $inner.schema)
-                $i = $inner.next
-                if ($tokens | get -o $i) == "," { $i += 1 }
-            }
-            { schema: { kind: "oneof", members: $members }, next: ($i + 1) }
-        },
-        _ => { error make {msg: $"($file): ($name)<...> is no type the tools read; they read oneof, list, record, and table"} },
-    }
-}
-
-# A type's part as nushell writes it.
-def type-name [schema: record]: nothing -> string {
-    match $schema.kind {
-        "scalar" => $schema.name,
-        "oneof" => $"oneof<($schema.members | each {|m| type-name $m } | str join ', ')>",
-        "list" => $"list<(type-name $schema.of)>",
-        _ => $"($schema.kind)<($schema.fields | each {|f| $'($f.name): (type-name $f.schema)' } | str join ', ')>",
-    }
-}
-
 # A spec's row as a problem names it: its place, and its name when it
 # has one.
 def spec-label [index: int, row: any]: nothing -> string {
     let name = (if ($row | describe | str starts-with "record") { $row | get -o name } else { null })
     if ($name | describe) == "string" and $name != "" { $"row ($index + 1) \(($name)\)" } else { $"row ($index + 1)" }
-}
-
-# A field's path below `at`, "" being a row's own.
-def field-path [at: string, name: string]: nothing -> string {
-    if $at == "" { $name } else { $"($at).($name)" }
-}
-
-# What is wrong with a record against its fields, a line each, `at` the
-# path to it: a field missing, a value of another type, and a field the
-# type does not name.
-def record-problems [value: any, fields: list<any>, at: string]: nothing -> list<string> {
-    let got = ($value | describe)
-    if not ($got | str starts-with "record") { return [$"(if $at == '' { 'the row' } else { $at }): a record expected, ($got) found"] }
-    let named = ($fields | get name)
-    let present = ($value | columns)
-    let checked = ($fields | each {|f|
-        let path = (field-path $at $f.name)
-        if $f.name not-in $present { [$"($path): missing"] } else { value-problems ($value | get $f.name) $f.schema $path }
-    } | flatten)
-    let unknown = ($present | where {|c| $c not-in $named } | each {|c| $"(field-path $at $c): a field the type does not name" })
-    $checked ++ $unknown
-}
-
-# What is wrong with a value against its part of a type, a line each, `at`
-# its path; none when it holds.
-def value-problems [value: any, schema: record, at: string]: nothing -> list<string> {
-    let got = ($value | describe)
-    match $schema.kind {
-        "scalar" => {
-            let holds = (match $schema.name {
-                "number" => ($got in ["int" "float"]),
-                "path" | "directory" => ($got == "string"),
-                _ => ($got == $schema.name),
-            })
-            if $holds { [] } else { [$"($at): ($schema.name) expected, ($got) found"] }
-        },
-        "oneof" => {
-            if ($schema.members | any {|m| value-problems $value $m $at | is-empty }) { [] } else { [$"($at): (type-name $schema) expected, ($got) found"] }
-        },
-        "record" => (record-problems $value $schema.fields $at),
-        "list" => {
-            if (not ($got | str starts-with "list")) and (not ($got | str starts-with "table")) { return [$"($at): (type-name $schema) expected, ($got) found"] }
-            $value | enumerate | each {|e| value-problems $e.item $schema.of $"($at).($e.index)" } | flatten
-        },
-        _ => {
-            if (not ($got | str starts-with "list")) and (not ($got | str starts-with "table")) { return [$"($at): (type-name $schema) expected, ($got) found"] }
-            $value | enumerate | each {|e| record-problems $e.item $schema.fields $"($at).($e.index)" } | flatten
-        },
-    }
 }
 
 # What a spec table means that its type cannot say, a line each: every
@@ -550,40 +430,6 @@ const rng_device = ["-device" "virtio-rng-device"]
 const devices = [
     "-device" "virtio-net-device,netdev=net0" "-netdev" "user,id=net0"
 ] ++ $rng_device
-
-# The sound device over a host backend: `backend` is an -audiodev
-# driver name with any of its own options after it (`pipewire`,
-# `coreaudio`, `none`, `wav,path=...`), and the backend runs at the
-# kernel's one rate so nothing resamples between them. The device
-# carries `streams`, playback and capture by default; a launch's wav
-# recorder has no capture voice and QEMU says so on its stderr for a
-# device that asks for one, so a launch gives the device playback
-# alone, the one stream the kernel drives.
-def sound-args [backend: string, --streams: int = 2]: nothing -> list<string> {
-    ["-audiodev" $"($backend),id=snd0,out.frequency=48000" "-device" $"virtio-sound-device,audiodev=snd0,streams=($streams)"]
-}
-
-# The host's audio backend for a run, from jabdisco's audio record:
-# JAB_AUDIO as given is the backend and its options verbatim; no
-# output found is `none`, which discards, so a program's sound calls
-# still answer; an output found goes to the backend that reaches it,
-# the device named: on Linux ALSA's `default`, which is the sound
-# server's default sink, the one the record names, through the server's
-# ALSA plugin (the pipewire backend dropped the start of a stream and
-# the pa backend errored on volume and cut off, both measured on the
-# reference host); on macOS coreaudio and on Windows dsound, whose
-# default is the system's chosen output, the one the record names.
-def audio-plan [found: oneof<record, nothing>]: nothing -> string {
-    let forced = ($env.JAB_AUDIO? | default "")
-    if $forced != "" { return $forced }
-    if $found == null { return "none" }
-    match $nu.os-info.name {
-        "linux" => "alsa,out.dev=default",
-        "macos" => "coreaudio",
-        "windows" => "dsound",
-        _ => "none",
-    }
-}
 
 # A headless machine prepared and not run: everything a launch sets up
 # before QEMU starts, handed back for whoever runs and drives it, the
@@ -684,13 +530,13 @@ export def plan [
     if $profile == "generic" and not $probed { error make {msg: "--profile generic is a probing launch's, classification alone; it needs --sdl-probe"} }
     if $profile == "paired" and $capture_nonce == 0 { error make {msg: "--profile paired needs the run's --capture-nonce, minted by the caller that makes the request"} }
     mkdir $out
-    let root = (target-root (if $ws != null { $ws } else { image-home $image }))
+    let root = (target root (if $ws != null { $ws } else { image-home $image }))
     let log = ($out | path join "serial.log")
     let qemu_log = ($out | path join "qemu.log")
     let screen = ($out | path join "screen.ppm")
     let pidfile = ($out | path join "qemu.pid")
     let monitor = ($out | path join "monitor")
-    for f in [$log $qemu_log $screen $pidfile] { retire $f $root }
+    for f in [$log $qemu_log $screen $pidfile] { target retire $f $root }
     # a Windows run's pipes are named pipes, named by a nonce of its own
     let windows = ($nu.os-info.name == "windows")
     let nonce = (if $windows { random int 1.. } else { 0 })
@@ -700,7 +546,7 @@ export def plan [
         { name: $monitor, inward: ($monitor + ".in"), outward: ($monitor + ".out") }
     })
     let qemu = (qemu-binary (image-home $image) $ws)
-    let bound = (timeout-binary)
+    let bound = (bound timeout)
     let found = (if (discovery-wanted $host_pad $live_sound) { discover $ws } else { { gamepad: null, audio: null } })
     let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     let pad = (pad-attach $gamepad $out $pad_port $ws $root)
@@ -716,18 +562,18 @@ export def plan [
     let relay_binary = (relay-build $relays $ws)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
-    if $wav != "" { retire $wav $root }
-    let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio-plan ($found | get -o audio) } else { "" })
-    let audio = (if $sound { sound-args $backend --streams 1 } else if $live_sound { sound-args $backend } else { [] })
+    if $wav != "" { target retire $wav $root }
+    let backend = (if $sound { $"wav,path=($wav)" } else if $live_sound { audio audio-plan ($found | get -o audio) } else { "" })
+    let audio = (if $sound { audio sound-args $backend --streams 1 } else if $live_sound { audio sound-args $backend } else { [] })
     if $probed and $ws == null { error make {msg: "--sdl-probe needs the program's workspace, which holds shim/crates/sdl"} }
     let shim = (if $probed { shim-build $ws "jabshim_sdl" } else { "" })
     let sdl_log = (if $probed { $sdl_probe | path expand } else { "" })
-    if $probed { retire $sdl_log $root }
+    if $probed { target retire $sdl_log $root }
     let shown = (if $probed { "sdl,gl=on" } else if $window { display (image-manifest $image) } else { "none" })
     let run_env = (if not $probed { $pad.env } else {
         let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
         let preload = ([($pad.env | get -o LD_PRELOAD | default "") $shim] | where {|p| $p != "" } | str join " ")
-        let nonce = (if $capture_nonce == 0 { {} } else { { SDL_SHIM_NONCE: (nonce-hex $capture_nonce) } })
+        let nonce = (if $capture_nonce == 0 { {} } else { { SDL_SHIM_NONCE: (nonce hex $capture_nonce) } })
         let driver = (if $server { {} } else { { SDL_VIDEODRIVER: "offscreen" } })
         $pad.env | merge { LD_PRELOAD: $preload, SDL_SHIM_LOG: $sdl_log } | merge $nonce | merge $driver
     })
@@ -797,20 +643,6 @@ export def capture-identity [machine: record, pid: oneof<int, nothing>]: nothing
         api: ($machine.api_in != ""),
         sends: ($machine.sends | each {|s| { at: ($s.at / 1sec), length: ($s.bytes | bytes length), sha256: ($s.bytes | hash sha256) } }),
     }
-}
-
-# A launch's capture nonce: the one its caller gives, else for a probing
-# launch one minted here, 1 to 2^63 - 1, so 0 names none and a launch
-# never mints a second; plan never mints (CaptureBundle).
-export def launch-nonce [given: int, probed: bool]: nothing -> int {
-    if $given != 0 or not $probed { return $given }
-    random int 1..
-}
-
-# A capture nonce as the shim's log writes it: sixteen lowercase hex
-# digits.
-export def nonce-hex [nonce: int]: nothing -> string {
-    $nonce | into binary --endian big | encode hex | str lowercase
 }
 
 # The workspace a launch belongs to, whose generic disk rides along and
@@ -945,7 +777,7 @@ export def launch [
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
     let gamepad = (pad-table $pad)
-    let nonce = (launch-nonce $capture_nonce ($sdl_probe != ""))
+    let nonce = (nonce mint $capture_nonce ($sdl_probe != ""))
     let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --spec $spec --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile)
     let send = $machine.sends
     let out = $machine.out
@@ -1002,10 +834,10 @@ export def launch [
         # QEMU deletes its pid file as it exits, so the read is tried, never
         # checked first: an exit between a check and the open is no pid
         let pid = (try { open --raw $pidfile | str trim } catch { "" })
-        let alive = ($result == null and (process-alive $pid))
+        let alive = ($result == null and (process process-alive $pid))
         # the pid kept while QEMU lives, its pid file gone once it ends
         if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
-        let sample = (if $pid == "" { null } else { cpu-seconds $pid })
+        let sample = (if $pid == "" { null } else { process cpu-seconds $pid })
         if $sample != null { $cpu = $sample }
         let elapsed = ((date now) - $started)
         # the pad port's header goes in as soon as QEMU is up, before any
@@ -1031,7 +863,7 @@ export def launch [
                     $screen_completed = (((date now) - $started) / 1sec)
                     $screen_due = null
                     if $capture != 0sec {
-                        if (process-alive $pid) { monitor-send $monitor "quit" $bound | ignore }
+                        if (process process-alive $pid) { monitor-send $monitor "quit" $bound | ignore }
                         $held = true
                         break
                     }
@@ -1057,18 +889,18 @@ export def launch [
         # polls and the span is a second give or take a poll
         if $threads != 0sec and $alive {
             if $threads_first == null and $elapsed >= $threads {
-                let reading = (threads-of ($pid | into int))
+                let reading = (process threads-of ($pid | into int))
                 $threads_first = { threads: $reading, at: (date now) }
             } else if $threads_first != null and $threads_held == null and $elapsed >= ($threads + 1sec) {
-                let reading = (threads-of ($pid | into int))
+                let reading = (process threads-of ($pid | into int))
                 let at = (date now)
-                $threads_held = (threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
+                $threads_held = (process threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
             }
         }
         # every thread's counter at each time `--threads-at` asks, read at
         # the first poll past it, its own time taken with it
         while $alive and $taken < ($thread_requests | length) and ($thread_requests | get $taken) <= $elapsed {
-            let threads = (threads-of ($pid | into int))
+            let threads = (process threads-of ($pid | into int))
             $readings = ($readings | append { requested: (($thread_requests | get $taken) / 1sec), at: (((date now) - $started) / 1sec), threads: $threads })
             $taken += 1
         }
@@ -1142,8 +974,8 @@ export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string
     let ws = (launch-workspace $kernel $image $dir)
     let machine = (machine-for $ws $spec $harts)
     mkdir $dir
-    let root = (target-root (if $ws != null { $ws } else { image-home $image }))
-    retire $file $root
+    let root = (target root (if $ws != null { $ws } else { image-home $image }))
+    target retire $file $root
     let qemu = (qemu-binary (image-home $image) $ws)
     let line = (spec-bootargs $machine $bootargs)
     let append = (if $line == "" { [] } else { ["-append" $line] })
@@ -1151,137 +983,6 @@ export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string
     let made = (^$qemu ...$args | complete)
     if $made.exit_code != 0 or not ($file | path exists) { error make {msg: $"QEMU wrote no device tree to ($file): ($made.stderr | str trim)"} }
     $file
-}
-
-# Read a wav QEMU's wav backend recorded: its rate, channels, and bits
-# a sample from the format chunk, and the data chunk's samples as they
-# lie, little-endian, the channels interleaved a frame at a time, to the
-# end of the file when the chunk's size was never written.
-export def wave [path: path]: nothing -> record<rate: int, channels: int, bits: int, frames: int, samples: binary> {
-    let bytes = (open --raw ($path | path expand) | into binary)
-    let total = ($bytes | bytes length)
-    if ($bytes | bytes at 0..<4 | decode) != "RIFF" or ($bytes | bytes at 8..<12 | decode) != "WAVE" { error make {msg: $"($path): not a wav"} }
-    mut at = 12
-    mut rate = 0
-    mut channels = 0
-    mut bits = 0
-    mut samples = 0x[]
-    while $at + 8 <= $total {
-        let id = ($bytes | bytes at $at..<($at + 4) | decode)
-        let size = ($bytes | bytes at ($at + 4)..<($at + 8) | into int --endian little)
-        let body = ($at + 8)
-        if $id == "fmt " {
-            $channels = ($bytes | bytes at ($body + 2)..<($body + 4) | into int --endian little)
-            $rate = ($bytes | bytes at ($body + 4)..<($body + 8) | into int --endian little)
-            $bits = ($bytes | bytes at ($body + 14)..<($body + 16) | into int --endian little)
-        } else if $id == "data" {
-            # the backend writes this size as it closes the file, which
-            # QEMU 11.1.2 never does at exit, so a size of 0, or one past
-            # the file's end, means the samples run to the end of the file
-            let unwritten = ($size == 0 or ($body + $size) > $total)
-            $samples = ($bytes | bytes at $body..<(if $unwritten { $total } else { $body + $size }))
-            if $unwritten { break }
-        }
-        $at = ($body + $size + ($size mod 2))
-    }
-    if $rate == 0 or $channels == 0 { error make {msg: $"($path): no format chunk"} }
-    { rate: $rate, channels: $channels, bits: $bits, frames: (($samples | bytes length) // ($channels * ($bits // 8))), samples: $samples }
-}
-
-# Read a screen `jab launch` took: its size and its pixels, three bytes
-# each, red, green, blue, row by row from the top left.
-export def screen [path: path]: nothing -> record<width: int, height: int, pixels: binary> {
-    # Bytes whatever the file holds: `open --raw` gives text for a file of
-    # valid UTF-8, a capture whose every channel is below 0x80 among them
-    let bytes = (open --raw ($path | path expand) | into binary)
-    # P6, a line of width and height, the maximum, then the pixels
-    let newlines = ($bytes | bytes index-of --all 0x[0a] | take 3)
-    let header = ($bytes | bytes at 0..<($newlines.2) | decode | lines)
-    let size = ($header.1 | split row " ")
-    { width: ($size.0 | into int), height: ($size.1 | into int), pixels: ($bytes | bytes at ($newlines.2 + 1)..) }
-}
-
-# Where a color is on a screen: how many pixels have it and their
-# bounding box (-1 all round when none do). `color` is six hex digits,
-# RRGGBB.
-export def ink [screen: record<width: int, height: int, pixels: binary>, color: string]: nothing -> record<count: int, left: int, top: int, right: int, bottom: int> {
-    let pattern = ($color | decode hex)
-    let hits = ($screen.pixels | bytes index-of --all $pattern | where {|i| $i mod 3 == 0 })
-    if ($hits | is-empty) { return { count: 0, left: -1, top: -1, right: -1, bottom: -1 } }
-    let xs = ($hits | each {|i| ($i // 3) mod $screen.width })
-    let ys = ($hits | each {|i| ($i // 3) // $screen.width })
-    { count: ($hits | length), left: ($xs | math min), top: ($ys | math min), right: ($xs | math max), bottom: ($ys | math max) }
-}
-
-# The color of the pixel at x, y as six hex digits, RRGGBB.
-export def pixel [screen: record<width: int, height: int, pixels: binary>, x: int, y: int]: nothing -> string {
-    let i = (($y * $screen.width + $x) * 3)
-    $screen.pixels | bytes at $i..<($i + 3) | encode hex | str lowercase
-}
-
-# A rough look at a screen as text, one character per block from the
-# pixel at the block's centre: space for black, then . o # by
-# brightness.
-export def thumbnail [screen: record<width: int, height: int, pixels: binary>, --columns: int = 96, --rows: int = 27]: nothing -> string {
-    let block_w = ($screen.width // $columns)
-    let block_h = ($screen.height // $rows)
-    let row_bytes = ($screen.width * 3)
-    0..<$rows | each {|r|
-        let y = ($r * $block_h + ($block_h // 2))
-        let row = ($screen.pixels | bytes at ($y * $row_bytes)..<(($y + 1) * $row_bytes))
-        0..<$columns | each {|c|
-            let x = ($c * $block_w + ($block_w // 2))
-            let p = ($row | bytes at ($x * 3)..<($x * 3 + 3))
-            let brightness = (($p | bytes at 0..<1 | into int) + ($p | bytes at 1..<2 | into int) + ($p | bytes at 2..<3 | into int))
-            if $brightness < 48 { " " } else if $brightness < 256 { "." } else if $brightness < 512 { "o" } else { "#" }
-        } | str join ""
-    } | str join "\n"
-}
-
-# The strings in a binary that start with `prefix`, each read to its
-# terminator: how a test asks a kernel image what text it carries.
-export def strings [path: path, prefix: string]: nothing -> list<string> {
-    let bytes = (open --raw ($path | path expand) | into binary)
-    let total = ($bytes | bytes length)
-    $bytes | bytes index-of --all ($prefix | into binary) | each {|at|
-        let tail = ($bytes | bytes at $at..<([($at + 256) $total] | math min))
-        let end = ($tail | bytes index-of 0x[00])
-        (if $end < 0 { $tail } else { $tail | bytes at 0..<$end }) | decode
-    }
-}
-
-# The named functions of a program's ELF as QEMU's translator sees
-# them: each one's start and end from the ELF's symbols, the end being
-# the next symbol's address, an assembler constant passed over (`nm`
-# lists a `.set` as an absolute symbol, its value no address, and one
-# valued inside the code would cut a function short; JAB_DENIED's all
-# ones would not even parse), whether it lies within one page of code,
-# since a translation block ends at a page boundary and chains within
-# a page only, so a loop straddling one runs several times slower, and
-# how many ecalls its code holds, read from the disassembly, since a
-# kernel call in a hot loop is a trap each time round. The tools are
-# the ones the build's flags stamp names, beside the ELF.
-export def hot [elf: path, names: list<string>]: nothing -> table<name: string, start: int, end: int, paged: bool, ecalls: int> {
-    let elf = ($elf | path expand)
-    let built = ($elf | path dirname)
-    let prefix = (open --raw ($built | path join "flags") | lines | first | split row " " | last)
-    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | where {|s| $s.kind not-in ["a" "A"] } | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
-    let ecalls = (^$"($prefix)objdump" -d $elf | lines | parse --regex '^\s*(?P<addr>[0-9a-f]+):\s+[0-9a-f]+\s+ecall\b' | each {|d| $d.addr | into int --radix 16 })
-    $names | each {|name|
-        let at = ($symbols | enumerate | where {|s| $s.item.name == $name } | get -o 0.index)
-        if $at == null { error make {msg: $"($name) is not among the symbols of ($elf)"} }
-        let start = ($symbols | get $at | get addr)
-        let next = ($symbols | get -o ($at + 1))
-        if $next == null { error make {msg: $"($name) is the last symbol of ($elf), so its end is unknown"} }
-        let end = $next.addr
-        {
-            name: $name,
-            start: $start,
-            end: $end,
-            paged: (($start // 4096) == (($end - 1) // 4096)),
-            ecalls: ($ecalls | where {|a| $a >= $start and $a < $end } | length),
-        }
-    }
 }
 
 # The QEMU arguments that put raw images on the machine as virtio-blk
@@ -1326,18 +1027,18 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     if $ws == null { return "" }
     let generic = ($ws | path join "generic")
     if not ($generic | path exists) { return "" }
-    let target = (target-root $ws)
+    let target = (target root $ws)
     let image = ($target | path join "mix.romfs")
     let stamp = ($target | path join "mix.flags")
     let manifest_path = ($generic | path join "manifest.nuon")
     let manifest = (if ($manifest_path | path exists) { open $manifest_path } else { [] })
-    let inputs = (tree-under [$generic])
-    let flags = (build-id ($manifest | to nuon) $inputs)
-    if ($image | path exists) and (not (stale $image $inputs $flags $stamp)) { return $image }
+    let inputs = (walk tree [$generic])
+    let flags = (stamp id ($manifest | to nuon) $inputs)
+    if ($image | path exists) and (not (stamp stale $image $inputs $flags $stamp)) { return $image }
     let stage = ($target | path join "generic")
-    retire $stage $target
+    target retire $stage $target
     mkdir $stage
-    for f in (files-under [$generic]) {
+    for f in (walk files [$generic]) {
         let relative = ($f | path relative-to $generic)
         if $relative == "manifest.nuon" { continue }
         let dest = ($stage | path join $relative)
@@ -1347,7 +1048,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
     for entry in $manifest {
         let archive = (fetched $target $entry.url $entry.sha256)
         let unpack = ($target | path join "fetch" "unpack")
-        retire $unpack $target
+        target retire $unpack $target
         mkdir $unpack
         ^tar -xzf $archive -C $unpack ...($entry.members | get from)
         for m in $entry.members {
@@ -1355,7 +1056,7 @@ def mix-image [ws: oneof<string, nothing>]: nothing -> string {
             mkdir ($dest | path dirname)
             mv ($unpack | path join $m.from) $dest
         }
-        retire $unpack $target
+        target retire $unpack $target
     }
     assets-names $stage
     ^genromfs -d $stage -f $image -V (volume-name "mix")
@@ -1399,7 +1100,7 @@ def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path
     mkdir $out
     let debug = (if "DEBUG" in $names {
         let log = ($out | path join "debug.log")
-        retire $log $root
+        target retire $log $root
         { args: ["-chardev" $"file,id=jabdebug,path=($log)" "-device" "virtserialport,chardev=jabdebug,nr=1,name=jab.debug"], log: $log }
     } else { { args: [], log: "" } })
     let port = (if $api { pipe-pair $out "api" $nonce $nu.os-info.name $root } else { null })
@@ -1422,7 +1123,7 @@ def ports [names: list<string>, out: path, api: bool, pad_port: bool, root: path
 export def pipe-path [out: path, endpoint: string, nonce: int, os: string]: nothing -> string {
     if $os != "windows" { return ($out | path join $endpoint) }
     if $nonce < 1 { error make {msg: $"a Windows run's pipes are named by its nonce, 1 to 2^63 - 1, not ($nonce)"} }
-    $"jab-(nonce-hex $nonce)-($endpoint)"
+    $"jab-(nonce hex $nonce)-($endpoint)"
 }
 
 # A pipe of `endpoint` for QEMU's pipe chardev, made in `out` as the host
@@ -1440,12 +1141,12 @@ export def pipe-pair [out: path, endpoint: string, nonce: int, os: string, root:
     let inward = ($out | path join $"($endpoint).in")
     let outward = ($out | path join $"($endpoint).out")
     if $os == "windows" {
-        retire $inward $root
+        target retire $inward $root
         "" | save $inward
     } else {
         fifo-at $inward $root
     }
-    retire $outward $root
+    target retire $outward $root
     "" | save $outward
     { name: $name, inward: $inward, outward: $outward }
 }
@@ -1491,8 +1192,8 @@ def bridge-pipe [pad: oneof<record<name: string, inward: string, outward: string
 export def relays-start [relays: list<any>, binary: string, root: path]: nothing -> list<record<job: int, relay: record>> {
     mut started = []
     for r in $relays {
-        retire $r.done $root
-        retire $"($r.done).next" $root
+        target retire $r.done $root
+        target retire $"($r.done).next" $root
         let id = (job spawn {
             let next = $"($r.done).next"
             ^$binary $r.name $r.inward $r.outward | complete | to nuon | save -f $next
@@ -1537,7 +1238,7 @@ export def relays-held [relayed: list<any>, qemu: record] {
 # into `root`'s retire home (retire) before a fresh pipe is made.
 def fifo-at [path: path, root: path]: nothing -> nothing {
     if ($path | path type) == "pipe" { return }
-    retire $path $root
+    target retire $path $root
     ^mkfifo $path
 }
 
@@ -1593,7 +1294,7 @@ def pad-report [items: table<type: int, code: int, value: int>]: nothing -> bina
 # The same events as the pad port takes them: eight bytes each, type,
 # code, value, little-endian, no SYN (doc/padport.md).
 def pad-frames [items: table<type: int, code: int, value: int>]: nothing -> binary {
-    $items | each {|e| (le $e.type 2) ++ (le $e.code 2) ++ (le $e.value 4) } | bytes collect
+    $items | each {|e| (word le $e.type 2) ++ (word le $e.code 2) ++ (word le $e.value 4) } | bytes collect
 }
 
 # The pad port's header for the reference pad, the one the evdev shim
@@ -1610,19 +1311,9 @@ def pad-port-header []: nothing -> binary {
     let axis_mask = ($axes | columns | each {|c| 1 bit-shl ($c | into int) } | math sum)
     let absinfo = (0..<64 | each {|code|
         let info = ($axes | get -o ($code | into string))
-        if $info == null { zeros 20 } else { $info | each {|f| le $f 4 } | bytes collect }
+        if $info == null { word zeros 20 } else { $info | each {|f| word le $f 4 } | bytes collect }
     } | bytes collect)
-    ("JPAD" | into binary) ++ (le 1 4) ++ $name ++ (zeros (128 - ($name | bytes length))) ++ (le 0xffff 4) ++ (le 0 4) ++ (le $axis_mask 8) ++ $absinfo
-}
-
-# A value as `width` little-endian bytes, two's complement.
-export def le [value: int, width: int]: nothing -> binary {
-    $value | into binary --endian little | bytes at 0..<$width
-}
-
-# `n` zero bytes.
-export def zeros [n: int]: nothing -> binary {
-    if $n <= 0 { 0x[] } else { 1..$n | each {|| 0x[00] } | bytes collect }
+    ("JPAD" | into binary) ++ (word le 1 4) ++ $name ++ (word zeros (128 - ($name | bytes length))) ++ (word le 0xffff 4) ++ (word le 0 4) ++ (word le $axis_mask 8) ++ $absinfo
 }
 
 # One input_event as an evdev device writes it, 24 bytes: the wall
@@ -1670,7 +1361,7 @@ def assets-image [c: record]: nothing -> string {
     let compiled = ($c.manifest | get -o target_assets | default "")
     if $declared == "" and $compiled == "" { return "" }
     if $declared != "" and $compiled != "" { error make {msg: $"($c.manifest.name): assets and target_assets together; a program's disk is one or the other"} }
-    let dir = (if $compiled != "" { shard-dir $c "asset" | path join $compiled } else { $c.here | path join $declared | path expand })
+    let dir = (if $compiled != "" { target shard-dir $c "asset" | path join $compiled } else { $c.here | path join $declared | path expand })
     if not ($dir | path exists) {
         let named = (if $compiled != "" { $"target_assets = '($compiled)'" } else { $"assets = '($declared)'" })
         error make {msg: $"($c.manifest.name): ($named) names no directory at ($dir)"}
@@ -1678,9 +1369,9 @@ def assets-image [c: record]: nothing -> string {
     assets-names $dir
     let image = ($c.out | path join $"($c.manifest.name).romfs")
     let stamp = ($c.out | path join "assets.flags")
-    let inputs = (tree-under [$dir])
-    let id = (build-id $c.manifest.name $inputs)
-    if ($image | path exists) and (not (stale $image $inputs $id $stamp)) { return $image }
+    let inputs = (walk tree [$dir])
+    let id = (stamp id $c.manifest.name $inputs)
+    if ($image | path exists) and (not (stamp stale $image $inputs $id $stamp)) { return $image }
     mkdir $c.out
     ^genromfs -d $dir -f $image -V (volume-name $c.manifest.name)
     $id | save -f $stamp
@@ -1695,7 +1386,7 @@ def assets-image [c: record]: nothing -> string {
 # image Jab builds never has one. `str length` counts bytes, which is
 # the measure the record and the driver use.
 def assets-names [dir: path]: nothing -> nothing {
-    let long = (paths-of ($dir | path join "**" "*") | each {|p| $p | path basename } | where {|n| ($n | str length) > 127 })
+    let long = (walk paths ($dir | path join "**" "*") | each {|p| $p | path basename } | where {|n| ($n | str length) > 127 })
     if not ($long | is-empty) {
         error make {msg: $"romfs names are 127 bytes at most, which is what a linux mount can read; too long: ($long | first)"}
     }
@@ -1716,28 +1407,6 @@ def cut-bytes [name: string, limit: int]: nothing -> string {
         $out = ($out + $g)
     }
     $out
-}
-
-# Whether the process is in the process table, which nushell reads on
-# every host; "" is no process at all.
-def process-alive [pid: string]: nothing -> bool {
-    if $pid == "" { return false }
-    let id = (try { $pid | into int } catch { -1 })
-    if $id < 0 { return false }
-    ps | where pid == $id | is-not-empty
-}
-
-# The CPU seconds a process has used, user plus system, from /proc,
-# or null where there is no /proc or the process is gone; accounting
-# only, never what a launch's actions wait on.
-def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
-    let stat = (try { open --raw ("/proc" | path join $pid "stat") | decode } catch { "" })
-    if $stat == "" { return null }
-    # after the command's closing parenthesis: state, ppid, pgrp,
-    # session, tty, tpgid, flags, minflt, cminflt, majflt, cmajflt,
-    # utime, stime, in clock ticks of a hundredth
-    let fields = ($stat | split row ") " | last | split row " ")
-    (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
 }
 
 # Give the QEMU monitor a command through its pipe (pipe-write) under
@@ -1768,44 +1437,6 @@ export def fifo-write [fifo: path, data: any, bound: string]: nothing -> bool {
     $r.exit_code == 0
 }
 
-# The GNU coreutils `timeout` every bound of a run takes (LaunchBound),
-# resolved once a run: JAB_TIMEOUT when it is set, the one candidate, the
-# launch refused naming it when its `--version` line names no GNU
-# coreutils, never a fall to discovery; else, on Windows, MSYS2's
-# /usr/bin/timeout.exe by its Windows path first, since Windows' own
-# `timeout`, a pause, comes ahead of it on PATH, then every `timeout` on
-# PATH in order, the first whose line names GNU coreutils taken, the
-# launch refused naming every candidate tried when none does. Its path,
-# run as a value wherever a bound runs, and its version line. Untyped
-# because it ends in an error.
-export def timeout-binary [] {
-    let forced = ($env.JAB_TIMEOUT? | default "")
-    if $forced != "" {
-        let line = (timeout-version $forced)
-        if not (gnu-timeout $line) { error make {msg: $"JAB_TIMEOUT names ($forced), whose --version reads ($line | to nuon), no GNU coreutils timeout, which every bound of a run takes"} }
-        return { path: $forced, version: $line }
-    }
-    let msys = (if $nu.os-info.name == "windows" { try { [(^cygpath -w /usr/bin/timeout.exe | str trim)] } catch { [] } } else { [] })
-    let listed = (which -a timeout | where type == "external" | get path)
-    let candidates = ($msys ++ $listed | uniq)
-    for c in $candidates {
-        let line = (timeout-version $c)
-        if (gnu-timeout $line) { return { path: $c, version: $line } }
-    }
-    error make {msg: $"no GNU coreutils timeout, which every bound of a run takes: tried (if ($candidates | is-empty) { 'none on PATH' } else { $candidates | str join ', ' }); install coreutils, or name one with JAB_TIMEOUT"}
-}
-
-# The first line a `timeout` prints for --version, "" when it prints none
-# or will not run.
-def timeout-version [path: string]: nothing -> string {
-    try { ^$path --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" }
-}
-
-# Whether a version line is GNU coreutils' `timeout`'s.
-def gnu-timeout [line: string]: nothing -> bool {
-    $line =~ '^timeout \(GNU coreutils\) '
-}
-
 # A word for the QEMU monitor's command line, which splits on spaces: in
 # double quotes, a backslash and a double quote inside escaped, so a
 # path with spaces in it stays one argument.
@@ -1831,96 +1462,9 @@ def screen-whole [path: path]: nothing -> bool {
     false
 }
 
-# The Jab QEMU processes on this host, by their command line, which
-# every Jab line marks with `-name jab`: the QEMU itself, wherever its
-# binary lives, never the `timeout` a test wraps it in, whose command
-# line carries the same words.
-def jab-pids []: nothing -> list<int> {
-    ps -l | where {|p| ((command-binary $p.command | path basename) == $qemu_name) and ($p.command | str contains "-name jab") } | get pid
-}
-
-# The binary a command line runs: everything before its first option, so
-# a binary whose path holds a space, an extern/qemu under such a
-# directory, stays whole.
-def command-binary [command: string]: nothing -> string {
-    $command | split row " -" | first
-}
-
-# The threads of a process with their cumulative CPU seconds: on Linux
-# from /proc, by thread id and name (the harts `CPU 0/TCG` and on, the
-# main loop under the process name); on macOS from `ps -M`, its rows
-# in order, the first the AppKit thread that draws the window, the
-# rest unnamed, so a thread is identified by its row.
-def threads-of [pid: int]: nothing -> table<id: string, name: string, cpu: float> {
-    match $nu.os-info.name {
-        "linux" => {
-            let tasks = (try { ls ("/proc" | path join ($pid | into string) "task") | get name } catch { [] })
-            $tasks | each {|t|
-                let stat = (try { open --raw ($t | path join "stat") | decode } catch { "" })
-                if $stat == "" { null } else {
-                    let fields = ($stat | split row ") " | last | split row " ")
-                    let name = (try { open --raw ($t | path join "comm") | decode | str trim } catch { "" })
-                    { id: ($t | path basename), name: $name, cpu: ((($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0) }
-                }
-            } | compact
-        },
-        "macos" => {
-            let out = (^ps -M -p ($pid | into string) | complete | get stdout)
-            $out | lines | skip 1 | enumerate | each {|row|
-                let times = ($row.item | parse --regex '(?P<stime>\d+:\d+(?::\d+)?\.\d+)\s+(?P<utime>\d+:\d+(?::\d+)?\.\d+)' | get -o 0)
-                if $times == null { null } else {
-                    { id: ($row.index | into string), name: (if $row.index == 0 { "main" } else { $"thread ($row.index)" }), cpu: ((clock-seconds $times.stime) + (clock-seconds $times.utime)) }
-                }
-            } | compact
-        },
-        _ => { error make {msg: $"no thread reading here for ($nu.os-info.name)"} },
-    }
-}
-
-# Each thread's CPU between two readings of threads-of taken `span`
-# seconds apart: by thread id, its name, `delta` the CPU seconds it used
-# in between, and `rate` those over the span, its share of a core; a
-# thread in one reading alone is passed over. The span rides along, so a
-# rate never travels without the stretch it was measured over. A span
-# that is not past zero is refused.
-export def threads-between [first: table<id: string, name: string, cpu: float>, second: table<id: string, name: string, cpu: float>, span: float]: nothing -> record<span: float, threads: list<record<name: string, delta: float, rate: float>>> {
-    if $span <= 0.0 { error make {msg: $"a span of ($span) s holds no rate"} }
-    let threads = ($second | each {|t|
-        let before = ($first | where id == $t.id | get -o 0)
-        if $before == null { null } else {
-            let delta = ($t.cpu - $before.cpu)
-            { name: $t.name, delta: $delta, rate: ($delta / $span) }
-        }
-    } | compact)
-    { span: $span, threads: $threads }
-}
-
-# A process's resident memory in bytes as its host reports it: VmRSS in
-# /proc/<pid>/status on Linux, `ps -o rss=` in KiB on macOS; null where
-# neither reads, the process gone or the host another.
-def memory-of [pid: int]: nothing -> any {
-    match $nu.os-info.name {
-        "linux" => {
-            let status = (try { open --raw ("/proc" | path join ($pid | into string) "status") | decode } catch { "" })
-            let kb = ($status | lines | parse --regex '^VmRSS:\s+(?P<kb>\d+) kB' | get -o 0.kb)
-            if $kb == null { null } else { ($kb | into int) * 1024 }
-        },
-        "macos" => {
-            let out = (try { ^ps -o rss= -p ($pid | into string) | complete | get stdout | str trim } catch { "" })
-            if $out == "" { null } else { ($out | into int) * 1024 }
-        },
-        _ => null,
-    }
-}
-
-# `ps` clock text, M:SS.hh or H:MM:SS.hh, as seconds.
-def clock-seconds [text: string]: nothing -> float {
-    $text | split row ":" | each {|p| $p | into float } | reduce --fold 0.0 {|it, acc| $acc * 60.0 + $it }
-}
-
 # Where `watch` records: watch.nuonl in the workspace's target.
 def watch-file [ws: path]: nothing -> string {
-    target-root $ws | path join "watch.nuonl"
+    target root $ws | path join "watch.nuonl"
 }
 
 # What a recording says first about the QEMU it records: the host, the
@@ -1939,7 +1483,7 @@ def watch-header [pid: int, started: datetime]: nothing -> record {
     let stamp_file = (if $kernel == "" { "" } else { $kernel | path dirname | path join "flags" })
     let stamp = (if $stamp_file != "" and ($stamp_file | path exists) { open --raw $stamp_file | decode | str trim } else { "" })
     let symbols = ($stamp | parse --regex '--defsym (?P<s>[A-Z0-9_]+)=1' | get s)
-    let binary = (command-binary $command)
+    let binary = (process command-binary $command)
     let qemu = (try { ^$binary --version | complete | get stdout | lines | get -o 0 | default "" } catch { "" })
     { os: $nu.os-info.name, arch: $nu.os-info.arch, qemu: $qemu, harts: (if $smp == "" { null } else { $smp | into int }), machine: $machine, cpu: $cpu, accel: $accel, window: $window, kernel: $kernel, symbols: $symbols, pid: $pid, started: ($started | format date "%Y-%m-%dT%H:%M:%S") }
 }
@@ -1954,12 +1498,12 @@ def watch-header [pid: int, started: datetime]: nothing -> record {
 # load. Interrupted, it ends with no report. `watch bench` records a
 # bench's runs instead.
 def "main watch" [ws: path, --skip: float = 5.0] {
-    let pids = (jab-pids)
+    let pids = (process jab-pids)
     if ($pids | is-empty) { error make {msg: "no jab is running"} }
     let pid = ($pids | first)
     let file = (watch-file $ws)
     mkdir ($file | path dirname)
-    retire $file (target-root $ws)
+    target retire $file (target root $ws)
     let started = (date now)
     let run = (watch-header $pid $started)
     ({ run: $run } | to nuon) + (char nl) | save --raw $file
@@ -1967,10 +1511,10 @@ def "main watch" [ws: path, --skip: float = 5.0] {
     if ($pids | length) > 1 { print $"jab watch: ($pids | length) jab processes; recording the first" }
     mut last: any = null
     loop {
-        if (jab-pids | where {|p| $p == $pid } | is-empty) { print "jab watch: the run has ended"; break }
+        if (process jab-pids | where {|p| $p == $pid } | is-empty) { print "jab watch: the run has ended"; break }
         let at = (((date now) - $started) / 1sec)
-        let threads = (threads-of $pid)
-        ({ at: $at, threads: $threads, rss: (memory-of $pid) } | to nuon) + (char nl) | save --raw --append $file
+        let threads = (process threads-of $pid)
+        ({ at: $at, threads: $threads, rss: (process memory-of $pid) } | to nuon) + (char nl) | save --raw --append $file
         let previous = $last
         if $previous != null {
             let seconds = ($at - $previous.at)
@@ -2047,94 +1591,6 @@ def memory-text [memory: any]: nothing -> string {
     if $memory == null { "" } else { $"; resident ($memory.median / 1048576 | math round) MiB at the median, ($memory.peak / 1048576 | math round) at the peak" }
 }
 
-# The one build tree a workspace writes into, every build and every
-# tool's output sharded within it: `.target` at the workspace's root, or
-# where XDG_CACHE_HOME is set `$XDG_CACHE_HOME/jab/target/<checkout>`,
-# the checkout its directory's name and the first eight hex digits of the
-# SHA-256 of its path, so two checkouts on one machine never build over
-# each other. `anchor` is the workspace, or a program with none above it.
-export def target-root [anchor: path]: nothing -> string {
-    let anchor = ($anchor | path expand)
-    let cache = ($env.XDG_CACHE_HOME? | default "")
-    if $cache == "" { return ($anchor | path join ".target") }
-    let checkout = $"($anchor | path basename)-($anchor | hash sha256 | str substring 0..<8)"
-    $cache | path expand | path join "jab" "target" $checkout
-}
-
-# Whether `dir` is a target this tool makes (target-root): a `.target`
-# directory, or a checkout's under `jab/target` in the XDG cache, which
-# is never that directory's shared `tmp` (retire-home).
-def is-target [dir: path]: nothing -> bool {
-    let name = ($dir | path basename)
-    ($name == ".target") or ($name != "tmp" and ($dir | path dirname | path basename) == "target" and ($dir | path dirname | path dirname | path basename) == "jab")
-}
-
-# The target a path lies in, the nearest of its parents that is one
-# (is-target), or null.
-def target-of [path: path]: nothing -> oneof<string, nothing> {
-    mut d = ($path | path expand --no-symlink | path dirname)
-    loop {
-        if (is-target $d) { return $d }
-        let up = ($d | path dirname)
-        if $up == $d { return null }
-        $d = $up
-    }
-}
-
-# Where a target's retirements go: `tmp`, which `just retire` empties,
-# beside every checkout's target under `jab/target` in the XDG cache,
-# else in the `.target` itself; `base` is the directory a retired path
-# keeps its place under, so a checkout's name rides along in the shared
-# one.
-def retire-home [target: path]: nothing -> record<tmp: string, base: string> {
-    let target = ($target | path expand)
-    let base = (if ($target | path basename) == ".target" { $target } else { $target | path dirname })
-    { tmp: ($base | path join "tmp"), base: $base }
-}
-
-# Moves `path` out of the way whole in place of deleting it, so nothing a
-# build, a test, a bench, or a clean clears away is lost: into the
-# retire home's `retired/<stamp>/` (retire-home) at its place under the
-# home's base, the target `root` when given, else the one the path lies
-# in (target-of); a path outside lands under `outside/` there at its
-# absolute path. A second retirement of one path within a second takes
-# a numbered name, and `--stamp` sets the stamp, so a clean's entries
-# share one. Nothing when nothing is there; a link is moved as a link.
-# A path in no target with no root given, or one already retired, is
-# left as it is and refused. Untyped because it can end in an error.
-export def retire [path: path, root?: path, --stamp: string = ""] {
-    let from = ($path | path expand --no-symlink)
-    if ($from | path type) == null { return }
-    let target = (if $root != null { $root | path expand } else { target-of $from })
-    if $target == null { error make {msg: $"($from) lies in no target, so there is nowhere to retire it to; it is left as it is"} }
-    let home = (retire-home $target)
-    if (under $from $home.tmp) { error make {msg: $"($from) is already retired; it is left as it is"} }
-    let stamp = (if $stamp == "" { date now | format date "%Y%m%d-%H%M%S" } else { $stamp })
-    let rest = (if (under $from $home.base) { $from | path relative-to $home.base | path split } else { ["outside"] ++ ($from | path split | skip 1) })
-    let at = ($home.tmp | path join "retired" $stamp ...$rest)
-    mut dest = $at
-    mut n = 1
-    while ($dest | path type) != null {
-        $dest = $"($at).($n)"
-        $n += 1
-    }
-    mkdir ($dest | path dirname)
-    mv $from $dest
-}
-
-# Where a kernel's or a program's output lives in the target `root`:
-# under its path relative to the workspace when it lies inside it,
-# member or not; beside its own source when it lies inside the target
-# itself, as a measured candidate's copy does, `inside`; under
-# `external/<name>-<the first eight hex digits of its path's SHA-256>`
-# when it lies outside both; under its name with no workspace.
-def shard-of [here: path, workspace: oneof<string, nothing>, root: path, name: string]: nothing -> record<relative: string, inside: bool> {
-    if (under $here $root) { return { relative: "", inside: true } }
-    if $workspace == null { return { relative: $name, inside: false } }
-    if (under $here $workspace) { return { relative: ($here | path relative-to $workspace | str replace --all "\\" "/"), inside: false } }
-    { relative: (["external" $"($name)-($here | hash sha256 | str substring 0..<8)"] | path join), inside: false }
-}
-
 # A program's directory in the target for one purpose, whatever the
 # tree: `<target>/<purpose>/<its shard>`, or `<its own>/<purpose>` for
 # a program inside the target. The purposes: asset, the trees its
@@ -2142,32 +1598,18 @@ def shard-of [here: path, workspace: oneof<string, nothing>, root: path, name: s
 # kept by name; candidates, measured copies of it; scratch.
 export def program-shard [dir: path, purpose: string]: nothing -> string {
     let c = (context ($dir | path expand) "program" [])
-    shard-dir $c $purpose
-}
-
-def shard-dir [c: record, purpose: string]: nothing -> string {
-    if $c.inside { $c.here | path join $purpose } else { $c.root | path join $purpose $c.shard }
+    target shard-dir $c $purpose
 }
 
 # Where a program's build of `tree`, release or debug, lands, its tests'
 # and runs' output beside it.
 export def program-out [dir: path, tree: string]: nothing -> string {
-    (context ($dir | path expand) "program" (tree-symbols $tree)).out
+    (context ($dir | path expand) "program" (target tree-symbols $tree)).out
 }
 
 # The kernel a program runs on in `tree` (kernel-elf).
 export def program-kernel [dir: path, tree: string]: nothing -> string {
-    kernel-elf (context ($dir | path expand) "program" (tree-symbols $tree))
-}
-
-# The symbols that put a build in `tree`: DEBUG for debug, none for
-# release.
-def tree-symbols [tree: string]: nothing -> list<string> {
-    match $tree {
-        "debug" => ["DEBUG"],
-        "release" => [],
-        _ => { error make {msg: $"a tree is release or debug, not ($tree)"} },
-    }
+    kernel-elf (context ($dir | path expand) "program" (target tree-symbols $tree))
 }
 
 # The nearest parent of `dir` holding workspace.jab.toml, or null.
@@ -2199,12 +1641,12 @@ def toolchain [here: path, workspace: oneof<string, nothing>]: nothing -> oneof<
 # the first triple whose `as` `which` finds. Untyped because it ends in
 # an error.
 def tool-prefix [toolchain: oneof<string, nothing>] {
-    let looked = ($triples | each {|t| exe-name ($t + "as") } | str join ", ")
+    let looked = ($triples | each {|t| host exe-name ($t + "as") } | str join ", ")
     if $toolchain != null {
         let bin = ($toolchain | path join "bin")
         for t in $triples {
             let prefix = ($bin | path join $t)
-            if (exe-name ($prefix + "as") | path exists) { return $prefix }
+            if (host exe-name ($prefix + "as") | path exists) { return $prefix }
         }
         error make {msg: $"no riscv64 binutils under ($bin): looked for ($looked)"}
     }
@@ -2233,54 +1675,6 @@ def march-check [asm: string, march: string, dir: path] {
     }
 }
 
-# The paths a glob pattern names, exactly as `glob` names them, but
-# through `ls` over the pattern as a glob, since nu's `glob` breaks on a
-# Windows drive letter (WindowsHost): each joined to the working directory
-# as written, never normalized, hidden entries among them; none when
-# nothing matches, where `ls` refuses, any other refusal raised;
-# `--no-dir` leaving the directories out. A pattern ending `**/*` names its
-# root first, as `glob` does.
-export def paths-of [pattern: string, --no-dir]: nothing -> list<string> {
-    let found = (try { ls -a ($pattern | into glob) } catch {|e|
-        if ($e.msg | str starts-with "No matches found") { [] } else { error make {msg: $e.msg} }
-    })
-    let kept = (if $no_dir { $found | where type != "dir" } else { $found })
-    let parts = ($pattern | path split)
-    let root = (if ($parts | length) > 2 and ($parts | last 2) == ["**" "*"] { $parts | drop 2 | path join } else { "" })
-    let rooted = (if $root != "" and (not $no_dir) and ($root | path type) == "dir" { [$root] } else { [] })
-    $rooted ++ ($kept | get name) | each {|p| $env.PWD | path join $p }
-}
-
-# Every file under the directories, for the staleness check.
-def files-under [dirs: list<string>]: nothing -> list<string> {
-    $dirs | each {|d| paths-of ($d | path join "**" "*") } | flatten | where {|p| ($p | path type) == "file" }
-}
-
-# Every file and directory under the directories, the directories
-# included since a deletion inside one moves its time and nothing
-# else's.
-def tree-under [dirs: list<string>]: nothing -> list<string> {
-    $dirs | each {|d| [$d] ++ (paths-of ($d | path join "**" "*")) } | flatten | where {|p| ($p | path type) in ["file" "dir"] }
-}
-
-# What a build was made from, for its stamp: the flags, then every
-# input path, sorted, so a source or asset deleted or renamed changes
-# the stamp and forces the build, which the newest-input check alone
-# cannot see, since a file that is gone is newer than nothing.
-def build-id [flags: string, inputs: list<string>]: nothing -> string {
-    $flags + (char nl) + ($inputs | sort | str join (char nl))
-}
-
-# Whether `output` needs building: missing, older than an input, or
-# built from other flags or inputs than `stamp` records.
-def stale [output: path, inputs: list<string>, flags: string, stamp: path]: nothing -> bool {
-    if not ($output | path exists) { return true }
-    if not ($stamp | path exists) { return true }
-    if (open --raw $stamp) != $flags { return true }
-    let newest = ($inputs | each {|p| ls -D $p | get 0.modified } | sort | last)
-    (ls -D $output | get 0.modified) <= $newest
-}
-
 # The workspace a kernel or a program builds against: the nearest
 # parent holding workspace.jab.toml, else the one the manifest's
 # `workspace` names, relative to the manifest, for a program that lives
@@ -2301,16 +1695,11 @@ def workspace-of [here: path, manifest: record]: nothing -> oneof<string, nothin
     $ws
 }
 
-# Whether `dir` is `root` or lies under it.
-def under [dir: path, root: path]: nothing -> bool {
-    try { $dir | path relative-to $root | ignore; true } catch { false }
-}
-
 # Whether `dir` is one of the workspace's own, its kernel or a program
 # workspace.jab.toml lists, by its workspace-relative path, which is how
 # an image built before its `home` marker is placed (image-home).
 def member-of [dir: path, ws: path]: nothing -> bool {
-    if not (under $dir $ws) { return false }
+    if not (target under $dir $ws) { return false }
     let relative = ($dir | path relative-to $ws | str replace --all "\\" "/")
     let listed = (open ($ws | path join "workspace.jab.toml"))
     $relative == $listed.kernel or ($relative in $listed.programs)
@@ -2327,8 +1716,8 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
     let manifest = (open $manifest_path)
     let workspace = (workspace-of $here $manifest)
     let tree = (profile $names)
-    let root = (target-root (if $workspace == null { $here } else { $workspace }))
-    let place = (shard-of $here $workspace $root $manifest.name)
+    let root = (target root (if $workspace == null { $here } else { $workspace }))
+    let place = (target shard-of $here $workspace $root $manifest.name)
     let target = (if $place.inside { $here | path join $tree } else { $root | path join $tree })
     let tc = (toolchain $here $workspace)
     {
@@ -2354,7 +1743,7 @@ def context [dir: path, kind: string, names: list<string>]: nothing -> record {
 def kernel-elf [c: record] {
     if $c.workspace != null {
         let ws = (open ($c.workspace | path join "workspace.jab.toml"))
-        return (target-root $c.workspace | path join $c.profile $ws.kernel "jab.elf")
+        return (target root $c.workspace | path join $c.profile $ws.kernel "jab.elf")
     }
     let from_env = ($env.JAB_KERNEL? | default "")
     if $from_env != "" { return $from_env }
@@ -2391,9 +1780,9 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     let elf = ($c.out | path join "jab.elf")
     let stamp = ($c.out | path join "flags")
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link])
-    let id = (build-id $flags $inputs)
-    if not (stale $elf $inputs $id $stamp) { return }
+    let inputs = ((walk files (["src"] ++ $includes)) ++ [$c.manifest_path $m.link])
+    let id = (stamp id $flags $inputs)
+    if not (stamp stale $elf $inputs $id $stamp) { return }
     mkdir $c.out
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
@@ -2401,12 +1790,12 @@ def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     march-check $asm $march_kernel $c.out
     # only the objects of the sources there are go into the link, so an
     # object left by a source since deleted or renamed never rides along
-    let objects = (paths-of ("src" | path join "*.S") | sort | each {|f|
+    let objects = (walk paths ("src" | path join "*.S") | sort | each {|f|
         let obj = ($c.out | path join (($f | path parse | get stem) + ".o"))
         ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
         $obj
     })
-    for stray in (paths-of ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { retire $stray $c.root }
+    for stray in (walk paths ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { target retire $stray $c.root }
     ^$ld -T $m.link -nostdlib ...$objects -o $elf
     ^$objdump -d $elf | save -f ($c.out | path join "jab.disas")
     $id | save -f $stamp
@@ -2547,9 +1936,9 @@ def image-declaration [d: any, ws: any, program: string] {
         let fields = [$r.cores ($r.ram / 1GiB | into int) $r.display.width $r.display.height $r.fps $isa]
         if ($fields | any {|f| $f < 0 or $f > 0xffff }) { error make {msg: $"($program) lists ($r.name), a count of which an image's u16 cannot hold: ($fields | str join ', ')"} }
         let named = ($name | into binary)
-        $named ++ (zeros ($decl_name_bytes - ($named | bytes length))) ++ ($fields | each {|f| le $f 2 } | bytes collect) ++ (zeros ($decl_spec_bytes - $decl_name_bytes - 2 * ($fields | length)))
+        $named ++ (word zeros ($decl_name_bytes - ($named | bytes length))) ++ ($fields | each {|f| word le $f 2 } | bytes collect) ++ (word zeros ($decl_spec_bytes - $decl_name_bytes - 2 * ($fields | length)))
     })
-    let bytes = ((le $d.base 2) ++ (le $count 1) ++ 0x[00] ++ ($entries | bytes collect))
+    let bytes = ((word le $d.base 2) ++ (word le $count 1) ++ 0x[00] ++ ($entries | bytes collect))
     { flags: $image_declared, offset: $decl_offset, length: ($bytes | bytes length), crc: (crc32 $bytes), bytes: $bytes }
 }
 
@@ -2842,11 +2231,11 @@ def build-program [dir: path, names: list<string>]: nothing -> nothing {
     let constants = (if $demand == null { [] } else { [(demand-include $demand $c.out)] })
     let header = (header-source $declaration $c.out)
     cd $c.here
-    let inputs = ((files-under (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants ++ [$header])
-    let id = (build-id $flags $inputs)
-    if (not (stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
+    let inputs = ((walk files (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants ++ [$header])
+    let id = (stamp id $flags $inputs)
+    if (not (stamp stale $image $inputs $id $stamp)) and (record-holds $image $demand) { return }
     mkdir $c.out
-    if $demand == null { retire ($c.out | path join "jab_manifest.inc") $c.root }
+    if $demand == null { target retire ($c.out | path join "jab_manifest.inc") $c.root }
     let asm = ($c.prefix + "as")
     let ld = ($c.prefix + "ld")
     let objcopy = ($c.prefix + "objcopy")
@@ -2931,7 +2320,7 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let relays = (if $windows { relays-of $c.out [{ endpoint: "api", pipe: $ports.api }] } else { [] })
     let relay_binary = (relay-build $relays $c.workspace)
     let inputs = (if $kbm { $input_devices } else { [] })
-    let audio = (if $sound { sound-args (audio-plan ($found | get -o audio)) } else { [] })
+    let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
     let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disks-args (machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($program_base),force-raw=on"
@@ -3129,14 +2518,14 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
 # static relocation model.
 export def shim-build [ws: path, name: string, --bin, --static]: nothing -> string {
     let manifest = ($ws | path join "shim" "Cargo.toml")
-    let target = (target-root $ws | path join "shim")
+    let target = (target root $ws | path join "shim")
     let built = (if $static {
         ^cargo rustc --release --quiet --manifest-path $manifest -p $name --bin $name --target-dir $target -- -C relocation-model=static | complete
     } else {
         ^cargo build --release --quiet --manifest-path $manifest -p $name --target-dir $target | complete
     })
     if $built.exit_code != 0 { error make {msg: $"building the shim package ($name) failed:\n($built.stderr)"} }
-    if $bin or $static { $target | path join "release" (exe-name $name) } else { $target | path join "release" $"lib($name).so" }
+    if $bin or $static { $target | path join "release" (host exe-name $name) } else { $target | path join "release" $"lib($name).so" }
 }
 
 # Probe a program under a window. `sdl`: run it under SDL with OpenGL
@@ -3174,7 +2563,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     if $c.workspace == null { error make {msg: "the sdl probe needs the program's workspace, above it or named by its manifest, which holds shim/crates/sdl"} }
     if $send != "" and not ($send | path exists) { error make {msg: $"--send ($send): no such file"} }
     let shim = (shim-build $c.workspace "jabshim_sdl")
-    let nonce = (launch-nonce 0 true)
+    let nonce = (nonce mint 0 true)
     let planned = (probe-plan $c.manifest $names $nonce --api=$api --send (if $send == "" { 0x[] } else { open --raw $send | into binary }))
     let sends = $planned.sends
     let api_on = $planned.api
@@ -3187,15 +2576,15 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let kept = ($out | path join "api.out")
     let trace_log = ($out | path join "trace.log")
     let pidfile = ($out | path join "qemu.pid")
-    for f in [$log $identity_file $bundle $kept $trace_log $pidfile] { retire $f $line.context.root }
+    for f in [$log $identity_file $bundle $kept $trace_log $pidfile] { target retire $f $line.context.root }
     let traced = (if $trace { trace-args $line.qemu_binary $trace_log } else { [] })
     let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
     let driver = (if $server { "" } else { "offscreen" })
-    let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log, SDL_SHIM_NONCE: (nonce-hex $nonce) }
+    let preload = { LD_PRELOAD: $shim, SDL_SHIM_LOG: $log, SDL_SHIM_NONCE: (nonce hex $nonce) }
     let extra = (if $driver == "" { $preload } else { $preload | insert SDL_VIDEODRIVER $driver })
     let binary = $line.qemu_binary
     let api_in = (if $api_on { $line.context.out | path join "api.in" } else { "" })
-    let bound = (timeout-binary)
+    let bound = (bound timeout)
     let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends $bound.path)
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
     if $api_on { cp ($line.context.out | path join "api.out") $kept }
@@ -3287,7 +2676,7 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
         let pid = (try { open --raw $pidfile | str trim } catch { "" })
-        let alive = ($result == null and (process-alive $pid))
+        let alive = ($result == null and (process process-alive $pid))
         if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
         let elapsed = ((date now) - $started)
         while $alive and $taken < ($sends | length) and ($sends | get $taken | get at) <= $elapsed {
@@ -3327,15 +2716,15 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table,
     let unwritten = ($whole | enumerate | where {|l| not ($l.item =~ $sdl_line) })
     if not ($unwritten | is-empty) {
         let shown = ($unwritten | first 4 | each {|l| $"line ($l.index + 1): ($l.item | str substring --grapheme-clusters 0..<80)" })
-        error make {msg: (sdl-refusal [{ fault: "the log has a line the shim does not write", held: ($unwritten | length), unit: "line", examples: $shown }])}
+        error make {msg: (refusal sdl-refusal [{ fault: "the log has a line the shim does not write", held: ($unwritten | length), unit: "line", examples: $shown }])}
     }
     let notices = ($whole | each {|l| $l | str replace --regex '^[0-9]+\.[0-9]{6} ' '' } | where {|l| $l in $sdl_notices })
     if not ($notices | is-empty) {
         let stops = ($notices | uniq --count | each {|n| { fault: $"the shim stopped the run: ($n.value)", held: $n.count, unit: "line", examples: [] } })
-        error make {msg: (sdl-refusal $stops)}
+        error make {msg: (refusal sdl-refusal $stops)}
     }
     let run = (sdl-run-lines ($whole | enumerate | each {|l| { line: ($l.index + 1), text: ($l.item | str replace --regex '^[0-9]+\.[0-9]{6} ' '') } } | where {|l| not ($l.text | str starts-with "object ") }))
-    if $run.fault != "" { error make {msg: (sdl-refusal [{ fault: $run.fault, held: $run.held, unit: "line", examples: $run.examples }])} }
+    if $run.fault != "" { error make {msg: (refusal sdl-refusal [{ fault: $run.fault, held: $run.held, unit: "line", examples: $run.examples }])} }
     let rows = ($whole
         | parse --regex '^(?P<ts>\d+\.\d+) (?P<name>\S+) ?(?P<rest>.*)$'
         | enumerate
@@ -3387,15 +2776,15 @@ export def sdl-log [log: path]: nothing -> record<objects: table, events: table,
     })
     let made = ($events | where name == "make_current")
     let total = ($made | length)
-    if ($objects | is-empty) { error make {msg: (sdl-refusal [{ fault: "the log has no object table", held: $total, unit: "make_current", examples: [] }])} }
+    if ($objects | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: "the log has no object table", held: $total, unit: "make_current", examples: [] }])} }
     let twice = ($objects | get index | uniq --repeated)
-    if not ($twice | is-empty) { error make {msg: (sdl-refusal [{ fault: "the object table gives an index twice", held: $total, unit: "make_current", examples: ($twice | each {|i| $"object ($i)" }) }])} }
+    if not ($twice | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: "the object table gives an index twice", held: $total, unit: "make_current", examples: ($twice | each {|i| $"object ($i)" }) }])} }
     for fault in [
         ["unnamed" "a frame names an object the table has no line for ahead of it"]
         ["outside" "a make_current's frames do not start in the shim's own library"]
     ] {
         let held = ($made | where fault == $fault.0)
-        if not ($held | is-empty) { error make {msg: (sdl-refusal [{ fault: $fault.1, held: ($held | length), unit: "make_current", examples: ($held | get example | uniq) }])} }
+        if not ($held | is-empty) { error make {msg: (refusal sdl-refusal [{ fault: $fault.1, held: ($held | length), unit: "make_current", examples: ($held | get example | uniq) }])} }
     }
     { objects: ($objects | reject at), events: ($events | reject fault example), process: $run.process, nonce: $run.nonce }
 }
@@ -3744,17 +3133,6 @@ def sdl-faults [cases: table, counts: record, objects: table]: nothing -> table<
     }
 }
 
-# A refusal's message: each fault it holds, how many of its unit hold it,
-# make_currents or the log's lines, and up to four of them.
-def sdl-refusal [faults: table<fault: string, held: int, unit: string, examples: list<string>>]: nothing -> string {
-    let parts = ($faults | each {|f|
-        let plural = (if $f.held == 1 { "" } else { "s" })
-        let shown = (if ($f.examples | is-empty) { "" } else { ", among them " + ($f.examples | first 4 | str join ", ") })
-        $"($f.fault): ($f.held) ($f.unit)($plural)($shown)"
-    })
-    $"the sdl probe refuses the log: ($parts | str join '; ')"
-}
-
 # The shim's log at `log` (sdl-resolve) with each make_current read by
 # where it came from. A make_current followed by a window-size call
 # within 2 ms opens a drawn frame, a `render`. Every other is read by its
@@ -3806,7 +3184,7 @@ def sdl-classified [log: path, bundle: string]: nothing -> record<objects: table
     })
     for class in [2 3 4 5 6] {
         let cases = ($refused | where class == $class)
-        if not ($cases | is-empty) { error make {msg: (sdl-refusal (sdl-faults $cases $counts $resolved.objects))} }
+        if not ($cases | is-empty) { error make {msg: (refusal sdl-refusal (sdl-faults $cases $counts $resolved.objects))} }
     }
     let named = ($made | uniq-by key | reduce --fold {} {|e, all| $all | insert $e.key ($e.frames | each {|f| sdl-frame-name $f } | str join " < ") })
     let read = ($keyed | each {|e|
@@ -3987,7 +3365,7 @@ export def sdl-bundle [probe: path, bundle: path, --profile: string = "", --extr
         mkdir ($bundle | path join $f | path dirname)
         cp ($probe | path join $f) ($bundle | path join $f)
     }
-    let files = (paths-of ($bundle | path join "**" "*") --no-dir | each {|p| { path: ($p | path relative-to $bundle), sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) } } | sort-by path)
+    let files = (walk paths ($bundle | path join "**" "*") --no-dir | each {|p| { path: ($p | path relative-to $bundle), sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) } } | sort-by path)
     let field = {|name: string| if $identity == null { null } else { $identity | get -o $name } }
     let manifest = {
         bundle_schema: 1,
@@ -4064,7 +3442,7 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     let profile = ($m | get -o profile | default "")
     let listed = ($m | get -o files | default [])
     let names = ($listed | get -o path | default [])
-    let present = (paths-of ($dir | path join "**" "*") --no-dir | each {|p| $p | path relative-to $dir } | where {|p| $p != "bundle.nuon" } | sort)
+    let present = (walk paths ($dir | path join "**" "*") --no-dir | each {|p| $p | path relative-to $dir } | where {|p| $p != "bundle.nuon" } | sort)
     let unlisted = ($present | where {|p| $p not-in $names })
     if not ($unlisted | is-empty) { do $refuse 1 "the inventory" $"files the manifest does not list: ($unlisted | str join ', ')" }
     for f in $listed {
@@ -4113,11 +3491,11 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
             if $read.process != $pid { do $refuse 5 "the run" $"the log's process ($read.process) is not the identity's qemu_pid ($pid)" }
             if $read.nonce == null { do $refuse 5 "the run" "the log has no nonce line" }
             if $nonce == null or $nonce == 0 { do $refuse 5 "the run" "the identity records no capture_nonce" }
-            if $read.nonce != (nonce-hex $nonce) { do $refuse 5 "the run" $"the log's nonce ($read.nonce) is not the identity's capture_nonce, (nonce-hex $nonce)" }
+            if $read.nonce != (nonce hex $nonce) { do $refuse 5 "the run" $"the log's nonce ($read.nonce) is not the identity's capture_nonce, (nonce hex $nonce)" }
             if $guest == null { do $refuse 5 "the run" "the guest's echoed nonce goes unread: a paired bundle is checked with its program's reader of api.out, --guest" }
             let echoed = (do $guest ($dir | path join "api.out"))
             if $echoed == null or $echoed == 0 { do $refuse 5 "the run" "the guest echoed no nonce, its records reading 0" }
-            if $echoed != $nonce { do $refuse 5 "the run" $"the guest echoed (nonce-hex $echoed), where the run's nonce is (nonce-hex $nonce)" }
+            if $echoed != $nonce { do $refuse 5 "the run" $"the guest echoed (nonce hex $echoed), where the run's nonce is (nonce hex $nonce)" }
             { process: $read.process, nonce: $read.nonce, capture_nonce: $nonce, qemu_pid: $pid, guest_nonce: $echoed }
         },
         "generic" | "historical" => { { process: $read.process, nonce: $read.nonce, capture_nonce: null, qemu_pid: null, guest_nonce: null } },
@@ -4137,58 +3515,6 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     let host = ($m | get -o reader)
     let box = (sdl-reader)
     { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($host == $box) }, trace: $trace, events: $cls.events }
-}
-
-# A guest's present sequence held to the device's count (ProbeRuns'
-# receipt stage): `frames` in order, each presented or not with the
-# present ordinal it carries, `anchor` the ordinal of the last present
-# before them. A presented frame's ordinal is one past the last, any
-# other frame's the last; every violation comes back by the frame's
-# index with the rule it broke, `skip` an advance past one, `repeat` a
-# present with the last's ordinal, `backward` an ordinal below the last,
-# `advance` a frame that presented nothing yet moved on, with its ordinal
-# and the one wanted, each frame judged against the one before as it
-# reads, so one fault is one violation. None where the sequence holds.
-export def ordinal-violations [anchor: int, frames: list<record<presented: bool, ordinal: int>>]: nothing -> list<record<index: int, rule: string, ordinal: int, wanted: int>> {
-    mut last = $anchor
-    mut found = []
-    for f in ($frames | enumerate) {
-        let got = $f.item.ordinal
-        let wanted = (if $f.item.presented { $last + 1 } else { $last })
-        if $got != $wanted {
-            let rule = (if $got < $last { "backward" } else if not $f.item.presented { "advance" } else if $got == $last { "repeat" } else { "skip" })
-            $found = ($found | append { index: $f.index, rule: $rule, ordinal: $got, wanted: $wanted })
-        }
-        $last = $got
-    }
-    $found
-}
-
-# The presentation contract's K over a run's presented acceptances in
-# order, the receipts' stamps in ticks: every pair i < j stands more than
-# (j - i) periods less `eps` apart. With q the acceptance less its index
-# times the period, K holds for every pair exactly when each q exceeds
-# the largest earlier q less eps, so the running maximum and its index
-# are kept and the check is linear. Every violation by its flip's index,
-# its witness the index of that maximum, the two flips' gap, and the
-# bound it did not pass. Read only on a present sequence that held
-# (ordinal-violations), so no present is missing from the flips.
-export def k-violations [accepted: list<int>, period: int, eps: int]: nothing -> list<record<index: int, witness: int, gap: int, bound: int>> {
-    mut found = []
-    mut top = 0
-    mut witness = -1
-    for a in ($accepted | enumerate) {
-        let q = ($a.item - $a.index * $period)
-        if $witness >= 0 and $q <= ($top - $eps) {
-            let before = ($accepted | get $witness)
-            $found = ($found | append { index: $a.index, witness: $witness, gap: ($a.item - $before), bound: (($a.index - $witness) * $period - $eps) })
-        }
-        if $witness < 0 or $q > $top {
-            $top = $q
-            $witness = $a.index
-        }
-    }
-    $found
 }
 
 # The pairing's limits, printed with every reading (sdl-pair).
@@ -4220,7 +3546,7 @@ export def sdl-pair [events: list<any>, flips: list<record<status: int, ordinal:
     let presented = ($flips | where status == 0)
     let uploads = ($host | where kind == "upload")
     mut refusals = []
-    let gaps = (if ($presented | is-empty) { [] } else { ordinal-violations (($presented | first | get ordinal) - 1) ($presented | each {|p| { presented: true, ordinal: $p.ordinal } }) })
+    let gaps = (if ($presented | is-empty) { [] } else { present ordinal-violations (($presented | first | get ordinal) - 1) ($presented | each {|p| { presented: true, ordinal: $p.ordinal } }) })
     if not ($gaps | is-empty) { $refusals = ($refusals | append { refusal: "an ordinal gap in the guest's presents", count: ($gaps | length) }) }
     let last = (if ($presented | is-empty) { 0 } else { $presented | last | get ordinal })
     let short = ($last - ($uploads | length))
@@ -4276,12 +3602,12 @@ def is-workspace [dir: path]: nothing -> bool {
 def programs-of [ws: path]: nothing -> list<string> {
     let ws = ($ws | path expand)
     let listed = (open ($ws | path join "workspace.jab.toml") | get programs)
-    let root = (target-root $ws)
+    let root = (target root $ws)
     # glob's exclusions as a filter on each path's words below the workspace
-    let found = (paths-of ($ws | path join "**" "program.jab.toml")
+    let found = (walk paths ($ws | path join "**" "program.jab.toml")
         | where {|f| not ($f | path relative-to $ws | path split | any {|w| $w in [".git" ".target" "target" "extern"] }) }
         | each {|f| $f | path dirname }
-        | where {|d| not (under $d $root) }
+        | where {|d| not (target under $d $root) }
         | each {|d| $d | path relative-to $ws | str replace --all "\\" "/" }
         | where {|p| $p not-in $listed }
         | sort)
@@ -4468,22 +3794,6 @@ def do-list [commands: table]: nothing -> string {
     (["the commands for development, `just do <command> [args]`:"] ++ $shown) | str join "\n"
 }
 
-# `just clean`: the workspace's target retired whole under one stamp
-# (retire), so the next build starts from nothing while nothing is
-# deleted: a checkout's target under the XDG cache moved as one into the
-# shared tmp beside it, a `.target`'s entries but its own tmp into that
-# tmp; only a directory that is a target this tool makes (is-target).
-def clean-target [ws: path]: nothing -> nothing {
-    let target = (target-root $ws)
-    if ($target | path type) != "dir" { print $"jab: no target at ($target)"; return }
-    if not (is-target $target) { error make {msg: $"($target) is not a target this tool makes; leaving it"} }
-    let home = (retire-home $target)
-    let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let entries = (if $home.base == $target { ls -a $target | get name | where {|e| ($e | path basename) != "tmp" } } else { [$target] })
-    for e in $entries { retire $e $target --stamp $stamp }
-    print $"jab: retired ($target) to ($home.tmp | path join 'retired' $stamp); `just retire` deletes everything retired"
-}
-
 # `just do clean`: with no path the whole target, as `just clean`
 # (clean-target); with one, the build outputs of the programs at or
 # under it, or the kernel's with `kernel`, in both trees or the one
@@ -4494,47 +3804,30 @@ def do-clean [ws: path, words: list<string>]: nothing -> nothing {
     let trees = (if $at == null { ["release" "debug"] } else { [($words | get -o ($at + 1) | default "")] })
     for t in $trees { if $t not-in ["release" "debug"] { error make {msg: $"--tree is release or debug, not ($t)"} } }
     let words = (if $at == null { $words } else { $words | enumerate | where {|e| $e.index != $at and $e.index != ($at + 1) } | get item })
-    if ($words | is-empty) { clean-target $ws; return }
-    let target = (target-root $ws)
+    if ($words | is-empty) { target clean $ws; return }
+    let target = (target root $ws)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let dirs = (if (path-words $words) == "kernel" {
         let m = (open ($ws | path join "workspace.jab.toml"))
-        $trees | each {|t| (context ($ws | path join $m.kernel) "kernel" (tree-symbols $t)).out }
+        $trees | each {|t| (context ($ws | path join $m.kernel) "kernel" (target tree-symbols $t)).out }
     } else {
         programs-under $ws $words | each {|p| $trees | each {|t| program-out ($ws | path join $p) $t } } | flatten
     })
     mut retired = []
     for d in $dirs {
         if ($d | path type) != null {
-            retire $d $target --stamp $stamp
+            target retire $d $target --stamp $stamp
             $retired = ($retired | append $d)
         }
     }
-    print (if ($retired | is-empty) { "jab: nothing built there to retire" } else { $"jab: retired ($retired | str join ', ') to ((retire-home $target).tmp | path join 'retired' $stamp)" })
-}
-
-# `just retire`: everything retired deleted, the retire home's tmp
-# (retire-home) removed whole, the one thing this tool deletes; only a
-# directory named tmp in a `.target` or beside the checkouts under
-# `jab/target`, never a link, and nothing when it is not there.
-def retire-all [ws: path]: nothing -> nothing {
-    let home = (retire-home (target-root $ws))
-    let tmp = $home.tmp
-    if ($tmp | path type) == null { print $"jab: nothing retired at ($tmp)"; return }
-    let kind = (ls -D $tmp | get 0.type)
-    let base = ($home.base | path basename)
-    let placed = (($tmp | path basename) == "tmp") and ($base == ".target" or ($base == "target" and ($home.base | path dirname | path basename) == "jab"))
-    if $kind != "dir" or not $placed { error make {msg: $"($tmp) is not the retire home this tool keeps; leaving it"} }
-    let size = (du $tmp | get -o 0.apparent | default 0b)
-    rm --recursive --permanent $tmp
-    print $"jab: deleted ($tmp), ($size) retired"
+    print (if ($retired | is-empty) { "jab: nothing built there to retire" } else { $"jab: retired ($retired | str join ', ') to ((target retire-home $target).tmp | path join 'retired' $stamp)" })
 }
 
 # The benches of the workspace's programs, `<program>/<bench>` each: the
 # NUON files under a program's bench/ directory.
 def benches-of [ws: path]: nothing -> list<string> {
     programs-of $ws | each {|p|
-        paths-of ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
+        walk paths ($ws | path expand | path join $p "bench" "*.nuon") | sort | each {|f| $"($p)/($f | path parse | get stem)" }
     } | flatten
 }
 
@@ -4585,7 +3878,7 @@ def bench-state [file: path]: nothing -> oneof<record, nothing> {
 # Whether the run a state describes is under way: not finished, and its
 # process alive.
 def bench-live [s: record]: nothing -> bool {
-    ($s.state not-in [done failed]) and (process-alive ($s.pid | into string))
+    ($s.state not-in [done failed]) and (process process-alive ($s.pid | into string))
 }
 
 # The state file written whole, through a file beside it moved over it,
@@ -4605,7 +3898,7 @@ def bench-save-state [file: path, state: record]: nothing -> nothing {
 # error.
 def bench-tar [home: path, stamp: string, name: string, root: path] {
     let file = ($home | path join $"($name | str replace --all '/' '_')-($stamp).tar")
-    retire $file $root
+    target retire $file $root
     let r = (do { cd $home; ^tar -cf ($file | path basename) $stamp | complete })
     if $r.exit_code != 0 { error make {msg: $"tar of ($home | path join $stamp) ended with ($r.exit_code): ($r.stderr | str trim)"} }
     $file
@@ -4641,7 +3934,7 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     if not ($unknown | is-empty) { error make {msg: $"($b.name) has no step ($unknown | str join ', '); its steps: ($labels | str join ', ')"} }
     let steps = (if ($picked | is-empty) { $b.def.steps } else { $b.def.steps | where {|s| $s.label in $picked } })
     let tree = ($b.def | get -o tree | default "release")
-    let names = (tree-symbols $tree)
+    let names = (target tree-symbols $tree)
     let home = (bench-home $b)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let dir = ($home | path join $stamp)
@@ -4707,7 +4000,7 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     let final = (if ($failed | is-empty) and ($reported == null or $reported == 0) { "done" } else { "failed" })
     $record = ($record | merge { report: $reported, state: $final })
     $record | to nuon --indent 2 | save --raw -f $record_file
-    let packed = (try { { tar: (bench-tar $home $stamp $b.name (target-root $ws)), error: "" } } catch {|e| { tar: null, error: $e.msg } })
+    let packed = (try { { tar: (bench-tar $home $stamp $b.name (target root $ws)), error: "" } } catch {|e| { tar: null, error: $e.msg } })
     bench-save-state $state_file ($base | merge { step: $total, label: "", state: $final })
     let failures = (if ($failed | is-empty) { "" } else { $"; failed: ($failed | str join ', ')" })
     let unreported = (if $reported == null or $reported == 0 { "" } else { $"; the report failed with exit ($reported)" })
@@ -4721,7 +4014,7 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
 # one look at the process table: those whose command lines name the
 # run's directory.
 def bench-qemus [run: path]: nothing -> list<record<pid: int, command: string>> {
-    ps -l | where {|p| ((command-binary $p.command | path basename) == (exe-name $qemu_name)) and ($p.command | str contains $run) } | each {|p| { pid: $p.pid, command: $p.command } }
+    ps -l | where {|p| ((process command-binary $p.command | path basename) == (host exe-name $process.qemu_name)) and ($p.command | str contains $run) } | each {|p| { pid: $p.pid, command: $p.command } }
 }
 
 # The step a QEMU of a bench's run belongs to, read from the command
@@ -4788,7 +4081,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     }
     let run = $state.dir
     let stamp = $state.stamp
-    let root = (target-root $ws)
+    let root = (target root $ws)
     let labels = ($b.def.steps | get label)
     let watch_dir = ($run | path join "watch")
     mkdir $watch_dir
@@ -4810,7 +4103,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
             let n = (($seen | where {|e| $e.label == $step } | length) + 1)
             let file = ($watch_dir | path join $"($step)-($n).nuonl")
             let started = (date now)
-            retire $file $root
+            target retire $file $root
             ({ run: (watch-header $pid $started) } | to nuon) + (char nl) | save --raw $file
             $seen = ($seen | append { pid: $pid, label: $step, n: $n, file: $file, started: $started, ended: false })
             print $"jab watch: ($step), QEMU ($n), ($pid)"
@@ -4818,7 +4111,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         let now = (date now)
         for e in ($seen | enumerate | where {|x| not $x.item.ended }) {
             if $e.item.pid in $pids {
-                ({ at: (($now - $e.item.started) / 1sec), threads: (threads-of $e.item.pid), rss: (memory-of $e.item.pid) } | to nuon) + (char nl) | save --raw --append $e.item.file
+                ({ at: (($now - $e.item.started) / 1sec), threads: (process threads-of $e.item.pid), rss: (process memory-of $e.item.pid) } | to nuon) + (char nl) | save --raw --append $e.item.file
             } else {
                 let i = $e.index
                 $seen = ($seen | enumerate | each {|x| if $x.index == $i { $x.item | merge { ended: true } } else { $x.item } })
@@ -4833,7 +4126,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
                 if $rates != "" { print $"  ($e.label) ($e.n): ($rates)" }
             }
         }
-        let finished = ($current.state in [done failed]) or (not (process-alive ($current.pid | into string)))
+        let finished = ($current.state in [done failed]) or (not (process process-alive ($current.pid | into string)))
         if $finished and ($pids | is-empty) and ($seen | all {|x| $x.ended }) { break }
         sleep 1sec
     }
@@ -4859,7 +4152,7 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
         watch: $per,
     }
     let out = ($run | path join "watch.nuon")
-    retire $out $root
+    target retire $out $root
     $whole | to nuon --indent 2 | save --raw $out
     let packed = (try { { tar: (bench-tar ($run | path dirname) $stamp $b.name $root), error: "" } } catch {|e| { tar: null, error: $e.msg } })
     print (if $packed.tar == null { $"jab watch: ($out); the run is left unpacked in its directory: ($packed.error)" } else { $"jab watch: everything in ($packed.tar)" })
@@ -4953,13 +4246,13 @@ def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12
 # Retire the workspace's whole target (clean-target): `just clean`.
 def "main clean" [ws: path] {
     if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
-    clean-target ($ws | path expand)
+    target clean ($ws | path expand)
 }
 
 # Delete everything retired (retire-all): `just retire`.
 def "main retire" [ws: path] {
     if not (is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
-    retire-all ($ws | path expand)
+    target retire-all ($ws | path expand)
 }
 
 def main [] {

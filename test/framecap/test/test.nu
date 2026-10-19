@@ -17,6 +17,7 @@
 # counts; the whole flip's scenarios run before the list's, so a defect
 # of the batch the two share fails at the candidate's own case.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 # Sixty-four awaited frames, half of them whole and half a rectangle
@@ -74,8 +75,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     } else {
         assert equal $flip.a3 $old.a3 $"its present uncounted: ($flip.a3) after ($old.a3)"
     }
-    let screen = (jab screen $transfer.run.screen)
-    assert equal (jab pixel $screen 960 540) $OLD "the screen the old frame"
+    let screen = (capture screen $transfer.run.screen)
+    assert equal (capture pixel $screen 960 540) $OLD "the screen the old frame"
     assert equal (refusals $transfer.run "transfer") 1 "QEMU refused the transfer"
     assert equal (refusals $transfer.run "flush") 0 (if $batched { "and no flush, which showed the old frame again" } else { "and no flush was issued" })
     clock-holds $transfer.receipts $KIND.badxfer "transfer"
@@ -94,10 +95,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     stamp-holds $flip
     assert equal $flip.status 3 $"the list with its second transfer refused answers 3: ($flip)"
     assert equal $flip.a3 ($old.a3 + 1) $"the list's flush answered OK counts its present: ($flip.a3) after ($old.a3)"
-    let screen = (jab screen $list.run.screen)
-    let shown = ($LIST_CENTRES | each {|c| jab pixel $screen $c.0 $c.1 })
+    let screen = (capture screen $list.run.screen)
+    let shown = ($LIST_CENTRES | each {|c| capture pixel $screen $c.0 $c.1 })
     assert equal $shown [$NEW $OLD $NEW] $"the first and third rectangles the new frame's, the second the old: ($shown)"
-    assert equal (jab pixel $screen $OUTSIDE.0 $OUTSIDE.1) $OLD "outside the rectangles the old frame"
+    assert equal (capture pixel $screen $OUTSIDE.0 $OUTSIDE.1) $OLD "outside the rectangles the old frame"
     assert equal (refusals $list.run "transfer") 1 "QEMU refused one transfer"
 
     let long = (scenario $kernel $image ($out | path join "long") $set "b" "jab.badxfer=2 jab.badxferat=1")

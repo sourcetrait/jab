@@ -53,6 +53,11 @@
 # the UART. On a CENSUS build the test runs the census's own fixtures
 # alone (census-holds).
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
+use ../../../nu/mod/present
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
+use ../../../nu/mod/word
 use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
@@ -857,7 +862,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the rendered assets the tree carries: the hum a Standard MIDI File
     # of one track, the servo the recipe's seconds of 16-bit samples
     assert equal $render_1_expected.ambients 1 "render_1 names one ambient"
-    let recipes = (jab paths-of ($game | path join "content" "sound" "*.nuon") | length)
+    let recipes = (walk paths ($game | path join "content" "sound" "*.nuon") | length)
     assert equal $render_1_expected.sounds $recipes $"render_1's tree carries every sound the content holds: ($render_1_expected.sounds) against ($recipes) recipes"
     let hum = (open --raw ($render_1_tree | path join "ambient" "hum.mid") | into binary)
     assert equal ($hum | bytes at 0..<4) ("MThd" | into binary) "the hum is a Standard MIDI File"
@@ -884,7 +889,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let r1_frames = ($r1.frames | length)
     assert (($r1.receipts | length) == $r1_frames and $r1_frames > 10) $"render_1_receipts: a receipt a frame: ($r1.receipts | length) for ($r1_frames)"
     let r1_rows = ($r1.frames | zip $r1.receipts | each {|p| { presented: ($p.0.flip_status == 0), ordinal: $p.1.ordinal, stamp: $p.1.stamp, tick: $p.1.tick, done: $p.0.flip_done_us, call: $p.0.flip_us } })
-    let r1_broken = (jab ordinal-violations 3 ($r1_rows | select presented ordinal))
+    let r1_broken = (present ordinal-violations 3 ($r1_rows | select presented ordinal))
     assert equal $r1_broken [] $"render_1_receipts: the presented frames' ordinals consecutive from 4: ($r1_broken | first 3)"
     let r1_presented = ($r1_rows | where presented)
     assert ($r1_presented | all {|r| $r.stamp >= $r.tick }) "render_1_receipts: each presented frame's decision at or past its tick"
@@ -1797,7 +1802,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 # A copy of a map source with the entities of the given classes dropped,
 # compiled under out with the game's content; the tree's path.
 export def variant-tree [source: record, name: string, dropped: list<string>, out: path, game: path]: nothing -> string {
-    jab retire $out
+    target retire $out
     mkdir $out
     let copy = ($source | update name $name | update entities ($source.entities | where {|e| $e.class not-in $dropped }))
     let src = ($out | path join $"($name).nuon")
@@ -1858,7 +1863,7 @@ def block-sum [bytes: binary, at: list<int>]: nothing -> int {
 # more. `jab hot` gives an end exclusive, so a page is an end less one's.
 def hot-functions [image: path]: nothing -> nothing {
     let elf = ($image | path parse | update extension "elf" | path join)
-    let hot = (jab hot $elf $HOT_FUNCTIONS)
+    let hot = (capture hot $elf $HOT_FUNCTIONS)
     for h in $hot {
         assert $h.paged $"($h.name) within one page of code: ($h.start) to ($h.end)"
         assert equal $h.ecalls ($HOT_ECALLS | get $h.name) $"($h.name) traps inside its page"
@@ -1884,14 +1889,14 @@ def release-strings [image: path]: nothing -> nothing {
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
     let release = (jab program-out $here "release" | path join "fierce.jab")
     assert ($release | path exists) $"the release image at ($release)"
-    let debug_found = (jab strings $image "fps: ")
+    let debug_found = (capture strings $image "fps: ")
     for text in $DEBUG_TEXT {
         assert ($debug_found | any {|s| $s | str starts-with $text }) $"the debug build carries '($text)'"
     }
     for text in $EXIT_TEXT {
         assert ($text in $debug_found) $"the debug build carries the exit text '($text)'"
     }
-    let release_found = (jab strings $release "fps: ")
+    let release_found = (capture strings $release "fps: ")
     for text in $DEBUG_TEXT {
         assert (not ($release_found | any {|s| $s | str starts-with $text })) $"the release build carries no '($text)'"
     }
@@ -1928,7 +1933,7 @@ def title-holds [kernel: path, image: path, out: path, set: string, name: string
     let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"title_($name)") --set $set --sound --disk (romfs $tree ($out | path join $"title_($name).romfs")) --serial "fps" --capture $TITLE_AT --seconds 5)
     assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($name)'s load screen"
     assert ($run.screen != "") $"a screen was taken on ($name)'s load screen"
-    let ink = (jab ink (jab screen $run.screen) $TITLE_INK)
+    let ink = (capture ink (capture screen $run.screen) $TITLE_INK)
     let cells = ($text | str length)
     let half = ($cells * $TITLE_CELL // 2)
     let width = ($ink.right - $ink.left + 1)
@@ -3285,7 +3290,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
 # The level of a run's recording between two seconds: the peak and the
 # mean of the left channel's samples' magnitudes, every 97th frame.
 def sound-level [wav: path, from: float, to: float]: nothing -> record<from: float, to: float, peak: int, mean: float> {
-    let w = (jab wave $wav)
+    let w = (capture wave $wav)
     let frame_bytes = ($w.channels * ($w.bits // 8))
     let a = (($from * $w.rate) | math round | into int)
     let b = ([(($to * $w.rate) | math round | into int), $w.frames] | math min)
@@ -3346,7 +3351,7 @@ def plan-views [tree: path, source: record, read: record]: nothing -> nothing {
 # A tree holding a map of the given bytes under the given name; its
 # path.
 def broken [tree: path, name: string, bytes: binary]: nothing -> string {
-    jab retire $tree
+    target retire $tree
     mkdir ($tree | path join "map")
     $name | save --raw -f ($tree | path join "map" "name")
     $bytes | save --raw -f ($tree | path join "map" $"($name).jabfps.map")
@@ -3541,7 +3546,7 @@ def stall-frame [on: bool, standing: int, once: int, forced: bool, spin: int]: n
     [
         ("S" | into binary) 0x[00 00 00]
         (if $on { 0x[01] } else { 0x[00] }) (if $forced { 0x[01] } else { 0x[00] }) 0x[00 00]
-        (jab le $standing 4) (jab le $once 4) (jab le $spin 4) (jab zeros 44)
+        (word le $standing 4) (word le $once 4) (word le $spin 4) (word zeros 44)
     ] | bytes collect
 }
 

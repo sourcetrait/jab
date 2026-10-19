@@ -18,6 +18,8 @@
 # worker woken asleep in its wait, and no hart claims or enables a device
 # identity.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use std/assert
 
 # The files whose routines and data a worker's hart never reaches: the
@@ -65,7 +67,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the clean kernels: the debug kernel the test runs on, and the release
     # kernel, built here as purity builds it
     ^nu $tool build --kernel $kernel_dir
-    let release = (jab target-root $ws | path join "release" "kernel" "jab.elf")
+    let release = (target root $ws | path join "release" "kernel" "jab.elf")
     assert ($release | path exists) $"the release kernel was built at ($release)"
     let debug_reading = (owners-check $kernel $inc)
     assert equal $debug_reading.violations [] $"owners: the debug kernel's worker paths reach no driver: (violation-text $debug_reading.violations)"
@@ -122,7 +124,7 @@ def sections-of [prefix: string, file: path]: nothing -> table<name: string, siz
 # The objects beside a kernel's ELF: each its file, its symbols, and its
 # sections
 def objects-of [prefix: string, elf: path] {
-    jab paths-of ($elf | path dirname | path join "*.o") | sort | each {|o| { file: ($o | path parse | get stem), symbols: (symbols-of $prefix $o), sections: (sections-of $prefix $o) } }
+    walk paths ($elf | path dirname | path join "*.o") | sort | each {|o| { file: ($o | path parse | get stem), symbols: (symbols-of $prefix $o), sections: (sections-of $prefix $o) } }
 }
 
 # Where the objects' data lie in the ELF: a range a data section of an

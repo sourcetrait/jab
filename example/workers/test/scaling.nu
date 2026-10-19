@@ -14,6 +14,7 @@
 # example/workers/scaling` runs it on a release build and reports; the
 # test runs the three-worker run once on its debug one.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/walk
 
 # when the held span starts: inside the stretch, which begins once the
 # digit lands a second in and lasts four
@@ -141,7 +142,7 @@ def "main run" [--tree: string = "release", --out: string = "", --label: string 
 # done twice, after writing both.
 def "main report" [dir: path] {
     let dir = ($dir | path expand)
-    let docs = (jab paths-of ($dir | path join "*" "scaling.nuon") | each {|f| open $f } | sort-by workers)
+    let docs = (walk paths ($dir | path join "*" "scaling.nuon") | each {|f| open $f } | sort-by workers)
     if ($docs | is-empty) { error make { msg: $"no scaling.nuon under ($dir)" } }
     let base = ($docs | where workers == 1 | get -o 0.fps)
     let hashes = ($docs | get hash | uniq)

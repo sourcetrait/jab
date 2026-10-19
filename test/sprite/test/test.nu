@@ -7,6 +7,7 @@
 # pixels around each included. The codes the refusals gave are checked
 # on the UART.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const background = [0x20 0x30 0x40]
@@ -176,7 +177,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let codes = ((1..23 | each {|_| "draw 0\n" } | str join "") + "draw 1\ndraw 2\ndraw 0\n")
     assert equal $run.serial $codes $"the codes: ($run.serial)"
     assert ($run.screen != "") "a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
 
     let draws = [
         (drawn $blend 0 10 10 $plain $one 0)
@@ -207,7 +208,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     for d in ($draws | enumerate) {
         for p in $d.item {
             let want = ($p.rgb | each {|c| $c | format number | get lowerhex | str substring 2.. | fill -a right -c "0" -w 2 } | str join "")
-            assert equal (jab pixel $screen $p.x $p.y) $want $"draw ($d.index): the pixel at ($p.x), ($p.y)"
+            assert equal (capture pixel $screen $p.x $p.y) $want $"draw ($d.index): the pixel at ($p.x), ($p.y)"
             $checked += 1
         }
     }

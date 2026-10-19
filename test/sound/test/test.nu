@@ -12,6 +12,7 @@
 # periods' 160 ms of lead, and that service alone counts, the stream going
 # on and the whole tone recorded after the longer silent start.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const RATE = 48000
@@ -62,7 +63,7 @@ def tone-holds [run: record]: nothing -> record<seconds: float, frequency: float
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.debug | str contains "jab: sound at ") $"the kernel found the sound device: ($run.debug)"
     assert ($run.sound != "") "the host recorded the sound"
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     assert ($wave.frames > 40000) $"most of a second was recorded: ($wave.frames) frames"
     # the left channel, then the stretch where the tone is

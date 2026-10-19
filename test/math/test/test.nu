@@ -13,6 +13,7 @@
 # saw on this box rounded up to a round figure; the understanding
 # records the measurement itself.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const PI = 3.141592653589793
@@ -193,7 +194,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the hot-code check
     let elf = ($image | path dirname | path join "math.elf")
-    let hot = (jab hot $elf [expand_all trapped])
+    let hot = (capture hot $elf [expand_all trapped])
     let all = ($hot | where name == "expand_all" | get 0)
     assert $all.paged $"expand_all lies within one page of code: ($all)"
     assert equal $all.ecalls 0 $"expand_all, every macro of the first cut, traps nowhere: ($all)"

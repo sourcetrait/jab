@@ -87,6 +87,10 @@
 # placement, and at the route's end, kept whole in run.nuon and reported
 # as host-time windows (cpu-windows).
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/nonce
+use ../../../nu/mod/present
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use ../nu/map.nu
 use ./pose.nu
 
@@ -372,7 +376,7 @@ def "main run" [
         mkdir $run_out
         $route_bytes | save --raw -f ($run_out | path join "route.nuon")
         # the run's capture nonce, minted here, the outermost layer, once
-        let nonce = (jab launch-nonce 0 true)
+        let nonce = (nonce mint 0 true)
         let probe_log = (if $sdl_probe { $run_out | path join "sdl.log" } else { "" })
         let words = (if $trace { $qemu ++ ["-msg" "timestamp=on" "-trace" "virtio_gpu_cmd_res_flush" "-trace" "virtio_gpu_cmd_set_scanout" "-D" ($run_out | path join "trace.log")] } else { $qemu })
         let sends = (run-sends $seed $cadence $nonce $asked
@@ -1141,7 +1145,7 @@ def digest [file: path]: nothing -> oneof<string, nothing> {
 # line in path order, hashed.
 export def tree-digest [tree: path]: nothing -> oneof<string, nothing> {
     if not ($tree | path exists) { return null }
-    jab paths-of ($tree | path join "**" "*") | where {|f| ($f | path type) == "file" } | sort | each {|f| $"($f | path relative-to $tree) (open --raw $f | into binary | hash sha256)" } | str join (char nl) | hash sha256
+    walk paths ($tree | path join "**" "*") | where {|f| ($f | path type) == "file" } | sort | each {|f| $"($f | path relative-to $tree) (open --raw $f | into binary | hash sha256)" } | str join (char nl) | hash sha256
 }
 
 # What a launch came to: its status, a fault line on the UART, the CPU
@@ -1798,7 +1802,7 @@ def receipt-invalidity [rows: list<any>, anchor: oneof<int, nothing>]: nothing -
     if $anchor == null { return ["the present sequence unanchored: no load record's cleared screen to start it"] }
     let unreceipted = ($rows | where {|r| $r.ordinal == null })
     let receipted = ($rows | where {|r| $r.ordinal != null })
-    let violations = (jab ordinal-violations $anchor ($receipted | each {|r| { presented: ($r.flip_status == $FLIP_PRESENTED), ordinal: $r.ordinal } }))
+    let violations = (present ordinal-violations $anchor ($receipted | each {|r| { presented: ($r.flip_status == $FLIP_PRESENTED), ordinal: $r.ordinal } }))
     let lasts = ([$anchor] ++ ($receipted | get ordinal | drop 1))
     let firsts = ($receipted | zip $lasts | where {|p| $p.0.flip_status == $FLIP_PRESENTED and $p.0.first_ordinal != (if $p.0.flip_attempts == 1 { $p.0.ordinal } else { $p.1 }) })
     let early = ($receipted | where {|r| $r.flip_status == $FLIP_PRESENTED and $r.receipt_stamp < $r.receipt_tick })
@@ -2319,7 +2323,7 @@ export def leg-text [run: int, schema: any, l: record]: nothing -> string {
 # retired, its legs (leg-text) and its outliers printed.
 def report [label: string, id: record, runs: list<any>, out: path]: nothing -> nothing {
     let file = ($out | path join "gauge.nuon")
-    jab retire $file (jab target-root $WORKSPACE)
+    target retire $file (target root $WORKSPACE)
     report-doc $label $id $runs | to nuon | save --raw $file
     for r in $runs {
         for l in $r.measured.legs {
@@ -2948,7 +2952,7 @@ def "main compare" [
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { jab program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
     mkdir ($target | path dirname)
-    jab retire $target (jab target-root $WORKSPACE)
+    target retire $target (target root $WORKSPACE)
     $result | to nuon --indent 2 | save --raw $target
     for t in $result.table {
         let marks = ($t.standings | where {|s| $s != "valid" })
@@ -3270,8 +3274,8 @@ def "main bench-report" [dir: path] {
     let text = (bench-text $doc)
     let nuon_file = ($dir | path join "report.nuon")
     let text_file = ($dir | path join "report.txt")
-    jab retire $nuon_file (jab target-root $WORKSPACE)
-    jab retire $text_file (jab target-root $WORKSPACE)
+    target retire $nuon_file (target root $WORKSPACE)
+    target retire $text_file (target root $WORKSPACE)
     $doc | to nuon --indent 1 | save --raw $nuon_file
     $text + "\n" | save --raw $text_file
     print $text

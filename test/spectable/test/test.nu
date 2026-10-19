@@ -21,6 +21,7 @@
 # alone builds the one listing specs again and leaves the other as it was,
 # and so does a change to the data alone.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -46,7 +47,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let label = $"row 1 \(($first.name)\)"
     let twin = $"row (($real | length) + 1)"
     let fixtures = ($out | path join "fixtures")
-    jab retire $fixtures
+    target retire $fixtures
     mkdir $fixtures
     let with = {|f: closure| $real | enumerate | each {|r| if $r.index == 0 { do $f $r.item } else { $r.item } } }
     let cases = [
@@ -151,7 +152,7 @@ def spec-row [name: string, f: record] {
 # builds again after each change and the other never does. Its account,
 # a line.
 def spec-builds [ws: path, asset: path, home: path]: nothing -> string {
-    jab retire $home
+    target retire $home
     mkdir ($home | path join "asset")
     let data = ($home | path join "asset" "spec.nuon")
     let type = ($home | path join "asset" "spec.nutype")

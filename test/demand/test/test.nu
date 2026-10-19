@@ -44,6 +44,8 @@
 # nothing. Then the declared program's declaration dropped, its next build
 # retiring the constants, including none, and recording a null demand.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -69,7 +71,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # manifests of the test's own, each naming the workspace
     let fixtures = ($out | path join "fixtures")
-    jab retire $fixtures
+    target retire $fixtures
     mkdir $fixtures
     let sdk = ($ws | path join "sdk")
     let head = $"name = 'fixture'\nsdk = '($sdk)'\nworkspace = '($ws)'\nincludes = ['($sdk | path join src)']\nlink = '($sdk | path join src program.ld)'\ndisplay = 'none'\n"
@@ -265,7 +267,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the record retired: a launch undeclared and diagnostic, and the next
     # build writing it again
-    jab retire $record_file
+    target retire $record_file
     let unrecorded = (jab launch --kernel $kernel --image $declared_image --out ($out | path join "unrecorded") --set $set)
     assert equal $unrecorded.status $status $"with its record retired the declared image runs as built: ($unrecorded.status), ($unrecorded.serial)"
     assert equal [$unrecorded.declared $unrecorded.diagnostic] [false true] $"with its record retired, a run of the declared image is undeclared and diagnostic: ($unrecorded.declared), ($unrecorded.diagnostic)"
@@ -282,7 +284,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let legacy_whole = { image: (sha $legacy_image), demand: null }
     let legacy_record = (recorded $legacy_image)
     assert equal $legacy_record $legacy_whole $"a legacy build records a null demand: ($legacy_record | to nuon)"
-    jab retire (record-of $legacy_image)
+    target retire (record-of $legacy_image)
     rebuilt $tool $legacy $legacy_image $legacy_whole "a legacy build with its record retired"
     do $manifest "legacy" $listed | ignore
     let relisted = (read-demand $legacy)
@@ -297,18 +299,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # --no-dir, a relative one from inside the tree, and a pattern matching
     # nothing empty; glob the oracle where it works, every host but Windows
     let tree = ($out | path join "paths_of")
-    jab retire $tree
+    target retire $tree
     mkdir ($tree | path join "a" "b")
     for f in [["a" "x.S"] ["a" ".hidden"] ["a" "b" "y.S"] ["top.nuon"]] { "x" | save -f ($tree | path join ...$f) }
     if $nu.os-info.name != "windows" {
         for p in [($tree | path join "**" "*") ($tree | path join "**" "*.S") ($tree | path join "*.nuon")] {
-            assert equal (jab paths-of $p | sort) (glob $p | sort) $"paths-of names what glob names for ($p)"
-            assert equal (jab paths-of $p --no-dir | sort) (glob $p --no-dir | sort) $"paths-of names what glob names for ($p) with --no-dir"
+            assert equal (walk paths $p | sort) (glob $p | sort) $"paths-of names what glob names for ($p)"
+            assert equal (walk paths $p --no-dir | sort) (glob $p --no-dir | sort) $"paths-of names what glob names for ($p) with --no-dir"
         }
-        let relative = (do { cd $tree; [(jab paths-of ("a" | path join "*.S") | sort) (glob ("a" | path join "*.S") | sort)] })
+        let relative = (do { cd $tree; [(walk paths ("a" | path join "*.S") | sort) (glob ("a" | path join "*.S") | sort)] })
         assert equal $relative.0 $relative.1 "a relative pattern joined to the working directory as glob joins it"
     }
-    assert equal (jab paths-of ($tree | path join "*.none")) [] "a pattern matching nothing names nothing"
+    assert equal (walk paths ($tree | path join "*.none")) [] "a pattern matching nothing names nothing"
 
     # the declaration's build key (ProgramMinimums): a program declaring a
     # spec of a workspace of the test's own, its spec data a copy of this

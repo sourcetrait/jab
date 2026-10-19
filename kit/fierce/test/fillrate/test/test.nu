@@ -8,6 +8,7 @@
 # test, an integer one, a span with no float at all, and the brightness
 # multiply cost a pixel.
 use ../../../../../sdk/nu/jab.nu
+use ../../../../../nu/mod/capture
 use std/assert
 
 # Three seconds a mode, eight modes and a ninth with --set vector,
@@ -44,10 +45,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the screen: the texture's two base colours, each exact at the
     # texel column where the gradient adds nothing, in half the rows
     assert ($run.screen != "") "a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
     assert equal [$screen.width $screen.height] [1920 1080] "a 1080p frame"
-    let orange = (jab ink $screen "ff8040")
-    let blue = (jab ink $screen "0040ff")
+    let orange = (capture ink $screen "ff8040")
+    let blue = (capture ink $screen "0040ff")
     assert ($orange.count > 1000) $"the texture's orange reached the screen: ($orange.count) pixels"
     assert ($blue.count > 1000) $"the texture's blue reached the screen: ($blue.count) pixels"
     print ($modes | table)

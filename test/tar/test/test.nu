@@ -4,6 +4,7 @@
 # its own memory first, which is how a shipped .tar.gz will be read once
 # the decompressor lands.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -30,7 +31,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # A tree, tarred, inside a romfs image; and what the kernel should say
 # about it, worked out here from the archive itself.
 def build-fixture [stage: path, img: path]: nothing -> record {
-    jab retire $stage
+    target retire $stage
     mkdir ($stage | path join "tree" "foo" "img")
     let note = "hello from a tar\n"
     $note | save -f ($stage | path join "tree" "foo" "note.txt")

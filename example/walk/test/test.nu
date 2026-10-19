@@ -12,6 +12,7 @@
 # stays out of its box; a small screen of a block and a lone pixel holds
 # the rule first.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const lanes = 8
@@ -32,7 +33,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
 
     # the records: kind, lane, side, scale, then the tint as a word
     let bytes = $run.api

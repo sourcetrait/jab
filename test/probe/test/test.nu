@@ -38,6 +38,9 @@
 # sdl-resolve must name as the harness's own function. Linux only, as the
 # probe is.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/nonce
+use ../../../nu/mod/present
+use ../../../nu/mod/target
 use std/assert
 
 # An address as the shim writes one, in lowercase hex.
@@ -172,7 +175,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let here = ($env.FILE_PWD | path join ".." | path expand)
     let ws = ($here | path join ".." ".." | path expand)
     let dir = ($out | path join "fixture")
-    jab retire $dir
+    target retire $dir
     mkdir $dir
 
     # the fixture, by the workspace's toolchain
@@ -339,7 +342,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # its nonce: read apart, each refused by name given twice, malformed,
     # or out of its place; a log with neither read as it always was
     let nonce = 0x1234_5678_9abc_def0
-    let nonce_text = (jab nonce-hex $nonce)
+    let nonce_text = (nonce hex $nonce)
     assert equal $nonce_text "123456789abcdef0" "nonce_hex: a nonce as sixteen lowercase hex digits"
     let run_lines = ["process 4242" $"nonce ($nonce_text)"]
     let lined = (do $log "lined" ($exe ++ $run_lines ++ [$flip_chain]))
@@ -391,10 +394,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal [$unminted.capture_nonce ("SDL_SHIM_NONCE" in ($unminted.env | columns))] [null false] "plumbing_unminted: plan given no nonce mints none and hands the shim none"
     let unnonced = (try { jab plan --kernel $kernel --image $image --out ($plumbing | path join "unnonced") --profile paired | ignore; "" } catch {|e| $e.msg })
     assert ($unnonced | str contains "--profile paired needs the run's --capture-nonce") $"plumbing_unnonced: a paired run given no nonce is refused: ($unnonced)"
-    let minted = (jab launch-nonce 0 true)
+    let minted = (nonce mint 0 true)
     assert ($minted >= 1) $"plumbing_minted: a probing launch given none mints one, 1 or more: ($minted)"
-    assert equal (jab launch-nonce $nonce true) $nonce "plumbing_given: a probing launch given one mints none"
-    assert equal (jab launch-nonce 0 false) 0 "plumbing_unprobed: a launch neither probing nor given one claims none"
+    assert equal (nonce mint $nonce true) $nonce "plumbing_given: a probing launch given one mints none"
+    assert equal (nonce mint 0 false) 0 "plumbing_unprobed: a launch neither probing nor given one claims none"
 
     # the probe's own plan, its profile, its port, and its sends: generic
     # with nothing asked, with --api, and with --send; paired where the
@@ -431,7 +434,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let probe = ($bundles | path join $"($name)_probe")
         mkdir $probe
         let sdl = ($probe | path join "sdl.log")
-        write-log $sdl ($exe ++ [$"process ($pid)" $"nonce (jab nonce-hex $run_nonce)" $flip_chain $registration_chain $switch_chain $render_chain "size"])
+        write-log $sdl ($exe ++ [$"process ($pid)" $"nonce (nonce hex $run_nonce)" $flip_chain $registration_chain $switch_chain $render_chain "size"])
         let upload = (jab sdl-log $sdl | get events | where name == "make_current" | first)
         let flushed = (($upload.ts - 0.002) * 1e9 | into int | into datetime | format date "%Y-%m-%dT%H:%M:%S%.6fZ")
         $"($flushed) virtio_gpu_cmd_res_flush res 0x1, x 0, y 0, w 1920, h 1080\n" | save --raw ($probe | path join "trace.log")
@@ -499,7 +502,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "ordinals_first", frames: [(do $p 5) (do $p 6)], wanted: [{ index: 0, rule: "skip", ordinal: 5, wanted: 4 }] }
     ]
     for v in $violations {
-        assert equal (jab ordinal-violations 3 $v.frames) $v.wanted $"($v.name): the violations as the rules name them"
+        assert equal (present ordinal-violations 3 $v.frames) $v.wanted $"($v.name): the violations as the rules name them"
     }
 
     # K over presented acceptances: a zero-delay sequence, every flip
@@ -508,8 +511,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # seed, the linear check names exactly the flips the all-pairs one does
     let period = 166666
     let exact = (0..<10 | each {|i| 5000000 + $i * $period })
-    assert equal (jab k-violations $exact $period 100) [] "k_zero_delay: exact periods pass at eps 100"
-    assert equal (jab k-violations $exact $period 0) (1..<10 | each {|j| { index: $j, witness: 0, gap: ($j * $period), bound: ($j * $period) } }) "k_zero_delay_strict: every pair fails at eps 0, each against the first"
+    assert equal (present k-violations $exact $period 100) [] "k_zero_delay: exact periods pass at eps 100"
+    assert equal (present k-violations $exact $period 0) (1..<10 | each {|j| { index: $j, witness: 0, gap: ($j * $period), bound: ($j * $period) } }) "k_zero_delay_strict: every pair fails at eps 0, each against the first"
     let draws = (generate {|x|
         let a = ($x bit-xor (($x bit-shl 13) bit-and 0xffffffff))
         let b = ($a bit-xor ($a bit-shr 17))
@@ -525,11 +528,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         }
     })
     for eps in [100 10000] {
-        let found = ($sequences | each {|s| jab k-violations $s $period $eps | length } | math sum)
+        let found = ($sequences | each {|s| present k-violations $s $period $eps | length } | math sum)
         assert ($found > 100) $"k_all_pairs: the generated set breaks K at eps ($eps), so the comparison holds something: ($found) violations"
         for s in ($sequences | enumerate) {
             let pairs = (1..<($s.item | length) | each {|j| $j } | where {|j| 0..<$j | each {|i| $i } | any {|i| (($s.item | get $j) - ($s.item | get $i)) <= (($j - $i) * $period - $eps) } })
-            assert equal (jab k-violations $s.item $period $eps | get index) $pairs $"k_all_pairs: sequence ($s.index) at eps ($eps), the linear check's flips the all-pairs check's"
+            assert equal (present k-violations $s.item $period $eps | get index) $pairs $"k_all_pairs: sequence ($s.index) at eps ($eps), the linear check's flips the all-pairs check's"
         }
     }
 

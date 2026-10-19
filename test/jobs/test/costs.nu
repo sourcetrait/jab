@@ -12,6 +12,7 @@
 # a hundred rounds a size. `just bench test/jobs/costs` runs it on a
 # release build and reports; the test runs it once on its debug one.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/walk
 
 const SIZES_US = [10 100 1000 10000]
 const ROUNDS = 100
@@ -94,7 +95,7 @@ def "main run" [--tree: string = "release", --out: string = "", --label: string 
 # in the run's directory.
 def "main report" [dir: path] {
     let dir = ($dir | path expand)
-    let docs = (jab paths-of ($dir | path join "*" "costs.nuon") | sort | each {|f| open $f })
+    let docs = (walk paths ($dir | path join "*" "costs.nuon") | sort | each {|f| open $f })
     if ($docs | is-empty) { error make { msg: $"no costs.nuon under ($dir)" } }
     let text = ($docs | each {|d| text $d } | str join "\n")
     $docs | to nuon --indent 1 | save --raw -f ($dir | path join "report.nuon")

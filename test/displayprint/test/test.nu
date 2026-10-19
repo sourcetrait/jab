@@ -3,6 +3,7 @@
 # the two lines sent to it, white on black in the first two console
 # rows, as the console font defines them.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 # How many pixels each printable character lights, from the font table.
@@ -23,10 +24,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $run.serial "uart first\nuart again\n" "the UART's two lines and nothing else"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"
-    let screen = (jab screen $run.screen)
+    let screen = (capture screen $run.screen)
     let ink = (glyph-ink)
     let expected = ("on screenline two" | split chars | each {|c| $ink | get ($c | into binary | first | into string) } | math sum)
-    let white = (jab ink $screen "ffffff")
+    let white = (capture ink $screen "ffffff")
     assert equal $white.count $expected "the screen's white pixels are the two lines' glyphs"
     assert ($white.top < 24) $"the text starts in the first console row: top ($white.top)"
     assert ($white.bottom < 48) $"the text stays in the first two console rows: bottom ($white.bottom)"

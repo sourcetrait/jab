@@ -7,6 +7,7 @@
 # way. The rows of the program's two tables are mirrored here, refusals
 # and all.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
 use std/assert
 
 const JAB_PNG_OK = 0
@@ -55,7 +56,7 @@ const loads = [
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "fixtures")
-    jab retire $stage
+    target retire $stage
     mkdir $stage
     let made = (^python3 ($env.FILE_PWD | path join "encode.py") $stage | from json)
     let img = ($out | path join "png.romfs")

@@ -25,6 +25,7 @@
 # the tree it booted on: its harts and its command line, given through
 # -append, a named spec's `jab.spec` after it.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
 use std/assert
 
 # The reader's codes, kernel/src/include/dtb.inc's DTB_*
@@ -44,7 +45,7 @@ const TIMEBASE = 10000000
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "trees")
-    jab retire $stage
+    target retire $stage
     mkdir $stage
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     # the line a launch on the configured spec hands the kernel: the test's

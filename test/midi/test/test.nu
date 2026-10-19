@@ -6,6 +6,7 @@
 # whole time, so every refill of the stream came through the trap
 # vector rather than a wait.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const RATE = 48000
@@ -22,7 +23,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.debug | str contains "jab: sound at ") $"the kernel found the sound device: ($run.debug)"
     assert ($run.sound != "") "the host recorded the sound"
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     # the left channel, then the stretch where the note is
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })

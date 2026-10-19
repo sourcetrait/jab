@@ -6,6 +6,7 @@
 # to say. The piece is minutes long, so the run is ended by the
 # capture; test/smf holds the player's end-of-piece exit.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/capture
 use std/assert
 
 const RATE = 48000
@@ -31,15 +32,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 
     # the piece: the second from a fifth of a second in, past the
     # stream's lead, carries its opening kicks
-    let wave = (jab wave $run.sound)
+    let wave = (capture wave $run.sound)
     assert equal [$wave.rate $wave.channels $wave.bits] [$RATE 2 16] $"the recording is in the one format: ($wave | reject samples)"
     let left = (0..<$wave.frames | each {|i| $wave.samples | bytes at ($i * 4)..<($i * 4 + 2) | into int --endian little --signed })
     let piece = ($left | slice ($RATE // 5)..<($RATE * 6 // 5) | enumerate | where {|s| ($s.item | math abs) > $HEARD } | get index)
     assert (($piece | length) > 2000) $"the piece plays on its own: ($piece | length) samples heard in its first second"
 
     # the title
-    let screen = (jab screen $run.screen)
-    let title = (jab ink $screen $TITLE_COLOR)
+    let screen = (capture screen $run.screen)
+    let title = (capture ink $screen $TITLE_COLOR)
     assert ($title.count > 500) $"the title is on the screen: ($title.count) off-white pixels"
     assert ($title.left >= $TITLE_X and $title.right < $TITLE_X + $TITLE_WIDTH) $"inside its box across: ($title)"
     assert ($title.top >= $TITLE_Y and $title.bottom < $TITLE_Y + $TITLE_HEIGHT) $"inside its box down: ($title)"

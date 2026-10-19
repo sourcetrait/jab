@@ -6,6 +6,7 @@
 # the program reads it in pages of 4000, which line up with no sector,
 # and writes every byte back as hex.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -62,7 +63,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # The fixture: repository files at their own paths, one entry of every
 # mode, and the two names. Returns what the test needs to judge by.
 def build-fixture [repo: path, stage: path, img: path]: nothing -> record {
-    jab retire $stage
+    target retire $stage
     mkdir $stage
 
     # the repository's own files, at the paths they have there

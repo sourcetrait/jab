@@ -10,6 +10,8 @@
 # byte, so that the checking inside the kernel is itself checked once
 # against something outside it.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/target
+use ../../../nu/mod/walk
 use std/assert
 
 const JAB_GZ_OK = 0
@@ -42,7 +44,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
 # Six gzip files in a romfs image, and what each should inflate to.
 def build-fixture [repo: path, stage: path, img: path]: nothing -> table<name: string, bytes: int, source: string> {
-    jab retire $stage
+    target retire $stage
     mkdir ($stage | path join "src")
     mkdir ($stage | path join "ship")
     let src = ($stage | path join "src")
@@ -55,7 +57,7 @@ def build-fixture [repo: path, stage: path, img: path]: nothing -> table<name: s
     "hello" | save -f ($src | path join "tiny.txt")
     "" | save -f ($src | path join "empty")
     cp ($repo | path join "asset" "img" "logo" "lowkick.480x640.png") ($src | path join "logo.png")
-    let font = (jab paths-of ($repo | path join "**" "*.S")
+    let font = (walk paths ($repo | path join "**" "*.S")
         | where {|p| ($p | path type) == "file" }
         | each {|p| { path: $p, bytes: (ls -D $p | get 0.size | into int) } }
         | sort-by bytes
