@@ -493,6 +493,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let admitted = (checked $first.bundle $guest)
     assert equal $admitted.stage 0 $"bundle_admitted: the check admits the bundle by replay: ($admitted.refused)"
     assert equal [$admitted.result.profile $admitted.result.run.process $admitted.result.run.guest_nonce $admitted.result.trace.flushes ($admitted.result.events | where kind == "upload" | length)] ["paired" 4242 $nonce 1 1] "bundle_admitted: paired, bound by its pid and its nonce, the trace's one flush paired with its upload"
+    assert equal ($admitted.result.events | where kind == "render" | get evidence) ["anchor"] "bundle_admitted: the render carries the replay's evidence, its anchor"
     let switch_frame = (do $inside 0 "displaychangelistener_gfx_switch")
     let moved_frame = $"0+(hex ((do $symbol 'displaychangelistener_gfx_switch').value + 8))"
     let registration_frame = (do $inside 0 "qemu_console_register_listener")
@@ -507,6 +508,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "bundle_classified_dropped", stage: 3, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | drop 1) } } }
         { name: "bundle_kind_altered", stage: 4, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | each {|e| if $e.kind == "upload" { $e | update kind "console" } else { $e } }) } } }
         { name: "bundle_table_renamed", stage: 4, rehash: true, change: {|b| swap-once ($b | path join "tables" "0.nm") "sdl2_gl_update " "sdl2_gl_updatf " } }
+        { name: "bundle_evidence_altered", stage: 4, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | each {|e| if $e.kind == "render" { $e | update evidence "timing" } else { $e } }) } } }
         { name: "bundle_pid_altered", stage: 5, rehash: true, change: {|b| swap-once ($b | path join "sdl.log") "process 4242" "process 4243" } }
         { name: "bundle_flush_removed", stage: 5, rehash: true, change: {|b| drop-line ($b | path join "trace.log") "virtio_gpu_cmd_res_flush" } }
         { name: "bundle_pid_unrecorded", stage: 5, rehash: true, change: {|b| nuon-edit ($b | path join "identity.nuon") {|i| $i | reject qemu_pid } } }
