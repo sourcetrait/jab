@@ -13,6 +13,13 @@ with a separator when it is used. Data follows padded to 512, and two zeroed
 blocks end the archive. A header whose name is empty, or whose checksum does
 not answer for it, is the end.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels, the format
+decoders forbidden beside the drivers.
+
 ## .set TAR_NAME
 
 `u8`: a ustar header's 100-byte name.

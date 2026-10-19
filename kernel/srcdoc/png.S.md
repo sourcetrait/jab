@@ -24,6 +24,13 @@ pixels, four bytes each, front to back where the source is wider (RGBA) and
 back to front where it is narrower, so nothing is read after it is
 overwritten. The buffer rule in jab.inc is what makes both passes fit.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels, the format
+decoders forbidden beside the drivers.
+
 ## .set PNG_SIG_LOW
 
 `u32`: the signature's first word, as the big-endian word a read sees.

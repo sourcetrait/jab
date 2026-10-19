@@ -25,6 +25,13 @@ source pixel at all, which is how a program clears the shape it drew a
 frame ago. The record and its pixels are read a byte at a time, so a sprite
 may sit anywhere.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels, the format
+decoders forbidden beside the drivers.
+
 ## .set SPRITE_SIDE_MAX
 
 `u64`: the most a record's width, height, and frame count may each be.

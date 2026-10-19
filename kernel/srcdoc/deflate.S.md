@@ -22,6 +22,13 @@ png.S hands the decoder each chunk's data as the one before runs out, and
 the stream is never copied together. A gzip is one segment and gives no
 hook.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels, the format
+decoders forbidden beside the drivers.
+
 ## .set DF_MAX_BITS
 
 `u64`: the longest code.

@@ -14,15 +14,23 @@ hart_idle:                                  # a secondary between its workers, o
     csrr t0, CSR_SIREG
     li t1, ~(1 << AIA_WAKE)
     and t1, t0, t1
-    beqz t1, 10f                            # its file enables the wake alone
+    beqz t1, 10f                            # no device's identity enabled
     ctz a1, t1
     la a0, msg_enabled
     j fatal_hart_dec                        # a device's identity enabled off hart 0
+10:
+    andi t1, t0, (1 << AIA_WAKE)
+    bnez t1, 11f                            # its file enables the wake alone
+    li a1, AIA_WAKE
+    la a0, msg_disabled
+    j fatal_hart_dec                        # the wake disabled: the hart could never be woken
 .pushsection .rodata
 msg_enabled:
     .asciz " enabled a device identity "
+msg_disabled:
+    .asciz " disabled the wake identity "
 .popsection
-10:
+11:
 .endif
     li t0, SIE_SEIE
     csrw sie, t0

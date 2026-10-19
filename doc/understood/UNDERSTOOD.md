@@ -628,19 +628,29 @@ of the program's in which the kernel records what the next start or stop
 saw there. `test/workers` and `test/workerfault` prove each rule.
 
 Every device belongs to hart 0. A driver's state is touched only by hart 0's
-calls and by the interrupt drain on hart 0. A worker's calls never reach a
-driver, and every device interrupt goes to hart 0's interrupt file. A
+calls and by the interrupt drain on hart 0, and so is the state of the
+format decoders and the sprite draw. A worker's calls never reach a driver
+or a decoder, and every device interrupt goes to hart 0's interrupt file. A
 secondary's file enables only the wake, so a drain there claims nothing
-else. `test/owners` checks this on the built kernels. It follows every path
-a worker can take from the trap vector, the drain, and the calls a worker
-may make. It fails when a path reaches a driver's routine or a driver's
-data, or calls through a register anywhere but the call table. Two reads
-are allowed by instruction: the drain's read of the sound's base address,
+else. `test/owners` checks this on the built kernels. Every kernel source
+file is in a class, and a new file fails the check until it is placed in
+one. The check follows every path a worker can take from the trap vector,
+the drain, and the calls a worker may make. It fails when a path reaches a
+routine or the data of a driver, a decoder, or hart 0's own storage, or
+calls through a register anywhere but the call table. It also checks the
+shapes it relies on, and any other shape fails by name: the test of the
+hart's id that sends a worker to its own calls, the four calls a worker may
+make, the call table's jump, and the drain's mask of the wake before it
+serves a device. Two reads are allowed by instruction, each under its
+condition: the drain's read of the sound's base address, after its mask,
 which only orders the sound first, and the worker wait's read of the
-sound's live flag, on hart 0's side of its branch. A debug kernel also ends
-the run when a hart other than 0 claims a device's interrupt, `jab: hart N
-claimed a device identity M`, or when a secondary's file enables one, `jab:
-hart N enabled a device identity M`.
+sound's live flag, on hart 0's side of its branch. The check sees the
+addresses an instruction names; an address held in a register and then
+used is outside it. A debug kernel also ends the run when a hart other than
+0 claims a device's interrupt, `jab: hart N claimed a device identity M`,
+or when a secondary's file enables one, `jab: hart N enabled a device
+identity M`, or disables its wake, `jab: hart N disabled the wake identity
+1`.
 
 Two of the program's buffers belong to the kernel after their call
 returns. A MIDI file is read in place while it plays, and a SoundFont while

@@ -15,6 +15,13 @@ loops over two small tables rather than unrolled: pi says where each lane
 goes and rho how far it turns, and between them they are the only part that
 is not arithmetic on neighbours.
 
+Every global here is hart 0's: hart 0's calls alone touch it. A worker's
+calls are jab.sys.harts and the worker calls (trap.S's worker_call), and a
+secondary's drain serves no device, its interrupt file enabling the wake
+alone (aia.S), so no path a worker takes reaches a routine or the data of
+this file; test/owners holds that on the built kernels, the format
+decoders forbidden beside the drivers.
+
 ## .set SHA3_LANES
 
 `u64`: the state's 64-bit lanes.

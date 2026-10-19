@@ -27,16 +27,24 @@ the wfi at once. The drain claims the wake and fences, so the state is read
 after it.
 
 Under DEBUG the hart's own file's eie0 is read back first, through
-siselect: an identity enabled there besides the wake ends the run, `jab:
-hart N enabled a device identity M` (trap.S's fatal_hart_dec). Only the
-wake belongs in a secondary's file (aia.S's aia_file_open), the half of the
-drain's path condition a misconfigured file breaks before any message
-lands in it (aia.S's irq_drain).
+siselect, and held to the wake's bit exactly: an identity enabled there
+besides the wake ends the run, `jab: hart N enabled a device identity M`
+(trap.S's fatal_hart_dec), M the lowest, and so does the wake's own bit
+clear, `jab: hart N disabled the wake identity 1`, a hart that could never
+be woken; a file holding both reads as the device's. Only the wake belongs
+in a secondary's file (aia.S's aia_file_open), the half of the drain's path
+condition a misconfigured file breaks before any message lands in it
+(aia.S's irq_drain).
 
 ## msg_enabled
 
 `28 u8`: the readback's line between its hart and its identity, under DEBUG
 only.
+
+## msg_disabled
+
+`29 u8`: the readback's line for a cleared wake, between its hart and the
+wake's identity, under DEBUG only.
 
 ## worker_enter
 
