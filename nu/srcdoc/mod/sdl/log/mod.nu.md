@@ -25,10 +25,12 @@ time in nanoseconds its file had as its line was written, null where it
 had no file, as the vDSO has none; and the events in order, each
 make_current with its frames past the leading ones in the shim's own
 library, object 1, which it counts, a frame by its object's index (null
-for none) and its address as written and as a number, and whether the
-timing rule makes it a render: a window-size call the next event,
-within 2 ms; every event with its stamp as the log wrote it. A last line
-the run's end cut short is left out. The run's lines are events too, and
+for none) and its address as written and as a number, and its timing
+mark, `render`: a window-size call the next event, within 2 ms, which a
+bundle's sequence check compares and the classification never reads, a
+render being read by its anchor (sdl classify); every event with its
+stamp as the log wrote it. A last line the run's end cut short is left
+out. The run's lines are events too, and
 their values come back apart: `process`, QEMU's pid, and `nonce`, the
 capture nonce as its sixteen hex digits, each null where the log has
 none, as a log written before them has neither. Every complete line is
