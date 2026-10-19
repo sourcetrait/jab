@@ -20,9 +20,9 @@
 # and one not; a second build of each does nothing, a change to the type
 # alone builds the one listing specs again and leaves the other as it was,
 # and so does a change to the data alone.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
+use ../../../nu/mod/build
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -170,13 +170,13 @@ def spec-builds [ws: path, asset: path, home: path]: nothing -> string {
     }
     let local = ($ws | path join "extern" "riscv")
     let toolchain = ($env.RISCV_TOOLCHAIN? | default (if ($local | path exists) { $local } else { "" }))
-    let tool = ($sdk | path join "nu" "jab.nu")
+    let tool = ($sdk | path join ".." "nu" "bin" "do.nu" | path expand)
     let build = {||
         [listed unlisted] | each {|p|
             let dir = ($home | path join $p)
             let r = (with-env (if $toolchain == "" { {} } else { { RISCV_TOOLCHAIN: $toolchain } }) { ^nu $tool build $dir | complete })
             if $r.exit_code != 0 { error make {msg: $"building ($p) failed: ($r.stderr)"} }
-            let image = (jab program-out $dir release | path join $"($p).jab")
+            let image = (build program-out $dir release | path join $"($p).jab")
             { program: $p, modified: (ls -D $image | get 0.modified) }
         }
     }

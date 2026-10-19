@@ -48,191 +48,42 @@
 
 use ../../nu/mod/audio
 use ../../nu/mod/bound
+use ../../nu/mod/build
 use ../../nu/mod/chardev
 use ../../nu/mod/demand
 use ../../nu/mod/disco
 use ../../nu/mod/disk
 use ../../nu/mod/host
 use ../../nu/mod/image
+use ../../nu/mod/machine
 use ../../nu/mod/nonce
+use ../../nu/mod/pad
 use ../../nu/mod/process
+use ../../nu/mod/sdl/classify
 use ../../nu/mod/sdl/log
-use ../../nu/mod/sdl/refusal
 use ../../nu/mod/sdl/symbols
-use ../../nu/mod/spec
-use ../../nu/mod/stamp
 use ../../nu/mod/target
 use ../../nu/mod/tool
-use ../../nu/mod/toolchain
 use ../../nu/mod/walk
-use ../../nu/mod/word
 use ../../nu/mod/workspace
-use ../../nu/mod/spec [harts_allowed]
+use ../../nu/mod/machine [rng_device]
 
 # This tool's own file, which `do` runs again for the SDK's commands.
 const self = (path self)
 # The window's base (jab.inc): the kernel's 2 MiB and the framebuffer's
 # 8 MiB come first, and the program has the rest of the machine's 4 GiB.
 const program_base = "0x80a00000"
-# A custom machine's RAM, the 4 GiB every machine had before named specs;
-# a named spec's is its own.
-const custom_ram_gib = 4
 # virt's map has this many virtio-mmio transports, a hard ceiling on
 # the devices a line can carry.
 const transport_limit = 8
-# RVA23 is the profile Jab pins, so everything it mandates is on whether
-# or not Jab itself uses it; the supervisor profile is the one carrying
-# an MMU mode and the supervisor timer the frame clock needs. RVA23 says
-# nothing about machine mode, so QEMU's model of it has no physical
-# memory protection at all, and the kernel enters in machine mode and
-# opens PMP before it has a trap vector: without `pmp=true` that write
-# is an illegal instruction which traps to address zero and spins there
-# forever. It is the one CPU a machine runs: QEMU carries it from 9.2,
-# and a QEMU without it is refused rather than run on another model.
-const cpu_profile = "rva23s64,pmp=true"
-# The assembler takes the same profile, so the source may use whatever
-# the CPU carries: the user profile for a program, which runs in U-mode,
-# and the supervisor profile for the kernel.
-const march_program = "-march=rva23u64"
-const march_kernel = "-march=rva23s64"
-# Multithreaded TCG, a host thread a hart, stated on every line: QEMU
-# 11.1.2 already takes it for riscv64 when no instruction counting is
-# asked, and the line says so whatever the host's QEMU would choose.
-const accel = "tcg,thread=multi"
-# The interrupt platform: the APLIC in MSI mode feeding each hart's IMSIC
-# interrupt files, with the ACLINT's timer, which only TCG offers.
-const machine_name = "virt,aia=aplic-imsic,aclint=on"
-# No parallel port: QEMU's default is a text console of its own, which
-# under SDL is a second, hidden window with its own GL context, drawn
-# on every refresh its cursor blinks.
-const machine_rest = [
-    "-global" "virtio-mmio.force-legacy=false"
-    "-parallel" "none"
-]
-# The QEMU a machine runs on: an extern when there is one, else PATH.
-# `extern/qemu` is a QEMU install, the binary under its `bin/` or at its
-# top, where the Windows installer puts it, looked for as the
-# toolchain's `extern/riscv` is, beside `here` (the program) and then in
-# the workspace; one that holds no binary is an error rather than a
-# quiet fall to PATH, since a run on another QEMU is what the link is
-# there to prevent. With no extern, the name, for PATH.
-def qemu-binary [here: path, workspace: oneof<string, nothing>]: nothing -> string {
-    let places = (if $workspace == null { [$here] } else { [$here $workspace] })
-    let file = (host exe-name $process.qemu_name)
-    for place in $places {
-        let prefix = ($place | path join "extern" "qemu")
-        if ($prefix | path type) != null {
-            let found = ([($prefix | path join "bin" $file) ($prefix | path join $file)] | where {|b| $b | path exists })
-            if ($found | is-empty) {
-                error make {msg: $"($prefix) holds no ($file), in bin/ or at its top: link extern/qemu to a QEMU install"}
-            }
-            return ($found | first)
-        }
-    }
-    $process.qemu_name
-}
-
-# The CPU every machine runs, the RVA23 profile, once the QEMU it runs on
-# lists the model; a QEMU that does not is refused with its version.
-def cpu-model [qemu: string]: nothing -> string {
-    let listed = (^$qemu -cpu help | complete | get stdout | lines | any {|l| ($l | str trim) == "rva23s64" })
-    if not $listed {
-        let version = (^$qemu --version | complete | get stdout | lines | get -o 0 | default "a QEMU")
-        let found = (which $qemu | get -o 0.path | default $qemu)
-        error make {msg: $"($version) at ($found) has no rva23s64, the RVA23 CPU every Jab machine runs on\nlink extern/qemu, in the workspace or beside the program, to a QEMU 11 install"}
-    }
-    $cpu_profile
-}
-
-# What a launch's machine is, the record a run keeps of it. A named
-# spec's, given its row (spec-row): its cores the harts and its RAM, with
-# `spec` its name in lowercase, its cores, its RAM in GiB, and its
-# display, `diagnostic` null. A custom machine of `harts` harts, 1 to 8
-# (harts_allowed), and custom_ram_gib: `diagnostic` its harts and RAM and
-# `spec` null, whatever its count. Never both, and one of them always.
-# Beside either the harts and the RAM it has, the -machine options, the
-# CPU model, the accelerator with its thread mode, and `overrides`, QEMU
-# words of a launch's own on its line.
-export def machine-of [harts?: int, --spec: any = null, --overrides: list<string> = []]: nothing -> record<harts: int, ram_gib: int, spec: any, diagnostic: any, machine: string, cpu: string, accel: string, overrides: list<string>> {
-    if $spec != null and $harts != null { error make {msg: "--spec with --harts: a named spec provisions its own harts, and --harts names a custom machine"} }
-    if $spec == null and $harts == null { error make {msg: "a machine is a named spec's, --spec, or a custom one, --harts N"} }
-    let common = { machine: $machine_name, cpu: $cpu_profile, accel: $accel, overrides: $overrides }
-    if $spec != null {
-        let ram = ($spec.ram / 1GiB | into int)
-        let named = { name: ($spec.name | str lowercase), cores: $spec.cores, ram_gib: $ram, display: $spec.display }
-        { harts: $spec.cores, ram_gib: $ram, spec: $named, diagnostic: null } | merge $common
-    } else {
-        if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), a custom machine's harts, not ($harts)"} }
-        { harts: $harts, ram_gib: $custom_ram_gib, spec: null, diagnostic: { harts: $harts, ram_gib: $custom_ram_gib } } | merge $common
-    }
-}
-
-# The machine a launch asks for (machine-of): `--harts`, given past 0, a
-# custom machine; else the spec `--spec` names, or the configured default
-# (spec-default), its row from `ws`'s spec data (spec-row). Both given are
-# refused, naming both, before QEMU starts.
-export def machine-for [ws: oneof<string, nothing>, spec: string, harts: int]: nothing -> record {
-    if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
-    if $harts != 0 { return (machine-of $harts) }
-    if $ws == null { error make {msg: "a named spec needs its workspace's asset/spec.nuon, and this launch has no workspace; name a custom machine with --harts"} }
-    let name = (if $spec != "" { $spec } else { spec configured $ws })
-    machine-of --spec (spec row $ws $name)
-}
-
-# A launch's command line for the kernel: `bootargs`, then a named spec's
-# `jab.spec=<name>`; a custom machine's `bootargs` alone.
-def spec-bootargs [m: record, bootargs: string]: nothing -> string {
-    if $m.spec == null { return $bootargs }
-    [$bootargs $"jab.spec=($m.spec.name)"] | where {|w| $w != "" } | str join " "
-}
-
-# A debug kernel's knob as it reads one from its command line
-# (knob_value): the first word of `line` that starts `<name>=`, its value
-# when the rest is digits alone; null with no such word, or with anything
-# else after its `=`.
-def knob-of [line: string, name: string]: nothing -> oneof<int, nothing> {
-    let word = ($line | split row " " | where {|w| $w starts-with $"($name)=" } | get -o 0)
-    if $word == null { return null }
-    let value = ($word | str substring (($name | str length) + 1)..)
-    if ($value =~ '^[0-9]+$') { $value | into int } else { null }
-}
-
-# The machine on `qemu` as `m` (machine-of) provisions it: virt with
-# `options` after it when given, the RVA23 CPU, multithreaded TCG, its
-# harts, every transport modern.
-def machine-args [qemu: string, m: record, --options: string = ""]: nothing -> list<string> {
-    let machine = (if $options == "" { $m.machine } else { $"($m.machine),($options)" })
-    ["-machine" $machine "-cpu" (cpu-model $qemu) "-accel" $m.accel "-smp" ($m.harts | into string)] ++ $machine_rest
-}
-
-# The RAM `m` has (machine-of), in GiB.
-def memory-args [m: record]: nothing -> list<string> {
-    ["-m" $"($m.ram_gib)G"]
-}
-
-# The guest is named for the program, `jab <program>`, which is what
-# QEMU's window shows inside its own prefix, hardcoded in every front
-# end (SDL adds the console's index too: `QEMU (jab pad-0)`), and the
-# threads are named (CPU 0/TCG and the rest), so a per-thread listing
-# reads; on Linux the process is named jab, so `pgrep -x jab` finds it.
-# `-name` alone names only the guest, and `process=` is a Linux prctl
-# that QEMU refuses to start without elsewhere ("Change of process name
-# not supported by your OS"), so the process name is Linux's alone.
-def name-args [program: string]: nothing -> list<string> {
-    let process = (if $nu.os-info.name == "linux" { ",process=jab" } else { "" })
-    ["-name" $"jab ($program)($process),debug-threads=on"]
-}
 const display_device = ["-device" "virtio-gpu-device,xres=1920,yres=1080"]
 const input_devices = [
     "-device" "virtio-keyboard-device"
     "-device" "virtio-tablet-device"
 ]
-# The entropy device, on a run and on a launch alike, since the
-# kernel's jab.sys.random draws from it
-const rng_device = ["-device" "virtio-rng-device"]
 const devices = [
     "-device" "virtio-net-device,netdev=net0" "-netdev" "user,id=net0"
-] ++ $rng_device
+] ++ $machine.rng_device
 
 # A headless machine prepared and not run: everything a launch sets up
 # before QEMU starts, handed back for whoever runs and drives it, the
@@ -319,8 +170,8 @@ export def plan [
     let ws = (image workspace $kernel $image $out)
     # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
     # is recorded below it, where a release kernel reads no knob and refuses
-    let asked = (machine-for $ws $spec $harts)
-    let machine = (if (knob-of $bootargs "jab.nominimum") == 1 { $asked | insert below_minimum true } else { $asked })
+    let asked = (machine resolve $ws $spec $harts)
+    let machine = (if (machine knob-of $bootargs "jab.nominimum") == 1 { $asked | insert below_minimum true } else { $asked })
     let demand = (demand image $image)
     demand spec-listed $machine $demand ($image | path parse | get stem)
     if $sound and $live_sound { error make {msg: "--sound and --live-sound together: the recording or the host's audio, one or the other"} }
@@ -348,13 +199,13 @@ export def plan [
         chardev fifo-at ($monitor + ".out") $root
         { name: $monitor, inward: ($monitor + ".in"), outward: ($monitor + ".out") }
     })
-    let qemu = (qemu-binary (image home $image) $ws)
+    let qemu = (machine qemu-binary (image home $image) $ws)
     let bound = (bound timeout)
     let found = (if (disco discovery-wanted $host_pad $live_sound) { disco discover $ws } else { { gamepad: null, audio: null } })
-    let hosted = (if $host_pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
-    let pad = (pad-attach $gamepad $out $pad_port $ws $root)
+    let hosted = (if $host_pad { pad gamepad-plan $found } else { { args: [], port: false, bridge: null } })
+    let pad = (pad pad-attach $gamepad $out $pad_port $ws $root)
     let api_on = ($api or (not ($send | is-empty)))
-    let ports = (chardev ports (symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
+    let ports = (chardev ports (build symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
     # Windows' relays, one a pipe with no client of its own: the monitor's,
     # the API's, and a scripted pad's port, the host's pad's client being
     # the bridge
@@ -372,7 +223,7 @@ export def plan [
     let shim = (if $probed { tool shim $ws "jabshim_sdl" } else { "" })
     let sdl_log = (if $probed { $sdl_probe | path expand } else { "" })
     if $probed { target retire $sdl_log $root }
-    let shown = (if $probed { "sdl,gl=on" } else if $window { display (image manifest $image) } else { "none" })
+    let shown = (if $probed { "sdl,gl=on" } else if $window { machine display (image manifest $image) } else { "none" })
     let run_env = (if not $probed { $pad.env } else {
         let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
         let preload = ([($pad.env | get -o LD_PRELOAD | default "") $shim] | where {|p| $p != "" } | str join " ")
@@ -380,9 +231,9 @@ export def plan [
         let driver = (if $server { {} } else { { SDL_VIDEODRIVER: "offscreen" } })
         $pad.env | merge { LD_PRELOAD: $preload, SDL_SHIM_LOG: $sdl_log } | merge $nonce | merge $driver
     })
-    let line = (spec-bootargs $machine $bootargs)
+    let line = (machine spec-bootargs $machine $bootargs)
     let append = (if $line == "" { [] } else { ["-append" $line] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
-    let args = ((machine-args $qemu $machine) ++ (name-args ($image | path parse | get stem)) ++ (memory-args $machine) ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let args = ((machine machine-args $qemu $machine) ++ (machine name-args ($image | path parse | get stem)) ++ (machine memory-args $machine) ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" $shown "-monitor" $"pipe:($watch.name)" "-serial" $"file:($log)"
@@ -559,7 +410,7 @@ export def launch [
 ]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
-    let gamepad = (pad-table $pad)
+    let gamepad = (pad pad-table $pad)
     let nonce = (nonce mint $capture_nonce ($sdl_probe != ""))
     let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --spec $spec --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile)
     let send = $machine.sends
@@ -658,7 +509,7 @@ export def launch [
                         if $api_in == "" { false } else { chardev pipe-write $api_in ($send | get $action.index | get bytes) $bound }
                     } else {
                         let g = ($gamepad.groups | get $action.index)
-                        if $gamepad.port { chardev pipe-write $pad_in (pad-frames $g.items) $bound } else if $gamepad.fifo != "" { chardev fifo-write $gamepad.fifo (pad-report $g.items) $bound } else { false }
+                        if $gamepad.port { chardev pipe-write $pad_in (pad pad-frames $g.items) $bound } else if $gamepad.fifo != "" { chardev fifo-write $gamepad.fifo (pad pad-report $g.items) $bound } else { false }
                     })
                     if $written and $action.kind == "send" {
                         $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
@@ -743,138 +594,6 @@ export def due-order [events: table<kind: string, index: int, at: duration>, scr
     if $screen == null or $screen > $elapsed { return $due }
     ($due | where {|e| $e.at < $screen }) ++ [{ kind: "screen", index: 0, at: $screen }] ++ ($due | where {|e| $e.at >= $screen })
 }
-
-# The device tree QEMU builds for a launch's machine, the one `--spec`
-# names, a custom one of `--harts` harts, or the configured default
-# (machine-for), written to the file `out` through -machine dumpdtb, QEMU
-# exiting once it is written and before any hart runs, `bootargs` in
-# /chosen as a launch's -append puts it, a named spec's
-# `jab.spec=<name>` after it; the kernel and the image place the line as plan
-# places it, and a previous file there is retired. The file's path.
-export def dump-tree [--kernel: path, --image: path, --out: path, --spec: string = "", --harts: int = 0, --bootargs: string = ""]: nothing -> string {
-    let file = ($out | path expand)
-    let dir = ($file | path dirname)
-    let ws = (image workspace $kernel $image $dir)
-    let machine = (machine-for $ws $spec $harts)
-    mkdir $dir
-    let root = (target root (if $ws != null { $ws } else { image home $image }))
-    target retire $file $root
-    let qemu = (qemu-binary (image home $image) $ws)
-    let line = (spec-bootargs $machine $bootargs)
-    let append = (if $line == "" { [] } else { ["-append" $line] })
-    let args = ((machine-args $qemu $machine --options $"dumpdtb=($file)") ++ (memory-args $machine) ++ ["-bios" "none" "-kernel" ($kernel | path expand) "-display" "none"] ++ $append)
-    let made = (^$qemu ...$args | complete)
-    if $made.exit_code != 0 or not ($file | path exists) { error make {msg: $"QEMU wrote no device tree to ($file): ($made.stderr | str trim)"} }
-    $file
-}
-
-# The gamepad a machine carries: nothing at all unless asked. Asked, on
-# Linux unless `port` says otherwise, the fifo `pad` in `out`, made fresh,
-# which QEMU's host-input device opens as the pad with the evdev shim
-# preloaded to answer its ioctls as the reference pad, the QEMU arguments
-# and environment for that; on every other host, and on Linux with
-# `port`, the pad port instead, the same reference pad described by the
-# header the driver writes first. The shim is one of the workspace's,
-# `ws`, the kernel's or the one above `out`; anything at the fifo's path
-# is retired into `root`'s retire home (fifo-at).
-def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>, root: path]: nothing -> record<args: list<string>, env: record, fifo: string, port: bool, header: binary> {
-    let none = { args: [], env: {}, fifo: "", port: false, header: 0x[] }
-    if not $wanted { return $none }
-    if $port or $nu.os-info.name != "linux" {
-        return ($none | merge { port: true, header: (pad-port-header) })
-    }
-    if $ws == null { error make {msg: "a gamepad needs a workspace, above the kernel or the output directory, which holds shim/crates/evdev"} }
-    let shim = (tool shim $ws "jabshim_evdev")
-    let fifo = ($out | path join "pad")
-    chardev fifo-at $fifo $root
-    {
-        args: ["-device" $"virtio-input-host-device,evdev=($fifo)"],
-        env: { LD_PRELOAD: $shim, EVDEV_SHIM_FIFO: $fifo },
-        fifo: $fifo,
-        port: false,
-        header: 0x[],
-    }
-}
-
-# A launch's pad table as the groups it plays: the rows grouped by their
-# time, each group one report the launch loop writes at that time; none
-# without a table, and none for a table with no rows, which still puts
-# the pad on the machine with nothing played into it.
-def pad-table [table: path]: nothing -> record<groups: list<any>> {
-    if ($table | is-empty) { return { groups: [] } }
-    let rows = (open ($table | path expand))
-    if ($rows | is-empty) { return { groups: [] } }
-    let wanted = [at type code value]
-    if not ($wanted | all {|c| $c in ($rows | columns) }) {
-        error make {msg: $"($table): a pad table has the columns at, type, code, value; this one has ($rows | columns | str join ', ')"}
-    }
-    { groups: ($rows | sort-by at | group-by --to-table {|r| $r.at | into int } | each {|g| { at: ($g.items | first | get at), items: $g.items } }) }
-}
-
-# One report of pad events, as the device would send them: each row an
-# input_event, then a SYN_REPORT closing the report.
-def pad-report [items: table<type: int, code: int, value: int>]: nothing -> binary {
-    ($items | each {|e| input-event $e.type $e.code $e.value } | bytes collect) ++ (input-event 0 0 0)
-}
-
-# The same events as the pad port takes them: eight bytes each, type,
-# code, value, little-endian, no SYN (doc/padport.md).
-def pad-frames [items: table<type: int, code: int, value: int>]: nothing -> binary {
-    $items | each {|e| (word le $e.type 2) ++ (word le $e.code 2) ++ (word le $e.value 4) } | bytes collect
-}
-
-# The pad port's header for the reference pad, the one the evdev shim
-# answers as, so a table plays the same either way (doc/padport.md):
-# the magic, the version, the name, the buttons BTN_GAMEPAD to
-# BTN_GAMEPAD plus 15, the axes X, Y, Z, RZ, GAS, BRAKE, HAT0X, HAT0Y
-# with the shim's absinfo, and zero for every other axis.
-def pad-port-header []: nothing -> binary {
-    let name = ("8BitDo Ultimate" | into binary)
-    let axes = {
-        0: [0 255 0 15 0], 1: [0 255 0 15 0], 2: [0 255 0 15 0], 5: [0 255 0 15 46],
-        9: [0 255 0 15 0], 10: [0 255 0 15 0], 16: [-1 1 0 0 0], 17: [-1 1 0 0 0],
-    }
-    let axis_mask = ($axes | columns | each {|c| 1 bit-shl ($c | into int) } | math sum)
-    let absinfo = (0..<64 | each {|code|
-        let info = ($axes | get -o ($code | into string))
-        if $info == null { word zeros 20 } else { $info | each {|f| word le $f 4 } | bytes collect }
-    } | bytes collect)
-    ("JPAD" | into binary) ++ (word le 1 4) ++ $name ++ (word zeros (128 - ($name | bytes length))) ++ (word le 0xffff 4) ++ (word le 0 4) ++ (word le $axis_mask 8) ++ $absinfo
-}
-
-# One input_event as an evdev device writes it, 24 bytes: the wall
-# clock's seconds and microseconds as two 64-bit fields, then the type
-# and the code as 16 bits each and the value as 32, all little-endian.
-def input-event [type: int, code: int, value: int]: nothing -> binary {
-    let ns = (date now | into int)
-    let sec = ($ns // 1_000_000_000)
-    let usec = (($ns mod 1_000_000_000) // 1000)
-    ($sec | into binary --endian little | bytes at 0..<8) ++ ($usec | into binary --endian little | bytes at 0..<8) ++ ($type | into binary --endian little | bytes at 0..<2) ++ ($code | into binary --endian little | bytes at 0..<2) ++ ($value | into binary --endian little | bytes at 0..<4)
-}
-
-# The build symbols named by `--set`: comma separated, in any case,
-# each made screaming snake case (debug, Debug and some-thing become
-# DEBUG and SOME_THING), sorted so order cannot matter, and refused when
-# the assembler would not take the name, which it would only say much
-# later.
-def symbols [set: string]: nothing -> list<string> {
-    let names = ($set | split row "," | each {|s| $s | str trim } | where {|s| $s != "" } | each {|s| $s | str screaming-snake-case } | uniq | sort)
-    for n in $names {
-        if not ($n =~ '^[A-Z_][A-Z0-9_]*$') {
-            error make {msg: $"--set ($n): not a symbol the assembler takes; a name starts with a letter"}
-        }
-    }
-    $names
-}
-
-# A test build's symbols: whatever was asked, and DEBUG.
-def with-debug [names: list<string>]: nothing -> list<string> { $names | append "DEBUG" | uniq | sort }
-
-# Which tree a build lands in: debug with DEBUG set, else release.
-def profile [names: list<string>]: nothing -> string { if "DEBUG" in $names { "debug" } else { "release" } }
-
-# The symbols as the assembler takes them.
-def defsyms [names: list<string>]: nothing -> list<string> { $names | each {|n| ["--defsym" $"($n)=1"] } | flatten }
 
 # Where `watch` records: watch.nuonl in the workspace's target.
 def watch-file [ws: path]: nothing -> string {
@@ -1005,206 +724,18 @@ def memory-text [memory: any]: nothing -> string {
     if $memory == null { "" } else { $"; resident ($memory.median / 1048576 | math round) MiB at the median, ($memory.peak / 1048576 | math round) at the peak" }
 }
 
-# A program's directory in the target for one purpose, whatever the
-# tree: `<target>/<purpose>/<its shard>`, or `<its own>/<purpose>` for
-# a program inside the target. The purposes: asset, the trees its
-# content compiles to; bench, the benches' runs; gauge, measurements
-# kept by name; candidates, measured copies of it; scratch.
-export def program-shard [dir: path, purpose: string]: nothing -> string {
-    let c = (context ($dir | path expand) "program" [])
-    target shard-dir $c $purpose
-}
-
-# Where a program's build of `tree`, release or debug, lands, its tests'
-# and runs' output beside it.
-export def program-out [dir: path, tree: string]: nothing -> string {
-    (context ($dir | path expand) "program" (target tree-symbols $tree)).out
-}
-
-# The kernel a program runs on in `tree` (kernel-elf).
-export def program-kernel [dir: path, tree: string]: nothing -> string {
-    kernel-elf (context ($dir | path expand) "program" (target tree-symbols $tree))
-}
-
-# The kernel's or a program's context for a build with `names` set:
-# manifest, workspace (workspace-of), toolchain, symbols, the target
-# (target-root, the workspace's or a lone program's own), the tree in
-# it (debug or release), and the output directory, the tree's shard
-# (shard-of).
-def context [dir: path, kind: string, names: list<string>]: nothing -> record {
-    let here = ($dir | path expand)
-    let manifest_path = ($here | path join $"($kind).jab.toml")
-    let manifest = (open $manifest_path)
-    let workspace = (workspace workspace-of $here $manifest)
-    let tree = (profile $names)
-    let root = (target root (if $workspace == null { $here } else { $workspace }))
-    let place = (target shard-of $here $workspace $root $manifest.name)
-    let target = (if $place.inside { $here | path join $tree } else { $root | path join $tree })
-    let tc = (toolchain $here $workspace)
-    {
-        here: $here,
-        manifest: $manifest,
-        manifest_path: $manifest_path,
-        workspace: $workspace,
-        toolchain: $tc,
-        prefix: (toolchain tool-prefix $tc),
-        symbols: $names,
-        profile: $tree,
-        root: $root,
-        shard: $place.relative,
-        inside: $place.inside,
-        target: $target,
-        out: (if $place.inside { $target } else { $target | path join $place.relative }),
-    }
-}
-
-# The kernel ELF a program runs on: the workspace's, in the same tree
-# of that workspace's target, or JAB_KERNEL. Left untyped because it
-# ends in an error, which the output check rejects.
-def kernel-elf [c: record] {
-    if $c.workspace != null {
-        let ws = (open ($c.workspace | path join "workspace.jab.toml"))
-        return (target root $c.workspace | path join $c.profile $ws.kernel "jab.elf")
-    }
-    let from_env = ($env.JAB_KERNEL? | default "")
-    if $from_env != "" { return $from_env }
-    error make {msg: "no workspace above this program and no JAB_KERNEL: where is the kernel?"}
-}
-
-# The window for a run: JAB_DISPLAY, else the manifest's display, else
-# the best QEMU window the host has: SDL with OpenGL on Linux and
-# Windows, cocoa on macOS (its only window, and it has no OpenGL). A
-# Linux machine with no display server is nobody's console; there the
-# display goes out over VNC for development.
-def display [manifest: record]: nothing -> string {
-    let forced = ($env.JAB_DISPLAY? | default "")
-    if $forced != "" { return $forced }
-    let declared = ($manifest | get -o display | default "")
-    if $declared != "" { return $declared }
-    match $nu.os-info.name {
-        "macos" => "cocoa",
-        "windows" => "sdl,gl=on",
-        _ => {
-            let server = (($env.DISPLAY? | default "") != "") or (($env.WAYLAND_DISPLAY? | default "") != "")
-            if $server { "sdl,gl=on" } else { "vnc=127.0.0.1:30" }
-        },
-    }
-}
-
-def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
-    let c = (context $dir "kernel" $names)
-    let m = $c.manifest
-    let includes = ($m | get -o includes | default [])
-    let include_flags = ($includes | each {|i| ["-I" $i] } | flatten)
-    let set_flags = (defsyms $names)
-    let flags = (($include_flags ++ $set_flags ++ [$march_kernel $c.prefix]) | str join " ")
-    let elf = ($c.out | path join "jab.elf")
-    let stamp = ($c.out | path join "flags")
-    cd $c.here
-    let inputs = ((walk files (["src"] ++ $includes)) ++ [$c.manifest_path $m.link])
-    let id = (stamp id $flags $inputs)
-    if not (stamp stale $elf $inputs $id $stamp) { return }
-    mkdir $c.out
-    let asm = ($c.prefix + "as")
-    let ld = ($c.prefix + "ld")
-    let objdump = ($c.prefix + "objdump")
-    toolchain march-check $asm $march_kernel $c.out
-    # only the objects of the sources there are go into the link, so an
-    # object left by a source since deleted or renamed never rides along
-    let objects = (walk paths ("src" | path join "*.S") | sort | each {|f|
-        let obj = ($c.out | path join (($f | path parse | get stem) + ".o"))
-        ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj
-        $obj
-    })
-    for stray in (walk paths ($c.out | path join "*.o") | where {|o| $o not-in $objects }) { target retire $stray $c.root }
-    ^$ld -T $m.link -nostdlib ...$objects -o $elf
-    ^$objdump -d $elf | save -f ($c.out | path join "jab.disas")
-    $id | save -f $stamp
-}
-
-# The spec data a program's build reads when its manifest lists `specs`:
-# the workspace's asset/spec.nuon and asset/spec.nutype, inputs of its
-# build, so a changed definition or a changed type alone builds it again
-# rather than leaving an image built under the old ones standing; none
-# for a program that lists no specs. A program listing specs whose
-# workspace has no spec data is refused naming where it looked.
-def spec-inputs [c: record]: nothing -> list<string> {
-    if ($c.manifest | get -o specs) == null { return [] }
-    if $c.workspace == null { error make {msg: $"($c.manifest.name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
-    let asset = ($c.workspace | path join "asset")
-    let files = [($asset | path join "spec.nuon") ($asset | path join "spec.nutype")]
-    let missing = ($files | where {|f| not ($f | path exists) })
-    if not ($missing | is-empty) { error make {msg: $"($c.manifest.name) lists specs, and its workspace has no ($missing | str join ' or ')"} }
-    $files
-}
-
-# Builds a program's image when stale, and writes beside it `home`, the
-# program's directory, which image-home reads back from the image. A
-# program declaring its demand (program-demand) has it checked at every
-# build and assembles with its constants (demand-include), written ahead
-# of the staleness check and counted among the build's inputs, so a
-# change in the text the SDK generates builds the image again; a build of
-# one declaring none retires the constants an earlier declaration left.
-# Every image begins with its first page (header-source), the jump to its
-# code, the header, and its declaration (image-declaration), generated and
-# counted among the inputs the same way and linked ahead of the program's
-# own object, so a change to a listed spec's row builds the image again
-# with the new declaration, and a build with nothing changed builds
-# nothing. Every build writes `demand.nuon` beside the image, the demand
-# recorded with it (image-demand), and a cached image is taken only beside
-# a record that holds and names the build's demand, any other building
-# again whole, the image and its record together.
-def build-program [dir: path, names: list<string>]: nothing -> nothing {
-    let c = (context $dir "program" $names)
-    let m = $c.manifest
-    let specs = (spec-inputs $c)
-    let demand = (demand program-demand $m $c.workspace)
-    let declaration = (demand image-declaration $demand $c.workspace $m.name)
-    let includes = ($m | get -o includes | default [])
-    let generated = (if $demand == null { [] } else { [$c.out] })
-    let include_flags = (($includes ++ $generated) | each {|i| ["-I" $i] } | flatten)
-    let set_flags = (defsyms $names)
-    let flags = (($include_flags ++ $set_flags ++ [$march_program $c.prefix]) | str join " ")
-    let image = ($c.out | path join $"($m.name).jab")
-    let stamp = ($c.out | path join "flags")
-    mkdir $c.out
-    let home = ($c.out | path join "home")
-    if not ($home | path exists) or ((open --raw $home | decode | str trim) != $c.here) { $c.here | save -f $home }
-    let constants = (if $demand == null { [] } else { [(demand demand-include $demand $c.out)] })
-    let header = (demand header-source $declaration $c.out)
-    cd $c.here
-    let inputs = ((walk files (["src"] ++ $includes)) ++ [$c.manifest_path $m.link] ++ $specs ++ $constants ++ [$header])
-    let id = (stamp id $flags $inputs)
-    if (not (stamp stale $image $inputs $id $stamp)) and (demand record-holds $image $demand) { return }
-    mkdir $c.out
-    if $demand == null { target retire ($c.out | path join "jab_manifest.inc") $c.root }
-    let asm = ($c.prefix + "as")
-    let ld = ($c.prefix + "ld")
-    let objcopy = ($c.prefix + "objcopy")
-    toolchain march-check $asm $march_program $c.out
-    let obj = ($c.out | path join $"($m.name).o")
-    let header_obj = ($c.out | path join "jab_header.o")
-    let elf = ($c.out | path join $"($m.name).elf")
-    ^$asm $march_program $header -o $header_obj
-    ^$asm $march_program ...$include_flags ...$set_flags src/main.S -o $obj
-    ^$ld -T $m.link -nostdlib $header_obj $obj -o $elf
-    ^$objcopy -O binary $elf $image
-    { image: (open --raw $image | hash sha256), demand: $demand } | to nuon | save -f (demand demand-record-of $image)
-    $id | save -f $stamp
-}
-
 # What a program's test or run needs, after building it with `names`
 # set: the kernel built with the same symbols in the same tree, so a
 # debug program runs on a debug kernel; standalone, with no workspace,
 # JAB_KERNEL is taken as it is.
 def prepared [dir: path, names: list<string>]: nothing -> record {
-    build-program $dir $names
-    let c = (context $dir "program" $names)
+    build build-program $dir $names
+    let c = (build context $dir "program" $names)
     if $c.workspace != null {
         let ws = (open ($c.workspace | path join "workspace.jab.toml"))
-        build-kernel ($c.workspace | path join $ws.kernel) $names
+        build build-kernel ($c.workspace | path join $ws.kernel) $names
     }
-    let kernel = (kernel-elf $c)
+    let kernel = (build kernel-elf $c)
     if not ($kernel | path exists) { error make {msg: $"no kernel at ($kernel); build the kernel first, with the same --set"} }
     { context: $c, kernel: $kernel, image: ($c.out | path join $"($c.manifest.name).jab") }
 }
@@ -1239,11 +770,11 @@ def test-args [ready: record]: nothing -> list<string> {
 def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record> {
     let ready = (prepared $dir $names)
     let c = $ready.context
-    let m = (machine-for $c.workspace $spec $harts)
+    let m = (machine resolve $c.workspace $spec $harts)
     demand spec-listed $m (demand image $ready.image) $c.manifest.name
-    let qemu = (qemu-binary $c.here $c.workspace)
-    let line = (spec-bootargs $m "")
-    let machine = ((machine-args $qemu $m) ++ (if $line == "" { [] } else { ["-append" $line] }))
+    let qemu = (machine qemu-binary $c.here $c.workspace)
+    let line = (machine spec-bootargs $m "")
+    let machine = ((machine machine-args $qemu $m) ++ (if $line == "" { [] } else { ["-append" $line] }))
     let assets = (disk assets-image $c)
     let disk = (if $assets == "" {
         let blank = ($c.target | path join "disk.img")
@@ -1251,9 +782,9 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
         $blank
     } else { $assets })
     let disk_serial = (if $assets == "" { "disk0" } else { disk disk-serial ($c.manifest | get -o serial | default $c.manifest.name) })
-    let shown = (if $window == null { display $c.manifest } else { $window })
+    let shown = (if $window == null { machine display $c.manifest } else { $window })
     let found = (if (disco discovery-wanted $pad $sound) { disco discover $c.workspace } else { { gamepad: null, audio: null } })
-    let gamepad = (if $pad { gamepad-plan $found } else { { args: [], port: false, bridge: null } })
+    let gamepad = (if $pad { pad gamepad-plan $found } else { { args: [], port: false, bridge: null } })
     # a Windows run's pipes are named pipes, named by a nonce of its own,
     # the API's taking a relay and the pad port's client the bridge
     let windows = ($nu.os-info.name == "windows")
@@ -1263,105 +794,16 @@ def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, n
     let relay_binary = (chardev relay-build $relays $c.workspace)
     let inputs = (if $kbm { $input_devices } else { [] })
     let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
-    let args = ($machine ++ (name-args $c.manifest.name) ++ (memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
+    let args = ($machine ++ (machine name-args $c.manifest.name) ++ (machine memory-args $m) ++ $display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($program_base),force-raw=on"
         "-display" $shown "-serial" $serial "-monitor" "none"
-    ] ++ (extra-args))
-    let count = (transports $args)
+    ] ++ (machine extra-args))
+    let count = (machine transports $args)
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
     { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (chardev bridge-pipe $ports.pad), relays: $relays, relay_binary: $relay_binary, machine: $m }
-}
-
-# Whatever JAB_QEMU_ARGS holds, split into words as a shell would read
-# them and nothing more, appended to a run's QEMU line after everything
-# else: for looking at a run with QEMU's own instruments, `-trace
-# alsa_* -trace virtio_snd_* -D trace.log` on a host where a stream
-# misbehaves. No shell reads the value, so a quote is removed here and
-# a `*` is passed as it is; quotes keep a word with spaces together, as
-# `-D "my trace.log"`. Nothing without it.
-def extra-args []: nothing -> list<string> {
-    shell-words ($env.JAB_QEMU_ARGS? | default "")
-}
-
-# The words of a line as a POSIX shell splits them, nothing expanded
-# and nothing run: spaces separate words; a run inside single or double
-# quotes is part of one word with the quotes removed; a backslash keeps
-# the character after it, outside single quotes. An unclosed quote is
-# an error.
-def shell-words [line: string]: nothing -> list<string> {
-    mut words: list<string> = []
-    mut word = ""
-    mut in_word = false
-    mut quote = ""
-    mut escaped = false
-    for c in ($line | split chars) {
-        if $escaped {
-            $word = ($word + $c)
-            $escaped = false
-            $in_word = true
-        } else if $quote != "" {
-            if $c == $quote {
-                $quote = ""
-            } else if $c == "\\" and $quote == '"' {
-                $escaped = true
-            } else {
-                $word = ($word + $c)
-            }
-        } else if $c == "'" or $c == '"' {
-            $quote = $c
-            $in_word = true
-        } else if $c == "\\" {
-            $escaped = true
-        } else if $c in [" " "\t" "\n"] {
-            if $in_word {
-                $words = ($words | append $word)
-                $word = ""
-                $in_word = false
-            }
-        } else {
-            $word = ($word + $c)
-            $in_word = true
-        }
-    }
-    if $quote != "" { error make {msg: $"JAB_QEMU_ARGS: a ($quote) quote is not closed: ($line)"} }
-    if $escaped { error make {msg: $"JAB_QEMU_ARGS: a backslash ends the value: ($line)"} }
-    if $in_word { $words = ($words | append $word) }
-    $words
-}
-
-# The virtio transports a QEMU line uses: every `-device` of a
-# virtio-*-device, which is how a device rides virt's mmio transports;
-# a port on the serial device's own bus, and the loader, ride none.
-def transports [args: list<string>]: nothing -> int {
-    $args | window 2 | where {|w| $w.0 == "-device" and ($w.1 =~ '^virtio-.*-device') } | length
-}
-
-# The gamepad on the line, when there is one, from jabdisco's record.
-# On Linux the pad is passed through: JAB_PAD names its evdev path
-# outright, else the expected pad's path from the record, and nothing
-# goes on the line with none. On macOS and Windows QEMU cannot pass a pad
-# through, so with a pad in the record the pad port goes on the line and
-# the bridge, jabshim_pad, is to be started beside QEMU with the pad's
-# identity, which is what `bridge` carries (doc/padport.md), on Windows
-# as the pad pipe's own client (PadWindows); Linux never takes that
-# route. Any other host gets no pad.
-def gamepad-plan [found: record]: nothing -> record<args: list<string>, port: bool, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>> {
-    let none = { args: [], port: false, bridge: null }
-    let pad = ($found | get -o gamepad)
-    match $nu.os-info.name {
-        "linux" => {
-            let forced = ($env.JAB_PAD? | default "")
-            let path = (if $forced != "" { $forced } else if $pad == null { "" } else { $pad | get -o path | default "" })
-            if $path == "" { $none } else { { args: ["-device" $"virtio-input-host-device,evdev=($path)"], port: false, bridge: null } }
-        },
-        "macos" | "windows" => {
-            if $pad == null { $none } else { { args: [], port: true, bridge: { name: $pad.name, vendor: ($pad | get -o vendor), product: ($pad | get -o product) } } }
-        },
-        _ => $none,
-    }
 }
 
 # Run a program with the console window, the UART on stdio; QEMU's exit
@@ -1427,7 +869,7 @@ def probe [dir: path, kind: string, names: list<string>, seconds: int, --api, --
 # every file the probe writes retired first.
 def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: string = "", --trace]: nothing -> nothing {
     if $nu.os-info.name != "linux" { error make {msg: "the sdl probe preloads a library into QEMU, which is Linux only"} }
-    let c = (context $dir "program" $names)
+    let c = (build context $dir "program" $names)
     if $c.workspace == null { error make {msg: "the sdl probe needs the program's workspace, above it or named by its manifest, which holds shim/crates/sdl"} }
     if $send != "" and not ($send | path exists) { error make {msg: $"--send ($send): no such file"} }
     let shim = (tool shim $c.workspace "jabshim_sdl")
@@ -1557,183 +999,6 @@ def probe-launch [binary: string, args: list<string>, environment: record, secon
     { exit: $result.exit_code, stderr: $result.stderr, qemu_pid: $qemu_pid, send_seconds: $written }
 }
 
-# How a make_current the timing rule leaves reached the window, by its
-# frames past the shim's own (sdl-resolve). Its immediate caller must
-# resolve to the SDL front end, the anchor: sdl2_gl_switch makes a
-# `switch`, the window taking a new surface; sdl2_gl_update an upload,
-# read by its second frame, the function that called it. The console's
-# update there makes it a flip's `upload` when a later frame lies in the
-# device's code, and leaves it unresolved however many frames follow
-# otherwise; any other resolved function outside the device's code makes
-# it the `console`'s own, a new surface's redraw or the registration's
-# first update; an unresolved frame of the executable makes it the
-# console's own only beside a device module, with the executable's table
-# read and holding both of the console's update functions of one family,
-# since a module reaches the console through those alone. Anything else
-# is `refused`: `class` says which refusal (sdl-report), `fault` what
-# failed, and `at` the frame at fault.
-def sdl-decide [frames: list, device_in: string, modules: list<int>, executable: oneof<record, nothing>]: nothing -> record<kind: string, class: int, fault: string, at: oneof<record, nothing>> {
-    let caller = ($frames | get -o 0)
-    if $caller == null { return { kind: "refused", class: 5, fault: "anchor", at: null } }
-    let caller_held = (symbols sdl-held $caller)
-    if $caller_held != null { return $caller_held }
-    if not ($caller.functions | any {|n| $n | str starts-with "sdl2_" }) { return { kind: "refused", class: 5, fault: "anchor", at: $caller } }
-    let switch = ("sdl2_gl_switch" in $caller.functions)
-    let update = ("sdl2_gl_update" in $caller.functions)
-    if $switch and (not $update) { return { kind: "switch", class: 0, fault: "", at: null } }
-    if (not $update) or $switch { return { kind: "refused", class: 5, fault: "front_end", at: $caller } }
-    let second = ($frames | get -o 1)
-    if $second == null { return { kind: "refused", class: 6, fault: "absent", at: $caller } }
-    if $second.object == null { return { kind: "refused", class: 6, fault: "nowhere", at: $second } }
-    let second_held = (symbols sdl-held $second)
-    if $second_held != null { return $second_held }
-    if (symbols sdl-device $second $device_in $modules) { return { kind: "refused", class: 5, fault: "device", at: $second } }
-    if not ($second.functions | is-empty) {
-        if not ($symbols.console_updates | flatten | any {|n| $n in $second.functions }) { return { kind: "console", class: 0, fault: "", at: null } }
-        let later = ($frames | skip 2)
-        if $device_in == "executable" {
-            let later_held = ($later | where {|f| $f.object == 0 } | each {|f| symbols sdl-held $f } | get -o 0)
-            if $later_held != null { return $later_held }
-        }
-        if ($later | any {|f| symbols sdl-device $f $device_in $modules }) { return { kind: "upload", class: 0, fault: "", at: null } }
-        return { kind: "refused", class: 6, fault: "cut_short", at: $second }
-    }
-    if $second.object == 0 and $device_in == "module" and $executable != null and $executable.state == "read" and $executable.console {
-        return { kind: "console", class: 0, fault: "", at: null }
-    }
-    { kind: "refused", class: 6, fault: "unanswered", at: $second }
-}
-
-# A frame as the record's callers name it: its function where it
-# resolves, aliases joined by `/`, else its object's file name and
-# address, `?` for no object.
-def sdl-frame-name [frame: record]: nothing -> string {
-    if not ($frame.functions | is-empty) { $frame.functions | str join "/" } else if $frame.object == null { $"?+($frame.hex)" } else { $"($frame.file)+($frame.hex)" }
-}
-
-# A frame at fault, for a refusal: its object's file name and address,
-# `?` for no object, with its functions where it resolves.
-def sdl-frame-text [frame: oneof<record, nothing>]: nothing -> string {
-    if $frame == null { return "the shim's own frames alone" }
-    let place = (if $frame.object == null { $"?+($frame.hex)" } else { $"($frame.file)+($frame.hex)" })
-    if ($frame.functions | is-empty) { $place } else { $"($place) \(($frame.functions | str join '/'))" }
-}
-
-# What an object's symbol table holds, for a refusal, the executable
-# named as such.
-def sdl-table-text [object: record]: nothing -> string {
-    let who = (if $object.index == 0 { $"the executable at ($object.path)" } else { $object.path })
-    if $object.state == "no_file" { return $"($who) has no file to read" }
-    if $object.state != "read" { return $"($who) went unread" }
-    match $object.source {
-        "symtab" => $"($who) keeps a symbol table of ($object.functions) sized functions",
-        "dynsym" => $"($who) keeps no symbol table, only dynamic symbols, ($object.functions) sized functions among them",
-        _ => $"($who) keeps no symbol table and no dynamic symbols",
-    }
-}
-
-# A fault's words for a refusal, naming the object it lies in.
-def sdl-fault-text [fault: string, at: oneof<record, nothing>, objects: table]: nothing -> string {
-    let object = (if $at == null or $at.object == null { null } else { $objects | where index == $at.object | get -o 0 })
-    let table = (if $at == null { "its frames end in the shim's own library" } else if $object == null { "it lies in no object" } else { sdl-table-text $object })
-    let path = (if $object == null { "" } else { $object.path | str replace --regex ' \(deleted\)$' '' })
-    match $fault {
-        "nm_absent" => "binutils' nm is not on PATH, and the frames' symbol tables are read with it",
-        "deleted" => $"the executable at ($path) was deleted after it started",
-        "changed" => $"($path) is not the file its line in the object table names, rebuilt or replaced since the run",
-        "unbundled" => (if $object.why == "" { $"the bundle holds no table for ($path)" } else { $"the bundle holds no table for ($path): ($object.why)" }),
-        "unreadable" => (if $object.why == "" { $"nm cannot read ($path)" } else { $"nm cannot read ($path): ($object.why)" }),
-        "anchor" => $"a make_current's immediate caller is not in the SDL front end, and ($table)",
-        "front_end" => "a make_current comes from a front-end function the probe does not model",
-        "device" => "an upload's second frame is the device's own code, which the probe does not model",
-        "absent" => "an upload's chain ends at its immediate caller",
-        "nowhere" => "an upload's second frame lies in no object",
-        "unanswered" => $"an upload's second frame resolves in no table, and ($table)",
-        "cut_short" => "a console update has no device frame after it",
-        _ => $fault,
-    }
-}
-
-# A refusal's faults (sdl-refusal) from the chains one class refused: one
-# a fault and the object it lies in, how many make_currents hold it by
-# the chains' counts, and the frames at fault.
-def sdl-faults [cases: table, counts: record, objects: table]: nothing -> table<fault: string, held: int, unit: string, examples: list<string>> {
-    let described = ($cases | each {|c| $c | insert text (sdl-fault-text $c.fault $c.at $objects) })
-    $described | get text | uniq | each {|text|
-        let group = ($described | where text == $text)
-        {
-            fault: $text,
-            held: ($group | each {|c| $counts | get $c.key } | math sum),
-            unit: "make_current",
-            examples: ($group | each {|c| sdl-frame-text $c.at } | uniq | first 4),
-        }
-    }
-}
-
-# The shim's log at `log` (sdl-resolve) with each make_current read by
-# where it came from. A make_current followed by a window-size call
-# within 2 ms opens a drawn frame, a `render`. Every other is read by its
-# frames (sdl-decide): a `switch`, the window taking a new surface; a
-# flip's `upload`, one per rectangle the device flushed; or one of the
-# `console`'s own, which is no flip of the program's. Each event gains
-# its `kind`, a make_current's one of those four and any other event's
-# its name, and its `callers` as the record names them (sdl-frame-name),
-# the immediate caller first. The reading comes only when every
-# make_current is decided; otherwise the first refusal in order: the
-# log's lines, a stop notice, and its structure (sdl-log), nm absent, an
-# object that is no longer the file its line names or a deleted
-# executable, an object nm cannot read, a make_current failing the anchor
-# or unmodelled, and an upload whose second frame does not resolve, each
-# naming its fault, how many make_currents or lines hold it, and up to
-# four of them. With --tables, a bundle's directory, the tables come out
-# of the bundle (sdl-resolve).
-export def sdl-classify [log: path, --tables: string = ""]: nothing -> record<objects: table, virtio_gpu_in: string, events: table> {
-    let c = (sdl-classified $log $tables)
-    { objects: $c.objects, virtio_gpu_in: $c.virtio_gpu_in, events: ($c.events | reject key) }
-}
-
-# A make_current's chain as the reading keys it: its frames past the
-# shim's own, each an object's index or `?` with its address in hex; an
-# event with no frames keys the empty chain.
-def sdl-chain-key [frames: list<any>]: nothing -> string {
-    let chain = ($frames | each {|f| $"(if $f.object == null { '?' } else { $f.object })+($f.hex)" } | str join " ")
-    $"chain:($chain)"
-}
-
-# sdl-classify's reading with each event's chain key kept, each chain's
-# decision by key, every object's table whole (sdl-resolved), and the
-# run's lines; `bundle` the tables' bundle, "" for nm.
-def sdl-classified [log: path, bundle: string]: nothing -> record<objects: table, virtio_gpu_in: string, events: table, decisions: list<any>, tables: record, process: oneof<int, nothing>, nonce: oneof<string, nothing>> {
-    let resolved = (symbols sdl-resolved $log false $bundle)
-    let events = $resolved.events
-    if ($events | is-empty) { error make {msg: "the shim log holds no events; the window made no SDL calls"} }
-    let executable = ($resolved.objects | where index == 0 | get -o 0)
-    let modules = ($resolved.objects | where {|o| $o.file | str starts-with $symbols.device_module } | get index)
-    let keyed = ($events | each {|e| $e | insert key (sdl-chain-key $e.frames) })
-    let made = ($keyed | where name == "make_current")
-    let decided = ($made | where render == false)
-    let chains = ($decided | uniq-by key)
-    let decisions = ($chains | reduce --fold {} {|e, all| $all | insert $e.key (sdl-decide $e.frames $resolved.virtio_gpu_in $modules $executable) })
-    let counts = ($decided | get key | uniq --count | reduce --fold {} {|c, all| $all | insert $c.value $c.count })
-    let refused = ($chains | each {|e|
-        let d = ($decisions | get $e.key)
-        if $d.kind == "refused" { $d | insert key $e.key }
-    })
-    for class in [2 3 4 5 6] {
-        let cases = ($refused | where class == $class)
-        if not ($cases | is-empty) { error make {msg: (refusal sdl-refusal (sdl-faults $cases $counts $resolved.objects))} }
-    }
-    let named = ($made | uniq-by key | reduce --fold {} {|e, all| $all | insert $e.key ($e.frames | each {|f| sdl-frame-name $f } | str join " < ") })
-    let read = ($keyed | each {|e|
-        if $e.name != "make_current" { $e | merge { kind: $e.name, callers: "" } } else {
-            let kind = (if $e.render { "render" } else { $decisions | get $e.key | get kind })
-            $e | merge { kind: $kind, callers: ($named | get $e.key) }
-        }
-    })
-    let decided_chains = ($chains | each {|e| { key: $e.key } | merge ($decisions | get $e.key | reject at) })
-    { objects: $resolved.objects, virtio_gpu_in: $resolved.virtio_gpu_in, events: $read, decisions: $decided_chains, tables: $resolved.tables, process: $resolved.process, nonce: $resolved.nonce }
-}
-
 # The report on a shim log (sdl-classify): how the flips reached the
 # window, one record, or the refusal saying why the log cannot be read.
 # A flip's uploads within 5 ms of the previous belong to one flip;
@@ -1741,7 +1006,7 @@ def sdl-classified [log: path, bundle: string]: nothing -> record<objects: table
 # flip's upload under 3 ms on each side sits inside a flip, which is the
 # half-drawn tick to look for.
 export def sdl-report [log: path]: nothing -> record {
-    let classified = (sdl-classify $log)
+    let classified = (classify $log)
     let events = $classified.events
     let executable = ($classified.objects | where index == 0 | get -o 0)
     let kinds = ($events | select ts kind callers)
@@ -1871,7 +1136,7 @@ export def sdl-bundle [probe: path, bundle: path, --profile: string = "", --extr
     if ($bundle | path type) != null { error make {msg: $"($bundle) is already there; a bundle is written once"} }
     let identity_file = ($probe | path join "identity.nuon")
     let identity = (if ($identity_file | path exists) { open --raw $identity_file | into binary | decode | from nuon } else { null })
-    let c = (sdl-classified $log "")
+    let c = (classify sdl-classified $log "")
     let lined = ($c.process != null)
     let given = (if $identity == null { "" } else { $identity | get -o profile | default "" })
     let named = (if $profile != "" { $profile } else if $given != "" { $given } else if $lined { "generic" } else { "historical" })
@@ -2006,13 +1271,13 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
         } else if $table != null { do $refuse 2 "the correspondence" $"object ($o.index)'s table went unread, and the manifest lists one for it" }
     }
     let cls = (try { open --raw ($dir | path join "classified.nuon") | into binary | decode | from nuon } catch {|e| do $refuse 3 "the sequence" $"classified.nuon is no NUON the check reads: ($e.msg)" })
-    let logged = ($read.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: (sdl-chain-key $e.frames) } })
+    let logged = ($read.events | each {|e| { line: ($e.at + 1), stamp: $e.stamp, name: $e.name, render: $e.render, key: (classify sdl-chain-key $e.frames) } })
     let held = ($cls.events | each {|e| { line: $e.line, stamp: $e.stamp, name: $e.name, render: $e.render, key: $e.key } })
     if ($logged | length) != ($held | length) { do $refuse 3 "the sequence" $"the log holds ($logged | length) events and classified.nuon ($held | length)" }
     for pair in ($logged | zip $held) {
         if $pair.0 != $pair.1 { do $refuse 3 "the sequence" $"the log's event at line ($pair.0.line) is ($pair.0 | to nuon), classified.nuon's ($pair.1 | to nuon)" }
     }
-    let replay = (try { sdl-classified ($dir | path join "sdl.log") $dir } catch {|e| do $refuse 4 "the replay" $"the log classified from the bundle's tables is refused: ($e.msg)" })
+    let replay = (try { classify sdl-classified ($dir | path join "sdl.log") $dir } catch {|e| do $refuse 4 "the replay" $"the log classified from the bundle's tables is refused: ($e.msg)" })
     for pair in ($replay.events | zip $cls.events) {
         let got = { kind: $pair.0.kind, callers: $pair.0.callers }
         let want = { kind: $pair.1.kind, callers: $pair.1.callers }
@@ -2054,33 +1319,6 @@ export def sdl-bundle-check [bundle: path, --guest: closure] {
     { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($host == $box) }, trace: $trace, events: $cls.events }
 }
 
-# A program's preparation before it is built, tested, or run: the script
-# its manifest's `prepare` names, relative to the manifest, run from the
-# program's directory with the phase, build, test, or run; nothing
-# without one. A preparation that fails stops the command with its
-# output.
-def prepare [dir: path, phase: string]: nothing -> nothing {
-    let here = ($dir | path expand)
-    let script = (open ($here | path join "program.jab.toml") | get -o prepare | default "")
-    if $script == "" { return }
-    let r = (do { cd $here; ^nu ($here | path join $script) $phase } | complete)
-    print -n $r.stdout
-    if $r.exit_code != 0 { error make {msg: $"preparing ($here) to ($phase) failed:\n($r.stderr)"} }
-}
-
-# Build the kernel, then the programs at or under a path in the
-# workspace, every program for none, each prepared first, with `names`.
-def build-under [ws: path, words: list<string>, names: list<string>]: nothing -> nothing {
-    let ws = ($ws | path expand)
-    let m = (open ($ws | path join "workspace.jab.toml"))
-    build-kernel ($ws | path join $m.kernel) $names
-    for p in (workspace programs-under $ws $words) {
-        let dir = ($ws | path join $p)
-        prepare $dir "build"
-        build-program $dir $names
-    }
-}
-
 # Test the programs at or under a path in the workspace, every program
 # for none, each on a build with DEBUG beside `names` and prepared to
 # test first; prints each test's output and a summary, exits 1 if any
@@ -2088,13 +1326,13 @@ def build-under [ws: path, words: list<string>, names: list<string>]: nothing ->
 # itself.
 def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> nothing {
     let ws = ($ws | path expand)
-    let names = (with-debug $names)
+    let names = (build with-debug $names)
     let selected = (workspace programs-under $ws $words)
     let m = (open ($ws | path join "workspace.jab.toml"))
-    build-kernel ($ws | path join $m.kernel) $names
+    build build-kernel ($ws | path join $m.kernel) $names
     let results = ($selected | each {|p|
         let dir = ($ws | path join $p)
-        prepare $dir "test"
+        build prepare $dir "test"
         let ready = (prepared $dir $names)
         let r = (^nu ...(test-args $ready) | complete)
         print $"--- ($p)"
@@ -2120,7 +1358,7 @@ def --wrapped "main do" [dir: path, ...words: string] {
     let name = ($words | first)
     let rest = ($words | skip 1)
     if $name == "probe" { ^nu $self probe $ws ...$rest; return }
-    if $name == "clean" { do-clean $ws $rest; return }
+    if $name == "clean" { build clean $ws ...$rest; return }
     let hit = ($commands | where command == $name)
     if ($hit | is-empty) { error make {msg: $"no development command called ($name); `just do` lists them"} }
     ^nu ($hit | first | get script) $name ...$rest
@@ -2179,35 +1417,6 @@ def do-list [commands: table]: nothing -> string {
     (["the commands for development, `just do <command> [args]`:"] ++ $shown) | str join "\n"
 }
 
-# `just do clean`: with no path the whole target, as `just clean`
-# (clean-target); with one, the build outputs of the programs at or
-# under it, or the kernel's with `kernel`, in both trees or the one
-# `--tree` names, each retired (retire) under one stamp. A program's
-# output holds the outputs of the programs under it, which go with it.
-def do-clean [ws: path, words: list<string>]: nothing -> nothing {
-    let at = ($words | enumerate | where item == "--tree" | get -o 0.index)
-    let trees = (if $at == null { ["release" "debug"] } else { [($words | get -o ($at + 1) | default "")] })
-    for t in $trees { if $t not-in ["release" "debug"] { error make {msg: $"--tree is release or debug, not ($t)"} } }
-    let words = (if $at == null { $words } else { $words | enumerate | where {|e| $e.index != $at and $e.index != ($at + 1) } | get item })
-    if ($words | is-empty) { target clean $ws; return }
-    let target = (target root $ws)
-    let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let dirs = (if (workspace path-words $words) == "kernel" {
-        let m = (open ($ws | path join "workspace.jab.toml"))
-        $trees | each {|t| (context ($ws | path join $m.kernel) "kernel" (target tree-symbols $t)).out }
-    } else {
-        workspace programs-under $ws $words | each {|p| $trees | each {|t| program-out ($ws | path join $p) $t } } | flatten
-    })
-    mut retired = []
-    for d in $dirs {
-        if ($d | path type) != null {
-            target retire $d $target --stamp $stamp
-            $retired = ($retired | append $d)
-        }
-    }
-    print (if ($retired | is-empty) { "jab: nothing built there to retire" } else { $"jab: retired ($retired | str join ', ') to ((target retire-home $target).tmp | path join 'retired' $stamp)" })
-}
-
 # The benches of the workspace's programs, `<program>/<bench>` each: the
 # NUON files under a program's bench/ directory.
 def benches-of [ws: path]: nothing -> list<string> {
@@ -2241,7 +1450,7 @@ def bench-at [ws: path, name: string] {
 # under the bench's name, each run a stamped directory in it, beside
 # state.nuon, which says what the latest run is doing for `watch bench`.
 def bench-home [b: record]: nothing -> string {
-    program-shard $b.dir "bench" | path join $b.bench
+    build program-shard $b.dir "bench" | path join $b.bench
 }
 
 # The list `just bench` prints: each bench with its summary.
@@ -2339,9 +1548,9 @@ def "main bench" [ws: path, name?: string, --only: string = ""] {
     print $"jab bench: ($b.name), ($total) steps, into ($dir): ($b.def.summary)"
     let broken = (try {
         let m = (open ($ws | path join "workspace.jab.toml"))
-        build-kernel ($ws | path join $m.kernel) $names
-        prepare $b.dir "build"
-        build-program $b.dir $names
+        build build-kernel ($ws | path join $m.kernel) $names
+        build prepare $b.dir "build"
+        build build-program $b.dir $names
         null
     } catch {|e| $e.msg })
     if $broken != null {
@@ -2543,44 +1752,17 @@ def "main watch bench" [...words: string, --skip: float = 5.0] {
     print (if $packed.tar == null { $"jab watch: ($out); the run is left unpacked in its directory: ($packed.error)" } else { $"jab watch: everything in ($packed.tar)" })
 }
 
-# The keyboard and the tablet on the line: on unless --no-kbm, and
-# never both flags of the pair.
-def kbm-choice [kbm: bool, no_kbm: bool]: nothing -> bool {
-    if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
-    not $no_kbm
-}
-
-# The gamepad on the line: on unless --no-pad, and never both flags.
-def pad-choice [pad: bool, no_pad: bool]: nothing -> bool {
-    if $pad and $no_pad { error make {msg: "--pad and --no-pad together: one or the other"} }
-    not $no_pad
-}
-
 # The headless machine for a program prepared and printed as JSON, for a
 # harness in another language to run and drive: `nu jab.nu plan <dir>
 # --disk <romfs> --serial fps --api --gamepad --set debug`, the kernel and
 # the image the program's own builds, `out` under the program's build tree
 # unless given, `--spec`, `--harts`, and `--bootargs` plan's.
 def "main plan" [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --spec (-s): string = "", --harts: int = 0, --bootargs: string = ""] {
-    let names = (symbols $set)
-    let c = (context ($dir | path expand) "program" $names)
+    let names = (build symbols $set)
+    let c = (build context ($dir | path expand) "program" $names)
     let ready = (prepared ($dir | path expand) $names)
     let out = (if $out == "" { $c.out | path join "machine" } else { $out | path expand })
     plan --kernel $ready.kernel --image $ready.image --out $out --api=$api --disk $disk --serial $serial --set $set --gamepad=$gamepad --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --spec $spec --harts $harts --bootargs $bootargs | to json
-}
-
-# Build: at a workspace's root the kernel and every program, or the
-# programs at or under a path (`example`, `example/bounce`,
-# `kit/fierce`), each prepared first; at a program's directory that
-# program, prepared; with --kernel at the kernel's, the kernel. Release
-# unless --set says otherwise.
-def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {
-    let names = (symbols $set)
-    if (workspace is-workspace $dir) { build-under $dir $words $names; return }
-    if $kernel { build-kernel $dir $names } else {
-        prepare $dir "build"
-        build-program $dir $names
-    }
 }
 
 # Test with DEBUG set beside whatever --set names: at a workspace's root
@@ -2589,12 +1771,12 @@ def "main build" [dir: path, ...words: string, --kernel, --set: string = ""] {
 # debug kernel. `--spec` names the spec every launch of the tests runs
 # that names none of its own, JAB_SPEC for them (spec-default).
 def "main test" [dir: path, ...words: string, --set: string = "", --spec (-s): string = ""] {
-    let names = (symbols $set)
+    let names = (build symbols $set)
     let forced = (if $spec == "" { {} } else { { JAB_SPEC: $spec } })
     with-env $forced {
         if (workspace is-workspace $dir) { test-under $dir $words $names; return }
-        prepare $dir "test"
-        ^nu ...(test-args (prepared $dir (with-debug $names)))
+        build prepare $dir "test"
+        ^nu ...(test-args (prepared $dir (build with-debug $names)))
     }
 }
 
@@ -2611,9 +1793,9 @@ def "main test" [dir: path, ...words: string, --set: string = "", --spec (-s): s
 def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0] {
     let program = (if (workspace is-workspace $dir) { workspace run-target $dir $words } else { $dir | path expand })
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
-    if $harts != 0 { machine-of $harts | ignore }
-    prepare $program "run"
-    run-program $program (symbols $set) $api (kbm-choice $kbm $no_kbm) (pad-choice $pad $no_pad) (not $no_sound) --spec $spec --harts $harts
+    if $harts != 0 { machine of $harts | ignore }
+    build prepare $program "run"
+    run-program $program (build symbols $set) $api (pad kbm-choice $kbm $no_kbm) (pad pad-choice $pad $no_pad) (not $no_sound) --spec $spec --harts $harts
 }
 
 # Probe one program under a window for --seconds and print one NUON
@@ -2624,22 +1806,10 @@ def "main run" [dir: path, ...words: string, --set: string = "", --api, --kbm, -
 def "main probe" [dir: path, kind: string, ...words: string, --seconds: int = 12, --set: string = "", --api, --send: string = "", --trace] {
     let program = (if (workspace is-workspace $dir) { workspace program-at $dir $words } else { $dir | path expand })
     let send = (if $send == "" { "" } else { $send | path expand })
-    prepare $program "run"
-    probe $program $kind (symbols $set) $seconds --api=$api --send $send --trace=$trace
-}
-
-# Retire the workspace's whole target (clean-target): `just clean`.
-def "main clean" [ws: path] {
-    if not (workspace is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
-    target clean ($ws | path expand)
-}
-
-# Delete everything retired (retire-all): `just retire`.
-def "main retire" [ws: path] {
-    if not (workspace is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
-    target retire-all ($ws | path expand)
+    build prepare $program "run"
+    probe $program $kind (build symbols $set) $seconds --api=$api --send $send --trace=$trace
 }
 
 def main [] {
-    print "nu jab.nu <build|test> <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--spec name | --harts 1..8]; nu jab.nu <build|test|run> <program dir> [--kernel] [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu clean <workspace>; nu jab.nu retire <workspace>; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]"
+    print "nu jab.nu test <workspace> [path] [--set names]; nu jab.nu run <workspace> <path> [--set names] [--api] [--no-kbm] [--no-pad] [--no-sound] [--spec name | --harts 1..8]; nu jab.nu <test|run> <program dir> [--set names]; nu jab.nu probe <workspace> sdl <path> [--seconds N]; nu jab.nu do <workspace> [command] [args]; nu jab.nu bench <workspace> [<program>/<bench>] [--only labels]; nu jab.nu watch [--skip N] <workspace>; nu jab.nu watch bench <program>/<bench> <workspace> [--skip N]; nu jab.nu plan <program dir> [flags]; build, clean, and retire: nu/bin/do.nu build and nu/bin/nuance.nu clean and retire"
 }

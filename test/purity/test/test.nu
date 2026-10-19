@@ -162,7 +162,7 @@ def fence-before [lines: list<string>, site: record] {
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let kernel_dir = ($ws | path join (open ($ws | path join "workspace.jab.toml") | get kernel))
-    let tool = ($ws | path join "sdk" "nu" "jab.nu")
+    let tool = ($ws | path join "nu" "bin" "do.nu")
 
     # the device ordering, read off the sources before anything is built
     let sources = (walk paths ($kernel_dir | path join "src" "*.S") | sort)

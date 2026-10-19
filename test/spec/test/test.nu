@@ -37,6 +37,8 @@ use ../../../nu/mod/walk
 use ../../../nu/mod/spec
 use ../../../nu/mod/chardev
 use ../../../nu/mod/demand
+use ../../../nu/mod/build
+use ../../../nu/mod/machine
 use std/assert
 
 const GIB = 1073741824
@@ -97,7 +99,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert (paired $p.qemu "-device" $"virtio-gpu-device,xres=($s.display.width),yres=($s.display.height)") $"($name): the GPU at its display: ($p.qemu)"
         assert ((after $p.qemu "-append") | split row " " | any {|w| $w == $"jab.spec=($name)" }) $"($name): jab.spec=($name) on the kernel's line: ($p.qemu)"
         assert equal [$p.machine.spec $p.machine.diagnostic] [{ name: $name, cores: $s.cores, ram_gib: $ram, display: $s.display } null] $"($name): the machine's record the spec's: ($p.machine)"
-        let tree = (open --raw (jab dump-tree --kernel $kernel --image $image --out ($out | path join $"($name).dtb") --spec $name) | into binary)
+        let tree = (open --raw (machine dump-tree --kernel $kernel --image $image --out ($out | path join $"($name).dtb") --spec $name) | into binary)
         assert equal (cpus-of $tree) $s.cores $"($name): its tree's cpus"
         assert equal (banks-of $tree) [{ base: 0x80000000, size: ($ram * $GIB) }] $"($name): its tree's one bank, its RAM from RAM's base"
         let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"run_($name)") --set $set --spec $name --seconds 20)
@@ -119,7 +121,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     for c in [
         { name: "plan", call: { jab plan --kernel $kernel --image $image --out $both_out --spec 1ka1 --harts 3 } }
         { name: "launch", call: { jab launch --kernel $kernel --image $image --out $both_out --set $set --spec 1ka1 --harts 3 } }
-        { name: "dump-tree", call: { jab dump-tree --kernel $kernel --image $image --out ($both_out | path join "both.dtb") --spec 1ka1 --harts 3 } }
+        { name: "dump-tree", call: { machine dump-tree --kernel $kernel --image $image --out ($both_out | path join "both.dtb") --spec 1ka1 --harts 3 } }
     ] {
         let said = (refusal $c.call)
         assert ($said | str contains $both) $"($c.name): --spec with --harts refused naming both: ($said)"
@@ -171,7 +173,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal [$held.status ($held.serial | lines) $held.diagnostic] [0 [] true] $"three harts hold it, diagnostic as a custom machine: ($held.serial)"
     let below = (jab launch --kernel $kernel --image $reserving --out ($out | path join "below") --set $set --harts 2 --bootargs $NOMINIMUM --seconds 20)
     assert equal [$below.status ($below.machine | get -o below_minimum) $below.diagnostic] [0 true true] $"the knob runs it below the minimum, so recorded and diagnostic: ($below.serial), ($below.machine)"
-    let tool = ($ws | path join "sdk" "nu" "jab.nu")
+    let tool = ($ws | path join "nu" "bin" "do.nu")
     ^nu $tool build --kernel ($ws | path join "kernel")
     let release = (target root $ws | path join "release" "kernel" "jab.elf")
     let release_below = (jab launch --kernel $release --image $reserving --out ($out | path join "release_below") --harts 2 --bootargs $NOMINIMUM --seconds 20)
@@ -465,9 +467,9 @@ def fixture [ws: path, dir: path, name: string, body: string, --forever]: nothin
     $"name = '($name)'\nsdk = '($sdk)'\nworkspace = '($ws)'\nincludes = ['($sdk | path join src)']\nlink = '($sdk | path join src program.ld)'\ndisplay = 'none'\n($body)" | save -f ($dir | path join "program.jab.toml")
     let code = (if $forever { "1:\n    jab.sys.display.await\n    j 1b\n" } else { "    jab.sys.exit 0\n" })
     $".include \"jab.inc\"\n\n.section .text\n.global _start\n_start:\n($code)" | save -f ($dir | path join "src" "main.S")
-    let made = (^nu ($ws | path join "sdk" "nu" "jab.nu") build $dir | complete)
+    let made = (^nu ($ws | path join "nu" "bin" "do.nu") build $dir | complete)
     if $made.exit_code != 0 { error make { msg: $"the fixture ($name) did not build: ($made.stderr)" } }
-    jab program-out $dir release | path join $"($name).jab"
+    build program-out $dir release | path join $"($name).jab"
 }
 
 # A tree's header fields.

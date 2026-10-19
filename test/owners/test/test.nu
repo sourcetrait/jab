@@ -61,7 +61,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($set | str contains "DEBUG") $"the run's checks are a debug kernel's, and the build is ($set)"
     let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let kernel_dir = ($ws | path join (open ($ws | path join "workspace.jab.toml") | get kernel))
-    let tool = ($ws | path join "sdk" "nu" "jab.nu")
+    let tool = ($ws | path join "nu" "bin" "do.nu")
     let inc = (open --raw ($ws | path join "sdk" "src" "jab.inc") | decode)
 
     # the clean kernels: the debug kernel the test runs on, and the release

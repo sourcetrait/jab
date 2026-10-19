@@ -1,6 +1,7 @@
 # Jab. The repository's one justfile: every recipe hands off to the SDK's
-# nushell tool, sdk/nu/jab.nu, which reads workspace.jab.toml and does
-# every lookup and up-to-date check in one process. Needs nushell, just
+# nushell, its bins under nu/bin and sdk/nu/jab.nu while it stands, which
+# read workspace.jab.toml and do every lookup and up-to-date check in one
+# process. Needs nushell, just
 # 1.32 or later for script recipes, a riscv64 GNU toolchain, and a QEMU
 # with the RVA23 model, rva23s64. Script recipes are stable from just
 # 1.44; `set unstable` below runs them on 1.32 to 1.43 without
@@ -24,6 +25,8 @@ set unstable := true
 
 here := justfile_directory()
 jab := here / "sdk" / "nu" / "jab.nu"
+do_bin := here / "nu" / "bin" / "do.nu"
+nuance_bin := here / "nu" / "bin" / "nuance.nu"
 
 default: build
 
@@ -32,7 +35,7 @@ default: build
 # Build the kernel and every program, or the programs under a path
 [script("nu")]
 build *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' build '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' build '{{here}}' ...$args }
 
 # `just test`, `just test example/pad`, `just test kit/fierce`; each
 # test's output, then a summary, failing if any fails; `--spec 1kb1`
@@ -78,14 +81,14 @@ bench *args:
 # starts from nothing; `just retire` deletes what it moved
 # Retire the whole target
 clean:
-    ^nu '{{jab}}' clean '{{here}}'
+    ^nu '{{nuance_bin}}' clean '{{here}}'
 
 # The one command that deletes: the tmp beside the targets,
 # $XDG_CACHE_HOME/jab/target/tmp, or .target/tmp, where everything
 # retired waits
 # Delete everything retired
 retire:
-    ^nu '{{jab}}' retire '{{here}}'
+    ^nu '{{nuance_bin}}' retire '{{here}}'
 
 # `just do` lists them; `just do <command> [args]` runs one, a relative
 # path among its args taken from where you are

@@ -48,6 +48,7 @@ use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/spec
 use ../../../nu/mod/demand
+use ../../../nu/mod/build
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -135,7 +136,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $fitted { specs: [$smallest.name], reserved: { gfx_harts: $fits }, features: [{ name: "probe", io_harts: $largest }], base: $smallest.cores } $"a base demand equal to the spec's harts holds, and a feature's demand past every spec refuses nothing: ($fitted | to nuon)"
 
     # the tool, each program built afresh
-    let tool = ($sdk | path join "nu" "jab.nu")
+    let tool = ($sdk | path join ".." "nu" "bin" "do.nu" | path expand)
     let past = ($fixtures | path join "base_past")
     mkdir ($past | path join "src")
     let exit_zero = ".include \"jab.inc\"\n\n.section .text\n.global _start\n_start:\n    jab.sys.exit 0\n"
@@ -151,7 +152,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $demand { specs: [$one $larger.name], reserved: { gfx_harts: 1 }, features: [{ name: "probe", io_harts: 1 }], base: 2 } $"the declared fixture's demand: ($demand | to nuon)"
     let made = (^nu $tool build $declared | complete)
     assert equal $made.exit_code 0 $"the declared fixture builds afresh against its generated constants: ($made.stderr)"
-    let declared_out = (jab program-out $declared release)
+    let declared_out = (build program-out $declared release)
     let built = (generated $declared_out)
     assert equal $built.constants [".set JAB_BASE_HARTS, 2" ".set JAB_RESERVED_GFX_HARTS, 1" ".set JAB_FEATURE_PROBE_IO_HARTS, 1"] $"the declared fixture's constants, generated afresh: ($built.constants)"
     assert $built.included $"the declared fixture's build includes its generated constants' directory: ($built.flags)"
@@ -282,7 +283,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     $exit_zero | save -f ($legacy | path join "src" "main.S")
     let legacy_made = (^nu $tool build $legacy | complete)
     assert equal $legacy_made.exit_code 0 $"the legacy fixture builds: ($legacy_made.stderr)"
-    let legacy_image = (jab program-out $legacy release | path join "fixture.jab")
+    let legacy_image = (build program-out $legacy release | path join "fixture.jab")
     let legacy_whole = { image: (sha $legacy_image), demand: null }
     let legacy_record = (recorded $legacy_image)
     assert equal $legacy_record $legacy_whole $"a legacy build records a null demand: ($legacy_record | to nuon)"
@@ -331,7 +332,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     $exit_zero | save -f ($program | path join "src" "main.S")
     let keyed_made = (^nu $tool build $program | complete)
     assert equal $keyed_made.exit_code 0 $"the keyed program builds: ($keyed_made.stderr)"
-    let keyed_image = (jab program-out $program release | path join "fixture.jab")
+    let keyed_image = (build program-out $program release | path join "fixture.jab")
     let first = ($specs | first)
     let declared_cores = {|| demand check-image $keyed_image | get declaration.specs.0.cores }
     assert equal (do $declared_cores) $first.cores $"its image declares ($first.name)'s cores"

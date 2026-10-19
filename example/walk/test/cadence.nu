@@ -14,6 +14,7 @@
 # status 0 exits 1 once its records are written, its status named.
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
+use ../../../nu/mod/machine
 
 const cadence_symbols = [CADENCE TIMING REPLAY PREPARE CADENCE_TEST]
 const nonce_at = 200ms
@@ -47,7 +48,7 @@ def main [
     if (not $replaying) and $replay != null { error make { msg: "a --replay stream was given and walk's image is no REPLAY build" } }
     let romfs = ($image | path dirname | path join "walk.romfs")
     if not ($romfs | path exists) { error make { msg: $"walk's romfs is not beside its image: ($romfs)" } }
-    let machine = (jab machine-for $ws $spec 0)
+    let machine = (machine resolve $ws $spec 0)
     let stream = (if $replaying { replay-of $replay } else { null })
     let seconds = (if $replaying { $stream.bound } else { $bound })
     let nonce = (nonce mint 0 true)

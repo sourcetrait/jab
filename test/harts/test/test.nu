@@ -46,6 +46,7 @@ use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/process
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
+use ../../../nu/mod/machine
 use std/assert
 
 const PAST_MAX = 9
@@ -78,7 +79,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # more refused before QEMU starts, its output directory emptied first
     # and no serial log written there
     let max = (harts-max)
-    let taken = (try { jab machine-of $max | get harts } catch {|e| $e.msg })
+    let taken = (try { machine of $max | get harts } catch {|e| $e.msg })
     assert equal $taken $max $"LauncherBound: a machine of JAB_HARTS_MAX's ($max) harts taken: ($taken)"
     let past_out = ($out | path join $"harts_($max + 1)")
     target retire $past_out
@@ -131,7 +132,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # four, diagnostic, so the tree and the machine agree
     # a cpu past JAB_HARTS_MAX: cpu@3's reg made 9, so harts 0 to 2 are
     # discovered, every one but the boot hart failed, and hart 0 runs on
-    let tree = (open --raw (jab dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb") --harts 4) | into binary)
+    let tree = (open --raw (machine dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb") --harts 4) | into binary)
     let past_file = ($out | path join "past_max.dtb")
     put32 $tree (prop-offset $tree "/cpus/cpu@3" "reg") $PAST_MAX | save --raw -f $past_file
     let past = (jab launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --harts 4 --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))

@@ -91,6 +91,8 @@ use ../../../nu/mod/nonce
 use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/build
+use ../../../nu/mod/machine
 use ../nu/map.nu
 use ./pose.nu
 
@@ -356,7 +358,7 @@ def "main run" [
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
-    let machine = (jab machine-for $at.workspace $spec $harts)
+    let machine = (machine resolve $at.workspace $spec $harts)
     let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
     let route_file = (if $route == "" { $env.FILE_PWD | path join "route_render_0.nuon" } else { $route | path expand })
@@ -431,7 +433,7 @@ def "main play" [
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
-    let machine = (jab machine-for $at.workspace $spec $harts)
+    let machine = (machine resolve $at.workspace $spec $harts)
     let contradiction = (flags-contradiction (image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
     let disk = (romfs-of $at.game "render_0" $at.out)
@@ -529,14 +531,14 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     let game = $program
     let workspace = ($game | path join ".." ".." | path expand)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
-    let built = (jab program-out $program $tree)
+    let built = (build program-out $program $tree)
     let target = (if $out == "" { $built | path join "gauge" $stamp } else { $out | path expand })
     mkdir $target
     {
         game: $game,
         workspace: $workspace,
         tree: $tree,
-        kernel: (if $kernel == "" { jab program-kernel $program $tree } else { $kernel | path expand }),
+        kernel: (if $kernel == "" { build program-kernel $program $tree } else { $kernel | path expand }),
         image: (if $image == "" { $built | path join "fierce.jab" } else { $image | path expand }),
         out: $target,
     }
@@ -544,7 +546,7 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
 
 # A map's tree as the romfs image the program reads, built in `out`.
 def romfs-of [game: path, map: string, out: path]: nothing -> string {
-    let tree = (jab program-shard $game "asset" | path join $map)
+    let tree = (build program-shard $game "asset" | path join $map)
     if not ($tree | path join "map.nuon" | path exists) { error make { msg: $"no tree for ($map) at ($tree)" } }
     let disk = ($out | path join $"($map).romfs")
     let made = (^genromfs -d $tree -f $disk -V "fps" | complete)
@@ -624,7 +626,7 @@ def identity [at: record, set: string, map: string, route: oneof<string, nothing
     let provenance_file = ($built | path join "provenance.nuon")
     let jab_inc = ($at.workspace | path join "sdk" "src" "jab.inc")
     let cap = (open --raw $jab_inc | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get -o 0.cap)
-    let tree = (jab program-shard $at.game "asset" | path join $map)
+    let tree = (build program-shard $at.game "asset" | path join $map)
     let host = (sys host)
     let cpus = (sys cpu)
     {
@@ -2950,7 +2952,7 @@ def "main compare" [
     --diagnostic                     # admit runs measured incomplete, invalid, unchecked, or unpaired, missing a leg, or on another route, marked
 ] {
     let result = (compare $files $field $bin_cm --diagnostic=$diagnostic)
-    let target = (if $out == "" { jab program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
+    let target = (if $out == "" { build program-shard ($env.FILE_PWD | path join ".." | path expand) "gauge" | path join "compare.nuon" } else { $out | path expand })
     mkdir ($target | path dirname)
     target retire $target (target root $WORKSPACE)
     $result | to nuon --indent 2 | save --raw $target

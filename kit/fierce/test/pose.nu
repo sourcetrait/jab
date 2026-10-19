@@ -20,6 +20,7 @@
 # pickup, or a trace, is printed with its fields. `just do pose`
 # builds and runs it.
 use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/build
 use ../nu/map.nu
 
 const RECORD = 64
@@ -30,7 +31,7 @@ const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
 def main [map: string, poses: path, out: path, --kernel: path, --image: path, --set: string = "DEBUG"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let tree = (jab program-shard $game "asset" | path join $map)
+    let tree = (build program-shard $game "asset" | path join $map)
     let shot = ($game | path join "nu" "shot.nu")
     let disk = ($out | path join $"($map).romfs")
     mkdir $out

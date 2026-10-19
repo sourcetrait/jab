@@ -58,6 +58,7 @@ use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/word
+use ../../../nu/mod/build
 use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
@@ -726,7 +727,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     hot-functions $image
     release-strings $image
     let game = ($env.FILE_PWD | path join ".." | path expand)
-    let trees = (jab program-shard $game "asset")
+    let trees = (build program-shard $game "asset")
     let render_1_source = (open ($game | path join "content" "map" "render_1.nuon"))
     let render_1_tree = ($trees | path join "render_1")
     let render_1_index = {|name: string| $render_1_source.sectors | enumerate | where {|s| $s.item.name == $name } | get 0.index }
@@ -1884,10 +1885,10 @@ def hot-functions [image: path]: nothing -> nothing {
 # the tool, since the test's build is a debug one.
 def release-strings [image: path]: nothing -> nothing {
     let here = ($env.FILE_PWD | path join ".." | path expand)
-    let tool = ($here | path join ".." ".." "sdk" "nu" "jab.nu" | path expand)
+    let tool = ($here | path join ".." ".." "nu" "bin" "do.nu" | path expand)
     let built = (^nu $tool build $here | complete)
     assert equal $built.exit_code 0 $"the release image built: ($built.stderr)"
-    let release = (jab program-out $here "release" | path join "fierce.jab")
+    let release = (build program-out $here "release" | path join "fierce.jab")
     assert ($release | path exists) $"the release image at ($release)"
     let debug_found = (capture strings $image "fps: ")
     for text in $DEBUG_TEXT {
@@ -3388,7 +3389,7 @@ def broken [tree: path, name: string, bytes: binary]: nothing -> string {
 export def cadence-holds [kernel: path, image: path, out: path, set: string, game: path]: nothing -> nothing {
     let dir = ($out | path join "cadence")
     mkdir $dir
-    let render_1_disk = (romfs (jab program-shard $game "asset" | path join "render_1") ($dir | path join "render_1.romfs"))
+    let render_1_disk = (romfs (build program-shard $game "asset" | path join "render_1") ($dir | path join "render_1.romfs"))
     let still_tree = (variant-tree (open ($game | path join "content" "map" "render_0.nuon")) "render_0_still" [android] ($dir | path join "still") $game)
     let still_disk = (romfs $still_tree ($dir | path join "still.romfs"))
     let still_read = (map read ($still_tree | path join "map" "render_0_still.jabfps.map"))

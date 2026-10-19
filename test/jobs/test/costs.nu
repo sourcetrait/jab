@@ -13,6 +13,7 @@
 # release build and reports; the test runs it once on its debug one.
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/walk
+use ../../../nu/mod/build
 
 const SIZES_US = [10 100 1000 10000]
 const ROUNDS = 100
@@ -82,11 +83,11 @@ def main [] {
 def "main run" [--tree: string = "release", --out: string = "", --label: string = "", --harts: int = 3] {
     if $tree not-in [release debug] { error make { msg: $"--tree is release or debug, not ($tree)" } }
     let program = ($env.FILE_PWD | path join ".." | path expand)
-    let built = (jab program-out $program $tree)
+    let built = (build program-out $program $tree)
     let out = (if $out == "" { $built | path join "costs" (date now | format date "%Y%m%d-%H%M%S") } else { $out | path expand })
     mkdir $out
     let set = (if $tree == "debug" { "debug" } else { "" })
-    let doc = (measure (jab program-kernel $program $tree) ($built | path join "jobs.jab") ($out | path join "launch") $set --harts $harts)
+    let doc = (measure (build program-kernel $program $tree) ($built | path join "jobs.jab") ($out | path join "launch") $set --harts $harts)
     $doc | to nuon --indent 2 | save --raw -f ($out | path join "costs.nuon")
     print (text $doc)
 }

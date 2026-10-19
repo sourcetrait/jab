@@ -15,6 +15,7 @@
 # test runs the three-worker run once on its debug one.
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/walk
+use ../../../nu/mod/build
 
 # when the held span starts: inside the stretch, which begins once the
 # digit lands a second in and lasts four
@@ -126,11 +127,11 @@ def main [] {
 def "main run" [--tree: string = "release", --out: string = "", --label: string = "", --workers: int = 3] {
     if $tree not-in [release debug] { error make { msg: $"--tree is release or debug, not ($tree)" } }
     let program = ($env.FILE_PWD | path join ".." | path expand)
-    let built = (jab program-out $program $tree)
+    let built = (build program-out $program $tree)
     let out = (if $out == "" { $built | path join "scaling" (date now | format date "%Y%m%d-%H%M%S") } else { $out | path expand })
     mkdir $out
     let set = (if $tree == "debug" { "debug" } else { "" })
-    let doc = (measure (jab program-kernel $program $tree) ($built | path join "workers.jab") ($out | path join "launch") $set --workers $workers)
+    let doc = (measure (build program-kernel $program $tree) ($built | path join "workers.jab") ($out | path join "launch") $set --workers $workers)
     $doc | to nuon --indent 2 | save --raw -f ($out | path join "scaling.nuon")
     print (text $doc)
 }
