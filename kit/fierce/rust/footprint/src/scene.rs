@@ -61,13 +61,15 @@ impl Camera {
     }
 }
 
-/// A surface's plane and its texel coordinates' world gradients at level 0.
+/// A surface's plane, and its texel coordinates' gradients and intercepts.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Mapping {
     pub(crate) normal: [f64; 3],
     pub(crate) point: [f64; 3],
     pub(crate) u: [f64; 3],
     pub(crate) v: [f64; 3],
+    pub(crate) u0: f64,
+    pub(crate) v0: f64,
     pub(crate) levels: u8,
 }
 
@@ -79,6 +81,20 @@ pub(crate) enum Owned {
     Actor,
     Unsized(String),
     Unknown,
+}
+
+/// The engine's own images after the map's materials: sets, then singles.
+pub(crate) const FRAME_SETS: [&str; 8] = ["stand", "walk1", "walk2", "walk3", "walk4", "aim", "fire", "struck"];
+pub(crate) const FRAME_SINGLES: [&str; 5] = ["android/fallen", "android/spark1", "android/spark2", "android/spark3", "gun/magazine"];
+
+/// An engine image's stem under `sprite/`, by its index after the materials.
+pub(crate) fn frame_stem(frame: usize) -> Option<String> {
+    let rotations = FRAME_SETS.len() * 8;
+    if frame < rotations {
+        Some(format!("android/{}_{}", FRAME_SETS[frame / 8], frame % 8))
+    } else {
+        FRAME_SINGLES.get(frame - rotations).map(|stem| stem.to_string())
+    }
 }
 
 /// The levels a texture's chain holds: halved while both sides are two or more.
@@ -107,30 +123,54 @@ pub(crate) fn png_size(path: &Path) -> Result<(u32, u32), String> {
     png_size_of(&bytes).ok_or_else(|| format!("{}: not a PNG opening with its IHDR", path.display()))
 }
 
-/// Each material's texture size, from `<tree>/<name>.png`, None where unread.
-pub(crate) fn texture_sizes(map: &Map, tree: &Path) -> Vec<Result<(u32, u32), String>> {
-    map.materials.iter().map(|name| png_size(&tree.join(format!("{name}.png")))).collect()
+/// Each texture's size: the map's materials', then the engine's images'.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Textures {
+    pub(crate) materials: Vec<Result<(u32, u32), String>>,
+    pub(crate) frames: Vec<Result<(u32, u32), String>>,
+}
+
+impl Textures {
+    /// A material's texture size, the engine's images following the map's materials.
+    fn of(&self, material: i32) -> Option<&Result<(u32, u32), String>> {
+        let index = usize::try_from(material).ok()?;
+        self.materials.get(index).or_else(|| self.frames.get(index - self.materials.len()))
+    }
+
+    /// The materials and images unread, each with its reason.
+    pub(crate) fn unread(&self, map: &Map) -> Vec<(String, String)> {
+        let materials = map.materials.iter().zip(&self.materials).filter_map(|(name, size)| size.as_ref().err().map(|why| (name.clone(), why.clone())));
+        let frames = self.frames.iter().enumerate().filter_map(|(k, size)| size.as_ref().err().map(|why| (format!("sprite/{}", frame_stem(k).unwrap_or_default()), why.clone())));
+        materials.chain(frames).collect()
+    }
+}
+
+/// Each texture's size, read from its PNG in the tree.
+pub(crate) fn textures(map: &Map, tree: &Path) -> Textures {
+    Textures {
+        materials: map.materials.iter().map(|name| png_size(&tree.join(format!("{name}.png")))).collect(),
+        frames: (0usize..).map_while(frame_stem).map(|stem| png_size(&tree.join("sprite").join(format!("{stem}.png")))).collect(),
+    }
 }
 
 /// The mapping a surface's texture takes, or why it has none.
-fn textured(sizes: &[Result<(u32, u32), String>], material: i32) -> Result<(f64, f64, u8), Owned> {
-    let size = usize::try_from(material).ok().and_then(|m| sizes.get(m)).ok_or(Owned::Unknown)?;
-    match size {
+fn textured(textures: &Textures, material: i32) -> Result<(f64, f64, u8), Owned> {
+    match textures.of(material).ok_or(Owned::Unknown)? {
         Ok((w, h)) => Ok((*w as f64, *h as f64, chain_levels(*w, *h))),
         Err(why) => Err(Owned::Unsized(why.clone())),
     }
 }
 
-/// The mapping of the surface an OWNER index names, under the camera.
-pub(crate) fn owned(map: &Map, sizes: &[Result<(u32, u32), String>], camera: &Camera, index: u32) -> Owned {
+/// The mapping of the surface an OWNER index names, an actor's as it was drawn.
+pub(crate) fn owned(map: &Map, textures: &Textures, actors: &BTreeMap<u32, Entity>, camera: &Camera, index: u32) -> Owned {
     let mapped = if index < LUMAP_PLANES {
-        plane_mapping(map, sizes, index)
+        plane_mapping(map, textures, index)
     } else if index < SURFACE_SPRITES {
-        wall_mapping(map, sizes, index - LUMAP_PLANES)
+        wall_mapping(map, textures, index - LUMAP_PLANES)
     } else if index < SURFACE_ACTORS {
-        sprite_mapping(map, sizes, camera, index - SURFACE_SPRITES)
+        sprite_mapping(map, textures, camera, index - SURFACE_SPRITES)
     } else {
-        Err(Owned::Actor)
+        actors.get(&(index - SURFACE_ACTORS)).ok_or(Owned::Actor).and_then(|entity| quad_mapping(entity, textures, camera))
     };
     match mapped {
         Ok(mapping) => Owned::Mapped(mapping),
@@ -139,29 +179,31 @@ pub(crate) fn owned(map: &Map, sizes: &[Result<(u32, u32), String>], camera: &Ca
 }
 
 /// A floor or ceiling: the normal (-a, -b, 1), u along x and v along y.
-fn plane_mapping(map: &Map, sizes: &[Result<(u32, u32), String>], index: u32) -> Result<Mapping, Owned> {
+fn plane_mapping(map: &Map, textures: &Textures, index: u32) -> Result<Mapping, Owned> {
     let sector = map.sectors.get((index / 2) as usize).ok_or(Owned::Unknown)?;
     let (plane, surface) = if index.is_multiple_of(2) { (sector.floor, sector.floor_surface) } else { (sector.ceiling, sector.ceiling_surface) };
     if surface.flags & SURFACE_SKY != 0 {
         return Err(Owned::Sky);
     }
-    let (w, h, levels) = textured(sizes, surface.material)?;
+    let (w, h, levels) = textured(textures, surface.material)?;
     Ok(Mapping {
         normal: [-plane.a, -plane.b, 1.0],
         point: [0.0, 0.0, plane.c],
         u: [w * surface.u_scale, 0.0, 0.0],
         v: [0.0, h * surface.v_scale, 0.0],
+        u0: w * surface.u_offset,
+        v0: h * surface.v_offset,
         levels,
     })
 }
 
 /// A wall: its normal across its run, u along it from a, v down from its anchor.
-fn wall_mapping(map: &Map, sizes: &[Result<(u32, u32), String>], index: u32) -> Result<Mapping, Owned> {
+fn wall_mapping(map: &Map, textures: &Textures, index: u32) -> Result<Mapping, Owned> {
     let wall = map.walls.get(index as usize).ok_or(Owned::Unknown)?;
     if wall.surface.flags & SURFACE_SKY != 0 {
         return Err(Owned::Sky);
     }
-    let (w, h, levels) = textured(sizes, wall.surface.material)?;
+    let (w, h, levels) = textured(textures, wall.surface.material)?;
     let a = map.vertices[wall.a];
     let b = map.vertices[wall.b];
     let run = [b[0] - a[0], b[1] - a[1]];
@@ -170,22 +212,30 @@ fn wall_mapping(map: &Map, sizes: &[Result<(u32, u32), String>], index: u32) -> 
         return Err(Owned::Unknown);
     }
     let along = [run[0] / length, run[1] / length];
+    let s = &wall.surface;
     Ok(Mapping {
         normal: [a[1] - b[1], b[0] - a[0], 0.0],
         point: [a[0], a[1], 0.0],
-        u: [w * wall.surface.u_scale * along[0], w * wall.surface.u_scale * along[1], 0.0],
-        v: [0.0, 0.0, -h * wall.surface.v_scale],
+        u: [w * s.u_scale * along[0], w * s.u_scale * along[1], 0.0],
+        v: [0.0, 0.0, -h * s.v_scale],
+        u0: w * (s.u_offset - s.u_scale * (a[0] * along[0] + a[1] * along[1])),
+        v0: h * (s.v_offset + s.v_scale * wall.anchor),
         levels,
     })
 }
 
 /// A map sprite's quad as sprite_draw lays it, pulled toward the eye.
-fn sprite_mapping(map: &Map, sizes: &[Result<(u32, u32), String>], camera: &Camera, index: u32) -> Result<Mapping, Owned> {
+fn sprite_mapping(map: &Map, textures: &Textures, camera: &Camera, index: u32) -> Result<Mapping, Owned> {
     let entity = map.entities.get(index as usize).ok_or(Owned::Unknown)?;
     if entity.class != CLASS_SPRITE {
         return Err(Owned::Unknown);
     }
-    let (w, h, levels) = textured(sizes, entity.material)?;
+    quad_mapping(entity, textures, camera)
+}
+
+/// A sprite's quad as sprite_draw lays it from its entity, pulled to the eye.
+fn quad_mapping(entity: &Entity, textures: &Textures, camera: &Camera) -> Result<Mapping, Owned> {
+    let (w, h, levels) = textured(textures, entity.material)?;
     let (sy, cy) = entity.yaw.to_radians().sin_cos();
     let (half_w, half_h) = (entity.width / 2.0, entity.height / 2.0);
     let mut centre = entity.position;
@@ -204,5 +254,6 @@ fn sprite_mapping(map: &Map, sizes: &[Result<(u32, u32), String>], camera: &Came
     let normal = [d[1] * r[2] - d[2] * r[1], d[2] * r[0] - d[0] * r[2], d[0] * r[1] - d[1] * r[0]];
     let point = summed(camera.eye, scaled(summed(centre, scaled(camera.eye, -1.0)), SPRITE_PULL));
     let (r, d) = (scaled(r, SPRITE_PULL), scaled(d, SPRITE_PULL));
-    Ok(Mapping { normal, point, u: scaled(r, w / (2.0 * dot(r, r))), v: scaled(d, h / (2.0 * dot(d, d))), levels })
+    let (u, v) = (scaled(r, w / (2.0 * dot(r, r))), scaled(d, h / (2.0 * dot(d, d))));
+    Ok(Mapping { normal, point, u, v, u0: w * 0.5 - dot(u, point), v0: h * 0.5 - dot(v, point), levels })
 }

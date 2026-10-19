@@ -1143,6 +1143,9 @@ packet_render:
 2:
     call context_counts
 3:
+.ifdef LEVELS
+    call snapshot_spans             # the packet's spans for its frame's snapshot
+.endif
     la t0, span_count
     sd zero, 0(t0)
     la t0, command_count

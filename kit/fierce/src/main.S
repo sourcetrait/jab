@@ -177,6 +177,9 @@ _start:
 .ifdef CENSUS
     call census_init                # the census's directory and the contexts' slots
 .endif
+.ifdef SNAPSHOTS
+    call snapshots_init             # the presented frames' ring, empty
+.endif
     li s8, 0                        # the frames drawn
     la t0, cadence
     li t1, CADENCE_DEFAULT
@@ -240,6 +243,10 @@ frame:
     la t1, frame_clock
     sd s9, CLOCK_SIMULATION(t1)     # the simulation's time, camera_look's start
     sd s8, CLOCK_SNAPSHOT(t1)       # the frame whose simulation the drawing is given
+.ifdef SNAPSHOTS
+    mv a0, s8
+    call snapshot_begin             # the frame's own snapshot opened
+.endif
     rdtime s9
 .ifdef DEBUG
     call draw_or_stall              # an S's stall in place of the drawing
@@ -297,6 +304,9 @@ frame:
     call pacing_step                # cadences 1 and 2: wait only if early, flip
     mv s9, a0                       # the step's end
 5:
+.ifdef SNAPSHOTS
+    call snapshot_present           # a presented frame's snapshot into the ring
+.endif
     call state_report
 .ifdef CENSUS
     mv a0, s8
@@ -1896,3 +1906,4 @@ k_dt_max:
 .include "src/hud.S"
 .include "src/workers.S"
 .include "src/census.S"
+.include "src/snapshot.S"

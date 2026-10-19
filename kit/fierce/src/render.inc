@@ -149,7 +149,14 @@
 .set Z_SHIFT, (DEPTH_BITS + 16)
 .set BLOCK_SHIFT, 4
 .set BLOCK, (1 << BLOCK_SHIFT)
+.ifdef IZ_TEST
+.ifndef DEBUG
+.error "IZ_TEST is a debug build's instrument"
+.endif
+.set IZ_MIN, 12201612               # 1/z of 5.5 m, the clamp pose's threshold
+.else
 .set IZ_MIN, 4096
+.endif
 .set SKY_DEPTH, 1
 .set GFX_SLOTS, (JAB_HARTS_MAX - 1)
 .set GFX_GUIDELINE, 3
@@ -356,6 +363,12 @@
 .if (MIP_LEVELS > 15) || (BLOCK != 16) || (SPAN_RECORDS > 65536)
 .error "a LEVELS code holds a level under the sentinel 15, a block's offset, and a span's index"
 .endif
+.set SNAPSHOTS, 1
+.endif
+.ifdef OWNER
+.ifdef DEBUG
+.set SNAPSHOTS, 1
+.endif
 .endif
 .set SCRATCH_POISON, 0x5a5a5a5a5a5a5a5a
 .set REPORT_KIND, 0
@@ -398,6 +411,9 @@
 .set REPORT_RECEIPT, 20
 .set REPORT_LOAD, 21
 .set REPORT_BOUNDS, 22
+.set REPORT_SPANS, 23
+.set REPORT_SNAPSHOT, 24
+.set REPORT_ACTOR, 25
 .set REPORT_FRAME_RECORDS, 8
 .set REPORT_SCHEMA_VERSION, 8
 .set TIME_START, 8
@@ -660,6 +676,47 @@
 .set SOUND_GATE, 14
 .set SOUND_RESPAWN, 15
 .set SOUND_COUNT, 16
+.set SPANS_FIRST, 8
+.set SPANS_ENTRIES, 12
+.set SPANS_A_RECORD, 8
+.set SPAN_ENTRY, 6
+.set SNAPSHOT_SEQUENCE, 8
+.set SNAPSHOT_COUNT, 12
+.set SNAPSHOT_CRC, 16
+.set SNAPSHOT_ACTORS, 20
+.set ACTOR_RECORD, 8
+.set SNAP_FRAME, 0
+.set SNAP_SEQUENCE, 4
+.set SNAP_SPAN_COUNT, 8
+.set SNAP_ACTOR_COUNT, 12
+.set SNAP_ACTORS, 16
+.set SNAP_ACTOR_SIZE, 40
+.set SNAP_ACTOR_INDEX, 0
+.set SNAP_ACTOR_X, 4
+.set SNAP_ACTOR_Y, 8
+.set SNAP_ACTOR_Z, 12
+.set SNAP_ACTOR_YAW, 16
+.set SNAP_ACTOR_WIDTH, 20
+.set SNAP_ACTOR_HEIGHT, 24
+.set SNAP_ACTOR_MATERIAL, 28
+.set SNAP_ACTOR_FLAGS, 32
+.set SNAP_ACTOR_ROW, 36
+.set SNAP_SPANS, (SNAP_ACTORS + MAX_ACTORS * SNAP_ACTOR_SIZE)
+.ifdef LEVELS
+.set SNAP_SPAN_BYTES, (SPAN_RECORDS * SPAN_ENTRY)
+.else
+.set SNAP_SPAN_BYTES, 0
+.endif
+.set SNAPSHOT_SIZE, ((SNAP_SPANS + SNAP_SPAN_BYTES + 7) & ~7)
+.set SNAPSHOT_RING, 16
+.set SNAPSHOT_NONE, 0xffffffff
+.set SNAPSHOT_STAGE, ((SPAN_RECORDS / SPANS_A_RECORD) + MAX_ACTORS + 1)
+.if (SPANS_ENTRIES + SPANS_A_RECORD * SPAN_ENTRY) > REPORT_SCHEMA
+.error "a span record's entries end before its schema"
+.endif
+.if (ACTOR_RECORD + SNAP_ACTOR_SIZE) > REPORT_SCHEMA
+.error "an actor record's fields end before its schema"
+.endif
 
 .macro owner_pixel colour
 .ifdef OWNER

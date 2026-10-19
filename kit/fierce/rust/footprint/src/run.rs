@@ -1,7 +1,7 @@
 use crate::*;
 
 /// The invocation, each subcommand's arguments.
-const USAGE: &str = "footprint derivative <coord> <izb> <uzb> <z> | footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> <owner.ppm> <levels.ppm>... [--rows <rows.nuon>] | footprint differ <a.ppm> <b.ppm>";
+const USAGE: &str = "footprint derivative <coord> <izb> <uzb> <z> | footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --iz-min <n> --owner <owner.ppm> [--export <api.out> <frame>] --levels <levels.ppm> [--export <api.out> <frame>]... [--rows <rows.nuon>] | footprint clamp-plan <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --owner <owner.ppm> --levels <levels.ppm> --surface <index> | footprint differ <a.ppm> <b.ppm>";
 
 /// The subcommand named, its answer printed as NUON.
 pub fn run() -> ExitCode {
@@ -24,6 +24,7 @@ fn dispatch(args: &[String]) -> FootprintResult<Nuon> {
         Some("derivative") => derivative_command(&args[1..]),
         Some("blocks") => blocks_command(&args[1..]),
         Some("reference") => reference_command(&args[1..]),
+        Some("clamp-plan") => clamp_plan_command(&args[1..]),
         Some("differ") => differ_command(&args[1..]),
         _ => Err(FootprintError::Usage(USAGE.to_string())),
     }
@@ -69,19 +70,93 @@ fn blocks_command(args: &[String]) -> FootprintResult<Nuon> {
     ]))
 }
 
-/// A tally's counts as NUON, beside the capture's file.
-fn tally_nuon(file: &str, tally: &Tally) -> Nuon {
+/// A capture on the command line: its picture, and its export and frame.
+struct Named {
+    picture: PathBuf,
+    export: Option<(PathBuf, u32)>,
+}
+
+/// The reference's and the plan's arguments, positionals and flags.
+struct Invocation {
+    map: PathBuf,
+    tree: PathBuf,
+    pose: [f64; 6],
+    iz_min: Option<i64>,
+    owner: Option<Named>,
+    levels: Vec<Named>,
+    rows: Option<PathBuf>,
+    surface: Option<u32>,
+}
+
+/// The arguments read: eight positionals, then the flags.
+fn invocation(args: &[String]) -> FootprintResult<Invocation> {
+    let usage = || FootprintError::Usage(USAGE.to_string());
+    if args.len() < 8 {
+        return Err(usage());
+    }
+    let names = ["x", "y", "z", "yaw", "pitch", "roll"];
+    let mut pose = [0.0; 6];
+    for (k, name) in names.iter().enumerate() {
+        pose[k] = number(&args[2 + k], name)?;
+    }
+    let mut found = Invocation { map: PathBuf::from(&args[0]), tree: PathBuf::from(&args[1]), pose, iz_min: None, owner: None, levels: Vec::new(), rows: None, surface: None };
+    let mut owner_last = false;
+    let mut it = args[8..].iter();
+    while let Some(flag) = it.next() {
+        let mut value = || it.next().ok_or_else(usage);
+        match flag.as_str() {
+            "--iz-min" => found.iz_min = Some(number(value()?, "--iz-min")?),
+            "--owner" => {
+                found.owner = Some(Named { picture: PathBuf::from(value()?), export: None });
+                owner_last = true;
+            }
+            "--levels" => {
+                found.levels.push(Named { picture: PathBuf::from(value()?), export: None });
+                owner_last = false;
+            }
+            "--export" => {
+                let api = PathBuf::from(value()?);
+                let frame = number(value()?, "--export's frame")?;
+                let named = if owner_last { found.owner.as_mut() } else { found.levels.last_mut() };
+                named.ok_or_else(usage)?.export = Some((api, frame));
+            }
+            "--rows" => found.rows = Some(PathBuf::from(value()?)),
+            "--surface" => found.surface = Some(number(value()?, "--surface")?),
+            _ => return Err(usage()),
+        }
+    }
+    Ok(found)
+}
+
+/// The snapshot a capture's export holds for its frame, held whole.
+fn snapshot_for(named: &Named, height: usize) -> FootprintResult<Option<Snapshot>> {
+    let Some((api, frame)) = &named.export else {
+        return Ok(None);
+    };
+    let bytes = fs::read(api).map_err(FootprintError::io(api))?;
+    let held = snapshots(&bytes).map_err(|message| FootprintError::refused(api, message))?;
+    snapshot_of(&held, *frame, height).map(Some).map_err(|message| FootprintError::refused(api, message))
+}
+
+/// A population's classes as NUON.
+fn population_nuon(population: &Population) -> Nuon {
+    let classes = [Class::Judged, Class::Sky, Class::Unknown, Class::Unread, Class::Actor, Class::Degenerate, Class::NoEnd, Class::Unpaired];
     record(vec![
-        ("file", Nuon::Str(file.to_string())),
+        ("blocks", count(population.blocks)),
+        ("classes", Nuon::Record(classes.iter().map(|c| (c.name().to_string(), count(population.count(*c)))).collect())),
+        ("unresolved", count(population.unresolved())),
+        ("sensitive", count(population.sensitive)),
+        ("clamped", count(population.clamped)),
+        ("actors", count(population.actors)),
+    ])
+}
+
+/// A tally's counts as NUON, beside the capture's file and the snapshot it read.
+fn tally_nuon(file: &Path, tally: &Tally, snapshot: Option<&Snapshot>) -> Nuon {
+    record(vec![
+        ("file", Nuon::Str(file.display().to_string())),
         ("blocks", count(tally.blocks)),
         ("judged", count(tally.judged)),
-        ("sky", count(tally.sky)),
-        ("actors", count(tally.actors)),
-        ("unknown", count(tally.unknown)),
-        ("unread", count(tally.unread)),
-        ("clamped", count(tally.clamped)),
-        ("degenerate", count(tally.degenerate)),
-        ("sensitive", count(tally.sensitive)),
         ("agree", count(tally.agree)),
         ("sharper", count(tally.sharper)),
         ("coarser", count(tally.coarser)),
@@ -89,66 +164,107 @@ fn tally_nuon(file: &str, tally: &Tally) -> Nuon {
         ("secant_sharper", count(tally.secant_sharper)),
         ("secant_coarser", count(tally.secant_coarser)),
         ("levels", Nuon::List(tally.levels.iter().map(|&n| count(n)).collect())),
+        ("snapshot", snapshot.map(snapshot_nuon).unwrap_or(Nuon::Null)),
     ])
 }
 
-/// A judged block's fields as NUON.
+/// A snapshot's frame and sizes as NUON.
+fn snapshot_nuon(snapshot: &Snapshot) -> Nuon {
+    record(vec![("frame", Nuon::Int(snapshot.frame as i64)), ("spans", count(snapshot.spans.len() as u64)), ("actors", count(snapshot.actors.len() as u64))])
+}
+
+/// A union block's fields as NUON.
 fn row_nuon(row: &Row) -> Nuon {
+    let maybe = |value: Option<u8>| value.map(|v| Nuon::Int(v as i64)).unwrap_or(Nuon::Null);
     record(vec![
         ("span", Nuon::Int(row.span as i64)),
         ("row", Nuon::Int(row.row as i64)),
         ("x0", Nuon::Int(row.x0 as i64)),
-        ("surface", Nuon::Int(row.surface as i64)),
+        ("class", Nuon::Str(row.class.name().to_string())),
+        ("surface", row.surface.map(|s| Nuon::Int(s as i64)).unwrap_or(Nuon::Null)),
+        ("depth", row.depth.map(Nuon::Float).unwrap_or(Nuon::Null)),
+        ("clamped", Nuon::Bool(row.clamped)),
         ("footprint", Nuon::Float(row.footprint)),
         ("along", Nuon::Float(row.along)),
         ("down", Nuon::Float(row.down)),
         ("secant", Nuon::Float(row.secant)),
+        ("length", Nuon::Float(row.length)),
         ("reference", Nuon::Int(row.reference as i64)),
-        ("band", row.band.map(|m| Nuon::Int(m as i64)).unwrap_or(Nuon::Null)),
+        ("band", maybe(row.band)),
         ("secant_reference", Nuon::Int(row.secant_reference as i64)),
-        ("secant_band", row.secant_band.map(|m| Nuon::Int(m as i64)).unwrap_or(Nuon::Null)),
-        ("levels", Nuon::List(row.levels.iter().map(|level| level.map(|l| Nuon::Int(l as i64)).unwrap_or(Nuon::Null)).collect())),
+        ("secant_band", maybe(row.secant_band)),
+        ("levels", Nuon::List(row.levels.iter().map(|level| maybe(*level)).collect())),
     ])
 }
 
-/// Each LEVELS capture's blocks held to the reference, and the rows with --rows.
+/// Each LEVELS capture's blocks held to the reference at the images' floor.
 fn reference_command(args: &[String]) -> FootprintResult<Nuon> {
-    let mut positional = Vec::new();
-    let mut rows_out = None;
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        if arg == "--rows" {
-            rows_out = Some(PathBuf::from(it.next().ok_or_else(|| FootprintError::Usage(USAGE.to_string()))?));
-        } else {
-            positional.push(arg.as_str());
+    let call = invocation(args)?;
+    let usage = || FootprintError::Usage(USAGE.to_string());
+    let iz_min = call.iz_min.ok_or_else(usage)?;
+    let owner_named = call.owner.as_ref().ok_or_else(usage)?;
+    if call.levels.is_empty() {
+        return Err(usage());
+    }
+    let map = read_map(&call.map)?;
+    let textures = textures(&map, &call.tree);
+    let [x, y, z, yaw, pitch, roll] = call.pose;
+    let camera = Camera::from_angles([x, y, z], yaw, pitch, roll);
+    let owner = read_ppm(&owner_named.picture)?;
+    let owner_snapshot = snapshot_for(owner_named, owner.height)?;
+    let mut captures = Vec::new();
+    let mut snapshots = Vec::new();
+    for named in &call.levels {
+        let image = read_ppm(&named.picture)?;
+        let snapshot = snapshot_for(named, image.height)?;
+        captures.push(Capture { image, spans: snapshot.as_ref().map(|s| s.spans.clone()) });
+        snapshots.push(snapshot);
+    }
+    let actors = owner_snapshot.as_ref().map(|s| s.actors.clone()).unwrap_or_default();
+    for (named, snapshot) in call.levels.iter().zip(&snapshots) {
+        if let Some(s) = snapshot
+            && owner_snapshot.is_some()
+            && s.actors != actors
+        {
+            return Err(FootprintError::refused(&named.picture, format!("its frame {}'s actors differ from the OWNER capture's", s.frame)));
         }
     }
-    if positional.len() < 10 {
-        return Err(FootprintError::Usage(USAGE.to_string()));
-    }
-    let map_path = Path::new(positional[0]);
-    let tree = Path::new(positional[1]);
-    let eye = [number::<f64>(positional[2], "x")?, number::<f64>(positional[3], "y")?, number::<f64>(positional[4], "z")?];
-    let (yaw, pitch, roll) = (number::<f64>(positional[5], "yaw")?, number::<f64>(positional[6], "pitch")?, number::<f64>(positional[7], "roll")?);
-    let owner_path = Path::new(positional[8]);
-    let map = read_map(map_path)?;
-    let sizes = texture_sizes(&map, tree);
-    let camera = Camera::from_angles(eye, yaw, pitch, roll);
-    let owner = read_ppm(owner_path)?;
-    let files = &positional[9..];
-    let captures = files.iter().map(|file| read_ppm(Path::new(file))).collect::<FootprintResult<Vec<_>>>()?;
-    let (tallies, rows) = compare(&map, &sizes, &camera, &owner, &captures).map_err(|message| FootprintError::refused(Path::new(files[0]), message))?;
-    if let Some(out) = rows_out {
+    let first = &call.levels[0].picture;
+    let scene = Scene { map: &map, textures: &textures, actors: &actors, camera: &camera, floor: depth_floor(iz_min) };
+    let (population, tallies, rows) = compare(&scene, &owner, &captures).map_err(|message| FootprintError::refused(first, message))?;
+    if let Some(out) = &call.rows {
         let table = Nuon::List(rows.iter().map(row_nuon).collect());
-        fs::write(&out, format!("{table}\n")).map_err(FootprintError::io(&out))?;
+        fs::write(out, format!("{table}\n")).map_err(FootprintError::io(out))?;
     }
-    let unread = map.materials.iter().zip(&sizes).filter_map(|(name, size)| size.as_ref().err().map(|why| record(vec![("material", Nuon::Str(name.clone())), ("why", Nuon::Str(why.clone()))]))).collect();
+    let unread = textures.unread(&map).into_iter().map(|(name, why)| record(vec![("material", Nuon::Str(name)), ("why", Nuon::Str(why))])).collect();
     Ok(record(vec![
-        ("camera", record(vec![("x", Nuon::Float(eye[0])), ("y", Nuon::Float(eye[1])), ("z", Nuon::Float(eye[2])), ("yaw", Nuon::Float(yaw)), ("pitch", Nuon::Float(pitch)), ("roll", Nuon::Float(roll))])),
+        ("camera", record(vec![("x", Nuon::Float(x)), ("y", Nuon::Float(y)), ("z", Nuon::Float(z)), ("yaw", Nuon::Float(yaw)), ("pitch", Nuon::Float(pitch)), ("roll", Nuon::Float(roll))])),
+        ("iz_min", Nuon::Int(iz_min)),
+        ("floor_depth", Nuon::Float(1.0 / depth_floor(iz_min))),
         ("rows", count(rows.len() as u64)),
         ("unread_materials", Nuon::List(unread)),
-        ("captures", Nuon::List(files.iter().zip(&tallies).map(|(file, tally)| tally_nuon(file, tally)).collect())),
+        ("owner", owner_snapshot.as_ref().map(snapshot_nuon).unwrap_or(Nuon::Null)),
+        ("population", population_nuon(&population)),
+        ("captures", Nuon::List(call.levels.iter().zip(&tallies).zip(&snapshots).map(|((named, tally), snapshot)| tally_nuon(&named.picture, tally, snapshot.as_ref())).collect())),
     ]))
+}
+
+/// The clamp's plan for a surface: its threshold and its witnesses.
+fn clamp_plan_command(args: &[String]) -> FootprintResult<Nuon> {
+    let call = invocation(args)?;
+    let usage = || FootprintError::Usage(USAGE.to_string());
+    let surface = call.surface.ok_or_else(usage)?;
+    let owner_named = call.owner.as_ref().ok_or_else(usage)?;
+    let [levels_named] = call.levels.as_slice() else {
+        return Err(usage());
+    };
+    let map = read_map(&call.map)?;
+    let textures = textures(&map, &call.tree);
+    let [x, y, z, yaw, pitch, roll] = call.pose;
+    let camera = Camera::from_angles([x, y, z], yaw, pitch, roll);
+    let owner = read_ppm(&owner_named.picture)?;
+    let capture = Capture { image: read_ppm(&levels_named.picture)?, spans: None };
+    clamp_plan(&map, &textures, &camera, &owner, &capture, surface).map_err(|message| FootprintError::refused(&levels_named.picture, message))
 }
 
 /// A region's fields as NUON.

@@ -317,6 +317,24 @@ console_frame:
     call gfx_give                   # the claim's harts given back to the raster
     j 8f
 15:
+    li t1, 'A'
+    bne t0, t1, 154f
+    lbu t1, 4(s2)
+    beqz t1, 155f
+    call actors_place               # every actor at its spawn state
+    li t1, 1
+155:
+    la t2, actors_held
+    sb t1, 0(t2)                    # held there while set: no thought, no motion
+    j 8f
+154:
+.ifdef SNAPSHOTS
+    li t1, 'X'
+    bne t0, t1, 156f
+    call snapshot_export            # the presented frames' snapshots on the API now
+    j 8f
+156:
+.endif
     li t1, 'J'
 .ifdef CENSUS
     bne t0, t1, 16f

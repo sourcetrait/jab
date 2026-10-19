@@ -186,6 +186,13 @@ actor_ms:
     ret
 
 actors_tick:
+.ifdef DEBUG
+    la t0, actors_held
+    lbu t0, 0(t0)
+    beqz t0, actors_tick_free
+    ret                             # held at their spawn state by an A
+actors_tick_free:
+.endif
     addi sp, sp, -48
     sd ra, 40(sp)
     sd s2, 32(sp)
@@ -312,6 +319,10 @@ actors_draw:
     sd a0, 0(t0)
     mv a0, s2
     call actor_draw
+.ifdef SNAPSHOTS
+    mv a0, s2
+    call snapshot_actor             # the actor as drawn, for the frame's snapshot
+.endif
 8:
     addi s2, s2, ACTOR_SIZE
     addi s3, s3, -1
@@ -1252,3 +1263,7 @@ actor_entity:
     .skip ENTITY_SIZE
 aim:
     .skip AIM_SIZE
+.ifdef DEBUG
+actors_held:
+    .skip 1
+.endif
