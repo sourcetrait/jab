@@ -47,12 +47,6 @@ export def main [log: path]: nothing -> record {
     let stat = {|values: list<float>| if ($values | is-empty) { { median: 0.0, max: 0.0 } } else { { median: ($values | math median | math round -p 2), max: ($values | math max | math round -p 2) } } }
     let range = {|values: list<float>| if ($values | is-empty) { { median: 0.0, min: 0.0, max: 0.0 } } else { { median: ($values | math median | math round -p 0), min: ($values | math min | math round -p 0), max: ($values | math max | math round -p 0) } } }
     let top = {|rows: list| $rows | get callers | uniq --count | sort-by count --reverse | first 2 | each {|c| { callers: $c.value, count: $c.count } } }
-    # which guest frame each render showed: the flips whose last upload
-    # landed since the render before it; none is the frame before shown
-    # again, one is that flip shown, more is every one but the last
-    # skipped, so a beat between the guest's cadence and the window's
-    # timer reads as skips or repeats at a steady interval and a stall
-    # as a burst of them
     let flip_count = ($done | length)
     mut next_flip = 0
     mut showings: list<record<at: float, flips: int>> = []

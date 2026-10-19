@@ -105,8 +105,6 @@ export def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
     let ld = ($c.prefix + "ld")
     let objdump = ($c.prefix + "objdump")
     toolchain march-check $asm $march_kernel $c.out
-    # only the objects of the sources there are go into the link, so an
-    # object left by a source since deleted or renamed never rides along
     let objects = (walk paths ("src" | path join "*.S") | sort | each {|f|
         let obj = ($c.out | path join (($f | path parse | get stem) + ".o"))
         ^$asm $march_kernel ...$include_flags ...$set_flags $f -o $obj

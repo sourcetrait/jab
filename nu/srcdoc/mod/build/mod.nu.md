@@ -57,6 +57,11 @@ The kernel ELF a program runs on: the workspace's, in the same tree
 of that workspace's target, or JAB_KERNEL. Left untyped because it
 ends in an error, which the output check rejects.
 
+## build-kernel
+
+- only the objects of the sources there are go into the link, so an
+  object left by a source since deleted or renamed never rides along
+
 ## spec-inputs
 
 The spec data a program's build reads when its manifest lists `specs`:

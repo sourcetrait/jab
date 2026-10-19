@@ -9,6 +9,9 @@ is read from its path: a member's under the workspace's .target at the
 member's path, any other program's under the program's own .target,
 and an image under no .target is taken to sit beside its program.
 
+- past .target: the tree, debug or release, then the program's
+  workspace-relative path or its name, then the image
+
 ## workspace
 
 The workspace a launch belongs to, whose generic disk rides along and

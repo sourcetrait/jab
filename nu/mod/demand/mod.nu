@@ -155,7 +155,6 @@ export def crc32 [bytes: binary]: nothing -> int {
 export def header-source [decl: record, out: path]: nothing -> string {
     let hex = {|v: int| $v | format number | get lowerhex }
     let rows = ($decl.bytes | chunks 16 | each {|row| "    .byte " + ($row | chunks 1 | each {|b| $"0x($b | encode hex | str lowercase)" } | str join ", ") })
-    # the jump and six words, then zeros to the header's end
     let text = (([
         ".section .jab.header, \"ax\""
         ".option push"

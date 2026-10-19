@@ -9,8 +9,6 @@ export def home [image: path]: nothing -> string {
     if ($marks | is-empty) { return ($image | path expand | path dirname) }
     let mark = ($marks | last)
     let base = ($parts | first $mark | path join)
-    # past .target: the tree, debug or release, then the program's
-    # workspace-relative path or its name, then the image
     let relative = ($parts | skip ($mark + 2) | drop 1)
     if ($relative | is-empty) or not ($base | path join "workspace.jab.toml" | path exists) { return $base }
     let program = ($base | path join ...$relative)

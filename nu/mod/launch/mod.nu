@@ -53,8 +53,6 @@ export def plan [
 ]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
     let ws = (image workspace $kernel $image $out)
-    # a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
-    # is recorded below it, where a release kernel reads no knob and refuses
     let asked = (machine resolve $ws $spec $harts)
     let machine = (if (machine knob-of $bootargs "jab.nominimum") == 1 { $asked | insert below_minimum true } else { $asked })
     let demand = (demand image $image)
@@ -76,7 +74,6 @@ export def plan [
     let pidfile = ($out | path join "qemu.pid")
     let monitor = ($out | path join "monitor")
     for f in [$log $qemu_log $screen $pidfile] { target retire $f $root }
-    # a Windows run's pipes are named pipes, named by a nonce of its own
     let windows = ($nu.os-info.name == "windows")
     let nonce = (if $windows { random int 1.. } else { 0 })
     let watch = (if $windows { chardev pipe-pair $out "monitor" $nonce "windows" $root } else {
@@ -91,9 +88,6 @@ export def plan [
     let pad = (pad pad-attach $gamepad $out $pad_port $ws $root)
     let api_on = ($api or (not ($send | is-empty)))
     let ports = (chardev ports (build symbols $set) $out $api_on ($pad.port or $hosted.port) $root $nonce)
-    # Windows' relays, one a pipe with no client of its own: the monitor's,
-    # the API's, and a scripted pad's port, the host's pad's client being
-    # the bridge
     let piped = (if not $windows { [] } else {
         [{ endpoint: "monitor", pipe: $watch } { endpoint: "api", pipe: $ports.api }] ++ (if $hosted.port { [] } else { [{ endpoint: "padport", pipe: $ports.pad }] })
     })
@@ -180,36 +174,36 @@ def capture-identity [machine: record, pid: oneof<int, nothing>]: nothing -> rec
 
 # A program run headless on the kernel under QEMU, its outputs read back
 export def main [
-    --kernel: path             # the kernel ELF
-    --image: path              # the program's .jab
-    --out: path                # where serial.log and the rest go
-    --seconds: int = 10        # the bound
-    --capture: duration = 0sec # when to take the screen and end the run; 0 never
-    --screen: duration = 0sec  # when to take the screen while the run goes on; 0 never
-    --keys: table<at: duration, key: string, hold: int> = [] # keys to press that long after the start, QEMU's names, held for hold ms
-    --api                      # put the API's port on the machine
-    --send: table<at: duration, bytes: binary> = [] # bytes to write into the API that long after the start; puts the port on the machine
-    --disk: path = ""          # a raw image to put on the machine as its first virtio-blk disk; the workspace's generic disk follows it
-    --serial: string = "disk0" # the disk's serial, which the guest reads back as its own; 19 characters at most
-    --set: string = ""         # the symbols the kernel was built with, comma separated
-    --pad: path = ""           # a NUON file of pad events, [[at, type, code, value]; ...], played as a gamepad: into a fifo attached through the evdev shim on Linux, else into the pad port
-    --pad-port                 # play --pad into the pad port on Linux too, the route every other host takes
-    --kbm                      # the keyboard and the tablet on the machine, which is the default
-    --no-kbm                   # neither on the machine
-    --sound                    # the sound device on the machine, its output recorded to sound.wav in `out`, handed back as `sound`
-    --window                   # the window a run of the program opens, in place of none
-    --live-sound               # the sound device over the host's audio as a run discovers it, in place of the --sound recording
-    --host-pad                 # the host's own gamepad as a run attaches it, in place of a --pad table
-    --spec (-s): string = ""   # the named spec the machine is, its cores, RAM, and display; the configured default unless given
-    --harts: int = 0           # a custom machine of 1 to 8 harts in place of a named spec, the run then diagnostic
-    --bootargs: string = ""    # the kernel's command line, its debug knobs, through -append
-    --dtb: path = ""           # a device tree for the kernel in place of QEMU's, through -dtb
-    --threads: duration = 0sec # when to read every QEMU thread's CPU and again a second on, the result's `threads` and `threads_span`; 0 never
-    --threads-at: list<duration> = [] # each time to read every QEMU thread's CPU, kept whole in the result's `thread_readings`; none unless given
-    --qemu: list<string> = []  # words appended to the QEMU line unchanged, after the launch's own; the run is then diagnostic
-    --sdl-probe: path = ""     # the sdl shim's log: QEMU under sdl,gl=on with the shim preloaded, Linux only
-    --capture-nonce: int = 0   # the run's capture nonce from the caller making the request; minted here for a probe given none
-    --profile: string = ""     # the capture's profile, paired or generic (plan)
+    --kernel: path
+    --image: path
+    --out: path
+    --seconds: int = 10
+    --capture: duration = 0sec
+    --screen: duration = 0sec
+    --keys: table<at: duration, key: string, hold: int> = []
+    --api
+    --send: table<at: duration, bytes: binary> = []
+    --disk: path = ""
+    --serial: string = "disk0"
+    --set: string = ""
+    --pad: path = ""
+    --pad-port
+    --kbm
+    --no-kbm
+    --sound
+    --window
+    --live-sound
+    --host-pad
+    --spec (-s): string = ""
+    --harts: int = 0
+    --bootargs: string = ""
+    --dtb: path = ""
+    --threads: duration = 0sec
+    --threads-at: list<duration> = []
+    --qemu: list<string> = []
+    --sdl-probe: path = ""
+    --capture-nonce: int = 0
+    --profile: string = ""
 ]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, timeout_binary: string, timeout_version: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
@@ -239,9 +233,6 @@ export def main [
         let pipe = $machine.bridge_pipe
         job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
     })
-    # the timed actions in the order a poll takes them (due-order): by
-    # time, and at one time the keys, then the API's bytes, then the pad's
-    # groups, each in its table's order
     let events = ([
         ($keys | enumerate | each {|e| { kind: "key", index: $e.index, at: $e.item.at } })
         ($send | enumerate | each {|e| { kind: "send", index: $e.index, at: $e.item.at } })
@@ -268,26 +259,16 @@ export def main [
     mut qemu_pid: any = null
     while $result == null {
         $result = (try { job recv --timeout 100ms } catch { null })
-        # QEMU deletes its pid file as it exits, so the read is tried, never
-        # checked first: an exit between a check and the open is no pid
         let pid = (try { open --raw $pidfile | str trim } catch { "" })
         let alive = ($result == null and (process process-alive $pid))
-        # the pid kept while QEMU lives, its pid file gone once it ends
         if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
         let sample = (if $pid == "" { null } else { process cpu-seconds $pid })
         if $sample != null { $cpu = $sample }
         let elapsed = ((date now) - $started)
-        # the pad port's header goes in as soon as QEMU is up, before any
-        # event, since the kernel waits for the whole of it
-        # every write into QEMU's pipes is bounded (pipe-write), since QEMU
-        # can end between the check that it runs and the write
         if (not $header_sent) and $alive {
             chardev pipe-write $pad_in $gamepad.header $bound | ignore
             $header_sent = true
         }
-        # every due action in due-order's order: a screen that fails holds
-        # every action after it for the rest of the run, as the capture's
-        # quit does
         if not $held {
             for action in (due-order ($events | skip $events_taken) $screen_due $elapsed) {
                 if $action.kind == "screen" {
@@ -321,9 +302,6 @@ export def main [
                 }
             }
         }
-        # each thread's CPU over the held span: a reading at `threads`,
-        # another a second on, each timed as it is taken, since the loop
-        # polls and the span is a second give or take a poll
         if $threads != 0sec and $alive {
             if $threads_first == null and $elapsed >= $threads {
                 let reading = (process threads-of ($pid | into int))
@@ -334,8 +312,6 @@ export def main [
                 $threads_held = (process threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
             }
         }
-        # every thread's counter at each time `--threads-at` asks, read at
-        # the first poll past it, its own time taken with it
         while $alive and $taken < ($thread_requests | length) and ($thread_requests | get $taken) <= $elapsed {
             let threads = (process threads-of ($pid | into int))
             $readings = ($readings | append { requested: (($thread_requests | get $taken) / 1sec), at: (((date now) - $started) / 1sec), threads: $threads })

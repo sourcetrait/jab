@@ -43,7 +43,6 @@ export def programs-of [ws: path]: nothing -> list<string> {
     let ws = ($ws | path expand)
     let listed = (open ($ws | path join "workspace.jab.toml") | get programs)
     let root = (target root $ws)
-    # glob's exclusions as a filter on each path's words below the workspace
     let found = (walk paths ($ws | path join "**" "program.jab.toml")
         | where {|f| not ($f | path relative-to $ws | path split | any {|w| $w in [".git" ".target" "target" "extern"] }) }
         | each {|f| $f | path dirname }

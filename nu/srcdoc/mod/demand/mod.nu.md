@@ -104,6 +104,8 @@ image_header bytes; then the declaration's bytes, none for a program
 declaring no demand. The file is written only when its text differs from
 what is there, so its time moves with its text alone. Its path.
 
+- the jump and six words, then zeros to the header's end
+
 ## check-image
 
 An image's first page, read as the kernel reads it before the program

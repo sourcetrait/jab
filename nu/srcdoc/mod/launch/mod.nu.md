@@ -65,6 +65,13 @@ with a nonce, `generic` for a probe that names none, "" for a run that
 claims none; `capture` the run's capture identity as it stands before
 QEMU starts (capture-identity).
 
+- a debug kernel's jab.nominimum=1 skips a program's minimum, so the run
+  is recorded below it, where a release kernel reads no knob and refuses
+- a Windows run's pipes are named pipes, named by a nonce of its own
+- Windows' relays, one a pipe with no client of its own: the monitor's,
+  the API's, and a scripted pad's port, the host's pad's client being
+  the bridge
+
 ## capture-identity
 
 A run's capture identity, what its identity records of the capture
@@ -154,6 +161,73 @@ naming its pipe (relays-held).
 QEMU removes its pid file as it exits, null where it never came up; the
 result carries `sdl_log`, `shim`, `capture_nonce`, and `profile` as
 planned, and `capture`, the run's capture identity (capture-identity).
+
+- `--kernel`: the kernel ELF
+- `--image`: the program's .jab
+- `--out`: where serial.log and the rest go
+- `--seconds`: the bound
+- `--capture`: when to take the screen and end the run; 0 never
+- `--screen`: when to take the screen while the run goes on; 0 never
+- `--keys`: keys to press that long after the start, QEMU's names, held for hold
+  ms
+- `--api`: put the API's port on the machine
+- `--send`: bytes to write into the API that long after the start; puts the port
+  on the machine
+- `--disk`: a raw image to put on the machine as its first virtio-blk disk; the
+  workspace's generic disk follows it
+- `--serial`: the disk's serial, which the guest reads back as its own; 19
+  characters at most
+- `--set`: the symbols the kernel was built with, comma separated
+- `--pad`: a NUON file of pad events, [[at, type, code, value]; ...], played as
+  a gamepad: into a fifo attached through the evdev shim on Linux, else into the
+  pad port
+- `--pad-port`: play --pad into the pad port on Linux too, the route every other
+  host takes
+- `--kbm`: the keyboard and the tablet on the machine, which is the default
+- `--no-kbm`: neither on the machine
+- `--sound`: the sound device on the machine, its output recorded to sound.wav
+  in `out`, handed back as `sound`
+- `--window`: the window a run of the program opens, in place of none
+- `--live-sound`: the sound device over the host's audio as a run discovers it,
+  in place of the --sound recording
+- `--host-pad`: the host's own gamepad as a run attaches it, in place of a --pad
+  table
+- `--spec (-s)`: the named spec the machine is, its cores, RAM, and display; the
+  configured default unless given
+- `--harts`: a custom machine of 1 to 8 harts in place of a named spec, the run
+  then diagnostic
+- `--bootargs`: the kernel's command line, its debug knobs, through -append
+- `--dtb`: a device tree for the kernel in place of QEMU's, through -dtb
+- `--threads`: when to read every QEMU thread's CPU and again a second on, the
+  result's `threads` and `threads_span`; 0 never
+- `--threads-at`: each time to read every QEMU thread's CPU, kept whole in the
+  result's `thread_readings`; none unless given
+- `--qemu`: words appended to the QEMU line unchanged, after the launch's own;
+  the run is then diagnostic
+- `--sdl-probe`: the sdl shim's log: QEMU under sdl,gl=on with the shim
+  preloaded, Linux only
+- `--capture-nonce`: the run's capture nonce from the caller making the request;
+  minted here for a probe given none
+- `--profile`: the capture's profile, paired or generic (plan)
+
+- the timed actions in the order a poll takes them (due-order): by
+  time, and at one time the keys, then the API's bytes, then the pad's
+  groups, each in its table's order
+- QEMU deletes its pid file as it exits, so the read is tried, never
+  checked first: an exit between a check and the open is no pid
+- the pid kept while QEMU lives, its pid file gone once it ends
+- the pad port's header goes in as soon as QEMU is up, before any
+  event, since the kernel waits for the whole of it
+- every write into QEMU's pipes is bounded (pipe-write), since QEMU
+  can end between the check that it runs and the write
+- every due action in due-order's order: a screen that fails holds
+  every action after it for the rest of the run, as the capture's
+  quit does
+- each thread's CPU over the held span: a reading at `threads`,
+  another a second on, each timed as it is taken, since the loop
+  polls and the span is a second give or take a poll
+- every thread's counter at each time `--threads-at` asks, read at
+  the first poll past it, its own time taken with it
 
 ## due-order
 

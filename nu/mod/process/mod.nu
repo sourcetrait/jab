@@ -13,9 +13,6 @@ export def process-alive [pid: string]: nothing -> bool {
 export def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
     let stat = (try { open --raw ("/proc" | path join $pid "stat") | decode } catch { "" })
     if $stat == "" { return null }
-    # after the command's closing parenthesis: state, ppid, pgrp,
-    # session, tty, tpgid, flags, minflt, cminflt, majflt, cmajflt,
-    # utime, stime, in clock ticks of a hundredth
     let fields = ($stat | split row ") " | last | split row " ")
     (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
 }

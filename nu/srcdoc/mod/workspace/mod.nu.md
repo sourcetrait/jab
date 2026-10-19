@@ -32,6 +32,8 @@ workspace.jab.toml lists, then the programs under its directory it does
 not list, the game's among them, found by their manifests outside the
 target, the cargo trees, and extern/.
 
+- glob's exclusions as a filter on each path's words below the workspace
+
 ## path-words
 
 A path given as words, each split on its slashes, so `example bounce`,

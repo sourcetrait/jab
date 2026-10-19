@@ -7,10 +7,18 @@ a sample from the format chunk, and the data chunk's samples as they
 lie, little-endian, the channels interleaved a frame at a time, to the
 end of the file when the chunk's size was never written.
 
+- the backend writes this size as it closes the file, which
+  QEMU 11.1.2 never does at exit, so a size of 0, or one past
+  the file's end, means the samples run to the end of the file
+
 ## screen
 
 Read a screen `jab launch` took: its size and its pixels, three bytes
 each, red, green, blue, row by row from the top left.
+
+- Bytes whatever the file holds: `open --raw` gives text for a file of
+  valid UTF-8, a capture whose every channel is below 0x80 among them
+- P6, a line of width and height, the maximum, then the pixels
 
 ## ink
 
