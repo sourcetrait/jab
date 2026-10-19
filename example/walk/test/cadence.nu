@@ -12,10 +12,10 @@
 # outcome. The bound is 180 s, or for a replay twice the reference's
 # window, its dt values summed, plus 60 s. A run that does not end with
 # status 0 exits 1 once its records are written, its status named.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
 use ../../../nu/mod/machine
 use ../../../nu/mod/launch
+use ../../../nu/mod/probe
 
 const cadence_symbols = [CADENCE TIMING REPLAY PREPARE CADENCE_TEST]
 const nonce_at = 200ms
@@ -53,7 +53,7 @@ def main [
     let stream = (if $replaying { replay-of $replay } else { null })
     let seconds = (if $replaying { $stream.bound } else { $bound })
     let nonce = (nonce mint 0 true)
-    let sends = ([{ at: $nonce_at, bytes: (jab nonce-frame $nonce) }]
+    let sends = ([{ at: $nonce_at, bytes: (probe wnon-frame $nonce) }]
         | append (if $replaying { [{ at: $nonce_at, bytes: $stream.bytes }] } else { [] }))
     let set = (if "DEBUG" in $symbols { "debug" } else { "" })
     let id = {

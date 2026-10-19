@@ -37,13 +37,13 @@
 # or two in the shim's library and the next in the harness, which
 # sdl-resolve must name as the harness's own function. Linux only, as the
 # probe is.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
 use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/sdl
 use ../../../nu/mod/tool
 use ../../../nu/mod/launch
+use ../../../nu/mod/probe
 use std/assert
 
 # An address as the shim writes one, in lowercase hex.
@@ -408,8 +408,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # manifest naming `paired` with a build that does not set it generic
     let pairing = { name: "walk", paired: "cadence" }
     let wnon = (0x[57 4e 4f 4e 00 00 00 00] ++ ($nonce | into binary --endian little))
-    assert equal (jab nonce-frame $nonce) $wnon "probe_frame: WNON, a zero word, the nonce as a le64"
-    let zero_frame = (try { jab nonce-frame 0 | ignore; "" } catch {|e| $e.msg })
+    assert equal (probe wnon-frame $nonce) $wnon "probe_frame: WNON, a zero word, the nonce as a le64"
+    let zero_frame = (try { probe wnon-frame 0 | ignore; "" } catch {|e| $e.msg })
     assert ($zero_frame | str contains "a capture nonce is 1 to 2^63 - 1") $"probe_frame_zero: a nonce of 0 has no frame: ($zero_frame)"
     let plans = [
         { name: "probe_generic", manifest: {}, names: [], api: false, send: 0x[], wanted: { profile: "generic", api: false, sends: [] } }
@@ -420,9 +420,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "probe_unset", manifest: $pairing, names: [], api: false, send: 0x[], wanted: { profile: "generic", api: false, sends: [] } }
     ]
     for p in $plans {
-        assert equal (jab probe-plan $p.manifest $p.names $nonce --api=$p.api --send $p.send) $p.wanted $"($p.name): the probe's profile, port, and sends"
+        assert equal (probe plan $p.manifest $p.names $nonce --api=$p.api --send $p.send) $p.wanted $"($p.name): the probe's profile, port, and sends"
     }
-    let untraced = (try { jab trace-args "true" ($plumbing | path join "trace.log") | ignore; "" } catch {|e| $e.msg })
+    let untraced = (try { probe trace-args "true" ($plumbing | path join "trace.log") | ignore; "" } catch {|e| $e.msg })
     assert ($untraced | str contains "lists no trace event virtio_gpu_cmd_res_flush or virtio_gpu_cmd_set_scanout") $"probe_untraced: a QEMU listing neither trace event is refused: ($untraced)"
 
     # the bundle: a paired capture bundled where it was taken, the fixture
