@@ -5,15 +5,15 @@
 # that image against its own. The binary file is compared byte for byte:
 # the program reads it in pages of 4000, which line up with no sector,
 # and writes every byte back as hex.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let repo = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let img = ($out | path join "fixture.romfs")
     let fixture = (build-fixture $repo ($out | path join "fixture") $img)
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "fixture" --seconds 30)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "fixture" --seconds 30)
     assert equal $run.status 0 $"exit status, with the first of the UART: ($run.serial | str substring 0..400)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

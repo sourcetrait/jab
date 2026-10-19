@@ -16,8 +16,8 @@
 # batch, so its refused transfer's flush shows the old frame again and
 # counts; the whole flip's scenarios run before the list's, so a defect
 # of the batch the two share fails at the candidate's own case.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 # Sixty-four awaited frames, half of them whole and half a rectangle
@@ -39,7 +39,7 @@ const GPU = 16
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let batched = ("FLIP_BATCH" in ($set | split row ","))
     let cap = (open --raw ($env.FILE_PWD | path join ".." ".." ".." "sdk" "src" "jab.inc") | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get 0.cap | into int)
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let receipts = (receipts-of $run.serial)
@@ -137,7 +137,7 @@ def clock-holds [receipts: table, kind: int, what: string] {
 # its receipts. Untyped because launch's record is wide.
 def scenario [kernel: path, image: path, out: path, set: string, letter: string, bootargs: string, --capture: duration = 0sec] {
     let send = [[at, bytes]; [500ms, ($letter | into binary)]]
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --capture $capture)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --capture $capture)
     assert ($run.serial | str contains "framecap: scenario done") $"scenario ($letter) ran to its end: ($run.serial)"
     { run: $run, receipts: (receipts-of $run.serial) }
 }

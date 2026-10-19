@@ -5,8 +5,8 @@
 # the screen in off-white; the UART stays silent and QEMU has nothing
 # to say. The piece is minutes long, so the run is ended by the
 # capture; test/smf holds the player's end-of-piece exit.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -20,7 +20,7 @@ const TITLE_X = 743
 const TITLE_Y = 492
 
 def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --sound --disk $assets --serial "techno" --capture 3200ms)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --sound --disk $assets --serial "techno" --capture 3200ms)
     print $"techno: status ($run.status) after ($run.wall_seconds | math round -p 2) seconds, ($run.debug | lines | length) kernel debug lines"
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"

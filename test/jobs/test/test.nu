@@ -24,7 +24,7 @@
 # distribution, the round's overhead bound beside the dispatch and the
 # barrier and at least each, held to no number, since a debug build's TCG
 # times are no measure.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use ./costs.nu
 use std/assert
 
@@ -43,7 +43,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let w = ($harts - 1)
         let held = ($threads and $harts >= 3)
         let send = [[at, bytes]; [1sec, ("f" | into binary)]]
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"fixture_($harts)") --set $set --send $send --harts $harts --seconds 40 --threads (if $held { $HELD_AT } else { 0sec }))
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"fixture_($harts)") --set $set --send $send --harts $harts --seconds 40 --threads (if $held { $HELD_AT } else { 0sec }))
         let lines = [
             [fixture, line];
             [Workers, $"jobs: scenario fixture, workers ($w)"]

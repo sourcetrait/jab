@@ -12,8 +12,8 @@
 # the keyboard, and the API, must go on returning at the display's
 # tick with the stream's room and the pad's event there to be had,
 # the hart halting between frames as before.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 # The API's records, as example/wasd/src/main.S lays them out
@@ -51,7 +51,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     mkdir $out
     let twitch = ($out | path join "twitch.nuon")
     [[at, type, code, value]; [500ms, $EV_ABS, $ABS_X, 1000], [510ms, $EV_ABS, $ABS_X, 0]] | to nuon | save -f $twitch
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --api --sound --pad $twitch --send [[at, bytes]; [1sec, $hold], [1800ms, $free]] --capture 3500ms)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --api --sound --pad $twitch --send [[at, bytes]; [1sec, $hold], [1800ms, $free]] --capture 3500ms)
     print $"wasd: status ($run.status) after ($run.wall_seconds | math round -p 2) seconds, ($run.api | bytes length) bytes of records, ($run.debug | lines | length) kernel debug lines"
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"

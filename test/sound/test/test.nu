@@ -11,8 +11,8 @@
 # service past the priming 300 ms before its drain, past the eight
 # periods' 160 ms of lead, and that service alone counts, the stream going
 # on and the whole tone recorded after the longer silent start.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -25,14 +25,14 @@ const HEARD = 1000
 const PERIODS = 58
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let plain = (jab launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --seconds 15)
+    let plain = (launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --seconds 15)
     let tone = (tone-holds $plain)
     let counts = (counts-of $plain.debug)
     assert equal $counts.exhausted 0 $"sound: no service of the plain run found its queue empty: ($counts)"
     counts-hold $counts "plain"
     print $"sound: ($tone.seconds | math round -p 2) seconds of ($tone.frequency | math round -p 1) Hz at ($tone.peak) recorded from the device; QEMU used ($plain.cpu_seconds) CPU seconds over ($plain.wall_seconds | math round -p 2) seconds; submitted ($counts.submitted) returned ($counts.returned) exhausted ($counts.exhausted)"
 
-    let late = (jab launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --sound --seconds 15 --bootargs "jab.soundlate=300")
+    let late = (launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --sound --seconds 15 --bootargs "jab.soundlate=300")
     assert equal $late.status 0 $"the late run's exit status, with the UART: ($late.serial)"
     assert (not ($late.serial | str contains "jab: sound stalled")) $"sound: the late run's stream went on past its empty queue: ($late.serial)"
     let late_counts = (counts-of $late.debug)

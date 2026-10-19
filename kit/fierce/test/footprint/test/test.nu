@@ -3,7 +3,7 @@
 # and each answer held to the exact arithmetic, the game's footprint
 # crate's `derivative`, every case the value or the saturation it was laid
 # for, and the program exiting 0 after the last.
-use ../../../../../sdk/nu/jab.nu
+use ../../../../../nu/mod/launch
 use std/assert
 
 # each case's purpose and whether it saturates, in the program's order
@@ -34,7 +34,7 @@ def footprint-tool []: nothing -> string {
 }
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 10)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 10)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let tool = (footprint-tool)

@@ -5,8 +5,8 @@
 # the stream still running in silence after it. The program spins the
 # whole time, so every refill of the stream came through the trap
 # vector rather than a wait.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -18,7 +18,7 @@ const PEAK = 6143
 const HEARD = 500
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --sound --seconds 15)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --sound --seconds 15)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.debug | str contains "jab: sound at ") $"the kernel found the sound device: ($run.debug)"

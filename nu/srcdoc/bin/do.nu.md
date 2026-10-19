@@ -12,3 +12,12 @@ every program, or the programs at or under a path, each prepared first;
 at a program's directory that program; with `--kernel` the kernel at its
 directory. Release unless `--set` names DEBUG; what is up to date is
 skipped.
+
+## main bench
+
+`bench`, the bench module's `main`: with no name the list of the
+workspace's benches, else the bench `<program>/<bench>` built in its
+tree and run step by step, its report after, the run packed into one tar
+whose path the last line names; `--only` the steps its comma-separated
+labels name. A run with a failed step or report exits 1 once everything
+is recorded.

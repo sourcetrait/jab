@@ -11,9 +11,9 @@
 # elapsed time by rdtime, the machine's 10 MHz clock, as distributions over
 # a hundred rounds a size. `just bench test/jobs/costs` runs it on a
 # release build and reports; the test runs it once on its debug one.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/walk
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 
 const SIZES_US = [10 100 1000 10000]
 const ROUNDS = 100
@@ -23,7 +23,7 @@ const TICKS_PER_US = 10
 # microseconds. Untyped because launch's record is wide.
 export def measure [kernel: path, image: path, out: path, set: string, --harts: int = 3] {
     let send = [[at, bytes]; [1sec, ("c" | into binary)]]
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --send $send --harts $harts --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --send $send --harts $harts --seconds 60)
     let line = ($run.serial | lines | where {|l| $l starts-with "jobs: costs, workers " } | get -o 0)
     if $run.status != 0 or $line == null { error make { msg: $"the costs scenario ended with ($run.status): ($run.serial)" } }
     let parsed = ($line | parse "jobs: costs, workers {w}, {n} bytes" | first)

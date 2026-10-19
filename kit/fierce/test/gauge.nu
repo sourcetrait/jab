@@ -86,13 +86,14 @@
 # asked. `run --cpu` reads every QEMU thread's CPU at 5 s, at each
 # placement, and at the route's end, kept whole in run.nuon and reported
 # as host-time windows (cpu-windows).
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
 use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/build
 use ../../../nu/mod/machine
+use ../../../nu/mod/launch
+use ../../../nu/mod/sdl
 use ../nu/map.nu
 use ./pose.nu
 
@@ -390,15 +391,15 @@ def "main run" [
         let id = (identity $at $set $map_name $route_file $mode $machine $words | merge { profile: "paired", capture_nonce: $nonce })
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         } else {
-            jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log
         })
         let ran = (outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
         let ran_id = (launched-identity $id $launched)
         let id_sha = (write-identity $ran_id $run_out)
-        let bundle = (if $sdl_probe { jab sdl-bundle $run_out ($run_out | path join "bundle") --profile paired | ignore; $run_out | path join "bundle" } else { null })
+        let bundle = (if $sdl_probe { sdl bundle $run_out ($run_out | path join "bundle") --profile paired | ignore; $run_out | path join "bundle" } else { null })
         let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP))
         print (run-line $label $n $measured $ran)
         print (outcome-line $n $measured $ran)
@@ -450,7 +451,7 @@ def "main play" [
     let id = (identity $at $set "render_0" null $mode $machine $qemu)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (jab launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu)
+    let launched = (launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu)
     let ran = (outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
     let ran_id = (launched-identity $id $launched)

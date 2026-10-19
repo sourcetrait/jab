@@ -2,8 +2,8 @@
 # to it and nothing else, and the screen carries exactly the glyphs of
 # the two lines sent to it, white on black in the first two console
 # rows, as the console font defines them.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 # How many pixels each printable character lights, from the font table.
@@ -20,7 +20,7 @@ def glyph-ink []: nothing -> record {
 }
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --capture 2sec)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --capture 2sec)
     assert equal $run.serial "uart first\nuart again\n" "the UART's two lines and nothing else"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"

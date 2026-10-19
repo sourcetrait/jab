@@ -13,9 +13,9 @@
 # frame's span, is the supporting record. `just bench
 # example/workers/scaling` runs it on a release build and reports; the
 # test runs the three-worker run once on its debug one.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/walk
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 
 # when the held span starts: inside the stretch, which begins once the
 # digit lands a second in and lasts four
@@ -35,7 +35,7 @@ const AT_ONCE = 1.5
 export def measure [kernel: path, image: path, out: path, set: string, --workers: int = 3] {
     if $workers < 1 or $workers > $MAX_WORKERS { error make { msg: $"--workers is 1 to ($MAX_WORKERS), not ($workers)" } }
     let send = [[at, bytes]; [1sec, ($workers | into string | into binary)]]
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --send $send --harts 4 --seconds 40 --threads $HELD_AT)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --send $send --harts 4 --seconds 40 --threads $HELD_AT)
     let line = ($run.serial | lines | where {|l| $l starts-with "workers: bench " } | get -o 0)
     if $run.status != 0 or $line == null { error make { msg: $"the bench scenario ended with ($run.status): ($run.serial)" } }
     let p = ($line | parse "workers: bench {w} frames {frames} ms {ms} hash {hash} rows {r0} {r1} {r2}" | get -o 0)

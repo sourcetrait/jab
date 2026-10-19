@@ -4,7 +4,7 @@
 # wrong permutation. The other two are ramps long enough to run the
 # sponge over many blocks, and those are held against what the host
 # computes with the same algorithm.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 # FIPS 202's own vectors
@@ -12,7 +12,7 @@ const SHA3_256_EMPTY = "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b
 const SHA3_256_ABC = "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 60)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let got = ($run.serial | lines | where {|l| $l starts-with "d " } | each {|l| $l | str substring 2.. })

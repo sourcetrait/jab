@@ -10,8 +10,8 @@
 # launch of a debug build with Render Zero's tree; the table it played is
 # kept beside the run as pad.nuon, so a seed that faults is replayed by
 # its number.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 use std/assert
 
 const RECORD = 64
@@ -52,7 +52,7 @@ def main [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", -
         let pad = ($run_out | path join "pad.nuon")
         $table | to nuon | save --raw -f $pad
         let capture = (($seconds * 1000 - 500) * 1ms)
-        let run = (jab launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --capture $capture --seconds $seconds)
+        let run = (launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --capture $capture --seconds $seconds)
         let serial = ($run.serial | lines)
         let fault = ($serial | where {|l| $l starts-with "jab: " } | get -o 0)
         let states = (states $run.api)

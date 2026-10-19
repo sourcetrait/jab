@@ -22,7 +22,7 @@
 #   and the read drained, and the disk behind them on the failed line is
 #   offered no request and its source stays masked.
 # And with no letter the program says so and exits 2.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 const VIRTIO0 = 0x10001000
@@ -89,7 +89,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         "jab: disk 3 kind 0 status 0 offered 0 outstanding 0 enabled 0"
     ] $"disk: the generic disk reset with nothing in flight, the slow one with its read in flight, the one behind them offered nothing, the source masked: ($disk.debug)"
 
-    let none = (jab launch --kernel $kernel --image $image --out ($out | path join "none") --set $set --api --seconds 10)
+    let none = (launch --kernel $kernel --image $image --out ($out | path join "none") --set $set --api --seconds 10)
     assert equal $none.status 2 $"no letter: exit status ($none.status): ($none.serial)"
     assert equal ($none.serial | lines) ["stuck: no scenario"] $"no letter, no scenario: ($none.serial)"
 
@@ -102,7 +102,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # the sound the scenario takes. Untyped because launch's record is wide.
 def scenario [kernel: path, image: path, out: path, set: string, letter: string, --bootargs: string = "", --qemu: list<string> = [], --pad: path = "", --pad-port, --sound] {
     let send = [[at, bytes]; [1sec, ($letter | into binary)]]
-    jab launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --qemu $qemu --pad $pad --pad-port=$pad_port --sound=$sound --seconds 30
+    launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --qemu $qemu --pad $pad --pad-port=$pad_port --sound=$sound --seconds 30
 }
 
 # A virtio-mmio device's interrupt source from its debug line, `<head>` and

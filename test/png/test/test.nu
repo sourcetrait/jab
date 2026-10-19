@@ -6,8 +6,8 @@
 # loaded from directories of frames straight off the disk, the same
 # way. The rows of the program's two tables are mirrored here, refusals
 # and all.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
+use ../../../nu/mod/launch
 use std/assert
 
 const JAB_PNG_OK = 0
@@ -61,7 +61,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let made = (^python3 ($env.FILE_PWD | path join "encode.py") $stage | from json)
     let img = ($out | path join "png.romfs")
     ^genromfs -d $stage -f $img -V png
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "png" --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "png" --seconds 60)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial | str substring 0..600)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

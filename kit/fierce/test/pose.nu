@@ -19,8 +19,8 @@
 # reports over the API, a round, an android's, the frame struck, a
 # pickup, or a trace, is printed with its fields. `just do pose`
 # builds and runs it.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 use ../nu/map.nu
 
 const RECORD = 64
@@ -48,9 +48,9 @@ def main [map: string, poses: path, out: path, --kernel: path, --image: path, --
         let seconds = (($p.seconds? | default 5) | into int)
         let pad = ($p.pad? | default "")
         let run = (if $pad == "" {
-            jab launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
+            launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
         } else {
-            jab launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
+            launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds
         })
         let records = (0..<(($run.api | bytes length) // $RECORD) | each {|i|
             let r = ($run.api | bytes at ($i * $RECORD)..<(($i + 1) * $RECORD))

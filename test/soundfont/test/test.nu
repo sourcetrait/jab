@@ -9,9 +9,9 @@
 # second and the release, and then the piano, heard; the UART says
 # what each font held, the one-sample font's three ones and FluidR3's
 # counts as the pinned file has them.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
 use ../../../nu/mod/target
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -36,7 +36,7 @@ const FLUID = { presets: 189, instruments: 193, samples: 1418 }
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let img = ($out | path join "tone.romfs")
     write-font ($out | path join "tone") $img
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --sound --disk $img --serial "tone" --seconds 90)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --sound --disk $img --serial "tone" --seconds 90)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.sound != "") "the host recorded the sound"

@@ -6,8 +6,8 @@
 # every drawn rectangle is held against the screen, the untouched
 # pixels around each included. The codes the refusals gave are checked
 # on the UART.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const background = [0x20 0x30 0x40]
@@ -172,7 +172,7 @@ def drawn [sprite: list, frame: int, x: int, y: int, tint: int, scale: int, pose
 }
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --capture 2sec)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --capture 2sec)
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let codes = ((1..23 | each {|_| "draw 0\n" } | str join "") + "draw 1\ndraw 2\ndraw 0\n")
     assert equal $run.serial $codes $"the codes: ($run.serial)"

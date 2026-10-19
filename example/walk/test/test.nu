@@ -11,8 +11,8 @@
 # lone pixel another walker's shading made in that colour by chance
 # stays out of its box; a small screen of a block and a lone pixel holds
 # the rule first.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const lanes = 8
@@ -29,7 +29,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     assert equal $small { count: 4, left: 1, top: 1, right: 2, bottom: 2 } $"a lone pixel stays out of the box: ($small)"
 
     assert ($assets | path exists) "the sdk built the assets image"
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "walk" --api --capture 8sec --seconds 30)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "walk" --api --capture 8sec --seconds 30)
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"

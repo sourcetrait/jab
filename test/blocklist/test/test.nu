@@ -6,7 +6,7 @@
 # romfs when it sees one. Both are attached read-only: the program's
 # write to its disk comes back as the device's error, and the image on
 # the host is the same bytes after the run as before it.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --assets: path, --set: string = ""] {
@@ -14,7 +14,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     let bytes = (ls -D $assets | get 0.size | into int)
     let sectors = ($bytes // 512)
     let before = (open --raw $assets | hash sha256)
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "blocklist")
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "blocklist")
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

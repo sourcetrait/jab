@@ -3,15 +3,15 @@
 # archive against its own. The program reads the tar out of romfs into
 # its own memory first, which is how a shipped .tar.gz will be read once
 # the decompressor lands.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "stage")
     let img = ($out | path join "tar.romfs")
     let fixture = (build-fixture $stage $img)
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "tar")
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "tar")
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

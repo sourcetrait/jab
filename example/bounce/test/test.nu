@@ -1,12 +1,12 @@
 # bounce's integration test: after three seconds the screen holds the
 # ball, a disc of radius 90 in its colour on the background, moved from
 # where it started, and the hart has been halting between frames.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --capture 3sec)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --capture 3sec)
     assert equal $run.serial "" "the UART stays silent"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"

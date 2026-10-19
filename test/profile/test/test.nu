@@ -5,11 +5,11 @@
 # acting as a flush; time, cycle, and instret read and rise over a spin;
 # hpmcounter3 and hpmcounter18 read. Any of them refused is an illegal
 # instruction, a program fault, and status 1.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 8)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 8)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

@@ -10,7 +10,7 @@
 # as a device, through the evdev shim, and then over the pad port; on
 # any other host over the port alone, since nothing preloads there.
 # The same lines either way.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 const expected = [
@@ -49,9 +49,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let routes = (if $nu.os-info.name == "linux" { ["device" "port"] } else { ["port"] })
     for route in $routes {
         let run = (if $route == "port" {
-            jab launch --kernel $kernel --image $image --out $out --set $set --pad $table --pad-port --seconds 8
+            launch --kernel $kernel --image $image --out $out --set $set --pad $table --pad-port --seconds 8
         } else {
-            jab launch --kernel $kernel --image $image --out $out --set $set --pad $table --seconds 8
+            launch --kernel $kernel --image $image --out $out --set $set --pad $table --seconds 8
         })
         assert equal $run.status 0 $"exit status over the ($route), with the UART: ($run.serial)"
         assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"

@@ -43,12 +43,12 @@
 # page, the change undone builds it back, and nothing changed builds
 # nothing. Then the declared program's declaration dropped, its next build
 # retiring the constants, including none, and recording a null demand.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/spec
 use ../../../nu/mod/demand
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 use std/assert
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
@@ -66,10 +66,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $own_record { image: (sha $image), demand: null } $"the legacy build records a null demand beside its image: ($own_record | to nuon)"
     let own_read = (read-recorded $image)
     assert equal $own_read null $"a legacy image's record reads as no demand: ($own_read | to nuon)"
-    let undeclared = (jab launch --kernel $kernel --image $image --out ($out | path join "legacy") --set $set)
+    let undeclared = (launch --kernel $kernel --image $image --out ($out | path join "legacy") --set $set)
     assert equal $undeclared.status 0 $"the legacy program runs: ($undeclared.status), ($undeclared.serial)"
     assert equal [$undeclared.declared $undeclared.diagnostic] [false true] $"a legacy program's run is undeclared and diagnostic: ($undeclared.declared), ($undeclared.diagnostic)"
-    let unplanned = (jab plan --kernel $kernel --image $image --out ($out | path join "legacy_plan"))
+    let unplanned = (launch plan --kernel $kernel --image $image --out ($out | path join "legacy_plan"))
     assert equal $unplanned.demand null $"a legacy program's plan carries no demand: ($unplanned.demand | to nuon)"
 
     # manifests of the test's own, each naming the workspace
@@ -160,13 +160,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let declared_image = ($declared_out | path join "fixture.jab")
     let declared_record = (recorded $declared_image)
     assert equal $declared_record { image: (sha $declared_image), demand: $demand } $"the build records its demand beside its image: ($declared_record | to nuon)"
-    let three = (jab launch --kernel $kernel --image $declared_image --out ($out | path join "three") --set $set)
+    let three = (launch --kernel $kernel --image $declared_image --out ($out | path join "three") --set $set)
     assert equal $three.status $status $"the declared fixture exits with the status its demand's numbers make: ($three.status), ($three.serial)"
     assert equal [$three.declared $three.diagnostic] [true false] $"on the specification's three harts a declared program's run is declared and not diagnostic: ($three.declared), ($three.diagnostic)"
-    let four = (jab launch --kernel $kernel --image $declared_image --out ($out | path join "four") --set $set --harts 4)
+    let four = (launch --kernel $kernel --image $declared_image --out ($out | path join "four") --set $set --harts 4)
     assert equal $four.status $status $"on four harts the declared fixture exits as on three: ($four.status), ($four.serial)"
     assert equal [$four.declared $four.diagnostic] [true true] $"on four harts a declared program's run is declared and diagnostic: ($four.declared), ($four.diagnostic)"
-    let planned = (jab plan --kernel $kernel --image $declared_image --out ($out | path join "plan"))
+    let planned = (launch plan --kernel $kernel --image $declared_image --out ($out | path join "plan"))
     assert equal $planned.demand $demand $"the declared fixture's plan carries its demand: ($planned.demand | to nuon)"
 
     # the manifest edited without a rebuild: a launch reads the demand
@@ -174,10 +174,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     do $manifest "declared" $"specs = ['($one)', '($larger.name)']\n\n[reserved]\ngfx_harts = 2\n\n[feature.probe]\nio_harts = 1\n" | ignore
     let reread = (read-demand $declared)
     assert ($reread != $demand) $"the edited reservation changes what the manifest declares: ($reread | to nuon)"
-    let edited = (jab plan --kernel $kernel --image $declared_image --out ($out | path join "edited"))
+    let edited = (launch plan --kernel $kernel --image $declared_image --out ($out | path join "edited"))
     assert equal $edited.demand $demand $"a reservation edited without a rebuild leaves the plan the built demand: ($edited.demand | to nuon)"
     do $manifest "declared" "" | ignore
-    let unlisted = (jab plan --kernel $kernel --image $declared_image --out ($out | path join "unlisted"))
+    let unlisted = (launch plan --kernel $kernel --image $declared_image --out ($out | path join "unlisted"))
     assert equal $unlisted.demand $demand $"`specs` removed without a rebuild leaves the plan the built demand: ($unlisted.demand | to nuon)"
 
     # the declaration restored and built again; a build beside a record
@@ -253,7 +253,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # beside it, or beside a record unreadable, builds again whole
     let other = { specs: [$one], reserved: { gfx_harts: 0 }, features: [], base: 1 }
     { image: $hash, demand: $other } | to nuon | save -f $record_file
-    let shaped = (jab plan --kernel $kernel --image $declared_image --out ($out | path join "shaped"))
+    let shaped = (launch plan --kernel $kernel --image $declared_image --out ($out | path join "shaped"))
     assert equal $shaped.demand $other $"a record altered alone and kept to the shape passes a launch: ($shaped.demand | to nuon)"
     rebuilt $tool $declared $declared_image $whole "a build beside a record of another demand"
     "{image: " | save -f $record_file
@@ -263,7 +263,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let built_bytes = (open --raw $declared_image | into binary)
     $built_bytes | bytes add --end 0x[00] | save -f $declared_image
     let altered = (sha $declared_image)
-    let tampered = (try { jab plan --kernel $kernel --image $declared_image --out ($out | path join "tampered") | ignore; "planned" } catch {|e| $e.msg })
+    let tampered = (try { launch plan --kernel $kernel --image $declared_image --out ($out | path join "tampered") | ignore; "planned" } catch {|e| $e.msg })
     assert ($tampered | str contains $"image: ($hash), where the image's SHA-256 is ($altered)") $"a launch of an image altered after its build is refused: ($tampered)"
     rebuilt $tool $declared $declared_image $whole "a build beside an altered image"
     assert equal (sha $declared_image) $hash "the altered image built again is the build's own"
@@ -271,7 +271,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the record retired: a launch undeclared and diagnostic, and the next
     # build writing it again
     target retire $record_file
-    let unrecorded = (jab launch --kernel $kernel --image $declared_image --out ($out | path join "unrecorded") --set $set)
+    let unrecorded = (launch --kernel $kernel --image $declared_image --out ($out | path join "unrecorded") --set $set)
     assert equal $unrecorded.status $status $"with its record retired the declared image runs as built: ($unrecorded.status), ($unrecorded.serial)"
     assert equal [$unrecorded.declared $unrecorded.diagnostic] [false true] $"with its record retired, a run of the declared image is undeclared and diagnostic: ($unrecorded.declared), ($unrecorded.diagnostic)"
     rebuilt $tool $declared $declared_image $whole "a build with its record retired"
@@ -292,7 +292,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     do $manifest "legacy" $listed | ignore
     let relisted = (read-demand $legacy)
     assert ($relisted != null) $"the legacy fixture's manifest now lists its specs: ($relisted | to nuon)"
-    let listed_plan = (jab plan --kernel $kernel --image $legacy_image --out ($out | path join "legacy_listed"))
+    let listed_plan = (launch plan --kernel $kernel --image $legacy_image --out ($out | path join "legacy_listed"))
     assert equal $listed_plan.demand null $"a legacy image given `specs` without a rebuild plans none: ($listed_plan.demand | to nuon)"
 
     # paths-of names what glob names, the build's walks taking it since

@@ -48,8 +48,8 @@
 # - StopExit: a stop inside the hold sees the hart working and waits for
 #   it, then a start on it answers 0.
 # The word decides each line; an expired hold is evidence of neither.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -75,7 +75,7 @@ const LINES = [
 ]
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join "workers") --set $set --harts 4 --sound --seconds 30)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join "workers") --set $set --harts 4 --sound --seconds 30)
     let got = ($run.serial | lines)
     assert (not ($got | any {|l| $l | str ends-with ": no wait witnessed" })) "RegistersHandshake: no wait witnessed"
     for row in ($LINES | enumerate) {
@@ -105,7 +105,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     mut held = "not run: the knob is a debug kernel's"
     if ($set | str contains "DEBUG") {
-        let noack = (jab launch --kernel $kernel --image $image --out ($out | path join "noack") --set $set --harts 4 --bootargs "jab.noack=3" --sound --seconds 30)
+        let noack = (launch --kernel $kernel --image $image --out ($out | path join "noack") --set $set --harts 4 --bootargs "jab.noack=3" --sound --seconds 30)
         let lines = ($noack.serial | lines)
         assert equal ($lines | get -o 9) "hart 3 start 6 then 1, stop 0 0, harts 15 7 8" $"NoAck: hart 3 held from its start, which answers 6, failed for the run, and a second start answering 1: ($noack.serial)"
         assert equal ($lines | last) "workers: exit with two running" $"NoAck: the program goes on to its exit: ($noack.serial)"
@@ -116,13 +116,13 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     mut witnessed = "not run: the knob is a debug kernel's"
     if ($set | str contains "DEBUG") {
-        let restart = (jab launch --kernel $kernel --image $image --out ($out | path join "restart") --set $set --harts 4 --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[72]]] --seconds 20)
+        let restart = (launch --kernel $kernel --image $image --out ($out | path join "restart") --set $set --harts 4 --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[72]]] --seconds 20)
         assert ($restart.debug | str contains "jab: bootargs jab.leavehold=1") $"Restart: the knob reached the kernel: ($restart.debug)"
         assert (not ($restart.serial | str contains "expired")) $"Restart: the hold expired before the start looked, evidence of neither order: ($restart.serial)"
         assert equal ($restart.serial | lines) ["restart: held, start saw busy, then 0, stopped 1"] $"Restart: a start while hart 1 holds at its exit's gap sees it working and answers busy, a retry starts it, and the stop's wait answers: ($restart.serial)"
         assert equal $restart.status 0 $"Restart: exit status: ($restart.serial)"
 
-        let stopexit = (jab launch --kernel $kernel --image $image --out ($out | path join "stopexit") --set $set --harts 4 --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[73]]] --seconds 20)
+        let stopexit = (launch --kernel $kernel --image $image --out ($out | path join "stopexit") --set $set --harts 4 --bootargs "jab.leavehold=1" --send [[at, bytes]; [1sec, 0x[73]]] --seconds 20)
         let lines = ($stopexit.serial | lines)
         assert (not ($stopexit.serial | str contains "expired")) $"StopExit: the hold expired before the stop looked, evidence of neither order: ($stopexit.serial)"
         assert equal ($lines | get -o 0) "stopexit: held, stop saw working, then 0" $"StopExit: a stop while hart 1 holds at its exit's gap sees it working and waits for it, then a start on it answers 0: ($stopexit.serial)"

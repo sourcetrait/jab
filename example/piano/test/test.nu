@@ -4,8 +4,8 @@
 # the piano's velocity gives, dying away as the piano does and gone
 # soon after the key lifts; the twelve white keys stand in their row
 # on the screen with their labels cut out of them in black.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -27,7 +27,7 @@ const ROW_WIDTH = 1768
 const LABEL_PIXELS = 2664
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --sound --keys [[at, key, hold]; [1sec, "a", 400]] --capture 2500ms)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --sound --keys [[at, key, hold]; [1sec, "a", 400]] --capture 2500ms)
     print $"piano: status ($run.status) after ($run.wall_seconds | math round -p 2) seconds, ($run.debug | lines | length) kernel debug lines"
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"

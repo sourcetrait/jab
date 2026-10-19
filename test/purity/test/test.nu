@@ -11,10 +11,10 @@
 # fence lies on every path to the store in both builds. QEMU runs every
 # fence as a full barrier, so no run could show one missing; this check
 # is what keeps them.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/launch
 use std/assert
 
 # What only a debug kernel says
@@ -217,7 +217,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the program: its debug line is there in this debug build, and it
     # runs on the debug kernel with the kernel's own lines on the debug
     # channel rather than the UART
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal $run.serial "purity: debug build\npurity: done\n" "the program's debug line and its last line, and nothing of the kernel's"
     assert ($run.debug | str contains "jab: kernel up on qemu virt") $"the kernel's banner is on the debug channel: ($run.debug)"

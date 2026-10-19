@@ -22,8 +22,8 @@
 #   held span; at nine seconds, more than one worker by then, the bars
 #   at the left in the deal's pattern and nowhere else, the caption's
 #   text inside its black box, the palette on the rest.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use ./scaling.nu
 use std/assert
 
@@ -93,7 +93,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $hot.ecalls 0 $"Hot: no kernel call in mandel_row: ($hot)"
 
     let send = [[at, bytes]; [1sec, ("p" | into binary)]]
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join "proof") --set $set --send $send --harts 4 --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join "proof") --set $set --send $send --harts 4 --seconds 60)
     let got = ($run.serial | lines)
     assert equal $run.status 0 $"Proof: the exit status: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "Proof: QEMU has no complaint about the guest"
@@ -135,7 +135,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert $doc.cpu_at_once $"Bench: the worker harts busy at once, their rates over the held span summing past ($doc.at_once) cores: ($doc.harts)"
     assert $doc.bands_at_once $"Bench: the last frame's bands overlapping, their time past ($doc.at_once) times the frame's span: ($doc.overlap)"
 
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join "animation") --set $set --harts 4 --seconds 30 --capture 9sec --threads 1500ms)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join "animation") --set $set --harts 4 --seconds 30 --capture 9sec --threads 1500ms)
     assert equal $run.serial "" "Animation: the UART stays silent"
     assert equal (open --raw $run.qemu_log) "" "Animation: QEMU has no complaint about the guest"
     let cpu = (hart-cpu $run.threads)

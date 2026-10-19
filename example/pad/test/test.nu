@@ -17,8 +17,8 @@
 # host, where no gamepad can be played, D is held through the API
 # instead, wasd's own test, and neither the stop nor the colours are
 # asked for.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 # The API's records, as example/pad/src/main.S lays them out
@@ -81,12 +81,12 @@ def exercise [route: string, kernel: path, image: path, out: path, set: string] 
     let played = ($route != "keys")
     let table = ($env.FILE_PWD | path join "table.nuon")
     let run = (match $route {
-        "device" => { jab launch --kernel $kernel --image $image --out $out --set $set --api --pad $table --capture 3500ms },
-        "port" => { jab launch --kernel $kernel --image $image --out $out --set $set --api --pad $table --pad-port --capture 3500ms },
+        "device" => { launch --kernel $kernel --image $image --out $out --set $set --api --pad $table --capture 3500ms },
+        "port" => { launch --kernel $kernel --image $image --out $out --set $set --api --pad $table --pad-port --capture 3500ms },
         _ => {
             let hold = (key-event $KEY_D $PRESSED)
             let free = (key-event $KEY_D $RELEASED)
-            jab launch --kernel $kernel --image $image --out $out --set $set --api --send [[at, bytes]; [1sec, $hold], [1800ms, $free]] --capture 3500ms
+            launch --kernel $kernel --image $image --out $out --set $set --api --send [[at, bytes]; [1sec, $hold], [1800ms, $free]] --capture 3500ms
         },
     })
     print $"pad: status ($run.status) after ($run.wall_seconds | math round -p 2) seconds over the ($route), ($run.api | bytes length) bytes of records, ($run.debug | lines | length) kernel debug lines"

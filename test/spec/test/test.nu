@@ -30,7 +30,6 @@
 # JAB_SPEC ahead of it, one naming no spec refused, a home that is not
 # there refused and never made, and a launch naming neither flag on the
 # configured spec.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/bound
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
@@ -39,6 +38,7 @@ use ../../../nu/mod/chardev
 use ../../../nu/mod/demand
 use ../../../nu/mod/build
 use ../../../nu/mod/machine
+use ../../../nu/mod/launch
 use std/assert
 
 const GIB = 1073741824
@@ -93,7 +93,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     for s in $provisioned {
         let name = ($s.name | str lowercase)
         let ram = ($s.ram / 1GiB | into int)
-        let p = (jab plan --kernel $kernel --image $image --out ($out | path join $"plan_($name)") --spec $name)
+        let p = (launch plan --kernel $kernel --image $image --out ($out | path join $"plan_($name)") --spec $name)
         assert (paired $p.qemu "-smp" ($s.cores | into string)) $"($name): -smp ($s.cores): ($p.qemu)"
         assert (paired $p.qemu "-m" $"($ram)G") $"($name): -m ($ram)G: ($p.qemu)"
         assert (paired $p.qemu "-device" $"virtio-gpu-device,xres=($s.display.width),yres=($s.display.height)") $"($name): the GPU at its display: ($p.qemu)"
@@ -102,14 +102,14 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let tree = (open --raw (machine dump-tree --kernel $kernel --image $image --out ($out | path join $"($name).dtb") --spec $name) | into binary)
         assert equal (cpus-of $tree) $s.cores $"($name): its tree's cpus"
         assert equal (banks-of $tree) [{ base: 0x80000000, size: ($ram * $GIB) }] $"($name): its tree's one bank, its RAM from RAM's base"
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"run_($name)") --set $set --spec $name --seconds 20)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"run_($name)") --set $set --spec $name --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [0 ["spec: up"]] $"($name): the program runs on it: ($run.serial)"
         assert equal [$run.declared $run.diagnostic] [true false] $"($name): a declared run, not diagnostic: ($run.declared), ($run.diagnostic)"
     }
 
     # every other spec refused before QEMU starts, naming why
     for s in ($specs | where {|s| $s.name not-in ($provisioned | get name) }) {
-        let said = (refusal { jab plan --kernel $kernel --image $image --out ($out | path join $"plan_($s.name)") --spec $s.name })
+        let said = (refusal { launch plan --kernel $kernel --image $image --out ($out | path join $"plan_($s.name)") --spec $s.name })
         let why = (if $s.cores > 8 { $"($s.name) has ($s.cores) cores, past the 8 harts a machine takes" } else { $"($s.name)'s display is ($s.display.width) by ($s.display.height), and the ABI's 1920 by 1080" })
         assert ($said | str contains $why) $"($s.name) refused, saying ($why): ($said)"
     }
@@ -119,8 +119,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let both_out = ($out | path join "both")
     target retire $both_out
     for c in [
-        { name: "plan", call: { jab plan --kernel $kernel --image $image --out $both_out --spec 1ka1 --harts 3 } }
-        { name: "launch", call: { jab launch --kernel $kernel --image $image --out $both_out --set $set --spec 1ka1 --harts 3 } }
+        { name: "plan", call: { launch plan --kernel $kernel --image $image --out $both_out --spec 1ka1 --harts 3 } }
+        { name: "launch", call: { launch --kernel $kernel --image $image --out $both_out --set $set --spec 1ka1 --harts 3 } }
         { name: "dump-tree", call: { machine dump-tree --kernel $kernel --image $image --out ($both_out | path join "both.dtb") --spec 1ka1 --harts 3 } }
     ] {
         let said = (refusal $c.call)
@@ -129,22 +129,22 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert (($both_out | path join "serial.log" | path type) == null) $"no QEMU run for --spec with --harts: ($both_out)"
 
     # a custom machine of three harts: diagnostic, 4 GiB, no jab.spec
-    let custom = (jab plan --kernel $kernel --image $image --out ($out | path join "custom") --harts 3)
+    let custom = (launch plan --kernel $kernel --image $image --out ($out | path join "custom") --harts 3)
     assert equal [$custom.machine.spec $custom.machine.diagnostic] [null { harts: 3, ram_gib: 4 }] $"a custom machine of three harts, diagnostic: ($custom.machine)"
     assert (paired $custom.qemu "-m" "4G") $"a custom machine's 4 GiB: ($custom.qemu)"
     assert (not ($custom.qemu | any {|w| $w =~ 'jab\.spec=' })) $"no jab.spec on a custom machine's line: ($custom.qemu)"
-    let custom_run = (jab launch --kernel $kernel --image $image --out ($out | path join "custom_run") --set $set --harts 3 --seconds 20)
+    let custom_run = (launch --kernel $kernel --image $image --out ($out | path join "custom_run") --set $set --harts 3 --seconds 20)
     assert equal [$custom_run.status $custom_run.declared $custom_run.diagnostic] [0 true true] $"a custom machine's run declared and diagnostic: ($custom_run.serial)"
 
     # a name the data does not define
-    let unknown = (refusal { jab plan --kernel $kernel --image $image --out ($out | path join "unknown") --spec 9zz9 })
+    let unknown = (refusal { launch plan --kernel $kernel --image $image --out ($out | path join "unknown") --spec 9zz9 })
     assert ($unknown | str contains "no spec 9zz9 in the spec data, which defines 1KA1") $"an unknown spec refused: ($unknown)"
 
     # a program listing 1KA1 alone, refused on 1KB1, naming both
     let listed = (fixture $ws ($out | path join "fixtures" "listed") "listed" "specs = ['1ka1']\n")
-    let unlisted = (refusal { jab plan --kernel $kernel --image $listed --out ($out | path join "unlisted") --spec 1kb1 })
+    let unlisted = (refusal { launch plan --kernel $kernel --image $listed --out ($out | path join "unlisted") --spec 1kb1 })
     assert ($unlisted | str contains "listed does not list 1kb1, the spec this launch names; it lists 1KA1") $"a spec its program does not list refused: ($unlisted)"
-    let on_listed = (jab plan --kernel $kernel --image $listed --out ($out | path join "listed_plan") --spec 1ka1)
+    let on_listed = (launch plan --kernel $kernel --image $listed --out ($out | path join "listed_plan") --spec 1ka1)
     assert equal $on_listed.machine.spec.name "1ka1" $"the spec it lists planned: ($on_listed.machine)"
 
     # the startup check: this program's first page, its declaration the
@@ -157,7 +157,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # program starts, its line alone on the UART and status 1; a name in
     # capitals read as the entries' lowercase
     for r in $CHECKS {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"check_($r.name)") --set $set --harts $r.harts --bootargs $r.bootargs --qemu $r.qemu --seconds 20)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"check_($r.name)") --set $set --harts $r.harts --bootargs $r.bootargs --qemu $r.qemu --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [$r.status [$r.line]] $"($r.name): ($r.bootargs) on ($r.harts) harts (($r.qemu | str join ' ')): ($run.status), ($run.serial)"
     }
 
@@ -167,16 +167,16 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the release kernel, reading no knob, refusing it still
     let reserving = (fixture $ws ($out | path join "fixtures" "reserving") "reserving" "specs = ['1ka1']\n\n[reserved]\ngfx_harts = 2\n")
     assert equal (demand check-image $reserving | get declaration.base) 3 "the reserving program's base demand three harts"
-    let short = (jab launch --kernel $kernel --image $reserving --out ($out | path join "short") --set $set --harts 2 --seconds 20)
+    let short = (launch --kernel $kernel --image $reserving --out ($out | path join "short") --set $set --harts 2 --seconds 20)
     assert equal [$short.status ($short.serial | lines)] [1 [$SHORT]] $"two harts short of the base demand refused: ($short.serial)"
-    let held = (jab launch --kernel $kernel --image $reserving --out ($out | path join "held") --set $set --harts 3 --seconds 20)
+    let held = (launch --kernel $kernel --image $reserving --out ($out | path join "held") --set $set --harts 3 --seconds 20)
     assert equal [$held.status ($held.serial | lines) $held.diagnostic] [0 [] true] $"three harts hold it, diagnostic as a custom machine: ($held.serial)"
-    let below = (jab launch --kernel $kernel --image $reserving --out ($out | path join "below") --set $set --harts 2 --bootargs $NOMINIMUM --seconds 20)
+    let below = (launch --kernel $kernel --image $reserving --out ($out | path join "below") --set $set --harts 2 --bootargs $NOMINIMUM --seconds 20)
     assert equal [$below.status ($below.machine | get -o below_minimum) $below.diagnostic] [0 true true] $"the knob runs it below the minimum, so recorded and diagnostic: ($below.serial), ($below.machine)"
     let tool = ($ws | path join "nu" "bin" "do.nu")
     ^nu $tool build --kernel ($ws | path join "kernel")
     let release = (target root $ws | path join "release" "kernel" "jab.elf")
-    let release_below = (jab launch --kernel $release --image $reserving --out ($out | path join "release_below") --harts 2 --bootargs $NOMINIMUM --seconds 20)
+    let release_below = (launch --kernel $release --image $reserving --out ($out | path join "release_below") --harts 2 --bootargs $NOMINIMUM --seconds 20)
     assert equal [$release_below.status ($release_below.serial | lines)] [1 [$SHORT]] $"the release kernel refuses it under the knob too: ($release_below.serial)"
 
     # no declaration: a program listing no specs, its header undeclared, and
@@ -188,7 +188,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let legacy = (legacy-image $ws ($out | path join "fixtures" "undeclared") ($undeclared | path dirname) ($out | path join "legacy"))
     assert equal (demand check-image $legacy | get kind) "legacy" "an image built before the header reads as legacy"
     for c in [{ name: "undeclared", image: $undeclared } { name: "legacy", image: $legacy }] {
-        let run = (jab launch --kernel $kernel --image $c.image --out ($out | path join $"($c.name)_run") --set $set --spec 1kb1 --seconds 20)
+        let run = (launch --kernel $kernel --image $c.image --out ($out | path join $"($c.name)_run") --set $set --spec 1kb1 --seconds 20)
         assert equal [$run.status ($run.serial | lines) $run.declared $run.diagnostic] [0 [] false true] $"the ($c.name) image on 1KB1, undeclared and diagnostic: ($run.serial)"
     }
 
@@ -219,7 +219,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let copy = (patched $bytes $m ($out | path join "malformed" $m.name) ($env.FILE_PWD | path join ".." | path expand))
         let checked = (refusal { demand check-image $copy })
         assert ($checked | str contains $"declaration refused: ($m.why)") $"($m.name): check-image refuses it, ($m.why): ($checked)"
-        let run = (jab launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
+        let run = (launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [1 [$"jab: declaration refused: ($m.why)"]] $"($m.name): the kernel refuses it, ($m.why): ($run.serial)"
         $copies = ($copies | append { name: $m.name, image: $copy })
     }
@@ -229,7 +229,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # its base: the jump takes it to the code, the bad CRC's copy unread
     let unchecked = (unchecked-kernel $ws $kernel $set ($out | path join "unchecked"))
     for c in [{ name: "own", image: $image } { name: "crc", image: ($copies | where name == "crc" | first | get image) }] {
-        let run = (jab launch --kernel $unchecked --image $c.image --out ($out | path join $"unchecked_($c.name)") --set $set --spec 1ka1 --seconds 20)
+        let run = (launch --kernel $unchecked --image $c.image --out ($out | path join $"unchecked_($c.name)") --set $set --spec 1ka1 --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [0 ["spec: up"]] $"a kernel without the check runs the ($c.name) image through its jump: ($run.serial)"
     }
 
@@ -266,7 +266,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let took = (((date now) - $t0) / 1sec)
     assert ($bounded.exit_code == 124 and $took < 2) $"sleep 30 under a one-second bound: ($bounded.exit_code) in ($took) s"
     let forever = (fixture $ws ($out | path join "fixtures" "forever") "forever" "" --forever)
-    let bound_run = (jab launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
+    let bound_run = (launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
     assert equal [$bound_run.status $bound_run.timeout_binary] [124 $real.path] $"a program that never exits ends at its bound, the resolved timeout in its record: ($bound_run.status), ($bound_run.timeout_binary)"
 
     # Windows' pipes (PipeShape): the chardev's path on each host, a POSIX
@@ -295,7 +295,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     "guest" | save --raw --append $windows.outward
     let renewed = (chardev pipe-pair $pipes "padport" 42 "windows" $root)
     assert equal [(ls $renewed.inward | get 0.size) (ls $renewed.outward | get 0.size)] [0B 0B] "a previous run's pair retired, the new one empty"
-    let piped = (jab plan --kernel $kernel --image $image --out ($pipes | path join "plan") --spec 1ka1 --api)
+    let piped = (launch plan --kernel $kernel --image $image --out ($pipes | path join "plan") --spec 1ka1 --api)
     if $nu.os-info.name == "windows" {
         assert equal ($piped.relays | each {|r| $r.endpoint }) ["monitor" "api"] $"the monitor's relay and the API's: ($piped.relays)"
         assert ((after $piped.qemu "-monitor") | str starts-with "pipe:jab-") $"the monitor on a named pipe: ($piped.qemu)"
@@ -337,7 +337,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     "spec = '1kb1'\n" | save --raw -f $config
     assert equal (do $in_xdg { spec configured $ws }) "1kb1" "a config there read as it is"
     assert equal (open --raw $config | into binary | decode) "spec = '1kb1'\n" "a config there never written over"
-    let unflagged = (do $in_xdg { jab plan --kernel $kernel --image $image --out ($out | path join "unflagged") })
+    let unflagged = (do $in_xdg { launch plan --kernel $kernel --image $image --out ($out | path join "unflagged") })
     assert equal $unflagged.machine.spec.name "1kb1" $"a launch naming neither flag on the configured spec: ($unflagged.machine)"
     assert equal (with-env { XDG_CONFIG_HOME: $xdg, JAB_SPEC: "1ka1" } { spec configured $ws }) "1ka1" "JAB_SPEC ahead of the config"
     "other = 1\n" | save --raw -f $config

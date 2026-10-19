@@ -42,11 +42,11 @@
 # two seconds on; and the stray kernel fault, the release store's cause
 # at another instruction and address, which ends the run with the
 # kernel fault line rather than being stepped over.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/process
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
 use ../../../nu/mod/machine
+use ../../../nu/mod/launch
 use std/assert
 
 const PAST_MAX = 9
@@ -83,7 +83,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $taken $max $"LauncherBound: a machine of JAB_HARTS_MAX's ($max) harts taken: ($taken)"
     let past_out = ($out | path join $"harts_($max + 1)")
     target retire $past_out
-    let refused = (try { jab launch --kernel $kernel --image $image --out $past_out --set $set --harts ($max + 1); "" } catch {|e| $e.msg })
+    let refused = (try { launch --kernel $kernel --image $image --out $past_out --set $set --harts ($max + 1); "" } catch {|e| $e.msg })
     assert ($refused | str contains $"--harts takes 1 to ($max)") $"LauncherBound: ($max + 1) harts refused before QEMU starts: ($refused)"
     assert (($past_out | path join "serial.log" | path type) == null) $"LauncherBound: no QEMU run for ($max + 1) harts: ($past_out)"
 
@@ -97,7 +97,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let ram_gib = (if $m.spec == "" { 4 } else { spec row $ws $m.spec | get ram | $in / 1GiB | into int })
         for boot in 1..3 {
             let asked = (if $m.spec == "" { { harts: $n } } else { { spec: $m.spec } })
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"($m.name)_($boot)") --set $set --spec ($asked | get -o spec | default "") --harts ($asked | get -o harts | default 0) --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"($m.name)_($boot)") --set $set --spec ($asked | get -o spec | default "") --harts ($asked | get -o harts | default 0) --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
             assert equal $run.status 0 $"exit status on ($m.name), boot ($boot): ($run.serial)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($m.name)"
             let mask = ((1 bit-shl $n) - 1)
@@ -135,7 +135,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let tree = (open --raw (machine dump-tree --kernel $kernel --image $image --out ($out | path join "virt4.dtb") --harts 4) | into binary)
     let past_file = ($out | path join "past_max.dtb")
     put32 $tree (prop-offset $tree "/cpus/cpu@3" "reg") $PAST_MAX | save --raw -f $past_file
-    let past = (jab launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --harts 4 --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+    let past = (launch --kernel $kernel --image $image --out ($out | path join "past_max") --set $set --harts 4 --dtb $past_file --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
     assert equal $past.status 0 $"the program runs on hart 0 past a topology problem: ($past.serial)"
     assert equal ($past.serial | lines) ["harts 7 1 6" "window 261888 0"] $"harts 0 to 2 discovered, hart 0 online, 1 and 2 failed: ($past.serial)"
     # harts 1 and 2 refused and hart 3 outside the tree, each parked in
@@ -154,7 +154,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the program never runs
     let slow_file = ($out | path join "slow_timebase.dtb")
     put32 $tree (prop-offset $tree "/cpus" "timebase-frequency") $SLOW_TIMEBASE | save --raw -f $slow_file
-    let slow = (jab launch --kernel $kernel --image $image --out ($out | path join "slow_timebase") --set $set --harts 4 --dtb $slow_file --seconds 20)
+    let slow = (launch --kernel $kernel --image $image --out ($out | path join "slow_timebase") --set $set --harts 4 --dtb $slow_file --seconds 20)
     assert equal $slow.status 1 $"an unsupported timer ends the boot with status 1: ($slow.status), ($slow.serial)"
     assert equal ($slow.serial | lines) [$"jab: timer unsupported: timebase-frequency ($SLOW_TIMEBASE)"] $"its line, and nothing of the program's: ($slow.serial)"
 
@@ -180,7 +180,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ] {
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status $t.status $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) $t.serial $"($t.name): its line: ($run.serial)"
         $tried = ($tried | append $"($t.name): ($run.serial | str trim)")
@@ -202,7 +202,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ] {
         let file = ($out | path join $"($t.name).dtb")
         $t.tree | save --raw -f $file
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $t.name) --set $set --harts 4 --dtb $file --seconds 20)
         assert equal $run.status 1 $"($t.name): exit status ($run.status), ($run.serial)"
         assert equal ($run.serial | lines) [$"jab: interrupt platform refused: code ($t.code)"] $"($t.name): its line: ($run.serial)"
         $platform = ($platform | append $"($t.name): ($run.serial | str trim)")
@@ -211,7 +211,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the missing hart: QEMU's four-hart tree on a two-hart machine, the
     # release stores to harts 2 and 3's files caught, nothing at either
     # address, both failed and the run going on
-    let missing = (jab launch --kernel $kernel --image $image --out ($out | path join "missing") --set $set --harts 2 --dtb ($out | path join "virt4.dtb") --seconds 20)
+    let missing = (launch --kernel $kernel --image $image --out ($out | path join "missing") --set $set --harts 2 --dtb ($out | path join "virt4.dtb") --seconds 20)
     assert equal $missing.status 0 $"the program runs past two missing harts: ($missing.serial)"
     assert equal ($missing.serial | lines) ["harts 15 3 12" "window 261888 0"] $"harts 0 to 3 discovered, 0 and 1 online, 2 and 3 failed: ($missing.serial)"
     if $debug {
@@ -225,7 +225,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         # the late check-in, on the specification's three harts: hart 2
         # held until hart 0 has failed it at the bound, its swap then
         # losing; still failed two seconds on, and parked, its thread idle
-        let late = (jab launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+        let late = (launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
         assert equal $late.status 0 $"the program runs past a late hart: ($late.serial)"
         assert equal ($late.serial | lines) ["harts 7 3 4" "window 261888 0"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
         let lines = ($late.debug | lines)
@@ -236,7 +236,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
         # the stray kernel fault: the release store's cause at another
         # instruction and address ends the run with the kernel fault line
-        let stray = (jab launch --kernel $kernel --image $image --out ($out | path join "stray") --set $set --bootargs "jab.stray=1" --seconds 20)
+        let stray = (launch --kernel $kernel --image $image --out ($out | path join "stray") --set $set --bootargs "jab.stray=1" --seconds 20)
         assert equal $stray.status 1 $"a stray store access fault ends the run with status 1: ($stray.status), ($stray.serial)"
         let fault = ($stray.serial | lines)
         assert equal ($fault | length) 1 $"the kernel fault line alone, nothing of the program's: ($stray.serial)"

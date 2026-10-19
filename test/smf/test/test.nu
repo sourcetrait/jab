@@ -8,9 +8,9 @@
 # release, at the level full velocity gives. The piece ends at its
 # last event, so the program lingers a moment before it exits and the
 # last release reaches the recording.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
 use ../../../nu/mod/target
+use ../../../nu/mod/launch
 use std/assert
 
 const RATE = 48000
@@ -39,7 +39,7 @@ const HEARD = 500
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let img = ($out | path join "piece.romfs")
     write-piece ($out | path join "piece") $img
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --sound --disk $img --serial "piece" --seconds 20)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --sound --disk $img --serial "piece" --seconds 20)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.sound != "") "the host recorded the sound"

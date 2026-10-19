@@ -24,10 +24,10 @@
 # the boot with 1 and its line. Last, the debug kernel's own reading of
 # the tree it booted on: its harts and its command line, given through
 # -append, a named spec's `jab.spec` after it.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
 use ../../../nu/mod/machine
+use ../../../nu/mod/launch
 use std/assert
 
 # The reader's codes, kernel/src/include/dtb.inc's DTB_*
@@ -99,7 +99,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let disk = ($out | path join "trees.romfs")
     let made = (^genromfs -d $stage -f $disk -V dtb | complete)
     assert equal $made.exit_code 0 $"genromfs: ($made.stderr)"
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $disk --serial "dtb" --bootargs $BOOTARGS --seconds 30)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $disk --serial "dtb" --bootargs $BOOTARGS --seconds 30)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)
@@ -172,7 +172,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let patched = ([($tree | bytes at 0..<($at + 8)) $r.size ($tree | bytes at ($at + 16)..)] | bytes collect)
         let file = ($out | path join $"($r.name).dtb")
         $patched | save --raw -f $file
-        let refused = (jab launch --kernel $kernel --image $image --out ($out | path join $r.name) --set $set --dtb $file --seconds 20)
+        let refused = (launch --kernel $kernel --image $image --out ($out | path join $r.name) --set $set --dtb $file --seconds 20)
         assert equal $refused.status 1 $"($r.name): the boot ends with 1: ($refused.serial)"
         assert ($refused.serial | lines | any {|l| $l == $r.line }) $"($r.name): its line, ($r.line): ($refused.serial)"
     }

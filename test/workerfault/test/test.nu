@@ -25,7 +25,7 @@
 # after the fault lines (`jab: shutdown unanswered: hart N`); every
 # scenario's lines are matched whole, so none may appear. And with no
 # letter the program says so and exits 2.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 const LONG_BYTES = 32768
@@ -70,7 +70,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($lines.1 =~ '^x+$') "print: the long line nothing but its own bytes"
     assert (fault-line $lines.2 1 0xd1 0x80000008) $"print: the fault line whole after it: ($lines.2)"
 
-    let none = (jab launch --kernel $kernel --image $image --out ($out | path join "none") --set $set --api --seconds 10)
+    let none = (launch --kernel $kernel --image $image --out ($out | path join "none") --set $set --api --seconds 10)
     assert equal $none.status 2 $"no letter: exit status ($none.status): ($none.serial)"
     assert equal ($none.serial | lines) ["workerfault: no scenario"] $"no letter, no scenario: ($none.serial)"
 
@@ -83,7 +83,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 # takes. Untyped because launch's record is wide.
 def scenario [kernel: path, image: path, out: path, set: string, letter: string, --bootargs: string = "", --sound] {
     let send = [[at, bytes]; [1sec, ($letter | into binary)]]
-    jab launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --sound=$sound --seconds 30
+    launch --kernel $kernel --image $image --out $out --set $set --send $send --bootargs $bootargs --sound=$sound --seconds 30
 }
 
 # Whether a line is a worker's store page fault: its hart, its argument,

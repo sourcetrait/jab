@@ -39,7 +39,7 @@
 # reader is proven on the first machine's bytes by the last record dropped,
 # the first duplicated over the second, and the last cut short. Under DEBUG
 # the debug channel carries each change of ownership.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 const ROWS = 64
@@ -73,7 +73,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     mut held = []
     mut first: any = null
     for m in $machines {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --spec $m.spec --harts $m.harts --bootargs $m.bootargs --seconds 30 --api)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --spec $m.spec --harts $m.harts --bootargs $m.bootargs --seconds 30 --api)
         let plan = (plan-of $m.online $reserved $feature)
         let got = ($run.serial | lines)
         let stop = ($got | where {|l| $l | str starts-with "transition stop " } | get -o 0)

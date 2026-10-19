@@ -17,9 +17,9 @@
 # whose file enables one at its idle's entry. Then the program runs, its
 # worker woken asleep in its wait, and no hart claims or enables a device
 # identity.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/launch
 use std/assert
 
 # The files whose routines and data a worker's hart never reaches: the
@@ -76,7 +76,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the run: the worker woken asleep in its wait, every drain off hart 0
     # claiming the wake alone, every secondary's file enabling it alone
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join "run") --set $set --seconds 20)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join "run") --set $set --seconds 20)
     assert (not ($run.serial | str contains " claimed a device identity ")) $"owners: no hart but 0 claimed a device identity: ($run.serial)"
     assert (not ($run.serial | str contains " enabled a device identity ")) $"owners: no secondary's file enabled a device identity: ($run.serial)"
     assert equal $run.status 0 $"owners: exit status, with the UART: ($run.serial)"

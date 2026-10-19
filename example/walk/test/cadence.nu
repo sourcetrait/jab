@@ -15,6 +15,7 @@
 use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/nonce
 use ../../../nu/mod/machine
+use ../../../nu/mod/launch
 
 const cadence_symbols = [CADENCE TIMING REPLAY PREPARE CADENCE_TEST]
 const nonce_at = 200ms
@@ -74,7 +75,7 @@ def main [
     mkdir $out
     let id_file = ($out | path join "identity.nuon")
     $id | to nuon --indent 2 | save --raw -f $id_file
-    let ran = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $romfs --serial "walk" --api --send $sends --seconds $seconds --spec $machine.spec.name --window=$window --live-sound=$live_sound --capture-nonce $nonce --profile paired)
+    let ran = (launch --kernel $kernel --image $image --out $out --set $set --disk $romfs --serial "walk" --api --send $sends --seconds $seconds --spec $machine.spec.name --window=$window --live-sound=$live_sound --capture-nonce $nonce --profile paired)
     $id | upsert machine $ran.machine | upsert qemu_binary $ran.qemu_binary | merge $ran.capture | to nuon --indent 2 | save --raw -f $id_file
     $ran | reject api | insert api_bytes ($ran.api | bytes length) | to nuon --indent 2 | save --raw -f ($out | path join "run.nuon")
     let named = (if $label == "" { "" } else { $" ($label)" })

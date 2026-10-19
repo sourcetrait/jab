@@ -1,0 +1,168 @@
+# launch
+
+## program_base
+
+The window's base (jab.inc): the kernel's 2 MiB and the framebuffer's
+8 MiB come first, and the program has the rest of the machine's 4 GiB.
+
+## plan
+
+A headless machine prepared and not run: everything a launch sets up
+before QEMU starts, handed back for whoever runs and drives it, the
+SDK's own `launch` or a harness that plays interactively. `qemu_binary`
+is the QEMU it runs on (qemu-binary, beside the program the image came
+from and then in the workspace, as a run's), `qemu` the whole argument
+vector after it, `env` what the process runs under (the evdev shim
+preloaded when a gamepad rides the fifo), and the rest the paths: the
+UART's log, QEMU's guest-error log, the screen a screendump lands in,
+the pid file, the monitor's pipe pair (`<monitor>.in` and `.out`), the
+debug channel's log under DEBUG, the API's `api_in` pipe and `api_out`
+file with `--api`, and the pad: with `--gamepad`, on Linux the fifo
+QEMU reads as the pad, which the driver writes 24-byte input_event
+records into, else (and with `--pad-port`) the pad port's `pad_pipe_in`
+pipe, whose header, `pad_header` as hex, the driver writes first, the
+pipes made. On Windows, where QEMU makes each pipe chardev one named
+pipe and waits for its client before it starts (pipe-path), each pipe's
+in-file is a plain file a writer appends to (pipe-write), and `relays`
+names the relay each pipe with no client of its own takes, the
+monitor's, the API's, and a scripted pad's port (relays-of), its
+binary `relay_binary` (relay-build), none and "" elsewhere;
+`bridge_pipe` is the pipe the pad bridge writes, "" with no pad port
+(bridge-pipe). The machine is headless unless `--window` puts it in the
+window a run of the program would open (`window`, `none` without); the sound device
+records to `sound` with `--sound`, or plays through the host's audio as
+a run's does with `--live-sound` (`audio`, the backend); and
+`--host-pad` attaches the host's own gamepad as a run does, on macOS
+through the bridge `bridge` names, to be started beside QEMU. A
+recording and the host's audio together are refused, as is the host's
+pad beside a scripted one. A previous run's files in `out` are retired
+into the retire home of `target`, the workspace's target or else the
+program's, wherever `out` lies (retire), its pipes kept; `target` is
+handed back for a harness that clears away files of its own. The
+machine is the one `--spec` names, or with `--harts` a custom one of 1
+to 8 harts, or with neither the configured default (machine-for), and
+`machine` is its record (machine-of), `below_minimum` true beside it
+where `bootargs` carries a debug kernel's jab.nominimum=1, which skips
+the program's minimum (knob-of); a named spec the image's demand
+does not list is refused before anything is made, a legacy image's run
+taking the named machine. `bootargs` goes to the kernel through QEMU's
+-append, into the device tree's /chosen, a named spec's
+`jab.spec=<name>` after it (spec-bootargs), where a debug kernel reads its test
+knobs, and the record's `bootargs` is the line as given; `dtb` hands the kernel that
+tree through -dtb in place of the one QEMU builds, QEMU checking its
+header before any hart runs. `demand` is the demand recorded with the
+image at its build (image-demand), null for a program on the legacy path
+and for an image with no record; a record that does not hold is refused.
+`send` is what a launch writes into the API at its times, kept as given
+in `sends`, and anything to send puts the port on as `--api` does. With
+`--sdl-probe`, a probing launch, Linux only: the window `sdl,gl=on`, the
+sdl shim built and preloaded beside any other (`shim`), logging to that
+file (`sdl_log`, a stale one retired), SDL's offscreen driver where no
+display server is. `capture_nonce` is the caller's, never minted here,
+1 to 2^63 - 1 or none, handed to the shim as `SDL_SHIM_NONCE` in its
+sixteen hex digits (nonce-hex); `profile` the capture's, `paired` only
+with a nonce, `generic` for a probe that names none, "" for a run that
+claims none; `capture` the run's capture identity as it stands before
+QEMU starts (capture-identity).
+
+## capture-identity
+
+A run's capture identity, what its identity records of the capture
+(CaptureBundle), from a machine as plan prepared it and the pid of the
+QEMU that ran it, read while it lived (null before or without one): the
+profile; `capture_nonce`; `qemu_pid`; the shim's log and library, ""
+for a run unprobed; the window; `api`, whether the API's port was on the
+machine; and `sends`, each entry to write into it by its time in
+seconds, its bytes' length, and their SHA-256.
+
+## main
+
+Run a program on the kernel under QEMU with no window, the UART to
+serial.log in `out`, for at most `seconds`. The status is what jab.sys.exit
+gave, 1 on a program fault, 124 when the bound ended the run. With
+`capture`, the screen is taken into screen.ppm that long after the
+start and the run is then ended (status 0); with `screen`, it is taken
+that long after the start while the run goes on to its bound or its
+exit; with `keys`, each key is pressed through the monitor that long
+after the start. `set` names the
+symbols the kernel was built with: DEBUG puts the kernel's debug
+channel on the machine, whose text comes back as `debug`. With `api`,
+or with anything to `send`, the API's port is on the machine: each
+entry of `send` is written into it that long after the start, and
+every byte the program sent, landed in api.out, comes back as `api`.
+QEMU's own complaints about the guest go to qemu.log and what it
+wrote to its stderr comes back as `stderr`, so a backend's complaint
+reaches a test; cpu_seconds is the QEMU process's CPU time over the
+run, on a host with /proc, and wall_seconds the run's length. The
+timed actions, the pad header, the keys, the API bytes, the pad
+events, and the screen, go in while QEMU's process is alive, which
+is asked of the process table rather than of /proc, so they happen
+on every host. Each poll takes the keys, the API bytes, and the pad
+events in due-order's order: every one due in the order of its time,
+and the screen after those due before its time and ahead of those
+due at or after it, which wait until its file is whole
+(screen-whole); a screen that fails or never comes whole leaves the
+result no screen and every action after it unwritten.
+`screen_started` and `screen_completed` are the screen's asking and
+its file's completion, and `send_seconds` each entry of `send`'s
+write, all seconds from the start, null for what never happened. The
+workspace, whose generic disk rides along and whose shim plays a pad,
+is the one above the kernel ELF, else the one above `out`. `--window`, `--live-sound`, and `--host-pad` put the
+machine on the host as a run puts it, the window, the host's audio,
+and the host's own gamepad (plan), with the bridge run beside QEMU
+where the pad needs one and ended after; the screen and the timed
+actions go through the monitor and the pipes as headless. The result
+carries the machine's line, `qemu_binary` and `qemu`, with the
+`window` and the `audio` backend it ran with, and `machine`, the
+record of the machine it had (machine-of); `--spec`, `--harts`,
+`--bootargs`, and `--dtb` are plan's. With `--threads`, every QEMU thread's CPU is read
+that long after the start and again a second on (threads-of), each
+reading timed as it is taken, since the loop polls: `threads_span` is
+the seconds between the two, a second give or take a poll, and
+`threads` carries each thread's name, the CPU seconds it used in
+between, and those over the span (threads-between), the harts' threads
+named `CPU N/TCG` on Linux; empty, its span null, when the run ended
+before the second reading. With `--threads-at`, every QEMU thread's
+cumulative CPU seconds are read at each time it lists, `thread_readings`
+keeping each reading whole: the time asked, `requested`, and the time
+it was taken, `at`, both seconds from the launch's start, which comes
+before QEMU's spawn, the reading taken at the first poll past its
+request, so `at` trails `requested` by up to a poll; and every thread's
+id, name, and counter (threads-of); a time the run ended before keeps
+its request with `at` and `threads` null, missing. `--qemu` appends words of its own
+to the line, unchanged, after the launch's: a device or a property a
+test needs that no launch flag gives. Such a run is diagnostic, its
+`machine` keeping the platform asked for with the words in its
+`overrides`, and the words
+come back apart as `overrides` too, so the requested platform and the
+custom command stay distinct; `qemu` is the line as it ran. `declared`
+says whether the demand recorded with the image at its build declares
+one (image-demand), and `diagnostic` is the run's standing: on a
+custom machine, with QEMU words of its own, of an image built on the
+legacy path or with no record beside it, undeclared and claiming no
+console, or below its program's minimum (plan's `below_minimum`). `--sdl-probe`,
+`--capture-nonce`, and `--profile` are plan's, the nonce the caller's,
+minted here only for a probing launch given none (launch-nonce); the
+launch writes the API only what its caller sends, never for itself. On
+Windows, where QEMU waits for a client of each of its pipes before it
+starts, the relays plan names start beside QEMU, a job each
+(relays-start), every write goes into a pipe's in-file (pipe-write), and
+once QEMU has ended each relay is given a second to end with its pipe,
+any left stopped, and one that ended in failure fails the launch,
+naming its pipe (relays-held).
+`qemu_pid` is QEMU's pid as the loop read it while QEMU lived, since
+QEMU removes its pid file as it exits, null where it never came up; the
+result carries `sdl_log`, `shim`, `capture_nonce`, and `profile` as
+planned, and `capture`, the run's capture identity (capture-identity).
+
+## due-order
+
+The order a launch's poll takes its timed actions in, `elapsed` after
+the start: every event due by then, its `at` at or before it, in the
+order of their times and at one time in the order given; and the
+screen, due at `screen` while it is still to take (null when none
+is), once due after every event due before its time and ahead of
+every event due at or after it, which wait on it, the poll writing
+them only once the screen is whole. The events come back as given,
+the screen as a row of kind `screen`, its `index` 0 and its `at` its
+time.

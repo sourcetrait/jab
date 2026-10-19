@@ -6,8 +6,8 @@
 # blends, so the drawn rectangle is held against it pixel for pixel:
 # the kernel's decode and its blend get an exact oracle on the real
 # GIMP file.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const width = 480
@@ -24,7 +24,7 @@ def main [--kernel: path, --image: path, --out: path, --assets: path, --set: str
     assert equal $said $"($width) ($height)" "the file is the logo's size"
     let expected = (open --raw $expected_path | into binary)
 
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "logo" --capture 4sec)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $assets --serial "logo" --capture 4sec)
     assert equal $run.serial "" $"the UART stays silent: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.screen != "") "a screen was taken"

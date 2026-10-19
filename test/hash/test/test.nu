@@ -4,14 +4,14 @@
 # carries XXH3, so the reference implementation is built here as a
 # throwaway Rust binary and asked the same question, over bytes it
 # generates by the same rule rather than by reading a file.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 const MODULUS = 251
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let oracle = (build-oracle ($out | path join "xxoracle"))
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 60)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial | str substring 0..400)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let got = ($run.serial | lines | where {|l| $l starts-with "h " } | each {|l|

@@ -43,6 +43,7 @@ use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/sdl
 use ../../../nu/mod/tool
+use ../../../nu/mod/launch
 use std/assert
 
 # An address as the shim writes one, in lowercase hex.
@@ -97,7 +98,7 @@ def symbols-of [file: path, flags: list<string>]: nothing -> table<name: string,
 # apart, or the refusal it raised.
 def reading [log: path]: nothing -> record<flips: int, console: int, switches: int, renders: int, refused: string> {
     try {
-        let r = (jab sdl-report $log)
+        let r = (sdl report $log)
         { flips: $r.flips, console: $r.other_uploads, switches: $r.switches, renders: $r.renders, refused: "" }
     } catch {|e|
         { flips: 0, console: 0, switches: 0, renders: 0, refused: $e.msg }
@@ -126,7 +127,7 @@ def first-made [log: path]: nothing -> record<shim_frames: int, functions: list<
 # its words, or stage 0 and its reading where it was admitted.
 def checked [bundle: path, guest: closure]: nothing -> record<stage: int, refused: string, result: any> {
     try {
-        { stage: 0, refused: "", result: (jab sdl-bundle-check $bundle --guest $guest) }
+        { stage: 0, refused: "", result: (sdl bundle-check $bundle --guest $guest) }
     } catch {|e|
         { stage: ($e.msg | parse --regex 'refused at stage (?P<n>\d+)' | get -o 0.n | default "-1" | into int), refused: $e.msg, result: null }
     }
@@ -331,7 +332,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the record's fields, over one of each
     let mixed = (do $log "record" ($exe ++ [$flip_chain $registration_chain $switch_chain $render_chain "size"]))
-    let record = (try { jab sdl-report $mixed } catch {|e| { refused: $e.msg } })
+    let record = (try { sdl report $mixed } catch {|e| { refused: $e.msg } })
     assert equal ($record | get -o run.binary) $fixture $"record: run.binary is the executable's path: ($record | to nuon)"
     assert equal ($record | get -o virtio_gpu_in) "executable" "record: virtio_gpu_in reads executable"
     assert equal ($record | select -o flips switches other_uploads renders) { flips: 1, switches: 1, other_uploads: 1, renders: 1 } "record: one flip, one switch, one of the console's own, one render"
@@ -372,7 +373,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let plumbing = ($dir | path join "plumbing")
     mkdir $plumbing
     let probe_log = ($plumbing | path join "sdl.log")
-    let generic = (jab plan --kernel $kernel --image $image --out ($plumbing | path join "generic") --sdl-probe $probe_log --capture-nonce $nonce)
+    let generic = (launch plan --kernel $kernel --image $image --out ($plumbing | path join "generic") --sdl-probe $probe_log --capture-nonce $nonce)
     assert equal $generic.api_in "" "plumbing_generic: a probing launch asking nothing carries no API port"
     assert ($generic.sends | is-empty) "plumbing_generic: and nothing to send"
     assert equal $generic.profile "generic" "plumbing_generic: a probe naming no profile is generic"
@@ -381,20 +382,20 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert ($generic.env | get -o LD_PRELOAD | default "" | str ends-with "libjabshim_sdl.so") $"plumbing_generic: the shim preloaded: ($generic.env | to nuon)"
     assert equal ($generic.capture | select api sends) { api: false, sends: [] } "plumbing_generic: its identity records no port and nothing sent"
     assert equal [$generic.capture_nonce ($generic.env | get -o SDL_SHIM_NONCE) $generic.capture.capture_nonce] [$nonce $nonce_text $nonce] "plumbing_nonce: the nonce handed in is the plan's, the shim's environment's in hex, and the identity's"
-    let asked_api = (jab plan --kernel $kernel --image $image --out ($plumbing | path join "api") --api --sdl-probe $probe_log --capture-nonce $nonce)
+    let asked_api = (launch plan --kernel $kernel --image $image --out ($plumbing | path join "api") --api --sdl-probe $probe_log --capture-nonce $nonce)
     assert ($asked_api.api_in != "") "plumbing_api: a generic probing launch with --api carries the port"
     assert ($asked_api.sends | is-empty) "plumbing_api: and sends nothing, no nonce frame among its sends"
     assert equal ($asked_api.capture | select api sends) { api: true, sends: [] } "plumbing_api: its identity records the port and nothing sent"
     let frame = 0x[49 f0 de bc 9a 78 56 34 12]
-    let asked_send = (jab plan --kernel $kernel --image $image --out ($plumbing | path join "send") --send [[at bytes]; [1sec $frame]] --sdl-probe $probe_log --capture-nonce $nonce)
+    let asked_send = (launch plan --kernel $kernel --image $image --out ($plumbing | path join "send") --send [[at bytes]; [1sec $frame]] --sdl-probe $probe_log --capture-nonce $nonce)
     assert ($asked_send.api_in != "") "plumbing_send: a caller's --send puts the port on"
     assert equal ($asked_send.sends | each {|s| $s.bytes }) [$frame] "plumbing_send: exactly the caller's entries to send, none prepended"
     assert equal $asked_send.capture.sends [{ at: 1.0, length: 9, sha256: ($frame | hash sha256) }] "plumbing_send: its identity records each entry's time, length, and SHA-256"
-    let paired = (jab plan --kernel $kernel --image $image --out ($plumbing | path join "paired") --profile paired --capture-nonce $nonce --send [[at bytes]; [200ms $frame]])
+    let paired = (launch plan --kernel $kernel --image $image --out ($plumbing | path join "paired") --profile paired --capture-nonce $nonce --send [[at bytes]; [200ms $frame]])
     assert equal [$paired.profile ($paired.api_in != "") ($paired.sends | each {|s| $s.bytes }) $paired.capture.capture_nonce] ["paired" true [$frame] $nonce] "plumbing_paired: a paired run's port, the nonce's frame its caller sends, and its nonce"
-    let unminted = (jab plan --kernel $kernel --image $image --out ($plumbing | path join "unminted") --sdl-probe $probe_log)
+    let unminted = (launch plan --kernel $kernel --image $image --out ($plumbing | path join "unminted") --sdl-probe $probe_log)
     assert equal [$unminted.capture_nonce ("SDL_SHIM_NONCE" in ($unminted.env | columns))] [null false] "plumbing_unminted: plan given no nonce mints none and hands the shim none"
-    let unnonced = (try { jab plan --kernel $kernel --image $image --out ($plumbing | path join "unnonced") --profile paired | ignore; "" } catch {|e| $e.msg })
+    let unnonced = (try { launch plan --kernel $kernel --image $image --out ($plumbing | path join "unnonced") --profile paired | ignore; "" } catch {|e| $e.msg })
     assert ($unnonced | str contains "--profile paired needs the run's --capture-nonce") $"plumbing_unnonced: a paired run given no nonce is refused: ($unnonced)"
     let minted = (nonce mint 0 true)
     assert ($minted >= 1) $"plumbing_minted: a probing launch given none mints one, 1 or more: ($minted)"
@@ -443,7 +444,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $run_nonce | into binary --endian little | save --raw ($probe | path join "api.out")
         { profile: "paired", capture_nonce: $run_nonce, qemu_pid: $pid, sdl_log: $sdl, shim: "", window: "sdl,gl=on", api: true, sends: [] } | to nuon | save --raw ($probe | path join "identity.nuon")
         let bundle = ($bundles | path join $name)
-        { probe: $probe, bundle: $bundle, manifest: (jab sdl-bundle $probe $bundle) }
+        { probe: $probe, bundle: $bundle, manifest: (sdl bundle $probe $bundle) }
     }
     let first = (do $capture "paired_a" $nonce 4242)
     let second = (do $capture "paired_b" ($nonce + 1) 4343)

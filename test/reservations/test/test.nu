@@ -41,7 +41,7 @@
 # is left: the claim takes 2^63 - 1, the reclaim is refused spent with the
 # grant as it stood, and the claim after it refused spent again, so the
 # counter never wrapped.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 # The last claim id, 2^63 - 1, the one jab.claimids=1 leaves.
@@ -59,7 +59,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     ] } else { [] }))
     mut held = []
     for m in $machines {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --harts $m.harts --bootargs $m.bootargs --seconds 20)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $m.name) --set $set --harts $m.harts --bootargs $m.bootargs --seconds 20)
         let want = (expected $m.online $m.spent)
         let got = ($run.serial | lines)
         for row in ($want | enumerate) {

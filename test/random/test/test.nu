@@ -3,7 +3,7 @@
 # bytes each come back whole, differ from each other, and spread over
 # many values, which is what entropy from the host looks like and what
 # a stuck or zeroed device would not.
-use ../../../sdk/nu/jab.nu
+use ../../../nu/mod/launch
 use std/assert
 
 # 128 bytes drawn uniformly take about 101 distinct values; a floor of
@@ -11,7 +11,7 @@ use std/assert
 const DISTINCT_FLOOR = 40
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 8)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 8)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.debug | str contains "jab: rng at ") $"the kernel found the rng device: ($run.debug)"

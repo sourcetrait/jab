@@ -9,9 +9,9 @@
 # the bytes that went in. The first file is also compared here byte for
 # byte, so that the checking inside the kernel is itself checked once
 # against something outside it.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
+use ../../../nu/mod/launch
 use std/assert
 
 const JAB_GZ_OK = 0
@@ -20,7 +20,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let repo = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
     let img = ($out | path join "gz.romfs")
     let files = (build-fixture $repo ($out | path join "stage") $img)
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "gz" --seconds 60)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $img --serial "gz" --seconds 60)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial | str substring 0..600)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

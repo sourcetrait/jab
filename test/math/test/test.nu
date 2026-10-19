@@ -12,8 +12,8 @@
 # Every tolerance is a measured number, the largest error the suite
 # saw on this box rounded up to a round figure; the understanding
 # records the measurement itself.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
+use ../../../nu/mod/launch
 use std/assert
 
 const PI = 3.141592653589793
@@ -39,7 +39,7 @@ const RNG_DEFAULT = "2545f4914f6cdd1d"
 const SWEEP_POINTS = 1601
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 20)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 20)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial | str substring 0..400)"
     assert equal (open --raw $run.qemu_log | into binary | bytes length) 0 "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines | each {|l| $l | split row " " | where {|w| $w != "" } })

@@ -8,9 +8,9 @@
 # everything the run writes land in `out`; a fault on the UART is
 # resolved to its routine from the ELF beside the image through the
 # toolchain the build's flags name. `just do play` builds and runs it.
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/tool
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 
 def main [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
     let game = ($env.FILE_PWD | path join ".." | path expand)
@@ -21,7 +21,7 @@ def main [--kernel: path, --image: path, --out: path, --map: string = "render_0"
     let disk = ($out | path join $"($map).romfs")
     let made = (^genromfs -d $tree -f $disk -V "fps" | complete)
     if $made.exit_code != 0 { error make { msg: $"genromfs on ($tree): ($made.stderr)" } }
-    let machine = (jab plan --kernel $kernel --image $image --out $out --disk $disk --serial "fps" --set $set --api --gamepad --sound)
+    let machine = (launch plan --kernel $kernel --image $image --out $out --disk $disk --serial "fps" --set $set --api --gamepad --sound)
     let plan = ($out | path join "plan.json")
     $machine | to json | save --raw -f $plan
     let elf = ($image | path parse | update extension "elf" | path join)

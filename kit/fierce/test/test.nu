@@ -52,13 +52,13 @@
 # 6, and Render One's map cut short, which exits 7, each saying so on
 # the UART. On a CENSUS build the test runs the census's own fixtures
 # alone (census-holds).
-use ../../../sdk/nu/jab.nu
 use ../../../nu/mod/capture
 use ../../../nu/mod/present
 use ../../../nu/mod/target
 use ../../../nu/mod/walk
 use ../../../nu/mod/word
 use ../../../nu/mod/build
+use ../../../nu/mod/launch
 use ../nu/map.nu
 use ../nu/png.nu
 use ./pose.nu
@@ -761,7 +761,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert equal $straddler.sector (do $render_1_index "door") $"the straddler's feet in the door sector: ($straddler)"
     let sprite_disk = (romfs $sprite_tree ($out | path join "sprite.romfs"))
     let sprite_sends = [{ at: 1500ms, bytes: (pose pose-frame $SPRITE_POSE) }]
-    let plain_run = (jab launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --api --disk (romfs $plain_tree ($out | path join "plain.romfs")) --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
+    let plain_run = (launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --api --disk (romfs $plain_tree ($out | path join "plain.romfs")) --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $plain_run.qemu_log) "" "QEMU has no complaint about the guest on the plain run"
     # the first frames drawn: a debug build poisons the producer's scratch
     # once a frame's packet is published (raster.S), so a render reading
@@ -775,7 +775,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let plain_lines = ($plain_run.serial | lines)
     assert ("fps: harts reserved 2, grant 1 2" in $plain_lines) $"the plain run names its grant, harts 1 and 2: ($plain_lines | where {|l| $l starts-with 'fps: harts' })"
     assert ("fps: workers 2 on harts 1 2" in $plain_lines) $"the plain run names its workers, a raster worker on each hart of its grant: ($plain_lines | where {|l| $l starts-with 'fps: worker' })"
-    let sprite_run = (jab launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
+    let sprite_run = (launch --kernel $kernel --image $image --out ($out | path join "sprite") --set $set --sound --api --disk $sprite_disk --serial "fps" --send $sprite_sends --capture 2500ms --seconds 5)
     assert equal (open --raw $sprite_run.qemu_log) "" $"QEMU has no complaint about the guest on the sprite run"
     let sprite_lines = ($sprite_run.serial | lines)
     assert (($sprite_lines | where {|l| $l starts-with $"fps: ($SPRITE_MAP) loaded" } | length) == 1) $"the sprite tree loaded: ($sprite_run.serial)"
@@ -812,7 +812,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # solid wall beside the doorway; there it reads the texture, the quad
     # drawn over the whole screen as one not proven within its sector,
     # where a clip to the sector's rectangle would cut it off
-    let straddle_run = (jab launch --kernel $kernel --image $image --out ($out | path join "straddle") --set $set --sound --api --disk $sprite_disk --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $STRADDLE_POSE) }] --capture 2500ms --seconds 5)
+    let straddle_run = (launch --kernel $kernel --image $image --out ($out | path join "straddle") --set $set --sound --api --disk $sprite_disk --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $STRADDLE_POSE) }] --capture 2500ms --seconds 5)
     assert equal (open --raw $straddle_run.qemu_log) "" "QEMU has no complaint about the guest on the straddle run"
     let straddle_frames = ($straddle_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
     assert equal ($straddle_frames | length) 2 $"the first frame and the straddle pose's reported: ($straddle_run.serial)"
@@ -874,7 +874,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     assert equal ($servo | bytes length) (((($servo_recipe.seconds | into float) * 48000) | math round | into int) * 2) "the servo is its seconds of 16-bit samples"
     let render_1_sends = ([{ at: 200ms, bytes: (gauge nonce-frame $RECEIPT_NONCE) }] | append ($render_1_poses | enumerate | each {|e| { at: (1500ms + ($e.index * 500ms)), bytes: (pose pose-frame $e.item) } }))
     let render_1_disk = (romfs $render_1_tree ($out | path join "render_1.romfs"))
-    let render_1_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_1") --set $set --sound --api --disk $render_1_disk --serial "fps" --send $render_1_sends --capture 5500ms --seconds 6)
+    let render_1_run = (launch --kernel $kernel --image $image --out ($out | path join "render_1") --set $set --sound --api --disk $render_1_disk --serial "fps" --send $render_1_sends --capture 5500ms --seconds 6)
     assert equal (open --raw $render_1_run.qemu_log) "" "QEMU has no complaint about the guest on render_1"
     # the receipts on Render One (ProbeRuns): the load record before the
     # first state with the title's ordinal 2, the cleared screen's 3, and
@@ -983,7 +983,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the stair: from Render One's spawn the left stick held forward up
     # the three steps onto the landing, a quarter turn to the north, then
     # up the ramp into the upper hall
-    let stair_run = (jab launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_stair.nuon") --disk $render_1_disk --serial "fps" --capture 8000ms --seconds 9)
+    let stair_run = (launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_stair.nuon") --disk $render_1_disk --serial "fps" --capture 8000ms --seconds 9)
     assert equal (open --raw $stair_run.qemu_log) "" "QEMU has no complaint about the guest on the stair"
     let stair_states = (records $stair_run.api | where kind == 1)
     assert (($stair_states | length) > 100) $"states through the stair: ($stair_states | length)"
@@ -1030,7 +1030,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         | append [{ at: 1750ms, bytes: (pose command-frame "T") }, { at: 3250ms, bytes: (pose command-frame "T") }]
         | sort-by at)
     let render_0_disk = (romfs $render_0_tree ($out | path join "render_0.romfs"))
-    let render_0_run = (jab launch --kernel $kernel --image $image --out ($out | path join "render_0") --set $set --sound --api --disk $render_0_disk --serial "fps" --send $render_0_sends --capture 4000ms --seconds 5)
+    let render_0_run = (launch --kernel $kernel --image $image --out ($out | path join "render_0") --set $set --sound --api --disk $render_0_disk --serial "fps" --send $render_0_sends --capture 4000ms --seconds 5)
     assert equal (open --raw $render_0_run.qemu_log) "" "QEMU has no complaint about the guest on render_0"
     let render_0_lines = ($render_0_run.serial | lines)
     let render_0_reports = ($render_0_lines | where {|l| $l starts-with "fps: render_0 loaded" })
@@ -1113,7 +1113,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         | append ($render_0_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
         | append [{ at: $CLOCK_END_AT, bytes: (pose command-frame "E") }]
         | sort-by at)
-    let render_0_walk = (jab launch --kernel $kernel --image $image --out ($out | path join "render_0_walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_render_0.nuon") --disk $render_0_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
+    let render_0_walk = (launch --kernel $kernel --image $image --out ($out | path join "render_0_walk") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_render_0.nuon") --disk $render_0_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
     assert equal (open --raw $render_0_walk.qemu_log) "" "QEMU has no complaint about the guest on the render_0 walk"
     let walk_lines = ($render_0_walk.serial | lines)
     let render_0_walk_records = (records $render_0_walk.api)
@@ -1199,7 +1199,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # the fallen frame, the trigger's round meets the geometry past it,
     # the walk takes its magazine; the shots heard in the recording
     let fight_sends = ([{ at: 1500ms, bytes: (pose pose-frame $FIGHT_POSE) }] | append ($FIGHT_ROUNDS | each {|at| { at: $at, bytes: (pose command-frame "F") } }))
-    let fight_run = (jab launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_fight.nuon") --disk $render_0_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
+    let fight_run = (launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad ($env.FILE_PWD | path join "table_fight.nuon") --disk $render_0_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
     assert equal (open --raw $fight_run.qemu_log) "" "QEMU has no complaint about the guest on the fight"
     let fight_records = (records $fight_run.api)
     assert (($fight_records | where kind == 1 | length) > 100) $"states through the fight: ($fight_records | where kind == 1 | length)"
@@ -1239,7 +1239,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         mut captures = {}
         for v in [{ name: "still", bright: false }, { name: "bright", bright: true }] {
             let view_sends = ([{ at: 1400ms, bytes: (level-frame $v.bright false) }] | append (settled $view_pose))
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $view_still ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"view_($v.name)_($yaw)") --set $set --sound --api --disk (romfs $view_still ($out | path join $"($v.name).romfs")) --serial "fps" --send $view_sends --capture 3000ms --seconds 5)
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the ($v.name) view at yaw ($yaw)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
             assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on the ($v.name) view at yaw ($yaw): ($run.serial)"
@@ -1278,7 +1278,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     mut spawn_captures = {}
     for v in [{ name: "tiled", held: false }, { name: "held", held: true }] {
         let sends = ([{ at: 1400ms, bytes: (level-frame true $v.held) }] | append (settled $SPAWN_POSE))
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_($v.name)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"spawn_($v.name)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the spawn view with the tiles ($v.name)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
         assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on the spawn view with the tiles ($v.name): ($run.serial)"
@@ -1300,7 +1300,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         { at: 1300ms, bytes: (packet-frame $PACKET_CAPS.commands $PACKET_CAPS.spans) }
         { at: 1400ms, bytes: (level-frame true false) }
     ] | append (settled $SPAWN_POSE))
-    let capped_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_capped") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $capped_sends --capture 3000ms --seconds 5)
+    let capped_run = (launch --kernel $kernel --image $image --out ($out | path join "spawn_capped") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $capped_sends --capture 3000ms --seconds 5)
     assert equal (open --raw $capped_run.qemu_log) "" "QEMU has no complaint about the guest on the spawn view in capped packets"
     let capped_frames = ($capped_run.serial | lines | where {|l| $l starts-with "fps: frame in" })
     assert equal ($capped_frames | length) 3 $"the first frame and the pose's two placements reported on the spawn view in capped packets: ($capped_run.serial)"
@@ -1339,7 +1339,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     for m in $WORKER_MODES {
         let label = $"the spawn view by ($m.workers) workers in bands of ($m.grain) rows"
         let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $m.workers $m.grain) }, { at: 1400ms, bytes: (level-frame true false) }, { at: $WORKER_FREEZE_AT, bytes: (pool-frame --modes $POOL_FROZEN) }] | append (settled $SPAWN_POSE) | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_w($m.workers)_g($m.grain)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"spawn_w($m.workers)_g($m.grain)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
         assert equal ($frames | length) 3 $"the first frame and the pose's two placements reported on ($label): ($run.serial)"
@@ -1370,7 +1370,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
             let label = $"the spawn view on ($h.harts) harts(if $h.bootargs == '' { '' } else { $', ($h.bootargs),' }) ($GFX_SLOTS) workers asked in bands of ($grain) rows"
             let sends = ([{ at: 1300ms, bytes: (gauge workers-frame $GFX_SLOTS $grain) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
             let dir = ($out | path join $"spawn_harts_($h.harts)(if $h.bootargs == '' { '' } else { '_late' })_g($grain)")
-            let run = (jab launch --kernel $kernel --image $image --out $dir --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 6 --harts $h.harts --bootargs $h.bootargs)
+            let run = (launch --kernel $kernel --image $image --out $dir --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 6 --harts $h.harts --bootargs $h.bootargs)
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
             let lines = ($run.serial | lines)
             let reserved = $"fps: harts reserved 2, grant ($h.harts_of)"
@@ -1393,12 +1393,12 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         }
     }
     for h in $SHORT_MACHINES {
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_short_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts $h.harts --bootargs $SHORT_KNOB)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"spawn_short_($h.harts)") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts $h.harts --bootargs $SHORT_KNOB)
         assert ($h.line in ($run.serial | lines)) $"($h.harts) harts hold fewer secondaries than the reservation, refused with its line, ($h.line): ($run.serial | lines | last 3)"
         assert equal $run.status $SHORT_EXIT $"a machine short of the reservation ends the run with ($SHORT_EXIT) on ($h.harts) harts: ($run.serial | lines | last 3)"
         assert ($run.machine | get -o below_minimum | default false) $"the run past the kernel's minimum is recorded below it on ($h.harts) harts: ($run.machine)"
     }
-    let kernel_short = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_short_kernel") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts 2)
+    let kernel_short = (launch --kernel $kernel --image $image --out ($out | path join "spawn_short_kernel") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --seconds 6 --harts 2)
     assert equal [$kernel_short.status ($kernel_short.serial | lines)] [1 [$KERNEL_SHORT]] $"two harts without the knob refused by the kernel before the program starts: ($kernel_short.serial | lines | last 3)"
     # the grant moved through the H frame (take-holds): a hart taken and
     # given back on four harts, by the default and by a W of three, and
@@ -1422,9 +1422,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let jobs_out = ($out | path join $"spawn_jobs_($j.grain)_($j.delayed)_($j.cancel)")
         let run = (if $j.cancel {
             let contract = ($sends | append [{ at: $STAMP_AT, bytes: (raise-frame 0 --stamp) }, { at: $JOB_SCREEN_AT, bytes: (pose command-frame "E") }] | sort-by at)
-            jab launch --kernel $kernel --image $image --out $jobs_out --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $contract --screen $JOB_SCREEN_AT --seconds 5
+            launch --kernel $kernel --image $image --out $jobs_out --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $contract --screen $JOB_SCREEN_AT --seconds 5
         } else {
-            jab launch --kernel $kernel --image $image --out $jobs_out --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5
+            launch --kernel $kernel --image $image --out $jobs_out --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --capture 3000ms --seconds 5
         })
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -1471,7 +1471,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         assert ($rows | is-empty) $"($label) the default's picture, no HUD or flip before the join: rows ($rows | first 5) differ, ($rows | length) in all"
     }
     let fault_sends = [{ at: 1300ms, bytes: (jobs-frame 0 0 false 1) }, { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }]
-    let fault_run = (jab launch --kernel $kernel --image $image --out ($out | path join "spawn_jobs_fault") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $fault_sends --capture 3000ms --seconds 5)
+    let fault_run = (launch --kernel $kernel --image $image --out ($out | path join "spawn_jobs_fault") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $fault_sends --capture 3000ms --seconds 5)
     let fault_lines = ($fault_run.serial | lines | where {|l| $l starts-with "jab: worker fault: " })
     assert (($fault_lines | length) == 1 and ($fault_lines | get 0 | str starts-with "jab: worker fault: hart=1 argument=")) $"hart 1's worker faults on its round with its line: ($fault_run.serial | lines | last 3)"
     assert equal $fault_run.status 1 $"a worker's fault ends the run with status 1: ($fault_run.serial | lines | last 3)"
@@ -1479,7 +1479,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         for i in $IDLE_CASES {
             let sends = (if $i.workers == null { [] } else { [{ at: 1300ms, bytes: (gauge workers-frame $i.workers 0) }] })
             let drawing = ($i.workers | default $GFX_GUIDELINE)
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.harts)_($i.workers | default 'default')") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT --threads-at $IDLE_READINGS --harts $i.harts)
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"spawn_idle_($i.harts)_($i.workers | default 'default')") --set $set --sound --api --disk ($out | path join "still.romfs") --serial "fps" --send $sends --seconds 6 --threads $IDLE_AT --threads-at $IDLE_READINGS --harts $i.harts)
             if $i.workers == null {
                 let first = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" } | first | parse $FRAME | get 0 | update cells {|c| $c | into int })
                 assert equal $first.workers $GFX_GUIDELINE $"the default on ($i.harts) harts draws with GFX_GUIDELINE's ($GFX_GUIDELINE) of its ($i.harts - 1) started workers: ($first)"
@@ -1538,7 +1538,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         let placed = { name: $"alpha_($fp.name)", x: $eye.x, y: $eye.y, z: $eye.z, yaw: 0, pitch: 0 }
         for mode in [tiled lit] {
             let sends = ([{ at: 1400ms, bytes: (level-frame true ($mode == "lit")) }] | append (settled $placed))
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
             let lines = ($run.serial | lines)
@@ -1616,7 +1616,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         mut deep_captures = {}
         for mode in [tiled lit] {
             let sends = ([{ at: 1400ms, bytes: (level-frame true ($mode == "lit")) }] | append (settled $placed))
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $deep_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"alpha_($fp.name)_($mode)") --set $set --sound --api --disk $deep_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -1650,7 +1650,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
         mut lit_captures = {}
         for mode in [tiled lit] {
             let sends = ([{ at: 1400ms, bytes: (level-frame false ($mode == "lit")) }] | append (settled $placed))
-            let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"alpha_light_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"alpha_light_($fp.name)_($mode)") --set $set --sound --api --disk $fixture_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
             let label = $"the ($fp.name) pose under the room's light with the tiles ($mode)"
             assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
             let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -1705,7 +1705,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     mut centre_screens = {}
     for mode in [tiled held] {
         let sends = ([{ at: 1400ms, bytes: (level-frame false ($mode == "held") --parity) }] | append (settled $centre_placed))
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"centre_($mode)") --set $set --sound --api --disk $centre_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"centre_($mode)") --set $set --sound --api --disk $centre_disk --serial "fps" --send $sends --capture 3500ms --seconds 5)
         let label = $"the white wall under the parity lumels with the tiles ($mode)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -1752,7 +1752,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     # after the hall was flowed off the window's, and its far wall reads
     # the backdrop through its doorway
     let grow_far = ((grow-source).sectors | enumerate | where {|s| $s.item.name == $GROW_FAR } | get 0.index)
-    let grow_run = (jab launch --kernel $kernel --image $image --out ($out | path join "grow_run") --set $set --sound --api --disk (romfs $grow_tree ($out | path join "grow.romfs")) --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $GROW_POSE) }] --capture 2500ms --seconds 5)
+    let grow_run = (launch --kernel $kernel --image $image --out ($out | path join "grow_run") --set $set --sound --api --disk (romfs $grow_tree ($out | path join "grow.romfs")) --serial "fps" --send [{ at: 1500ms, bytes: (pose pose-frame $GROW_POSE) }] --capture 2500ms --seconds 5)
     assert equal (open --raw $grow_run.qemu_log) "" "QEMU has no complaint about the guest on the growth run"
     let grow_lines = ($grow_run.serial | lines)
     let grow_loads = ($grow_lines | where {|l| $l starts-with $"fps: ($GROW_MAP) loaded" })
@@ -1772,7 +1772,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
 
     # a map whose magic is wrong
     let bad = (broken ($out | path join "bad_tree") "bad" ([("XXXX" | into binary), (0..<60 | each {|i| 0x[00] } | bytes collect)] | bytes collect))
-    let bad_run = (jab launch --kernel $kernel --image $image --out ($out | path join "bad") --set $set --sound --disk (romfs $bad ($out | path join "bad.romfs")) --serial "fps" --seconds 8)
+    let bad_run = (launch --kernel $kernel --image $image --out ($out | path join "bad") --set $set --sound --disk (romfs $bad ($out | path join "bad.romfs")) --serial "fps" --seconds 8)
     assert equal $bad_run.status 6 $"a wrong magic exits 6: ($bad_run.status), ($bad_run.serial)"
     assert ("fps: /map/bad.jabfps.map is not a Jab FPS map" in ($bad_run.serial | lines)) $"and says so: ($bad_run.serial)"
 
@@ -1780,7 +1780,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = "", --asse
     let whole = (open --raw ($render_1_tree | path join "map" "render_1.jabfps.map") | into binary)
     assert (($whole | bytes length) > $SHORT_BYTES) $"Render One's map runs past ($SHORT_BYTES) bytes: ($whole | bytes length)"
     let short = (broken ($out | path join "short_tree") "short" ($whole | bytes at 0..<$SHORT_BYTES))
-    let short_run = (jab launch --kernel $kernel --image $image --out ($out | path join "short") --set $set --sound --disk (romfs $short ($out | path join "short.romfs")) --serial "fps" --seconds 8)
+    let short_run = (launch --kernel $kernel --image $image --out ($out | path join "short") --set $set --sound --disk (romfs $short ($out | path join "short.romfs")) --serial "fps" --seconds 8)
     assert equal $short_run.status 7 $"a short file exits 7: ($short_run.status), ($short_run.serial)"
     assert ($"fps: /map/short.jabfps.map ends at ($SHORT_BYTES) bytes before its structures do" in ($short_run.serial | lines)) $"and says so: ($short_run.serial)"
 
@@ -1931,7 +1931,7 @@ def records [api: binary]: nothing -> table<kind: int, sector: int, x: float, y:
 # but one, and on the title's rows, so a shorter text drawn in its place
 # fails by its width and nothing drawn by its count; the ink's box.
 def title-holds [kernel: path, image: path, out: path, set: string, name: string, tree: path, text: string]: nothing -> record<count: int, left: int, top: int, right: int, bottom: int> {
-    let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"title_($name)") --set $set --sound --disk (romfs $tree ($out | path join $"title_($name).romfs")) --serial "fps" --capture $TITLE_AT --seconds 5)
+    let run = (launch --kernel $kernel --image $image --out ($out | path join $"title_($name)") --set $set --sound --disk (romfs $tree ($out | path join $"title_($name).romfs")) --serial "fps" --capture $TITLE_AT --seconds 5)
     assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($name)'s load screen"
     assert ($run.screen != "") $"a screen was taken on ($name)'s load screen"
     let ink = (capture ink (capture screen $run.screen) $TITLE_INK)
@@ -2190,7 +2190,7 @@ def take-holds [kernel: path, image: path, out: path, set: string, disk: path, d
     let base = ([{ at: $STAMP_AT, bytes: (raise-frame 0 --stamp) }, { at: 1400ms, bytes: (level-frame true false) }] | append (settled $SPAWN_POSE))
     let launch = {|name: string, harts: int, sends: list<any>, screen: duration|
         let ended = [{ at: $screen, bytes: (pose command-frame "E") }]
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"take_($name)") --set $set --sound --api --disk $disk --serial "fps" --send ($base | append $sends | append $ended | sort-by at) --screen $screen --seconds 7 --harts $harts)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"take_($name)") --set $set --sound --api --disk $disk --serial "fps" --send ($base | append $sends | append $ended | sort-by at) --screen $screen --seconds 7 --harts $harts)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the take's ($name)"
         let outside = ($run.serial | lines | where {|l| $l starts-with "fps: dispatch outside the grant" })
         assert ($outside | is-empty) $"the take's ($name) dispatches to started harts inside the grant alone: ($outside)"
@@ -2371,7 +2371,7 @@ def pool-trace [serial: string]: nothing -> table<frame: int, requesting: list<i
 def pool-holds [kernel: path, image: path, out: path, set: string, disk: path, lit: binary]: nothing -> record<rotation_surfaces: int, rotation_wait: int, sight_frames: int, sight_slots: int, rings_merged: int, stale_evicted: int> {
     let launch = {|name: string, sends: list<any>|
         let all = ($sends | append [{ at: $POOL_PLACE_AT, bytes: (pose pose-frame $SPAWN_POSE) }, { at: $POOL_END_AT, bytes: (pose command-frame "E") }] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --capture $POOL_CAPTURE_AT --seconds 7)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"pool_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --capture $POOL_CAPTURE_AT --seconds 7)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on the pool's ($name)"
         let m = (gauge measure $run.api [{ name: "start", places: [], pad: [] }, { name: "sight", places: [$SPAWN_POSE], pad: [] }])
         assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the pool's ($name) complete and valid at schema ($CLOCK_SCHEMA): ($m.problems | str join '; ') ($m.invalid | str join '; ')"
@@ -2952,7 +2952,7 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     } | flatten)
     let end = ($BUILDER_AT + ($BUILDER_STEP * (3 * ($BUILDER_LIGHTINGS | length) + 1)))
     let run_out = ($out | path join "builder_run")
-    let run = (jab launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --disk (romfs $tree ($out | path join "builder.romfs")) --serial "fps" --send $sends --capture $end --seconds 9)
+    let run = (launch --kernel $kernel --image $image --out $run_out --set $set --sound --api --disk (romfs $tree ($out | path join "builder.romfs")) --serial "fps" --send $sends --capture $end --seconds 9)
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the builder's run"
     let spec = ({ size: $size, lightings: $BUILDER_LIGHTINGS, k: $frame.k, w: $frame.w, h: $frame.h, truncations: $BUILDER_TRUNCATIONS } | to nuon)
     let read_out = ($out | path join "builder.nuon")
@@ -3049,9 +3049,9 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     # screen, then the E, which waits on the screen; the three due at one
     # time take the screen first
     let names = {|order: list<any>| $order | each {|a| if $a.kind == "screen" { "screen" } else { [P E] | get $a.index } } }
-    let late = (do $names (jab due-order [{ kind: "send", index: 0, at: $SETTLE_AT }, { kind: "send", index: 1, at: $HANDOFF_END_AT }] $HANDOFF_SCREEN_AT ($HANDOFF_END_AT + 100ms)))
+    let late = (do $names (launch due-order [{ kind: "send", index: 0, at: $SETTLE_AT }, { kind: "send", index: 1, at: $HANDOFF_END_AT }] $HANDOFF_SCREEN_AT ($HANDOFF_END_AT + 100ms)))
     assert equal $late [P screen E] $"a late poll takes the overdue placement, the screen, then the E: ($late)"
-    let tied = (do $names (jab due-order [{ kind: "send", index: 0, at: $HANDOFF_SCREEN_AT }, { kind: "send", index: 1, at: $HANDOFF_SCREEN_AT }] $HANDOFF_SCREEN_AT $HANDOFF_SCREEN_AT))
+    let tied = (do $names (launch due-order [{ kind: "send", index: 0, at: $HANDOFF_SCREEN_AT }, { kind: "send", index: 1, at: $HANDOFF_SCREEN_AT }] $HANDOFF_SCREEN_AT $HANDOFF_SCREEN_AT))
     assert equal $tied [screen P E] $"a placement, the screen, and the E due at one time take the screen first: ($tied)"
     let tree = (handoff-tree $source $game ($out | path join "handoff"))
     let m = (map read ($tree | path join "map" $"($FIXTURE_MAP).jabfps.map"))
@@ -3115,7 +3115,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     # placement's frame's
     let launch = {|name: string, sends: list<any>, times: record|
         let all = ($sends | append [{ at: $PLACE_AT, bytes: $times.placed }, { at: $times.second, bytes: $times.placed }, { at: $times.end, bytes: $ended }] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --screen $times.screen --seconds $HANDOFF_SECONDS)
+        let run = (launch --kernel $kernel --image $image --out ($out | path join $"handoff_($name)") --set $set --sound --api --disk $disk --serial "fps" --send $all --screen $times.screen --seconds $HANDOFF_SECONDS)
         let label = $"the handoff's ($name)"
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest on ($label)"
         let frames = ($run.serial | lines | where {|l| $l starts-with "fps: frame in" })
@@ -3409,7 +3409,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
             { at: $SCHEDULE_SLOW.at, bytes: (stall-frame true $SCHEDULE_SLOW.stall 0 false $SCHEDULE_FAST.spin) }
             { at: $SCHEDULE_END, bytes: (pose command-frame "E") }
         ] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $render_1_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
+        let run = (launch --kernel $kernel --image $image --out ($dir | path join $"schedule_($cadence)") --set $set --sound --api --pad $triggers --disk $render_1_disk --serial "fps" --send $sends --capture ($SCHEDULE_END + 1sec) --seconds 11)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
         let m = (gauge measure $run.api [{ name: "schedule", places: [], pad: [] }])
         assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the window complete and valid at schema ($CLOCK_SCHEMA) ($says): ($m.problems) ($m.invalid)"
@@ -3500,7 +3500,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
             { at: $MOTION_AT, bytes: (stall-frame true $MOTION_STALL 0 false 0) }
             { at: $MOTION_END, bytes: (pose command-frame "E") }
         ] | sort-by at)
-        let run = (jab launch --kernel $kernel --image $image --out ($dir | path join $"motion_($cadence)") --set $set --sound --api --pad $stick --disk $still_disk --serial "fps" --send $sends --capture ($MOTION_END + 1sec) --seconds 7)
+        let run = (launch --kernel $kernel --image $image --out ($dir | path join $"motion_($cadence)") --set $set --sound --api --pad $stick --disk $still_disk --serial "fps" --send $sends --capture ($MOTION_END + 1sec) --seconds 7)
         assert equal (open --raw $run.qemu_log) "" $"QEMU has no complaint about the guest ($says)"
         let m = (gauge measure $run.api [{ name: "motion", places: [$MOTION_POSE], pad: [] }])
         assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the window complete and valid at schema ($CLOCK_SCHEMA) ($says): ($m.problems) ($m.invalid)"
@@ -3604,7 +3604,7 @@ export def census-holds [kernel: path, image: path, out: path, set: string, game
         { at: 1500ms, bytes: (pose pose-frame $SPAWN_POSE) }
         { at: $CENSUS_SHRINK.to, bytes: (census-frame 0) }
     ] | append $lights | sort-by at)
-    let run = (jab launch --kernel $kernel --image $image --out ($dir | path join "run") --set $set --sound --api --disk $still_disk --serial "fps" --send $sends --capture $CENSUS_END --seconds 10 --harts $CENSUS_HARTS)
+    let run = (launch --kernel $kernel --image $image --out ($dir | path join "run") --set $set --sound --api --disk $still_disk --serial "fps" --send $sends --capture $CENSUS_END --seconds 10 --harts $CENSUS_HARTS)
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the census run"
     let faults = ($run.serial | lines | where {|l| $l starts-with "jab: " })
     assert ($faults | is-empty) $"no fault on the census run: ($faults)"

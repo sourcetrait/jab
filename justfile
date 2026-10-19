@@ -75,7 +75,7 @@ watch *args:
 # Run a program's bench, every step one after another, then its report
 [script("nu")]
 bench *args:
-    def --wrapped main [...args] { ^nu '{{jab}}' bench '{{here}}' ...$args }
+    def --wrapped main [...args] { ^nu '{{do_bin}}' bench '{{here}}' ...$args }
 
 # Every build, test, run, and bench here moved aside, so the next build
 # starts from nothing; `just retire` deletes what it moved

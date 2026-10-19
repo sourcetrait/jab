@@ -7,8 +7,8 @@
 # priced: their rates against perspective's say what a float depth
 # test, an integer one, a span with no float at all, and the brightness
 # multiply cost a pixel.
-use ../../../../../sdk/nu/jab.nu
 use ../../../../../nu/mod/capture
+use ../../../../../nu/mod/launch
 use std/assert
 
 # Three seconds a mode, eight modes and a ninth with --set vector,
@@ -21,7 +21,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let vector = (($set | split row "," | each {|s| $s | str trim | str uppercase }) | any {|s| $s == "VECTOR" })
     let wanted = (["fill" "texture" "perspective" "polygon" "fixed" "integer" "lit"] ++ (if $vector { ["vector"] } else { [] }) ++ ["textureflip"])
     let capture = ((($wanted | length) * $MODE_SECONDS * 1sec) + $SETTLE)
-    let run = (jab launch --kernel $kernel --image $image --out $out --set $set --seconds 40 --capture $capture)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --seconds 40 --capture $capture)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let modes = ($run.serial | lines | each {|l|
