@@ -10,6 +10,12 @@ The robojab binary, the play harness, one package of the tool workspace
 (tool-build): its path, for a script that serves a planned machine to
 an agent.
 
+## pair
+
+The jabpair binary, the pairing's exact bracket, one package of the tool
+workspace (tool-build): its path, for `sdl pair` to send its pairings to
+on stdin.
+
 ## tool-build
 
 A package of the tool workspace, tool/ in the jab workspace, built with

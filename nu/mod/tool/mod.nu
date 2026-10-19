@@ -11,6 +11,11 @@ export def robojab [ws: path]: nothing -> string {
     tool-build $ws "robojab" "the harness needs it"
 }
 
+# The jabpair binary, the pairing's bracket, built in the tool workspace
+export def pair [ws: path]: nothing -> string {
+    tool-build $ws "jabpair" "a pairing's bracket needs it"
+}
+
 # A tool workspace package's binary, cargo building it on first use and change
 def tool-build [ws: path, package: string, without: string]: nothing -> string {
     let tool = ($ws | path join "tool")

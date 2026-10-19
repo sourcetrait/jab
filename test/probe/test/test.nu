@@ -26,7 +26,9 @@
 # shim and the identity, plan minting none and a launch alone one; the
 # probe's own plan in each profile, the nonce's frame, and a QEMU without
 # the flush trace refused; the present sequence's rules and K's, K held
-# to the all-pairs check over a generated set. A
+# to the all-pairs check over a generated set; the pairing over synthetic
+# runs, each read admitted, ambiguous, or refused by its rule or by its
+# bracket, the stalls named and the uploads placed in their calls. A
 # paired capture bundled, the fixture relinked at its path so the raw log
 # is refused as changed, and the bundle admitted by its check's replay;
 # then each stage's negatives, copies of the bundle altered and rehashed
@@ -540,58 +542,105 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
 
     # the pairing over synthetic runs: the load's two presents, ordinals 2
-    # and 3, then 120 frames a period apart from 1.6 s, each upload 3 ms
-    # after its present's end on a host clock 1792000000 s on, the open's
-    # upload first, a render after each upload, and a poll 1.5 s past the
-    # last; each case the regular run changed
+    # and 3, then 120 frames a period apart from 1.6 s, each present's call
+    # 1.5 ms from its start with its upload 0.3 ms in, on a host clock
+    # 1792000000 s on logged by the microsecond, the open's upload first, a
+    # render after each upload, and a poll 1.5 s past the last; each case
+    # the regular run changed
     let period_ms = (1000.0 / 60.0)
     let base = 1792000000.0
-    let ends = ([100.0 1500.0] ++ (0..<120 | each {|i| 1600.0 + $i * $period_ms }))
-    let upload = {|ms: float| { ts: ($base + ($ms + 3.0) / 1000.0), name: "make_current", kind: "upload", key: "chain:0+10" } }
-    let render = {|ms: float| { ts: ($base + ($ms + 5.0) / 1000.0), name: "make_current", kind: "render", key: "chain:?+20" } }
-    let poll = {|ms: float| { ts: ($base + $ms / 1000.0), name: "poll", kind: "poll", key: "chain:" } }
-    let made = {|times: list<float>, after: float| [(do $upload 50.0)] ++ ($times | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($times | last) + $after))] }
-    let flipped = {|times: list<float>| $times | enumerate | each {|e| { status: 0, ordinal: ($e.index + 2), end_us: ($e.item * 1000.0) } } }
-    let regular = { events: (do $made $ends 1500.0), flips: (do $flipped $ends) }
+    let starts = ([100.0 1500.0] ++ (0..<120 | each {|i| 1600.0 + $i * $period_ms }))
+    let stamped = {|ms: float, name: string, kind: string, key: string| { ts: ($base + ($ms * 1000.0 | math floor) / 1000000.0), name: $name, kind: $kind, key: $key } }
+    let upload = {|ms: float| do $stamped $ms "make_current" "upload" "chain:0+10" }
+    let render = {|ms: float| do $stamped ($ms + 5.0) "make_current" "render" "chain:?+20" }
+    let poll = {|ms: float| do $stamped $ms "poll" "poll" "chain:" }
+    let made_at = {|times: list<float>, offsets: list<float>, after: float| [(do $upload 50.0)] ++ ($times | zip $offsets | each {|t| [(do $upload ($t.0 + $t.1)) (do $render $t.0)] } | flatten) ++ [(do $poll (($times | last) + $after))] }
+    let made = {|times: list<float>, after: float| do $made_at $times ($times | each { 0.3 }) $after }
+    let ticks = {|ms: float| $ms * 10000.0 | math round | into int }
+    let flipped_at = {|times: list<float>, lengths: list<float>| $times | zip $lengths | enumerate | each {|e| { status: 0, ordinal: ($e.index + 2), lo: (do $ticks $e.item.0), hi: (do $ticks ($e.item.0 + $e.item.1)) } } }
+    let flipped = {|times: list<float>| do $flipped_at $times ($times | each { 1.5 }) }
+    let regular = { events: (do $made $starts 1500.0), flips: (do $flipped $starts) }
     let paired = (sdl pair $regular.events $regular.flips)
-    assert equal [$paired.ok ($paired.pairs | length) $paired.window.first $paired.window.last] [true 122 2 123] $"pair_regular: the regular run paired whole, 122 presents, ordinals 2 to 123: ($paired.refusals | to nuon)"
-    assert (($paired.fit.max_residual_ms < 0.01) and (($paired.fit.drift - 1.0 | math abs) < 0.000001)) $"pair_regular: an exact fit, drift 1: ($paired.fit | to nuon)"
-    assert ($paired.limits | str contains "no absolute guest-to-SDL latency") "pair_regular: the limits printed with the reading"
-    # a refused flip and a frame with no flip after frame 10, their ordinals the last
-    let unpaired_flips = ($regular.flips | take 12 | append [{ status: 1, ordinal: 13, end_us: 0.0 } { status: 255, ordinal: 13, end_us: 0.0 }] | append ($regular.flips | skip 12))
-    let unpaired = (sdl pair $regular.events $unpaired_flips)
-    assert equal [$unpaired.ok ($unpaired.pairs | length)] [true 122] $"pair_unpaired: a refused flip and a frame with no flip go unpaired: ($unpaired.refusals | to nuon)"
+    assert equal [$paired.verdict ($paired.pairs | length) $paired.window.first $paired.window.last $paired.bracket.status] ["admitted" 122 2 123 "feasible"] $"pair_regular: the regular run paired whole, its bracket feasible: ($paired.refusals | to nuon)"
+    assert equal ($paired.shifts | get status) ["infeasible" "infeasible"] $"pair_regular: the load's gap rules out either shift: ($paired.shifts | to nuon)"
+    assert (($paired.stalls | is-empty) and ($paired.pairs | all {|p| $p.place.first_ms <= 0.3 and $p.place.last_ms >= 0.3 })) "pair_regular: no stall, every upload's place holding its 0.3 ms"
+    assert ((($paired.fit.drift - 1.0) | math abs) < 0.0001) $"pair_regular: the fit a diagnostic, drift 1: ($paired.fit | to nuon)"
+    assert ($paired.limits | str contains "cannot uniquely reject every stream shift") "pair_regular: the limits printed with the reading"
+    # a refused flip and a frame with no flip after frame 10, both unpaired
+    let unpaired = (sdl pair $regular.events ($regular.flips | take 12 | append [{ status: 1, ordinal: 13, lo: 0, hi: 0 } { status: 255, ordinal: 13, lo: 0, hi: 0 }] | append ($regular.flips | skip 12)))
+    assert equal [$unpaired.verdict ($unpaired.pairs | length)] ["admitted" 122] $"pair_unpaired: a refused flip and a frame with no flip go unpaired: ($unpaired.refusals | to nuon)"
     # the window after a loading silence longer than any of its own gaps
     let quiet = ([100.0 1500.0] ++ (0..<120 | each {|i| 6000.0 + $i * $period_ms }))
     let silence = (sdl pair (do $made $quiet 1500.0) (do $flipped $quiet))
-    assert equal [$silence.ok ($silence.pairs | length)] [true 122] $"pair_silence: the ordinals place a window after a silence: ($silence.refusals | to nuon)"
-    # Astra's compensating loss and addition: of 120 presents at iP, the
-    # upload at 60P lost and one at 60.25P added, admitted as the limit
-    # says, its largest residual about 0.248 P
-    let even = (1..120 | each {|i| $i * $period_ms })
-    let even_uploads = ($even | each {|ms| if $ms == (60 * $period_ms) { do $upload (60.25 * $period_ms) } else { do $upload $ms } })
-    let compensated = (sdl pair ([(do $upload 0.0)] ++ $even_uploads ++ [(do $poll (($even | last) + 1500.0))]) (do $flipped $even))
-    assert $compensated.ok $"pair_compensated: a compensating loss and addition passes, the documented limit: ($compensated.refusals | to nuon)"
-    assert (($compensated.fit.max_residual_ms > (0.24 * $period_ms)) and ($compensated.fit.max_residual_ms < (0.25 * $period_ms))) $"pair_compensated: its largest residual about 0.248 P: ($compensated.fit.max_residual_ms) ms"
+    assert equal [$silence.verdict ($silence.pairs | length)] ["admitted" 122] $"pair_silence: the ordinals place a window after a silence: ($silence.refusals | to nuon)"
+    # a stall, one call 14 ms with its upload in place, admitted and named
+    # with its upload's place early in it; then two, each named
+    let stalled = {|indices: list<int>| $regular.flips | enumerate | each {|e| if $e.index in $indices { $e.item | update hi ($e.item.lo + 140440) } else { $e.item } } }
+    let stall = (sdl pair $regular.events (do $stalled [42]))
+    assert equal [$stall.verdict ($stall.stalls | get ordinal)] ["admitted" [44]] $"pair_stall: admitted, the stall named: ($stall.stalls | to nuon)"
+    assert (($stall.stalls | first | get place.last_ms) < 2.0) $"pair_stall: its upload placed early in its call: ($stall.stalls | to nuon)"
+    let stalls = (sdl pair $regular.events (do $stalled [42 80]))
+    assert equal [$stalls.verdict ($stalls.stalls | get ordinal)] ["admitted" [44 82]] $"pair_stalls: each stall named: ($stalls.stalls | to nuon)"
+    # mixed long and short calls, the long ones' uploads early and the short
+    # ones' late: the fit's residuals large, the bracket holding
+    let lengths = ($starts | enumerate | each {|e| if $e.index >= 2 and ($e.index mod 2) == 1 { 10.0 } else { 1.5 } })
+    let mixed = (sdl pair (do $made_at $starts ($lengths | each {|l| if $l > 2.0 { 0.3 } else { 1.4 } }) 1500.0) (do $flipped_at $starts $lengths))
+    assert equal [$mixed.verdict $mixed.bracket.status] ["admitted" "feasible"] $"pair_mixed: the bracket holds: ($mixed.refusals | to nuon)"
+    assert ($mixed.fit.max_residual_ms > 4.0) $"pair_mixed: the fit's residuals large: ($mixed.fit | to nuon)"
+    # a retried frame, its final attempt's call after an await of 8 ms and
+    # its upload in that call, admitted; its upload in the await between the
+    # two attempts, refused by the bracket and named
+    let retried_starts = ($starts | enumerate | each {|e| if $e.index == 50 { $e.item + 8.0 } else { $e.item } })
+    let retried = (sdl pair (do $made $retried_starts 1500.0) (do $flipped $retried_starts))
+    assert equal $retried.verdict "admitted" $"pair_retried: the final attempt's bounds hold its upload: ($retried.refusals | to nuon)"
+    let awaited = (sdl pair $regular.events (do $flipped $retried_starts))
+    assert equal [$awaited.verdict $awaited.bracket.binding.ceiling] ["refused" [52]] $"pair_await: an upload in the await refused, its present named: ($awaited.bracket | to nuon)"
+    # drift on narrow calls, 20 us with each upload 10 us in: at the
+    # declared 50 ppm admitted; at 100 ppm refused as drift past the bound
+    let drifted = {|ppm: float|
+        let scale = (1.0 + $ppm / 1000000.0)
+        let events = ([(do $upload 50.0)] ++ ($starts | each {|ms| [(do $upload (($ms + 0.01) * $scale)) (do $render ($ms * $scale))] } | flatten) ++ [(do $poll ((($starts | last) + 1500.0) * $scale))])
+        sdl pair $events (do $flipped_at $starts ($starts | each { 0.02 }))
+    }
+    let bound = (do $drifted 50.0)
+    assert equal $bound.verdict "admitted" $"pair_drift_bound: drift at the declared bound admitted: ($bound.refusals | to nuon)"
+    let past = (do $drifted 100.0)
+    assert equal [$past.verdict ($past.refusals | get refusal)] ["refused" ["the bracket: no drift within the declared bound holds every upload in its call, and one past it does"]] $"pair_drift_past: refused as drift past the bound: ($past.refusals | to nuon)"
+    # regular presents with short calls and no load gap: the stream shifted
+    # by one upload is feasible too, so the reading is ambiguous and the
+    # binding decides
+    let frames = ($starts | skip 2)
+    let open = (sdl pair (do $made $frames 1500.0) (do $flipped $frames))
+    assert equal [$open.verdict ($open.shifts | where status == "feasible" | get name)] ["ambiguous" ["later"]] $"pair_ambiguous: the shifted mapping feasible too: ($open.shifts | to nuon)"
+    # Astra's compensating loss and addition: frame 60's upload lost and one
+    # added; a quarter period on, past its call, refused and named; inside
+    # its call, passing, the limit the reading states
+    let swapped = {|at: float| do $made $frames 1500.0 | enumerate | each {|e| if $e.index == 121 { do $upload (($frames | get 60) + $at) } else { $e.item } } }
+    let past_call = (sdl pair (do $swapped 4.1667) (do $flipped $frames))
+    assert equal [$past_call.verdict $past_call.bracket.binding.floor] ["refused" [62]] $"pair_compensated: an addition past its call refused and named: ($past_call.bracket | to nuon)"
+    let in_call = (sdl pair (do $swapped 1.0) (do $flipped $frames))
+    assert equal $in_call.verdict "ambiguous" $"pair_compensated_inside: an addition inside its call passes: ($in_call.refusals | to nuon)"
+    assert ($in_call.limits | str contains "a loss and an addition fall inside one call") "pair_compensated_inside: the limit stated with it"
     # the refusals, each at its own rule
-    let late = ($ends | skip 2 | last 10 | each {|ms| $ms + 10 * $period_ms })
-    let window_uploads = ($regular.events | where kind == "upload")
-    let extra = {|at: float, count: int| 1..$count | each {|i| do $upload ($at + 2.0 + $i) } }
+    let late = ($starts | skip 2 | last 10 | each {|ms| $ms + 10 * $period_ms })
+    let tail = {|times: list<float>| $times | each {|ms| [(do $upload ($ms + 0.3)) (do $render $ms)] } | flatten }
+    let extra = {|at: float, count: int| 1..$count | each {|i| do $upload ($at + 5.0 + $i) } }
+    let model = "the bracket: the clock model holds at no drift, a pause, a real-clock step, or an upload outside its call"
     let refusals = [
-        { name: "pair_three_uploads", says: "a residual past half the period", events: ((do $made ($ends | take 50) 0.0 | drop 1) ++ (do $extra ($ends | get 49) 2) ++ ((($ends | skip 50) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
-        { name: "pair_upload_missing", says: "a residual past half the period", events: ((do $made ($ends | take 60) 0.0 | drop 1) ++ ((($ends | skip 61) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_three_uploads", says: $model, events: ((do $made ($starts | take 50) 0.0 | drop 1) ++ (do $extra ($starts | get 49) 2) ++ (do $tail (($starts | skip 50) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_upload_missing", says: $model, events: ((do $made ($starts | take 60) 0.0 | drop 1) ++ (do $tail (($starts | skip 61) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
         { name: "pair_duplicated", says: "a duplicated event", events: ($regular.events | take 41 | append ($regular.events | get 40) | append ($regular.events | skip 41)), flips: $regular.flips }
-        { name: "pair_gap", says: "an ordinal gap in the guest's presents", events: ((do $made ($ends | take 30) 0.0 | drop 1) ++ [(do $upload (($ends | get 29) + 5.0))] ++ (($ends | skip 30) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($ends | last) + 1500.0))]), flips: ($regular.flips | take 30 | append ($regular.flips | skip 30 | each {|f| $f | update ordinal ($f.ordinal + 1) })) }
-        { name: "pair_shifted", says: "a residual past half the period", events: ([(do $upload 10.0)] ++ $regular.events), flips: $regular.flips }
-        { name: "pair_slip", says: "a residual past half the period", events: ((do $made ($ends | take 62) 0.0 | drop 1) ++ [(do $upload (($ends | get 61) + 8.0))] ++ ((($ends | skip 62) ++ $late) | each {|ms| [(do $upload $ms) (do $render $ms)] } | flatten) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
+        { name: "pair_gap", says: "an ordinal gap in the guest's presents", events: ((do $made ($starts | take 30) 0.0 | drop 1) ++ [(do $upload (($starts | get 29) + 5.5))] ++ (do $tail ($starts | skip 30)) ++ [(do $poll (($starts | last) + 1500.0))]), flips: ($regular.flips | take 30 | append ($regular.flips | skip 30 | each {|f| $f | update ordinal ($f.ordinal + 1) })) }
+        { name: "pair_shifted", says: $model, events: ([(do $upload 10.0)] ++ $regular.events), flips: $regular.flips }
+        { name: "pair_slip", says: $model, events: ((do $made ($starts | take 62) 0.0 | drop 1) ++ [(do $upload (($starts | get 61) + 8.0))] ++ (do $tail (($starts | skip 62) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
         { name: "pair_backwards", says: "a stamp going backwards", events: ($regular.events | update 82 {|e| $e | update ts ($e.ts - 0.5) }), flips: $regular.flips }
-        { name: "pair_device", says: "a device error in the window", events: $regular.events, flips: ($regular.flips | take 70 | append { status: 3, ordinal: 71, end_us: 0.0 } | append ($regular.flips | skip 70)) }
-        { name: "pair_cut", says: "the log ending under 1 s past the window's last upload", events: (do $made $ends 500.0), flips: $regular.flips }
-        { name: "pair_short", says: "the log short of an ordinal", events: (do $made ($ends | drop 3) 1500.0), flips: $regular.flips }
+        { name: "pair_device", says: "a device error in the window", events: $regular.events, flips: ($regular.flips | take 70 | append { status: 3, ordinal: 71, lo: 0, hi: 0 } | append ($regular.flips | skip 70)) }
+        { name: "pair_cut", says: "the log ending under 1 s past the window's last upload", events: (do $made $starts 500.0), flips: $regular.flips }
+        { name: "pair_short", says: "the log short of an ordinal", events: (do $made ($starts | drop 3) 1500.0), flips: $regular.flips }
     ]
     for c in $refusals {
         let read = (sdl pair $c.events $c.flips)
-        assert ((not $read.ok) and (($read.refusals | get refusal) == [$c.says])) $"($c.name): refused, saying ($c.says) and nothing else: ($read.refusals | to nuon)"
+        assert (($read.verdict == "refused") and (($read.refusals | get refusal) == [$c.says])) $"($c.name): refused, saying ($c.says) and nothing else: ($read.refusals | to nuon)"
     }
 
     # the shim's capture, on a binary built non-PIE: the premises first
