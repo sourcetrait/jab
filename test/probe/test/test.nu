@@ -446,7 +446,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         $run_nonce | into binary --endian little | save --raw ($probe | path join "api.out")
         { profile: "paired", capture_nonce: $run_nonce, qemu_pid: $pid, sdl_log: $sdl, shim: "", window: "sdl,gl=on", api: true, sends: [] } | to nuon | save --raw ($probe | path join "identity.nuon")
         let bundle = ($bundles | path join $name)
-        { probe: $probe, bundle: $bundle, manifest: (sdl bundle $probe $bundle) }
+        let manifest = (sdl bundle $probe $bundle)
+        # the fixture object 0 is no QEMU, so its manifest names the one the
+        # trace bracket rests on
+        nuon-edit ($bundle | path join "bundle.nuon") {|m| $m | update host.qemu.version "QEMU emulator version 11.1.2" }
+        { probe: $probe, bundle: $bundle, manifest: $manifest }
     }
     let first = (do $capture "paired_a" $nonce 4242)
     let second = (do $capture "paired_b" ($nonce + 1) 4343)
@@ -481,6 +485,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         { name: "bundle_pid_unrecorded", stage: 5, rehash: true, change: {|b| nuon-edit ($b | path join "identity.nuon") {|i| $i | reject qemu_pid } } }
         { name: "bundle_guest_zero", stage: 5, rehash: true, change: {|b| 0 | into binary --endian little | save --raw -f ($b | path join "api.out") } }
         { name: "bundle_exchanged", stage: 5, rehash: true, change: {|b| cp -f ($second.bundle | path join "api.out") ($b | path join "api.out") } }
+        { name: "bundle_qemu_unsupported", stage: 5, rehash: false, change: {|b| nuon-edit ($b | path join "bundle.nuon") {|m| $m | update host.qemu.version "QEMU emulator version 10.2.2" } } }
+        { name: "bundle_flush_after", stage: 5, rehash: true, change: {|b| let up = (open --raw ($b | path join "classified.nuon") | decode | from nuon | get events | where kind == "upload" | first | get stamp | split row "."); let us = (($up.0 | into int) * 1000000 + ($up.1 | into int) + 1); $"((($us * 1000) | into datetime | format date "%Y-%m-%dT%H:%M:%S%.6fZ")) virtio_gpu_cmd_res_flush res 0x1, x 0, y 0, w 1920, h 1080\n" | save --raw -f ($b | path join "trace.log") } }
     ]
     for n in $negatives {
         let copy = ($bundles | path join $n.name)
@@ -492,6 +498,43 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
     let other = (checked $second.bundle $guest)
     assert equal $other.stage 0 $"bundle_second: the second capture's own bundle is admitted: ($other.refused)"
+
+    # the trace's bracket (TraceBracket), on the real clock's microseconds:
+    # each flip upload at or after its flush and at or before the next
+    # traced command, flush or set_scanout, an equal stamp admitted on
+    # either side, the last flush's bracket open, the lags reported; three
+    # flushes a period apart from a whole second, whose stamp has no
+    # fraction
+    let t0 = 1792000000000000
+    let flush = {|us: int| { name: "virtio_gpu_cmd_res_flush", us: ($t0 + $us) } }
+    let scanout = {|us: int| { name: "virtio_gpu_cmd_set_scanout", us: ($t0 + $us) } }
+    let traced = {|cmds: list<any>| $cmds | each {|c| $"(($c.us * 1000) | into datetime | format date (if ($c.us mod 1000000) == 0 { '%Y-%m-%dT%H:%M:%SZ' } else { '%Y-%m-%dT%H:%M:%S%.6fZ' })) ($c.name) res 0x1" } | str join (char nl) }
+    let bracketed = {|cmds: list<any>, uploads: list<int>| try { { ok: true, trace: (sdl trace-bracket (do $traced $cmds) ($uploads | each {|u| $t0 + $u })), refused: "" } } catch {|e| { ok: false, trace: null, refused: $e.msg } } }
+    let three = [(do $flush 0) (do $flush 16667) (do $flush 33333)]
+    assert equal ((do $traced $three) | lines | first | split row " " | first) "2026-10-14T17:46:40Z" "trace_whole_second: the first stamp on a whole second, written with no fraction"
+    let held = (do $bracketed $three [74 16740 33410])
+    assert equal [$held.ok $held.trace.flushes $held.trace.open_last $held.trace.slow $held.trace.median_lag_us $held.trace.resolution_us] [true 3 true [] 74 1] $"trace_held: three uploads in their brackets, the last open: ($held | to nuon)"
+    let equal = (do $bracketed $three [0 33333 33333])
+    assert equal $equal.ok true $"trace_equal: an upload equal to its own flush's stamp and one equal to the next command's admitted: ($equal.refused)"
+    let stall = (do $bracketed $three [74 23314 33410])
+    assert equal [$stall.ok $stall.trace.slow] [true [{ upload: 2, lag_us: 6647 }]] $"trace_stall: a stall inside its flush admitted and reported slow: ($stall | to nuon)"
+    let long = (do $bracketed $three [74 16740 900000])
+    assert equal [$long.ok $long.trace.open_last ($long.trace.slow | get upload)] [true true [3]] $"trace_open: the last flush's upload long after it, its bracket open: ($long | to nuon)"
+    let scanned = [(do $flush 0) (do $scanout 5000) (do $flush 16667) (do $flush 33333)]
+    let before = (do $bracketed $scanned [4000 16740 33410])
+    assert equal [$before.ok $before.trace.set_scanouts] [true 1] $"trace_scanout_before: an upload before an intervening set_scanout admitted: ($before.refused)"
+    let refusals = [
+        { name: "trace_upload_early", says: "flip upload 1 lies outside its flush's bracket, 5 us before its flush", cmds: $three, uploads: [-5 16740 33410] }
+        { name: "trace_upload_late", says: "flip upload 1 lies outside its flush's bracket, 1 us past the next traced command", cmds: $three, uploads: [16668 16740 33410] }
+        { name: "trace_upload_past_scanout", says: "flip upload 1 lies outside its flush's bracket, 1000 us past the next traced command", cmds: $scanned, uploads: [6000 16740 33410] }
+        { name: "trace_stamp_back", says: "the trace's stamps step back at its traced command 3", cmds: [(do $flush 0) (do $flush 16667) (do $flush 16000)], uploads: [74 16740 33410] }
+        { name: "trace_log_back", says: "the log's upload stamps step back at flip upload 3", cmds: $three, uploads: [74 33410 33400] }
+        { name: "trace_counts", says: "the trace holds 3 flushes and the log 2 flip uploads", cmds: $three, uploads: [74 16740] }
+    ]
+    for c in $refusals {
+        let got = (do $bracketed $c.cmds $c.uploads)
+        assert ((not $got.ok) and ($got.refused | str starts-with $c.says)) $"($c.name): refused, saying ($c.says): ($got.refused)"
+    }
 
     # the receipt stage's function: each present one past the last, every
     # other frame the last, the first held to the anchor, one fault one

@@ -65,11 +65,45 @@ qemu_pid, the log's nonce the identity's capture_nonce, and the nonce
 the guest echoed, read from the bundle's api.out by `guest`, the
 program's reader, equal to both, a 0 or a missing value refused; generic
 and historical, nothing bound and nothing paired; and with trace.log,
-QEMU's flushes paired in order one for one with the log's flip uploads,
-each upload within 5 ms after its flush on the one host clock; 6, the
+the manifest's QEMU the one the bracket rests on (traced_qemu), any other
+version or none refused as unsupported, then the trace's bracket
+(trace-bracket) over the log's flip uploads as integer microseconds of
+their stamps (stamp-us), its refusal this stage's; 6, the
 reader, the host's set beside this one, `same` whether their jab commits
 agree, read from schema 1's `jab` or schema 2's first repository and
 refusing nothing, the replay's equality being what admits another
 revision. The profile, the run, both readers, the trace's
-pairing, and classified.nuon's events. Untyped because it ends in an
+bracket, and classified.nuon's events. Untyped because it ends in an
 error.
+
+## traced_qemu
+
+The QEMU version whose command queue the bracket rests on, 11.1.2: its
+flush traces at its start (`hw/display/virtio-gpu.c:534`) and reaches the
+shim's make_current through `qemu_console_update` (604) in the same call,
+the queue running one command at a time (1078, the flush 1104-1106, its
+answer 1130-1133), so a flush's upload lies between its trace and the next
+command's. A bundle from another QEMU is never read on that assumption.
+
+## trace-bracket
+
+The trace's bracket (TraceBracket), exported for its fixtures: the traced
+commands, flushes and set_scanouts in file order, their stamps read to
+the microsecond through a datetime, never a float, both of GLib's forms,
+the fraction written only when nonzero; the trace's stamps never
+decreasing, nor the uploads', a reversal in either refused with its
+place; the flushes and the uploads equal in count, paired in order; each
+upload at or after its flush's stamp and at or before the next traced
+command's, closed at the resolution, an equal stamp admitted since the
+two clocks' one microsecond cannot order them, a refusal naming the
+upload and its side; the last flush's bracket open above. The 5 ms
+window it replaces held a lag's size, which a stall inside the flush's
+own processing makes any length, and refused an honest run (walk's
+traced capture, upload 495 at 6.647 ms). Returned: the counts, the
+lags' largest, median, and 99th by nearest rank in microseconds, the
+resolution, whether the last is open, and `slow`, every lag past
+`--slow-ms` (2), each with its upload.
+
+## stamp-us
+
+A log stamp, the shim's `<seconds>.<six digits>`, as whole microseconds.

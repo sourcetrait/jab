@@ -6,6 +6,7 @@ No child imports it; each imports its siblings by path.
 
 - `sdl bundle`: sdl/bundle's `main`.
 - `sdl bundle-check`: sdl/bundle's `bundle-check`.
+- `sdl trace-bracket`: sdl/bundle's `trace-bracket`.
 - `sdl classify`: sdl/classify's `main`.
 - `sdl log`: sdl/log's `main`.
 - `sdl pair`: sdl/pair's `main`.

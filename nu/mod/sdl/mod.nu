@@ -1,4 +1,4 @@
-export use (path self ./bundle) [bundle-check main]
+export use (path self ./bundle) [bundle-check main trace-bracket]
 export use (path self ./classify) [main]
 export use (path self ./log) [main]
 export use (path self ./pair) [main]

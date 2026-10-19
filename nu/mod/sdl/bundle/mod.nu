@@ -5,6 +5,9 @@ use (path self ../log)
 use (path self ../symbols)
 use (path self ../../walk)
 
+# The QEMU version whose command queue the trace's bracket rests on
+const traced_qemu = "11.1.2"
+
 # A probed run's capture bundled with its tables and manifest, on its host
 export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []] {
     let probe = ($probe | path expand)
@@ -155,19 +158,53 @@ export def bundle-check [bundle: path, --guest: closure] {
         _ => { do $refuse 5 "the run" $"the manifest's profile is ($profile | to nuon), where paired, generic, or historical is read" },
     })
     let trace = (if "trace.log" not-in $names { null } else {
-        let flushes = (open --raw ($dir | path join "trace.log") | into binary | decode | lines
-            | parse --regex '^(?P<at>\S+) virtio_gpu_cmd_res_flush\b'
-            | each {|c| ($c.at | into datetime | into int) / 1e9 })
-        let uploads = ($replay.events | where kind == "upload" | get ts)
-        if ($flushes | length) != ($uploads | length) { do $refuse 5 "the run" $"the trace holds ($flushes | length) flushes and the log ($uploads | length) flip uploads" }
-        let lags = ($flushes | zip $uploads | each {|p| ($p.1 - $p.0) * 1000.0 })
-        let off = ($lags | enumerate | where {|l| $l.item < 0.0 or $l.item >= 5.0 })
-        if not ($off | is-empty) { do $refuse 5 "the run" $"flip upload ($off | first | get index | $in + 1) lies ($off | first | get item | math round -p 3) ms after its flush, outside the 5 ms after it" }
-        { flushes: ($flushes | length), uploads: ($uploads | length), max_lag_ms: (if ($lags | is-empty) { null } else { $lags | math max | math round -p 3 }) }
+        let version = ($m | get -o host.qemu.version | default "")
+        if not ($version | str contains $"version ($traced_qemu)") { do $refuse 5 "the run" $"the trace's bracket rests on QEMU ($traced_qemu)'s command queue, and the bundle's QEMU reads ($version | to nuon): unsupported, never read on another version's assumption" }
+        let uploads = ($replay.events | where kind == "upload" | each {|e| stamp-us $e.stamp })
+        let text = (open --raw ($dir | path join "trace.log") | into binary | decode)
+        try { trace-bracket $text $uploads } catch {|e| do $refuse 5 "the run" $e.msg }
     })
     let host = ($m | get -o reader)
     let box = (sdl-reader)
     let commit_of = {|r| if ($r | describe | str starts-with 'record') { if ($r | get -o repos) != null { $r.repos | get -o 0.commit } else { $r | get -o jab } } }
     let hosted = (do $commit_of $host)
     { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($hosted != null and $hosted == (do $commit_of $box)) }, trace: $trace, events: $cls.events }
+}
+
+# Each flip upload between its traced flush and the next traced command, in us
+export def trace-bracket [trace: string, uploads: list<int>, --slow-ms: float = 2.0]: nothing -> record<flushes: int, uploads: int, set_scanouts: int, max_lag_us: oneof<int, nothing>, median_lag_us: oneof<int, nothing>, p99_lag_us: oneof<int, nothing>, resolution_us: int, open_last: bool, slow: list<record<upload: int, lag_us: int>>> {
+    let commands = ($trace | lines | parse --regex '^(?P<at>\S+) (?P<name>virtio_gpu_cmd_res_flush|virtio_gpu_cmd_set_scanout)\b' | each {|c| { name: $c.name, us: (($c.at | into datetime | into int) // 1000) } })
+    let back = ($commands | window 2 | enumerate | where {|w| $w.item.1.us < $w.item.0.us } | get -o 0)
+    if $back != null { error make {msg: $"the trace's stamps step back at its traced command ($back.index + 2), a clock stepped back being no bracket"} }
+    let behind = ($uploads | window 2 | enumerate | where {|w| $w.item.1 < $w.item.0 } | get -o 0)
+    if $behind != null { error make {msg: $"the log's upload stamps step back at flip upload ($behind.index + 2), a clock stepped back being no bracket"} }
+    let flushes = ($commands | enumerate | where {|c| $c.item.name == "virtio_gpu_cmd_res_flush" })
+    if ($flushes | length) != ($uploads | length) { error make {msg: $"the trace holds ($flushes | length) flushes and the log ($uploads | length) flip uploads"} }
+    let pairs = ($flushes | zip $uploads | enumerate | each {|e|
+        let next = ($commands | get -o ($e.item.0.index + 1))
+        { upload: ($e.index + 1), flush_us: $e.item.0.item.us, upload_us: $e.item.1, next_us: (if $next == null { null } else { $next.us }) }
+    })
+    let early = ($pairs | where {|p| $p.upload_us < $p.flush_us } | get -o 0)
+    if $early != null { error make {msg: $"flip upload ($early.upload) lies outside its flush's bracket, ($early.flush_us - $early.upload_us) us before its flush"} }
+    let late = ($pairs | where {|p| if $p.next_us == null { false } else { $p.upload_us > $p.next_us } } | get -o 0)
+    if $late != null { error make {msg: $"flip upload ($late.upload) lies outside its flush's bracket, ($late.upload_us - $late.next_us) us past the next traced command"} }
+    let lags = ($pairs | each {|p| $p.upload_us - $p.flush_us } | sort)
+    let rank = {|q: float| $lags | get ([((($lags | length) * $q | math ceil) - 1) 0] | math max) }
+    {
+        flushes: ($flushes | length),
+        uploads: ($uploads | length),
+        set_scanouts: ($commands | where name == "virtio_gpu_cmd_set_scanout" | length),
+        max_lag_us: (if ($lags | is-empty) { null } else { $lags | last }),
+        median_lag_us: (if ($lags | is-empty) { null } else { do $rank 0.5 }),
+        p99_lag_us: (if ($lags | is-empty) { null } else { do $rank 0.99 }),
+        resolution_us: 1,
+        open_last: (if ($pairs | is-empty) { false } else { ($pairs | last | get next_us) == null }),
+        slow: ($pairs | where {|p| ($p.upload_us - $p.flush_us) > ($slow_ms * 1000.0) } | each {|p| { upload: $p.upload, lag_us: ($p.upload_us - $p.flush_us) } }),
+    }
+}
+
+# A log stamp, the shim's seconds and six digits, as whole microseconds
+def stamp-us [stamp: string]: nothing -> int {
+    let parts = ($stamp | split row ".")
+    ($parts.0 | into int) * 1000000 + ($parts.1 | into int)
 }
