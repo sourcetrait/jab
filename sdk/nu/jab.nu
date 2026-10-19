@@ -62,6 +62,7 @@ use ../../nu/mod/toolchain
 use ../../nu/mod/walk
 use ../../nu/mod/word
 use ../../nu/mod/workspace
+use ../../nu/mod/spec [harts_allowed]
 
 # This tool's own file, which `do` runs again for the SDK's commands.
 const self = (path self)
@@ -209,7 +210,7 @@ export def machine-of [harts?: int, --spec: any = null, --overrides: list<string
         let named = { name: ($spec.name | str lowercase), cores: $spec.cores, ram_gib: $ram, display: $spec.display }
         { harts: $spec.cores, ram_gib: $ram, spec: $named, diagnostic: null } | merge $common
     } else {
-        if $harts not-in $spec.harts_allowed { error make {msg: $"--harts takes ($spec.harts_allowed | first) to ($spec.harts_allowed | last), a custom machine's harts, not ($harts)"} }
+        if $harts not-in $harts_allowed { error make {msg: $"--harts takes ($harts_allowed | first) to ($harts_allowed | last), a custom machine's harts, not ($harts)"} }
         { harts: $harts, ram_gib: $custom_ram_gib, spec: null, diagnostic: { harts: $harts, ram_gib: $custom_ram_gib } } | merge $common
     }
 }
