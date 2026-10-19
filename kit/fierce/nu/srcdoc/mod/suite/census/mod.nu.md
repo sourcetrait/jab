@@ -14,15 +14,15 @@ left empty while they draw
 
 ## census-holds
 
-The census's own fixtures, a CENSUS build's (census.S, census.nu), on
+The census's own fixtures, a CENSUS build's (census.S, census), on
 the still copy of Render Zero's spawn view in one launch on eight harts,
 every context the directory counts written each frame: the launch here,
 QEMU silent and no fault, then the run's log read in a nu of its own by
-census_holds.nu's census-fixture-holds, which holds what the census
+census's census-fixture-holds, which holds what the census
 writes, since the suite's modules loaded around that reading slowed its
 closures about tenfold (measured on test.nu).
 
 - every worker of the eight harts asked at 32 rows, since the default's
   cap of three would leave five of the census's eight contexts undrawn
-- the run's log read in a nu of its own (census_holds.nu's
-  census-fixture-holds), its failure's own report first in the output
+- the run's log read in a nu of its own (census's census-fixture-holds),
+  its failure's own report first in the output

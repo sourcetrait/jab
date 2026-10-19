@@ -543,9 +543,9 @@ DUMP_RECORDS texel records (REPORT_TILE_TEXELS: the slot, the first
 texel's index, DUMP_TEXELS texels as the tile holds them, the last
 record's past the tile zero), the schema in each. A BUILDING slot's
 texels are whatever it holds: its built rows, and below them the rows as
-the slot held them before, its last tile's or zero. The test's tiles.nu
-reads them back (`dumps`), the builder's assertion holding them to the
-host's oracle.
+the slot held them before, its last tile's or zero. Fierce's tiles reads
+them back (`read`), the builder's assertion holding them to the host's
+oracle.
 
 ## msg_alpha
 

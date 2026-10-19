@@ -126,7 +126,7 @@ The builder's assertion on the builder fixture's tree: one run, under
 the bright, the gradient, and the parity lumels in turn, every tile of
 the wall at every level of its chain built by the B frame and read back
 by the D frame; every dump whole, its records each in its place
-(tiles.nu's dumps), and the host's oracle (tiles.nu's builder-tile, in a
+(tiles' read), and the host's oracle (tiles/builder's builder-tile, in a
 nu of its own) holding every texel of every tile, the bright's the
 chain's exactly, the others within the build's rounding, the alpha the
 chain's; every key of the wall's grids dumped once under each, with the
@@ -168,7 +168,7 @@ screen judged by its stamp alone; and the screen and the E due
 together, the E after the screen. Each picture
 held to the lit one over the wall's rows and columns on the screen
 inset by FIXTURE_INSET, the crosshair's square and the stamp's cells
-left out, by tiles.nu's handoff in a nu of its own: each pixel's
+left out, by the tiles bin's handoff in a nu of its own: each pixel's
 greatest channel difference, of 255, as its pixels, those differing,
 the most, the 99th, and the mean, the pixels whose texel's light is
 clamped at the last node apart; under partial residency each pixel's

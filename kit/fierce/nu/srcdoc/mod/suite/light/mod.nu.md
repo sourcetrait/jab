@@ -53,5 +53,5 @@ within TheUser's bound, each run proven on its path
 ## steps
 
 the lit loop continuous along the opening's rows, the held-off run's
-every pixel beside its neighbour within CENTRE_STEP (tiles.nu's
+every pixel beside its neighbour within CENTRE_STEP (the tiles bin's
 lit-steps, in a nu of its own)

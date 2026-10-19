@@ -74,9 +74,13 @@ no logic, each `def "main <verb>"` one call of one module function, its
 result returned as the module returns it. A module imports another by
 its path relative to the importing file, named through `path self`, `use
 (path self ../target)`, so nushell, which keeps one module per path as
-written, parses each module file once however many modules import it; a
-bin or a script imports by the plain relative path, since its top level
-runs after its parse, where `path self` refuses. A module exports its API
+written, parses each module file once however many modules import it. A
+bin binds each import's path first, `const MAP = path self ../../mod/map`
+then `use $MAP`, since its top level runs after its parse, where `path
+self` as a command refuses, and a bare relative path beside a module's
+`path self` of the same module is a second parse, which slowed fierce's
+map compiler 15 percent; an older script keeps the plain relative path.
+A module exports its API
 typed in and out, keeps its helpers unexported, and names no definition
 after a builtin. A definition carries one summary line of 80 characters at most
 in the source, its usage and reasoning in the mirror. The root's `do`

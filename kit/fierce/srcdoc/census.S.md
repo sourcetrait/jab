@@ -94,7 +94,7 @@ line ends and a continuation begins when its bytes with the longest item
 would pass the chunk, CENSUS_CHUNK or the console's Q frame's smaller one,
 so no line passes the buffer whatever the surfaces a frame lists; a reader
 joins a context's chunks in order, as many surfaces as its head lists, their
-counts summing to its distinct tiles (the test's `census.nu`). A reader takes
+counts summing to its distinct tiles (fierce's `census`). A reader takes
 the contexts a frame holds from the directory line, never from the lines that
 arrived; the directory's first format, before it named them, held three.
 Dropped counts

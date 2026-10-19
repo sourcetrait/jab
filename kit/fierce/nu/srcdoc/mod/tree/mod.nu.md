@@ -92,8 +92,9 @@ texel's channel c, lit by the light L of its centre, reads c L / 256
 within one for the multiply's floor and c over 256 times one lane and
 the build's truncations, a centre's rounding and a step a texel along a
 cell's segment, under BUILDER_TRUNCATIONS of a lane's 256ths at this k.
-The oracle runs in a nu of its own over tiles.nu, which loads nothing
-else, its per-texel loop slowed some fifteenfold inside this module
+The oracle runs in a nu of its own through the tiles bin, which loads
+the tile modules alone, its per-texel loop slowed some fifteenfold inside
+this module
 
 ## HANDOFF_FIXTURE
 
