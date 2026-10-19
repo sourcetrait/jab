@@ -15,8 +15,8 @@ path comes out as the modules' own `path self` imports write it, so each
 module is parsed once.
 
 A verb's words are a program's path from the workspace's root, its words
-spaced or joined by slashes, or a shortcut, `kit/fierce` or `fierce`, as
-the justfile's were. A first word that is an absolute path names a
+spaced or joined by slashes, or a shortcut, `kit/fierce` or `fierce`. A
+first word that is an absolute path names a
 workspace's, the kernel's, or a program's directory instead (`workspace
 subject`): a candidate's copy, an export, or a program outside the
 workspace builds, tests, or runs by its path, and a caller of the

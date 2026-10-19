@@ -7,9 +7,7 @@ runs only under QEMU's `virt` machine.
 
 - `workspace.jab.toml` the workspace: the kernel and the programs.
 - `do` the driver, a link to `nu/bin/do.nu`: `build`, `test`, `run`,
-  `bench`, and `watch`. `justfile` a shim over the bins while every
-  consumer moves to them, `just do` handing a command for development to
-  the tree that holds it.
+  `bench`, and `watch`.
 - `kernel/` the kernel: `kernel.jab.toml`, sources under `src/`, and
   each source's `.eye` and `.md` under `srcdoc/`.
 - `sdk/` what a program uses, its sources under `src/` and their `.eye`
@@ -116,9 +114,7 @@ whole into the retire home, `tmp/retired/<stamp>/` at its place there.
 starts from nothing, and `nu/bin/nuance.nu clean <path>` retires only the
 outputs of the programs under a path, or the kernel's, in one tree with
 `--tree`. `nu/bin/nuance.nu retire` is the one command that deletes: it
-removes the retire home's `tmp` and everything in it. The justfile
-stands as a shim over these while every consumer moves to them, `just
-build` the root's `./do build`, `just do font` the kernel's `font`, and on.
+removes the retire home's `tmp` and everything in it.
 The toolchain is found by its install directory, the one holding
 `bin/`: `RISCV_TOOLCHAIN`, else an `extern/riscv` link beside the kernel
 or program, else the workspace's `extern/riscv`, else the tools on
@@ -322,8 +318,8 @@ the program sends it, and the fault lines, in every build.
 
 The API is a second port, bytes both ways between a program and the
 host through `jab.sys.api.write`, `jab.sys.api.read`, and `jab.sys.api.await`.
-Every kernel carries it and any build runs with or without it: `just
-run example wasd --api` puts the port on the machine, and without the
+Every kernel carries it and any build runs with or without it: `./do
+run example/wasd --api` puts the port on the machine, and without the
 flag the calls report that there is none. The host's end sits beside
 the build output: `api.in`, a named pipe the host writes into, on
 Windows a plain file the pipe's relay forwards, and `api.out`, a file
