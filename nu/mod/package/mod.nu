@@ -91,10 +91,13 @@ export def verify [dir: path]: nothing -> nothing {
 
 # A packaged artifact of a role at a path in the package, or why it is none
 def artifact [root: string, m: record, rel: string, role: string]: nothing -> record<path: string, problems: list<string>> {
-    let row = ($m.artifacts | where path == $rel | get -o 0)
     let path = ($root | path join $rel)
-    if $row == null { return { path: $path, problems: [$"($rel) is no artifact of the package"] } }
-    if $row.role != $role { return { path: $path, problems: [$"($rel) is the package's ($row.role), where the preflight takes its ($role)"] } }
+    let parts = ($rel | path split)
+    let row = ($m.artifacts | where path == $rel | get -o 0)
+    let rows = (if $row != null { [$row] } else { $m.artifacts | where {|a| ($a.path | path split | take ($parts | length)) == $parts } })
+    if ($rows | is-empty) { return { path: $path, problems: [$"($rel) is no artifact of the package"] } }
+    let other = ($rows | where role != $role | get -o 0)
+    if $other != null { return { path: $path, problems: [$"($rel) holds the package's ($other.role) at ($other.path), where the preflight takes its ($role)"] } }
     { path: $path, problems: [] }
 }
 

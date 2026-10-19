@@ -49,6 +49,10 @@ is one, else the artifacts counted.
 
 ## artifact
 
+A file's row at the path, or a tree's rows beneath it, since a tree is laid
+file by file, every one of them of the role the preflight takes, else the
+path is named.
+
 ## rebuild-problems
 
 A packaged step that names no image, kernel, or asset tree, or a route
