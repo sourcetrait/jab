@@ -116,6 +116,7 @@ export def preflight [dir: path, --spec: string, --image: string, --kernel: stri
     mkdir $out
     let checked = (check $root)
     let m = (if ($root | path join $MANIFEST | path exists) { open ($root | path join $MANIFEST) } else { { artifacts: [] } })
+    if ($root | path join $MANIFEST | path exists) { cp ($root | path join $MANIFEST) ($out | path join $MANIFEST) }
     let img = (artifact $root $m $image "image")
     let krn = (artifact $root $m $kernel "kernel")
     let trd = (artifact $root $m $tree "assets")

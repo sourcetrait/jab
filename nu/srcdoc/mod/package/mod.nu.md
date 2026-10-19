@@ -71,4 +71,6 @@ the packaged image under the sdl shim, generic profile, bundled and its
 bundle checked, the shim's SHA-256 kept; elsewhere the platform's
 declared limit in its place; and no rebuild (rebuild-problems). Every
 refusal is named and the preflight fails, ending the bench before any
-run; `preflight.nuon` in its `out` holds every reading.
+run; `preflight.nuon` in its `out` holds every reading, and the package's
+manifest is copied beside it, so the bench run carries the identities it
+ran under for whatever reads it after.
