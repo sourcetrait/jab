@@ -1,9 +1,9 @@
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../console)
-use (path self ../../../map.nu)
+use (path self ../../map)
 use (path self ../../gauge/measure)
 use (path self ../../picture)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../../gauge/stream)
 use (path self ../../tree)
 use std/assert
@@ -254,7 +254,7 @@ export def builder-holds [kernel: path, image: path, out: path, set: string, sou
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest on the builder's run"
     let spec = ({ size: $size, lightings: $BUILDER_LIGHTINGS, k: $frame.k, w: $frame.w, h: $frame.h, truncations: $BUILDER_TRUNCATIONS } | to nuon)
     let read_out = ($out | path join "builder.nuon")
-    let oracle = (^nu ($game | path join "test" "tiles.nu") builder ($run_out | path join "api.out") $spec $read_out | complete)
+    let oracle = (^nu ($game | path join "nu" "bin" "nuance" "tiles.nu") builder ($run_out | path join "api.out") $spec $read_out | complete)
     assert equal $oracle.exit_code 0 $"the builder's oracle read the run's dumps: ($oracle.stderr)"
     let read = (open $read_out)
     assert ($read.problems | is-empty) $"every dump whole, every record in its place: ($read.problems | first 3)"
@@ -465,7 +465,7 @@ export def handoff-holds [kernel: path, image: path, out: path, set: string, sou
     }
     let spec_file = ($out | path join "handoff_spec.nuon")
     $spec | to nuon | save -f $spec_file
-    let tiles = ($game | path join "test" "tiles.nu")
+    let tiles = ($game | path join "nu" "bin" "nuance" "tiles.nu")
     let stats = ($pairs | enumerate | par-each --keep-order {|e|
         let file = ($out | path join $"handoff_stats_($e.index).nuon")
         let r = (^nu $tiles handoff $spec_file $e.index $file | complete)

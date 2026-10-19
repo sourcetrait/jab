@@ -265,7 +265,11 @@ SDK and the kernel came from.
 
 A path a record wrote under the game's old place, `game/fps`, read at
 its new one, `kit/fierce`, when the old is gone: the move of KitFierce.
-Any other path, and one still there, as written.
+A route or a pad table under the game's `test/`, `route_<name>.nuon` or
+`table_<name>.nuon`, read at FierceTools' place for it,
+`nu/nuon/route/` or `nu/nuon/table/`, by the same name, so an older run's
+recorded route reads at the bytes its SHA-256 names. Any other path, and
+one still there, as written.
 
 ## program-of
 

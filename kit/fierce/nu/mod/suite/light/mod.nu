@@ -147,7 +147,7 @@ export def steps [context: record, records: record]: nothing -> record {
     let telling = $records."alpha centre".telling
     let varied = $records."alpha centre".varied
     let steps_out = ($out | path join "centre_steps.nuon")
-    let steps = (^nu ($game | path join "test" "tiles.nu") lit-steps $centre_screens.held ($centre_opening | to nuon) $FIXTURE_CROSSHAIR $steps_out | complete)
+    let steps = (^nu ($game | path join "nu" "bin" "nuance" "tiles.nu") lit-steps $centre_screens.held ($centre_opening | to nuon) $FIXTURE_CROSSHAIR $steps_out | complete)
     assert equal $steps.exit_code 0 $"the lit loop's steps read from the held-off capture: ($steps.stderr)"
     let centre_steps = (open $steps_out)
     assert ($centre_steps.most <= $CENTRE_STEP) $"the lit loop's picture continuous along the opening's rows, every pixel within ($CENTRE_STEP) of the one beside it: ($centre_steps.most) at ($centre_steps.x), ($centre_steps.y)"

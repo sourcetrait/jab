@@ -1,5 +1,5 @@
 use (path self ../../../../../nu/mod/word)
-use (path self ../../../test/pose.nu)
+use (path self ../pose)
 
 # When a run's seed goes in, before the program's first frame
 export const SEED_AT = 200ms

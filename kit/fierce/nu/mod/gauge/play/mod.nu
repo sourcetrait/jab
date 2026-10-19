@@ -7,7 +7,7 @@ use (path self ../../console)
 use (path self ../cpu)
 use (path self ../identity)
 use (path self ../measure)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../report)
 use (path self ../../console) [SEED_AT]
 use (path self ../../frame) [GFX_SLOTS]
@@ -62,7 +62,7 @@ export def route [
     let machine = (machine resolve $at.workspace $spec $harts)
     let contradiction = (identity contradiction (identity image-flags $at.image) $at.tree)
     if $contradiction != null { error make { msg: $contradiction } }
-    let route_file = (if $route == "" { $WORKSPACE | path join "kit" "fierce" "test" "route_render_0.nuon" } else { $route | path expand })
+    let route_file = (if $route == "" { $WORKSPACE | path join "kit" "fierce" "nu" "nuon" "route" "route_render_0.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
     let r = ($route_bytes | decode utf-8 | from nuon)
     let requests = (if $cpu { cpu requests $r.legs $r.end } else { [] })

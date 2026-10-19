@@ -1,0 +1,23 @@
+record<
+    map: string,
+    end: duration,
+    legs: list<oneof<
+        record<
+            name: string,
+            places: table<
+                at: duration, x: number, y: number, z: number,
+                yaw: number, pitch: number
+            >,
+            pad: table<at: duration, type: int, code: int, value: int>
+        >,
+        record<
+            name: string,
+            places: table<
+                at: duration, x: number, y: number, z: number,
+                yaw: number, pitch: number
+            >,
+            sends: table<at: duration, kind: string>,
+            pad: table<at: duration, type: int, code: int, value: int>
+        >
+    >>
+>

@@ -1,6 +1,6 @@
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../console)
-use (path self ../../../map.nu)
+use (path self ../../map)
 use (path self ../../picture)
 use (path self ../../tree)
 use std/assert

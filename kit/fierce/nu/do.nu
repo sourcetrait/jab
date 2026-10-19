@@ -1,127 +1,59 @@
-# do.nu: the game's commands for development, the manifest's `do`,
-# which the repository's `just do <command>` runs and `just do` lists:
-# the content rendered and compiled, a capture of placed poses, the smoke
-# test, robojab's play, and the gauge. A command that runs the program
-# builds it first through the SDK, its maps compiled with it.
-use ../../../nu/mod/walk
-use ../../../nu/mod/build
-
+# This file's directory, fierce's nu tree
 const here = (path self | path dirname)
 
+# The commands' usage; `just do` at the repository's root lists them
 def main [] {
     print "nu do.nu <command> [args]; `just do` at the repository's root lists the commands"
 }
 
-# The game's directory, the workspace's, and the SDK's tool.
-def places []: nothing -> record<game: string, workspace: string, tool: string> {
-    let game = ($here | path join ".." | path expand)
-    let workspace = ($game | path join ".." ".." | path expand)
-    { game: $game, workspace: $workspace, tool: ($workspace | path join "nu" "bin" "do.nu") }
-}
-
-# The game built through the SDK with the symbols `set` names, its maps
-# compiled first.
-def build [set: string]: nothing -> nothing {
-    let p = (places)
-    ^nu $p.tool build $p.workspace "kit/fierce" --set $set
-}
-
-# Every asset under content/ rendered to the file beside it the engine
-# reads: an SVG to a PNG at its own size through rust/svg2png, built when
-# it is not there; an ambient note list to a MIDI file through
-# nu/ambient.nu; a sound recipe to PCM through nu/sound.nu
+# Every content asset rendered by nuance.nu's render
 def "main render" [] {
-    let p = (places)
-    let tool = ($p.game | path join "rust" "target" "release" "svg2png")
-    if not ($tool | path exists) { ^cargo build --release --manifest-path ($p.game | path join "rust" "Cargo.toml") }
-    for svg in (walk paths ($p.game | path join "content" "**" "*.svg")) { ^$tool $svg ($svg | str replace --regex '\.svg$' '.png') }
-    for list in (walk paths ($p.game | path join "content" "ambient" "*.nuon")) { ^nu ($here | path join "ambient.nu") render $list ($list | str replace --regex '\.nuon$' '.mid') }
-    for recipe in (walk paths ($p.game | path join "content" "sound" "*.nuon")) { ^nu ($here | path join "sound.nu") render $recipe ($recipe | str replace --regex '\.nuon$' '.pcm') }
+    ^nu ($here | path join "bin" "nuance.nu") render
 }
 
-# Every map source under content/map compiled into the game's asset shard
-# of the target, each a tree with its materials, ambients, counts, and
-# plan views
+# Every map source compiled into the asset shard by nuance.nu's compile
 def "main compile" [] {
-    ^nu ($here | path join "prepare.nu") build
+    ^nu ($here | path join "bin" "nuance.nu") compile
 }
 
-# A run's screen capture as a PNG to look at, every Nth pixel: `just do
-# shot <screen.ppm> frame.png`
+# A run's screen capture as a PNG to look at by nuance.nu's shot
 def "main shot" [ppm: path, png: path, --step: int = 4] {
-    ^nu ($here | path join "shot.nu") $ppm $png --step $step
+    ^nu ($here | path join "bin" "nuance.nu") shot $ppm $png --step $step
 }
 
-# Build with the symbols given, then capture a map from placed camera
-# poses, a NUON list of {name, x, y, z, yaw, pitch}, as PNGs under out:
-# `just do pose render_1 poses.nuon out`; `--set debug,owner` captures the
-# surface each pixel belongs to
+# A map captured from placed poses by nuance.nu's pose
 def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
-    build $set
-    let p = (places)
-    let built = (build program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "pose.nu") $map ($poses | path expand) ($out | path expand) --kernel (build program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --set $set
+    ^nu ($here | path join "bin" "nuance.nu") pose $map $poses $out --set $set
 }
 
-# Build with DEBUG set, then play Render Zero on the pad from seeded
-# random tables for that many seconds a seed, the seeds separated by
-# commas, a fault resolved to its routine: `just do smoke 1,2,3 60`
+# Seeded random players on the pad by nuance.nu's smoke
 def "main smoke" [seeds: string = "1", seconds: int = 60] {
-    let list = ($seeds | split row "," | each {|s| $s | str trim } | where {|s| $s != "" } | each {|s| $s | into int })
-    build "debug"
-    let p = (places)
-    let built = (build program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "smoke.nu") --kernel (build program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --out ($built | path join "smoke") --seeds ($list | to nuon) --seconds $seconds
+    ^nu ($here | path join "bin" "nuance.nu") smoke $seeds $seconds
 }
 
-# Build with DEBUG set, then hand a map to robojab for an agent or a
-# script to play: `just do play` prints the MCP server line and config
-# record for a subagent; `just do play <socket>` serves commands on that
-# socket in the foreground; `just do play mcp render_1 300` another map
-# and bound
+# A debug build's map handed to robojab by nuance.nu's play
 def "main play" [target: string = "mcp", map: string = "render_0", seconds: int = 600] {
-    build "debug"
-    let p = (places)
-    let built = (build program-out $p.game "debug")
-    ^nu ($p.game | path join "test" "play.nu") --kernel (build program-kernel $p.game "debug") --image ($built | path join "fierce.jab") --out ($built | path join "play") --map $map --seconds $seconds --target $target
+    ^nu ($here | path join "bin" "nuance.nu") play $target $map $seconds
 }
 
-# Build, then play the gauge's route (test/route_render_0.nuon) on that
-# build headless, every frame of each run read from the program's clock
-# records, gauge.nuon written and the summary printed: `just do gauge`,
-# the release build three times at the program's own cadence, 1; `just
-# do gauge debug 1`; `--host` in the host's window and audio; `--cadence
-# 0`, `1`, or `2`; `--out` and `--label` as `nuance.nu gauge run` takes them
+# The gauge's route on a fresh build by do.nu's build and nuance.nu's gauge run
 def --wrapped "main gauge" [tree: string = "release", runs: int = 3, ...rest] {
-    build (if $tree == "debug" { "debug" } else { "" })
-    let p = (places)
-    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge run --tree $tree --runs $runs ...$rest
+    ^nu ($here | path join "bin" "do.nu") build --set (if $tree == "debug" { "debug" } else { "" })
+    ^nu ($here | path join "bin" "nuance.nu") gauge run --tree $tree --runs $runs ...$rest
 }
 
-# Build, then put Render Zero in the host's window, with its audio and
-# its own gamepad, for you to play; the measurement closes after that
-# many seconds and the window with it: `just do gauge-play 120`, or
-# `just do gauge-play 60 release --cadence 2`
+# Render Zero in the host's window on a fresh build by nuance.nu's gauge play
 def --wrapped "main gauge-play" [seconds: int = 120, tree: string = "release", ...rest] {
-    build (if $tree == "debug" { "debug" } else { "" })
-    let p = (places)
-    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge play --tree $tree --seconds $seconds ...$rest
+    ^nu ($here | path join "bin" "do.nu") build --set (if $tree == "debug" { "debug" } else { "" })
+    ^nu ($here | path join "bin" "nuance.nu") gauge play --tree $tree --seconds $seconds ...$rest
 }
 
-# Read a run's capture as the gauge reads its own, the identity its
-# launch wrote beside it taken up: `just do gauge-read <run>/api.out`
+# A run's capture read by nuance.nu's gauge read
 def --wrapped "main gauge-read" [api: path, ...rest] {
-    let p = (places)
-    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge read ($api | path expand) ...$rest
+    ^nu ($here | path join "bin" "nuance.nu") gauge read ($api | path expand) ...$rest
 }
 
-# Set builds' gauge.nuon files side by side, each walked leg per half
-# metre of its path, the method and every bin kept: `just do
-# gauge-compare a/gauge.nuon b/gauge.nuon`; a run measured incomplete,
-# invalid, or before validity was recorded is refused unless
-# `--diagnostic` admits it, marked, and one with nothing to compare is
-# refused even then
+# Builds' gauge.nuon files compared by nuance.nu's gauge compare
 def --wrapped "main gauge-compare" [...rest] {
-    let p = (places)
-    ^nu ($p.game | path join "nu" "bin" "nuance.nu") gauge compare ...$rest
+    ^nu ($here | path join "bin" "nuance.nu") gauge compare ...$rest
 }

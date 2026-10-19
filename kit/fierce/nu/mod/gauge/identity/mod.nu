@@ -422,13 +422,16 @@ def repo-of [workspace: path]: nothing -> record<dir: string, commit: string, di
     { dir: $workspace, commit: $commit, dirty: ($status != "") }
 }
 
-# A path under the old game/fps read at kit/fierce where the old is gone
+# An old path at its new place: game/fps's at kit/fierce, test data's at nu/nuon
 export def moved [file: string]: nothing -> string {
     if $file == "" or ($file | path exists) { return $file }
     let parts = ($file | path split)
     let at = ($parts | window 2 | enumerate | where {|w| $w.item == ["game" "fps"] } | get -o 0.index)
-    if $at == null { return $file }
-    $parts | first $at | append ["kit" "fierce"] | append ($parts | skip ($at + 2)) | path join
+    let fierce = (if $at == null { $parts } else { $parts | first $at | append ["kit" "fierce"] | append ($parts | skip ($at + 2)) })
+    let data = (($fierce | length) >= 4 and ($fierce | last 4 | first 3) == ["kit" "fierce" "test"] and (($fierce | last) =~ '^(route|table)_.+\.nuon$'))
+    if $at == null and not $data { return $file }
+    if not $data { return ($fierce | path join) }
+    $fierce | drop 2 | append ["nu" "nuon" ($fierce | last | split row "_" | first) ($fierce | last)] | path join
 }
 
 # The program directory an image was built from, by its home file or .target

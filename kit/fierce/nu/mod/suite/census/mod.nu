@@ -1,6 +1,6 @@
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../console)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../../tree)
 use std/assert
 use (path self ../../console) [GRAIN_DEFAULT SPAWN_POSE]
@@ -43,7 +43,7 @@ def census-holds [kernel: path, image: path, out: path, set: string, game: path]
     let faults = ($run.serial | lines | where {|l| $l starts-with "jab: " })
     assert ($faults | is-empty) $"no fault on the census run: ($faults)"
 
-    let holds = ($game | path join "test" "census_holds.nu")
+    let holds = ($game | path join "nu" "mod" "census")
     let serial = ($dir | path join "run" "serial.log")
     let command = ("use '" + $holds + "' [census-fixture-holds]; print (census-fixture-holds (open --raw '" + $serial + "' | decode) " + ($CENSUS_SHRUNK | into string) + " " + ($GFX_SLOTS | into string) + ")")
     let read = (^nu -c $command | complete)

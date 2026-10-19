@@ -3,7 +3,7 @@ use (path self ../../console)
 use (path self ../../frame)
 use (path self ../../gauge/measure)
 use (path self ../../picture)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../../gauge/stream)
 use std/assert
 use (path self ../../console) [CONSOLE_P GRAIN_DEFAULT SPAWN_POSE]

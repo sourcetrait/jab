@@ -1,6 +1,6 @@
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../picture)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../../tree)
 use std/assert
 use (path self ../../frame) [CRACKS FRAME LOAD]

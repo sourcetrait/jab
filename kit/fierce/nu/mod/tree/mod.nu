@@ -1,7 +1,7 @@
 use (path self ../../../../../nu/mod/target)
-use (path self ../../map.nu)
-use (path self ../../png.nu)
-use (path self ../../../test/tiles.nu) [builder-texel]
+use (path self ../map)
+use (path self ../png)
+use (path self ../tiles) [builder-texel]
 use std/assert
 
 # The halves sprite's material, the test's own texture
@@ -87,7 +87,7 @@ export def variant [source: record, name: string, dropped: list<string>, out: pa
     let copy = ($source | update name $name | update entities ($source.entities | where {|e| $e.class not-in $dropped }))
     let src = ($out | path join $"($name).nuon")
     $copy | to nuon | save --raw -f $src
-    let compiled = (^nu ($game | path join "nu" "map.nu") compile $src $out --content ($game | path join "content") | complete)
+    let compiled = (^nu ($game | path join "nu" "bin" "nuance" "map.nu") compile $src $out --content ($game | path join "content") | complete)
     if $compiled.exit_code != 0 { error make { msg: $"compiling ($name): ($compiled.stderr)" } }
     $out | path join $name
 }

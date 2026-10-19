@@ -1,4 +1,4 @@
-use (path self ../../../map.nu)
+use (path self ../../map)
 use (path self ../../console) [CONSOLE_P]
 use (path self ../../frame) [RECORD]
 

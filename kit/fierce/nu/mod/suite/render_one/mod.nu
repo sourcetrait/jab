@@ -1,9 +1,9 @@
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../console)
 use (path self ../../frame)
-use (path self ../../../map.nu)
+use (path self ../../map)
 use (path self ../../picture)
-use (path self ../../../../test/pose.nu)
+use (path self ../../pose)
 use (path self ../../tree)
 use std/assert
 use (path self ../../console) [CONSOLE_P RECEIPT_NONCE]
@@ -301,7 +301,7 @@ export def stair [context: record, records: record]: nothing -> record {
     let render_1_disk = $records."render_one launched".render_1_disk
     let render_1_source = $context.render_1.source
     let render_1_read = $records."render_one poses".render_1_read
-    let stair_run = (launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($game | path join "test" "table_stair.nuon") --disk $render_1_disk --serial "fps" --capture 8000ms --seconds 9)
+    let stair_run = (launch --kernel $kernel --image $image --out ($out | path join "stair") --set $set --sound --api --pad ($game | path join "nu" "nuon" "table" "table_stair.nuon") --disk $render_1_disk --serial "fps" --capture 8000ms --seconds 9)
     assert equal (open --raw $stair_run.qemu_log) "" "QEMU has no complaint about the guest on the stair"
     let stair_states = (picture records $stair_run.api | where kind == 1)
     assert (($stair_states | length) > 100) $"states through the stair: ($stair_states | length)"

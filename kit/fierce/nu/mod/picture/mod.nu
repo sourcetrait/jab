@@ -1,5 +1,5 @@
 use (path self ../../../../../nu/mod/capture)
-use (path self ../../map.nu)
+use (path self ../map)
 use std/assert
 use (path self ../frame) [RECORD]
 

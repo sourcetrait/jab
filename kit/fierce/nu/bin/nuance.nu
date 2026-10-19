@@ -1,5 +1,46 @@
 #!/usr/bin/env nu
-use ../mod/gauge
+# The game's commands' path, bound at parse time
+const GAME = path self ../mod/game
+# The gauge's aggregator's path, bound at parse time
+const GAUGE = path self ../mod/gauge
+# The asset trees' path, bound at parse time
+const TREES = path self ../mod/map/trees
+# The screen shot's path, bound at parse time
+const SHOT = path self ../mod/shot
+use $GAME
+use $GAUGE
+use $TREES
+use $SHOT
+
+# Every content asset rendered beside it by game render
+def "main render" [] {
+    game render
+}
+
+# Every map source compiled into the asset shard by trees
+def "main compile" [] {
+    trees
+}
+
+# A run's screen capture as a PNG to look at by shot
+def "main shot" [ppm: path, png: path, --step: int = 4] {
+    shot $ppm $png --step $step
+}
+
+# A map captured from placed poses on a debug build by game pose
+def "main pose" [map: string, poses: path, out: path, --set: string = "debug"] {
+    game pose $map $poses $out --set $set
+}
+
+# Seeded random players on the pad on a debug build by game smoke
+def "main smoke" [seeds: string = "1", seconds: int = 60] {
+    game smoke $seeds $seconds
+}
+
+# A debug build's map handed to robojab by game play
+def "main play" [target: string = "mcp", map: string = "render_0", seconds: int = 600] {
+    game play $target $map $seconds
+}
 
 # A route played and measured from the command line by gauge play route
 def "main gauge run" [--tree: string = "release", --kernel: string = "", --image: string = "", --route: string = "", --map: string = "", --runs: int = 3, --seeds: string = "[]", --cadence: int = 1, --workers: int = -1, --grain: int = 32, --host, --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]", --cpu, --sdl-probe, --trace] {
