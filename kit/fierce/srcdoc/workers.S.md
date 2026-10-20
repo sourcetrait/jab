@@ -200,6 +200,14 @@ entry check (round_joined) exits 15; a hold no release reaches in
 JOB_HOLD_US marks job_hold_expired and goes on, since a worker can print
 and end nothing, and the next boundary's entry exits 16 on it.
 
+On a SERVICE build the round record carries the snapshot's service word,
+SVC_WORD as the frame's snapshot left it, in ROUND_SERVICE, written before
+the publishes' fence; after the joins each worker's copy in JOB_SERVICE is
+held to it and a difference marks the frame's record SVC_TORN. The word never
+changes inside a drawing, the boundary and a start or stop being the game
+phase's, so the mark is a witness that the workers read the word from the
+packet, never one torn mid-render (SceneOwnership).
+
 ## raster_worker
 
 The fixed band is the worker's position among the round's harts, so the
@@ -208,7 +216,9 @@ band's rows end at the screen's last. JOB_HART is the kernel's a1. On a
 debug build the J frame's fault, keyed to the hart, loads SCRATCH_POISON's
 address before the band, its delay spins on rdtime before each band and
 claim (job_delay), and in fixed bands its hold waits for the join's
-release past its position (job_hold_wait).
+release past its position (job_hold_wait). On a SERVICE build it copies the
+round's ROUND_SERVICE into its mailbox's JOB_SERVICE before its bands, the
+completion's fence ordering it before hart 0's check.
 
 ## round_finish
 
@@ -383,7 +393,7 @@ build alone.
 
 ## round
 
-`ROUND_SIZE u8`: the round record, ROUND_* fields, hart 0's, published with the jobs.
+`ROUND_SIZE u8`: the round record, ROUND_* fields, hart 0's, published with the jobs; a SERVICE build's service word at ROUND_SERVICE.
 
 ## round_next
 

@@ -193,6 +193,14 @@ console_frame:
     sd t1, 0(t2)
     j 8f
 13:
+.ifdef SERVICE
+    li t1, 'V'
+    bne t0, t1, 158f
+    mv a0, s2
+    call service_command            # the service started or stopped at this read, its answer filled
+    j 8f
+158:
+.endif
 .ifdef DEBUG
     li t1, 'S'
     bne t0, t1, 14f
@@ -380,6 +388,11 @@ console_frame:
     sw t1, 4(t0)
     li t1, REPORT_SIZE
     jab.sys.api.write t0, t1
+.ifdef SERVICE
+    la t0, console_record
+    sd zero, CONSOLE_STATUS(t0)
+    sd zero, CONSOLE_GENERATION(t0) # a V's answer cleared for the next command's
+.endif
     ld ra, 24(sp)
     ld s2, 16(sp)
     addi sp, sp, 32

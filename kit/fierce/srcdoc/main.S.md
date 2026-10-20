@@ -314,6 +314,15 @@ after the flip hands a presented frame's snapshot to the ring
 (snapshot_present) before the state report, so the console's X reads the
 last SNAPSHOT_RING frames presented.
 
+A SERVICE build (service.S) runs the simulation boundary after the frame
+before's records and the frame's seconds, before the game's start: its
+service phase applies the ring's messages and paces the next quota, timed
+into the service record's SVC_APPLY_US, a phase of its own inside the
+critical path and no other phase's, since s9 takes the game's start after it.
+Once the game's phases end, the frame's snapshot, the count as the drawing is
+given it, also hands the game state's service word into the record's
+SVC_WORD, the word every round of the drawing carries (round_run).
+
 ## frame_records
 
 Built from frame_clock and the stats, which world_draw zeroes only when the
@@ -349,9 +358,12 @@ its eligibility tick, and its present ordinal, and the ordinal its first
 attempt found, the frame before's at this frame's start, since this frame's
 reset follows the records; and from schema 8 the final attempt's call, its
 start and end in ticks, 0 and 0 for a frame that made no attempt, which
-carries no call to bound. The eight records go in one write, the API's
-write being the one call besides the await that can wait, and its cost is
-the reporting's. On a debug build, while the console's J cancel stands
+carries no call to bound. A SERVICE build adds a ninth, the frame's service
+record copied whole from service_record, its kind, frame, and SERVICE_SCHEMA
+set over the copy: still the frame's, since the next boundary fills the
+record only after these records go out. The eight records, or nine, go in one
+write, the API's write being the one call besides the await that can wait,
+and its cost is the reporting's. On a debug build, while the console's J cancel stands
 (job_cancel), the frame's witness follows its records, REPORT_ROUNDS with
 the stats' rounds and cancelled rounds: a round whose workers finished
 before the cancel landed counts in the rounds and not the cancelled, and a

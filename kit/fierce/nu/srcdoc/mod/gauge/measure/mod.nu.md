@@ -353,13 +353,24 @@ the row's, and at schema 6 the harts record's masks. Without the clock
 records the clock's columns are null, the presentation's below schema 2
 or without its record, the packets' below schema 3 or without theirs,
 the workers' below schema 4, the pool's below schema 5 or without
-theirs, and the masks below schema 6 or without theirs.
+theirs, and the masks below schema 6 or without theirs. A capture holding
+service records, a SERVICE build's, gives every row the service columns,
+the phase, the slots applied and rejected, the age, the depth, the quotas
+skipped, and the flags, null for a frame without its record, and the time
+left unattributed is the critical path less the phases and the service
+phase, the service being a phase of its own (SceneOwnership); a capture
+holding none gives its rows no service columns.
 
 ## receiptless
 
 The receipt record's columns of a row below schema 7 or without its
 record, all null, the call's bounds among them, which a row below schema
 8 keeps null too.
+
+## serviceless
+
+The service record's columns of a row without its record on a capture
+that holds some, all null.
 
 ## hartsless
 
@@ -412,8 +423,9 @@ completion intervals apart, the unattributed time, the
 drawing's parts, the tile cache, the presentation, the packets, and the
 workers that drew them with their rounds' times, the fast frames, their
 critical path under `period_us`, with those among them that waited
-before their flip apart; the drawing's and the game's times alone
-without them.
+before their flip apart; with service columns the service phase's
+statistics, the slots applied in all, the greatest depth, and the quotas
+skipped; the drawing's and the game's times alone without them.
 
 ## greatest
 

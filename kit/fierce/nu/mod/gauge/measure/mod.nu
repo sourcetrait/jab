@@ -559,11 +559,15 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
             let bounded = ($at >= 8)
             { receipt_stamp: $rc.stamp, receipt_tick: $rc.tick, ordinal: $rc.ordinal, first_ordinal: $rc.first_ordinal, call_start: (if $bounded { $rc.call_start } else { null }), call_end: (if $bounded { $rc.call_end } else { null }) }
         })
+        let sv = ($s.services | get -o $st.frame)
+        let served = (if ($s.services | is-empty) { {} } else if $sv == null { serviceless } else {
+            { service_us: $sv.service_us, service_applied: $sv.applied, service_rejected: $sv.rejected, service_age_us: $sv.age_us, service_depth: $sv.depth, service_skipped: $sv.skipped, service_flags: $sv.flags }
+        })
         let base = {
             frame: $st.frame, leg: ($names | get $leg_at), entry: $entry, sector: $st.sector,
             x: $st.x, y: $st.y, z: $st.z, yaw: $st.yaw, pitch: $st.pitch, roll: $st.roll,
             draw_us: $st.draw_us, game_us: $st.game_us,
-        }
+        } | merge $served
         if $f == null or $d == null {
             $rows = ($rows | append ($base | merge (clockless) | merge $pool | merge $masks | merge $receipt))
         } else {
@@ -591,7 +595,7 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
                 flip_us: $f.flip_us, report_us: $f.report_us, await_us: $f.await_us, flip_done_us: $f.flip_done_us,
                 flip_status: $f.flip_status, completion_interval_us: $interval, acceptance_interval_us: null,
                 latency_us: ($f.flip_done_us - $f.start_us),
-                unattributed_us: ($f.critical_us - ($phases | each {|ph| $timed | get $ph } | math sum)),
+                unattributed_us: ($f.critical_us - ($phases | each {|ph| $timed | get $ph } | math sum) - ($served.service_us? | default 0)),
                 clear_us: $d.clear_us, portals_us: $d.portals_us, planes_us: $d.planes_us, walls_us: $d.walls_us,
                 sprites_us: $d.sprites_us, tiles_us: $d.tiles_us,
                 parts_unattributed_us: ($f.draw_us - ($parts | each {|pt| $drawn | get $pt } | math sum)),
@@ -609,6 +613,12 @@ def rows-of [s: record, legs: list<any>, last: int, schema: oneof<int, nothing>]
 # A row's receipt columns, all null, below schema 7 or without its record
 def receiptless []: nothing -> record {
     [receipt_stamp receipt_tick ordinal first_ordinal call_start call_end]
+    | reduce --fold {} {|column, acc| $acc | insert $column null }
+}
+
+# A row's service columns, all null, but on a SERVICE build's frame
+def serviceless []: nothing -> record {
+    [service_us service_applied service_rejected service_age_us service_depth service_skipped service_flags]
     | reduce --fold {} {|column, acc| $acc | insert $column null }
 }
 
@@ -747,7 +757,12 @@ def leg-summary [name: string, rows: list<any>, period_us: number]: nothing -> r
         slots_used_max: (greatest ($clocked | get slots_used)),
         ring_fill_max: (greatest ($clocked | get ring_fill)),
         memory_peak: (greatest ($clocked | get memory_peak)),
-    }
+    } | merge (if "service_us" in ($clocked | columns) { {
+        service: (stats ($clocked | get service_us)),
+        service_applied: (total ($clocked | get service_applied)),
+        service_depth_max: (greatest ($clocked | get service_depth)),
+        service_skipped: (greatest ($clocked | get service_skipped)),
+    } } else { {} })
 }
 
 # A list's greatest value with nulls dropped, null for none

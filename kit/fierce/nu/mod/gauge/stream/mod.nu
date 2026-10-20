@@ -47,6 +47,21 @@ const KIND_LOAD = 21
 # The load's bounds record kind, from schema 8: its calls' bounds and the origin
 const KIND_BOUNDS = 22
 
+# A SERVICE build's frame record kind: the boundary's application and the packet's word
+const KIND_SERVICE = 26
+
+# A SERVICE build's rejected message, written as its boundary rejects it
+const KIND_SERVICE_REJECT = 27
+
+# A SERVICE build's window closed: its counts and the producer's chains
+const KIND_SERVICE_END = 28
+
+# A SERVICE build's window closed: hart 0's chain, the gaps, the corrupted sequence
+const KIND_SERVICE_EVIDENCE = 29
+
+# The V frame's command byte as a console record carries it
+const CONSOLE_V = 86
+
 # A seed's command byte, R, as console records name it
 const CONSOLE_R = 82
 
@@ -132,8 +147,14 @@ def u32-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 4) 
 # A record's little-endian 64-bit word at a byte offset
 def u64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) | into int --endian little }
 
+# A record's little-endian signed 64-bit word at a byte offset, all ones -1
+def i64-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 8) | into int --endian little --signed }
+
+# A record's little-endian signed 32-bit word at a byte offset
+def i32-at [r: binary, at: int]: nothing -> int { $r | bytes at $at..<($at + 4) | into int --endian little --signed }
+
 # A capture's records read in order by kind through its first end marker
-export def main [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int, receipts: list<any>, loads: list<any>, bounds: list<any>, nonce_set: bool, late_nonce: bool> {
+export def main [api: binary]: nothing -> record<states: list<any>, events: list<any>, seeded: bool, late_seed: bool, cadence_set: bool, late_cadence: bool, workers_set: bool, late_workers: bool, frames: list<any>, draws: list<any>, presents: list<any>, packets: list<any>, tiles: list<any>, storages: list<any>, configs: list<any>, harts: list<any>, rounds: list<any>, end: oneof<record<frame: int, schema: int>, nothing>, past: int, receipts: list<any>, loads: list<any>, bounds: list<any>, nonce_set: bool, late_nonce: bool, services: list<any>, service_rejects: list<any>, service_ends: list<any>, service_evidence: list<any>, service_answers: list<any>> {
     mut states = []
     mut events = []
     mut frames = []
@@ -157,6 +178,11 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
     mut bounds = []
     mut nonce_set = false
     mut late_nonce = false
+    mut services = []
+    mut service_rejects = []
+    mut service_ends = []
+    mut service_evidence = []
+    mut service_answers = []
     mut end: any = null
     mut past = 0
     for r in ($api | chunks $RECORD | where {|c| ($c | bytes length) == $RECORD }) {
@@ -177,6 +203,11 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
             }
             if $command == $CONSOLE_I {
                 if ($states | is-empty) { $nonce_set = true } else { $late_nonce = true }
+            }
+            if $command == $CONSOLE_V {
+                $service_answers = ($service_answers | append {
+                    states: ($states | length), status: (i32-at $r 8), harts: (u32-at $r 12), generation: (u32-at $r 16),
+                })
             }
         } else if $kind == $KIND_STATE {
             $states = ($states | append {
@@ -270,6 +301,31 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
                 origin: (u64-at $r 40), schema: (u32-at $r 60),
                 arrival_states: ($states | length), arrival_loads: ($loads | length),
             })
+        } else if $kind == $KIND_SERVICE {
+            let flags = (u32-at $r 56)
+            $services = ($services | append {
+                frame: (u32-at $r 4), applied: (u32-at $r 8), rejected: (u32-at $r 12), service_us: (u32-at $r 16),
+                age_us: (u32-at $r 20), offered: (u32-at $r 24), dropped: (u32-at $r 28), skipped: (u32-at $r 32),
+                depth: (u32-at $r 36), last: (i64-at $r 40), word: (i64-at $r 48), flags: ($flags mod 65536),
+                generation: ($flags // 65536), schema: (u32-at $r 60),
+            })
+        } else if $kind == $KIND_SERVICE_REJECT {
+            $service_rejects = ($service_rejects | append {
+                frame: (u32-at $r 4), sequence: (i64-at $r 8), generation: (u32-at $r 16), slot: (u32-at $r 20),
+            })
+        } else if $kind == $KIND_SERVICE_END {
+            let flags = (u32-at $r 28)
+            $service_ends = ($service_ends | append {
+                frame: (u32-at $r 4), offered: (u32-at $r 8), dropped: (u32-at $r 12), applied: (u32-at $r 16),
+                rejected: (u32-at $r 20), discarded: (u32-at $r 24), valid: (($flags mod 2) == 1),
+                forced: ((($flags // 2) mod 2) == 1), corrupted: (($flags // 256) mod 256), generation: ($flags // 65536),
+                last: (i64-at $r 32), published: (i64-at $r 40), expected: (i64-at $r 48), skipped: (u32-at $r 56),
+            })
+        } else if $kind == $KIND_SERVICE_EVIDENCE {
+            $service_evidence = ($service_evidence | append {
+                frame: (u32-at $r 4), applied: (i64-at $r 8), gaps: (i64-at $r 16), corrupted: (i64-at $r 24),
+                next: (i64-at $r 32), generation: (u32-at $r 56),
+            })
         } else if $kind == $KIND_END {
             $end = { frame: (u32-at $r 4), schema: (u32-at $r 60) }
         }
@@ -279,7 +335,8 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
         late_cadence: $late_cadence, workers_set: $workers_set, late_workers: $late_workers, frames: $frames,
         draws: $draws, presents: $presents, packets: $packets, tiles: $tiles, storages: $storages, configs: $configs,
         harts: $harts, rounds: $rounds, end: $end, past: $past, receipts: $receipts, loads: $loads, bounds: $bounds,
-        nonce_set: $nonce_set, late_nonce: $late_nonce,
+        nonce_set: $nonce_set, late_nonce: $late_nonce, services: $services, service_rejects: $service_rejects,
+        service_ends: $service_ends, service_evidence: $service_evidence, service_answers: $service_answers,
     }
 }
 

@@ -137,6 +137,15 @@ microseconds, and a boundary's work in texels under every mode, the
 lift's among them (`--quota`), each 0 for the build's own. A change of
 the slots forgets the pool too.
 
+## service
+
+The console's V frame, a SERVICE build's (SceneOwnership): byte 4 set
+starts the service, clear stops it; byte 5 LOCKSTEP, a debug build's; the
+total messages and the quota frames as words from byte 8, frames 0 for the
+total every frame unbounded; the corrupted sequence plus one as a 64-bit
+word from byte 16, 0 for none, and the hold's microseconds before each
+message as a word from byte 24, both a debug build's knobs.
+
 ## stall
 
 The console's S frame, a debug build's alone: byte 4 the standing stall

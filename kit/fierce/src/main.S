@@ -174,6 +174,9 @@ _start:
     call load_report
 .endif
     call workers_start              # the raster's workers, asleep until a round
+.ifdef SERVICE
+    call service_init               # no message applied, no service running
+.endif
 .ifdef CENSUS
     call census_init                # the census's directory and the contexts' slots
 .endif
@@ -225,6 +228,9 @@ frame:
     fmin.s fa0, fa0, ft0
     la t0, frame_seconds
     fsw fa0, 0(t0)
+.ifdef SERVICE
+    call service_frame              # the simulation boundary: messages applied, the next quota paced
+.endif
     rdtime s9
     call camera_look
     call console_read
@@ -243,6 +249,12 @@ frame:
     la t1, frame_clock
     sd s9, CLOCK_SIMULATION(t1)     # the simulation's time, camera_look's start
     sd s8, CLOCK_SNAPSHOT(t1)       # the frame whose simulation the drawing is given
+.ifdef SERVICE
+    la t0, service_word
+    ld t2, 0(t0)
+    la t0, service_record
+    sd t2, SVC_WORD(t0)             # the snapshot's service word, the packet's
+.endif
 .ifdef SNAPSHOTS
     mv a0, s8
     call snapshot_begin             # the frame's own snapshot opened
@@ -779,6 +791,24 @@ frame_records:
     sd zero, RECEIPT_CALL_END(t1)
 5:
     sw zero, 56(t1)                 # zeros to the schema
+.ifdef SERVICE
+    addi t1, t1, REPORT_SIZE        # the service record, the frame's boundary and its packet
+    la t2, service_record
+    li t3, 0
+6:
+    add t4, t2, t3
+    ld t4, 0(t4)
+    add a2, t1, t3
+    sd t4, 0(a2)
+    addi t3, t3, 8
+    li t4, REPORT_SIZE
+    bltu t3, t4, 6b
+    li t2, REPORT_SERVICE
+    sw t2, REPORT_KIND(t1)
+    sw t5, REPORT_FRAME_NUMBER(t1)
+    li t2, SERVICE_SCHEMA
+    sw t2, REPORT_SCHEMA(t1)
+.endif
     la t0, clock_records
     li t1, (REPORT_SIZE * REPORT_FRAME_RECORDS)
     jab.sys.api.write t0, t1
@@ -1907,3 +1937,6 @@ k_dt_max:
 .include "src/workers.S"
 .include "src/census.S"
 .include "src/snapshot.S"
+.ifdef SERVICE
+.include "src/service.S"
+.endif

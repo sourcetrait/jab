@@ -68,7 +68,9 @@ file at parse time.
 ## main
 
 The suite in the order its cases are listed: on a CENSUS build the census's
-fixtures alone and on a HANDOFF build the handoff's, each printing `fps: ok`;
+fixtures alone, on a HANDOFF build the handoff's, and on a SERVICE build the
+service's (service holds, with the context) and its summary line, each
+printing `fps: ok`;
 on any other the release's checks, then the context, `{kernel, image, out,
 set, assets, game, trees, render_1: {source, tree}}`, then every case with
 the context and the records of the cases it reads, kept by case name in one

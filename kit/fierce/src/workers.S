@@ -564,6 +564,11 @@ round_run:
     sw t2, ROUND_BANDS(s0)
     la t0, round_next
     sw zero, 0(t0)                  # the claims, before the publishes' fence
+.ifdef SERVICE
+    la t0, service_record
+    ld t1, SVC_WORD(t0)
+    sd t1, ROUND_SERVICE(s0)        # the snapshot's service word, every worker's to read
+.endif
 .ifdef DEBUG
     la t0, job_delay_worker
     lbu t1, 0(t0)
@@ -710,6 +715,16 @@ round_run:
     li t0, 1
     sd t0, 24(sp)
 74:
+.ifdef SERVICE
+    ld t0, JOB_SERVICE(s6)
+    ld t1, ROUND_SERVICE(s0)
+    beq t0, t1, 76f
+    la t0, service_record
+    lwu t1, SVC_FLAGS(t0)
+    ori t1, t1, SVC_TORN
+    sw t1, SVC_FLAGS(t0)            # a worker read another word than the packet carried
+76:
+.endif
     addi t0, s3, -1
     slli t0, t0, CTX_SHIFT
     la tp, worker_contexts
@@ -813,6 +828,10 @@ raster_worker:
 2:
 .endif
     lwu s5, ROUND_FLAGS(s4)         # the clear
+.ifdef SERVICE
+    ld t0, ROUND_SERVICE(s4)
+    sd t0, JOB_SERVICE(s0)          # the service word as the packet gave it, the witness
+.endif
     lwu s8, ROUND_GRAIN(s4)
     li s6, 0                        # its bands
     li s7, JAB_JOB_OK

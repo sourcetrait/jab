@@ -10,3 +10,6 @@ specs = [ '1ka1', '1kb1' ]
 
 [reserved]
 gfx_harts = 2
+
+[feature.service]
+io_harts = 1

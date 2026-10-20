@@ -33,6 +33,12 @@ export def main [--kernel: path, --image: path, --out: path, --set: string = "",
         print "fps: ok"
         return
     }
+    if ("SERVICE" in ($set | split row ",")) {
+        let held = (service holds (context $base) {})
+        print $"fps: the service: the ring's ($held.order.stores) index stores and ($held.order.loads) loads fenced; ($held.loads | columns | each {|n| let l = ($held.loads | get $n); $'($n) ($l.end.applied) applied and ($l.end.dropped) dropped of ($l.end.offered) over ($l.boundaries) boundaries' } | str join '; '); sequence ($held.corrupt.rejected) rejected at frame ($held.corrupt.frame); stopped mid-quota at ($held.cancel.offered) offered, ($held.cancel.skipped) quotas skipped; forced with ($held.forced.discarded) discarded; refused on three harts through ($held.refusal.frames) frames"
+        print "fps: ok"
+        return
+    }
     mut results = {}
     $results = ($results | insert "load release" (load release $base {}))
     let ctx = (context $base)

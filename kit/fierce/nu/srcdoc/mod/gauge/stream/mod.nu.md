@@ -66,9 +66,19 @@ title's and the cleared screen's call start and end in ticks and the
 origin, with the state and load records before it; an I's answer before
 the first state sets `nonce_set`, a later one
 `late_nonce`. A state carries its pose, the eye's x, y, and z and the
-yaw, pitch, and roll in degrees. What follows the marker is outside the
-measurement: its state records are counted as `past` and nothing else in
-it is read.
+yaw, pitch, and roll in degrees. A SERVICE build's records, outside the
+clock kinds and their schema, so no completeness counts them
+(SceneOwnership): the frame's service record, kind 26, as `services`, its
+counts, phase, age, depth, the last applied sequence and the packet's word
+as signed words, all ones -1, and its flags with the generation split off;
+a rejected message, kind 27, as `service_rejects`; a closed window's two,
+kinds 28 and 29, as `service_ends`, its counts, valid and forced, the
+corrupted count, generation, last sequence, chains, and skipped quotas, and
+`service_evidence`, hart 0's chain, the gaps, the corrupted sequence, and
+the next sequence; and each V's answer as `service_answers`, the states
+before it, its status, the service's harts, and the generation. What
+follows the marker is outside the measurement: its state records are
+counted as `past` and nothing else in it is read.
 
 ## schema-of
 

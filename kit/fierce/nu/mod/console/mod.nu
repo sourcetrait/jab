@@ -116,6 +116,15 @@ export def pool [--modes: int = 0, --trace, --cold, --slots: int = 0, --guarante
     [("O" | into binary), 0x[00 00 00], ($modes | into binary | bytes at 0..<1), (do $flag $trace), (do $flag $cold), 0x[00], (do $word $slots), (do $word $guarantee), (do $word $ring), (do $word $merge_us), (do $word $quota), (0..<36 | each {|i| 0x[00] } | bytes collect)] | bytes collect
 }
 
+# The V frame, a SERVICE build's: the service started with its load, or stopped
+export def service [start: bool, --total: int = 0, --frames: int = 0, --lockstep, --corrupt: int = -1, --delay-us: int = 0]: nothing -> binary {
+    [
+        ("V" | into binary) 0x[00 00 00]
+        (if $start { 0x[01] } else { 0x[00] }) (if $lockstep { 0x[01] } else { 0x[00] }) 0x[00 00]
+        (word le $total 4) (word le $frames 4) (word le ($corrupt + 1) 8) (word le $delay_us 4) (word zeros 36)
+    ] | bytes collect
+}
+
 # The S frame, a debug build's: stalls, a forced flip, and a consume spin
 export def stall [on: bool, standing: int, once: int, forced: bool, spin: int]: nothing -> binary {
     [

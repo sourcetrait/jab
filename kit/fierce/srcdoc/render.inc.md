@@ -1826,7 +1826,7 @@ sprite_draw drew it, and its row.
 
 ## .set REPORT_FRAME_RECORDS
 
-`u32`: the clock records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, harts, and receipt records, 512 bytes.
+`u32`: the records a frame sends in one write, the frame, draw, presentation, packet, tile, storage, harts, and receipt records, 512 bytes; a SERVICE build's ninth its service record, 576.
 
 ## .set REPORT_SCHEMA_VERSION
 
@@ -2981,6 +2981,220 @@ screen shows must still be held when X is read.
 
 The records one snapshot writes at most: its span records, an actor each,
 and its end.
+
+## .set REPORT_SERVICE
+
+`u32`: a SERVICE build's frame record, the ninth of the frame's write
+(SceneOwnership): the boundary's messages applied and rejected, the service
+phase's microseconds, the oldest applied message's age, the producer's
+offered and dropped and the quotas skipped so far, the ring's depth after
+applying, the last applied sequence, the packet's service word, and the
+flags with the window's generation, at the SVC_ offsets.
+
+## .set REPORT_SERVICE_REJECT
+
+`u32`: a message the boundary rejected for its checksum, written as it is
+rejected: its sequence, generation, and slot at the REJECT_ offsets.
+
+## .set REPORT_SERVICE_END
+
+`u32`: a window closed by its stop: the offered, dropped, applied, rejected,
+and discarded counts, the flags, the last offered sequence, the producer's
+published and expected chains, and the quotas skipped, at the END_ offsets;
+a forced stop's last sequence all ones and its chains 0.
+
+## .set REPORT_SERVICE_EVIDENCE
+
+`u32`: a closed window's second record: hart 0's applied chain, the
+sequences' gaps with the trailing one to the last offered on a valid handoff,
+the producer's corrupted sequence, all ones for none, the next sequence after
+the last applied, and the generation, at the EVIDENCE_ offsets.
+
+## .set SERVICE_SCHEMA
+
+`u32`: the service records' layout, 1, at REPORT_SCHEMA in each, apart from
+the clock records' schema.
+
+## .set SVC_APPLIED
+## .set SVC_REJECTED
+## .set SVC_APPLY_US
+## .set SVC_AGE_US
+## .set SVC_OFFERED
+## .set SVC_DROPPED
+## .set SVC_SKIPPED
+## .set SVC_DEPTH
+
+`u32`: the frame record's counts, each a u32 at its offset: applied and
+rejected at the boundary, the service phase and the oldest applied message's
+age in microseconds, the producer's offered and dropped, the quotas skipped,
+and the ring's depth after applying.
+
+## .set SVC_LAST
+## .set SVC_WORD
+
+`u32`: the offsets of the last applied sequence and the packet's service
+word, each a u64, all ones for none.
+
+## .set SVC_FLAGS
+
+`u32`: the flags' offset, a u32: SVC_RUNNING, SVC_TORN, SVC_LOCKSTEP,
+SVC_STARTED, and SVC_STOPPED in its low half and the window's generation
+from SVC_GENERATION_SHIFT.
+
+## .set SVC_RUNNING
+## .set SVC_TORN
+## .set SVC_LOCKSTEP
+## .set SVC_STARTED
+## .set SVC_STOPPED
+## .set SVC_GENERATION_SHIFT
+
+`u32`: the flags' bits: a window running at the frame's end, a worker that
+read another service word than its round carried, LOCKSTEP in force, the
+service started or stopped in the frame, and the generation's shift.
+
+## .set REJECT_SEQUENCE
+## .set REJECT_GENERATION
+## .set REJECT_SLOT
+
+`u32`: the rejection's fields: the sequence a u64, the generation and the
+slot u32s.
+
+## .set END_OFFERED
+## .set END_DROPPED
+## .set END_APPLIED
+## .set END_REJECTED
+## .set END_DISCARDED
+## .set END_FLAGS
+## .set END_LAST
+## .set END_PUBLISHED
+## .set END_EXPECTED
+## .set END_SKIPPED
+
+`u32`: the end record's fields: five u32 counts, the flags, the last offered
+sequence and the two chains u64s, the quotas skipped a u32.
+
+## .set END_VALID
+## .set END_FORCED
+## .set END_CORRUPTED_SHIFT
+## .set END_GENERATION_SHIFT
+
+`u32`: the end flags: a valid handoff, a forced stop, the producer's
+corrupted count's shift, and the generation's.
+
+## .set EVIDENCE_APPLIED
+## .set EVIDENCE_GAPS
+## .set EVIDENCE_CORRUPTED
+## .set EVIDENCE_NEXT
+## .set EVIDENCE_GENERATION
+
+`u32`: the evidence record's fields: four u64s and the generation's u32.
+
+## .set MSG_SHIFT
+## .set MSG_BYTES
+## .set MSG_SLOTS
+## .set MSG_APPLY_MAX
+
+`u32`: a message's bytes, 64, and their shift; the ring's slots, 256, a power
+of two; the slots a boundary consumes at most, 32, applied or rejected
+(Astra's review 3, B6).
+
+## .set MSG_SEQUENCE
+## .set MSG_GENERATION
+## .set MSG_TIME
+## .set MSG_PAYLOAD
+## .set MSG_PAYLOAD_WORDS
+## .set MSG_CHECKSUM
+
+`u32`: a message's fields: its sequence, its window's generation, its
+production time, MSG_PAYLOAD_WORDS words of payload, and its checksum over
+the words before it, each a u64.
+
+## .set SERVICE_BASIS
+## .set SERVICE_PRIME
+## .set SERVICE_GOLDEN
+
+`u64`: FNV-1a's offset basis and prime, the checksums' and the chains' fold,
+and the golden ratio's word the payload multiplies.
+
+## .set SERVICE_NONE
+## .set SERVICE_ON
+
+`i64`: no sequence, all ones; and a window running, service_state's value.
+
+## .set SERVICE_QUOTA
+## .set SERVICE_JOB_OFFERED
+
+`u32`: the producer's mailbox's words: the quota in its arguments and the
+count it offered in its own words.
+
+## .set SERVICE_FORCED
+## .set SERVICE_RUNNING_ALREADY
+## .set SERVICE_NOT_RUNNING
+## .set SERVICE_NO_HART
+## .set SERVICE_START_REFUSED
+
+`i32`: the V's answers past 0 and the take's own refusals: a forced stop, a
+start while running, a stop with none running, a claim holding no hart, and
+the base the start's refusal code is added to.
+
+## .set LINE_INDEX
+## .set LINE_COUNT
+## .set LINE_LOSS
+
+`u32`: a line's words: the index, W or R; the count, offered or applied; and
+the loss, dropped or rejected.
+
+## .set RESULT_READY
+## .set RESULT_OFFERED
+## .set RESULT_DROPPED
+## .set RESULT_LAST
+## .set RESULT_PUBLISHED
+## .set RESULT_EXPECTED
+## .set RESULT_CORRUPTED
+## .set RESULT_CORRUPTED_COUNT
+## .set RESULT_SIZE
+
+`u32`: the producer's evidence block's u64 words and its size.
+
+## .set HEADER_GENERATION
+## .set HEADER_CORRUPT
+## .set HEADER_DELAY
+
+`u32`: the header's u64 words: the window's generation, a debug build's
+corrupted sequence, and its hold ticks.
+
+## .set SCHED_TOTAL
+## .set SCHED_FRAMES
+## .set SCHED_INDEX
+## .set SCHED_SIZE
+
+`u32`: the schedule's u64 words and its size.
+
+## .set V_MODE
+## .set V_FLAGS
+## .set V_TOTAL
+## .set V_FRAMES
+## .set V_CORRUPT
+## .set V_DELAY
+## .set V_LOCKSTEP
+
+`u32`: the V frame's fields: byte 4 set starting the service and clear
+stopping it, byte 5's LOCKSTEP bit, the total and its quota frames as u32s,
+the corrupted sequence plus one as a u64, 0 none, and the hold's
+microseconds as a u32.
+
+## .set CONSOLE_STATUS
+## .set CONSOLE_HARTS
+## .set CONSOLE_GENERATION
+
+`u32`: a V's answer's fields in the console record: the status an i32, the
+service's harts, and the window's generation.
+
+## .set ROUND_SERVICE
+## .set JOB_SERVICE
+
+`u32`: the round record's u64 service word, the packet's, and a raster
+worker's copy of it in its mailbox's own words, the witness.
 
 ## .macro owner_pixel
 
