@@ -27,6 +27,18 @@ fn outcome(answer: PipeResult<Answer>) -> (&'static str, String) {
     (answer.outcome, answer.why)
 }
 
+/// A running record under `00000000000000a1` whose caller and supervisor are gone.
+fn stale_record(home: &Path) {
+    let mut gone = std::process::Command::new("true").spawn().unwrap();
+    let pid = gone.id() as i64;
+    gone.wait().unwrap();
+    let stale = serde_json::json!({
+        "token": "00000000000000a1", "state": "running", "caller": { "pid": pid, "start": 1 },
+        "supervisor": { "pid": pid, "start": 1 }, "gate": null, "replaced": null, "utc": "then",
+    });
+    fs::write(home.join(OWNER), serde_json::to_vec(&stale).unwrap()).unwrap();
+}
+
 #[test]
 fn a_second_launch_is_refused_while_the_first_holds_the_lock() {
     let home = scratch("lockheld");
@@ -66,18 +78,38 @@ fn a_release_frees_the_lock_and_a_late_one_leaves_its_successor_whole() {
 #[test]
 fn a_stale_record_is_replaced_and_named() {
     let home = scratch("lockstale");
-    let mut gone = std::process::Command::new("true").spawn().unwrap();
-    let pid = gone.id() as i64;
-    gone.wait().unwrap();
-    let stale = serde_json::json!({
-        "token": "00000000000000a1", "state": "running", "caller": { "pid": pid, "start": 1 },
-        "supervisor": { "pid": pid, "start": 1 }, "gate": null, "replaced": null, "utc": "then",
-    });
-    fs::write(home.join(OWNER), serde_json::to_vec(&stale).unwrap()).unwrap();
+    stale_record(&home);
     let (taken, why) = outcome(lock_acquire(&home, "00000000000000b2", me()));
     assert_eq!(taken, "ok", "{why}");
     assert!(why.contains("stale record replaced"), "{why}");
     assert_eq!(owner(&home)["replaced"]["token"], "00000000000000a1");
+}
+
+#[test]
+fn two_callers_over_one_stale_record_take_it_in_turn() {
+    let home = scratch("lockstaletwo");
+    stale_record(&home);
+    let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let callers: Vec<_> = ["00000000000000b2", "00000000000000c3"]
+        .into_iter()
+        .map(|token| {
+            let (home, start) = (home.clone(), start.clone());
+            std::thread::spawn(move || {
+                start.wait();
+                let (answer, why) = outcome(lock_acquire(&home, token, me()));
+                (token, answer, why)
+            })
+        })
+        .collect();
+    let answers: Vec<_> = callers.into_iter().map(|caller| caller.join().unwrap()).collect();
+    let taken: Vec<_> = answers.iter().filter(|a| a.1 == "ok").collect();
+    let refused: Vec<_> = answers.iter().filter(|a| a.1 == "refused").collect();
+    assert_eq!((taken.len(), refused.len()), (1, 1), "{answers:?}");
+    assert!(taken[0].2.contains("stale record replaced"), "{answers:?}");
+    assert!(refused[0].2.contains(&format!("{} holds the lock", taken[0].0)), "the first's live record named: {answers:?}");
+    let record = owner(&home);
+    assert_eq!(record["token"], taken[0].0);
+    assert_eq!(record["replaced"]["token"], "00000000000000a1", "the stale record kept whole in it");
 }
 
 #[test]
