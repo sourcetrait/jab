@@ -1,18 +1,18 @@
-//! The binary's command line: the relay, the supervisor and its gate, the lock, and a group's end.
+//! The binary's command line: the relay, and the supervisor's modes.
 
 use crate::*;
 
-/// `jabpipe <name> <in-file> <out-file>`, or a mode: `supervise`, `gate`, `lock`, `group`.
+/// `jabpipe <name> <in-file> <out-file>`, or a mode: supervise, gate, lock, group.
 pub fn run() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     let rest = || args[1..].to_vec();
     match args.first().map(String::as_str) {
-        Some("supervise") => supervise::supervise(rest()),
+        Some("supervise") => supervise(rest()),
         #[cfg(unix)]
-        Some("gate") => gate::gate(rest()),
-        Some("lock") => lock::lock(rest()),
+        Some("gate") => gate(rest()),
+        Some("lock") => lock(rest()),
         #[cfg(unix)]
-        Some("group") => group::group(rest()),
+        Some("group") => group(rest()),
         _ => match relayed(args) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

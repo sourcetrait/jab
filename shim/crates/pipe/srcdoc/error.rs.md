@@ -10,3 +10,9 @@ none when the open refused outright.
 ### fn io
 
 ### fn exit_code
+
+### fn fmt
+
+### fn source
+
+## type PipeResult

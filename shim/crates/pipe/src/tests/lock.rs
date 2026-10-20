@@ -1,4 +1,3 @@
-use crate::lock::{Answer, LOCK, OWNER, acquire, release, set_state};
 use crate::*;
 use std::{fs, path::PathBuf};
 
@@ -31,8 +30,8 @@ fn outcome(answer: PipeResult<Answer>) -> (&'static str, String) {
 #[test]
 fn a_second_launch_is_refused_while_the_first_holds_the_lock() {
     let home = scratch("lockheld");
-    assert_eq!(outcome(acquire(&home, "00000000000000a1", me())).0, "ok");
-    let (refused, why) = outcome(acquire(&home, "00000000000000b2", me()));
+    assert_eq!(outcome(lock_acquire(&home, "00000000000000a1", me())).0, "ok");
+    let (refused, why) = outcome(lock_acquire(&home, "00000000000000b2", me()));
     assert_eq!(refused, "refused");
     assert!(why.contains("00000000000000a1 holds the lock"), "{why}");
     assert_eq!(owner(&home)["token"], "00000000000000a1", "the holder's record whole");
@@ -41,25 +40,25 @@ fn a_second_launch_is_refused_while_the_first_holds_the_lock() {
 #[test]
 fn a_state_is_written_only_under_the_records_token() {
     let home = scratch("lockstate");
-    acquire(&home, "00000000000000a1", me()).unwrap();
+    lock_acquire(&home, "00000000000000a1", me()).unwrap();
     let readiness = home.join("readiness.json");
     fs::write(&readiness, br#"{"token":"00000000000000a1","supervisor":{"pid":10,"start":11},"gate":{"pid":12,"group":12,"start":13}}"#).unwrap();
-    assert_eq!(outcome(set_state(&home, "00000000000000a1", "running", Some(&readiness))).0, "ok");
+    assert_eq!(outcome(lock_set_state(&home, "00000000000000a1", "running", Some(&readiness))).0, "ok");
     let record = owner(&home);
     assert_eq!(record["state"], "running");
     assert_eq!(record["gate"]["group"], 12);
-    assert_eq!(outcome(set_state(&home, "00000000000000b2", "cleanup", None)).0, "refused");
+    assert_eq!(outcome(lock_set_state(&home, "00000000000000b2", "cleanup", None)).0, "refused");
     assert_eq!(owner(&home)["state"], "running", "nothing changed by another token");
 }
 
 #[test]
 fn a_release_frees_the_lock_and_a_late_one_leaves_its_successor_whole() {
     let home = scratch("lockrelease");
-    acquire(&home, "00000000000000a1", me()).unwrap();
-    assert_eq!(outcome(release(&home, "00000000000000a1")).0, "ok");
+    lock_acquire(&home, "00000000000000a1", me()).unwrap();
+    assert_eq!(outcome(lock_release(&home, "00000000000000a1")).0, "ok");
     assert_eq!(owner(&home)["state"], "released");
-    assert_eq!(outcome(acquire(&home, "00000000000000b2", me())).0, "ok", "a released record is free");
-    assert_eq!(outcome(release(&home, "00000000000000a1")).0, "late");
+    assert_eq!(outcome(lock_acquire(&home, "00000000000000b2", me())).0, "ok", "a released record is free");
+    assert_eq!(outcome(lock_release(&home, "00000000000000a1")).0, "late");
     assert_eq!(owner(&home)["token"], "00000000000000b2", "the successor's record whole");
     assert_eq!(owner(&home)["state"], "starting");
 }
@@ -75,7 +74,7 @@ fn a_stale_record_is_replaced_and_named() {
         "supervisor": { "pid": pid, "start": 1 }, "gate": null, "replaced": null, "utc": "then",
     });
     fs::write(home.join(OWNER), serde_json::to_vec(&stale).unwrap()).unwrap();
-    let (taken, why) = outcome(acquire(&home, "00000000000000b2", me()));
+    let (taken, why) = outcome(lock_acquire(&home, "00000000000000b2", me()));
     assert_eq!(taken, "ok", "{why}");
     assert!(why.contains("stale record replaced"), "{why}");
     assert_eq!(owner(&home)["replaced"]["token"], "00000000000000a1");
@@ -85,7 +84,7 @@ fn a_stale_record_is_replaced_and_named() {
 fn a_record_the_tools_cannot_read_refuses_the_launch() {
     let home = scratch("lockunreadable");
     fs::write(home.join(OWNER), b"{ not json").unwrap();
-    let (refused, why) = outcome(acquire(&home, "00000000000000a1", me()));
+    let (refused, why) = outcome(lock_acquire(&home, "00000000000000a1", me()));
     assert_eq!(refused, "refused");
     assert!(why.contains("cannot be settled"), "{why}");
     assert_eq!(fs::read(home.join(OWNER)).unwrap(), b"{ not json", "left as it was");
@@ -97,9 +96,22 @@ fn a_lock_held_past_its_second_answers_busy() {
     let held = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(home.join(LOCK)).unwrap();
     held.lock().unwrap();
     let started = Instant::now();
-    let (busy, _) = outcome(acquire(&home, "00000000000000a1", me()));
+    let (busy, _) = outcome(lock_acquire(&home, "00000000000000a1", me()));
     assert_eq!(busy, "busy");
     assert!(started.elapsed() >= Duration::from_secs(1) && started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
     assert!(!home.join(OWNER).exists(), "nothing written");
     held.unlock().unwrap();
+}
+
+#[test]
+fn a_release_held_past_its_second_answers_busy_and_leaves_the_record() {
+    let home = scratch("lockreleasebusy");
+    lock_acquire(&home, "00000000000000a1", me()).unwrap();
+    let held = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(home.join(LOCK)).unwrap();
+    held.lock().unwrap();
+    let (busy, _) = outcome(lock_release(&home, "00000000000000a1"));
+    assert_eq!(busy, "busy");
+    assert_eq!(owner(&home)["state"], "starting", "the record left for the recovery's test");
+    held.unlock().unwrap();
+    assert_eq!(outcome(lock_release(&home, "00000000000000a1")).0, "ok");
 }

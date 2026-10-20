@@ -1,8 +1,6 @@
 //! The gate: a supervised launch's child before its go, inert until the word.
 
 use crate::*;
-use std::os::unix::io::{FromRawFd, RawFd};
-use std::os::unix::process::CommandExt;
 
 /// The descriptor the gate reads its word on.
 pub(crate) const CONTROL_FD: RawFd = 3;
@@ -16,7 +14,7 @@ pub(crate) const ABANDONED: u8 = 125;
 /// A gate's exit when its command could not be run.
 pub(crate) const UNRUN: u8 = 127;
 
-/// `jabpipe gate <fd> -- <command...>`: the go read on `fd`, then the command in its place.
+/// `jabpipe gate <fd> -- <command...>`: the go read, then the command exec'd.
 pub(crate) fn gate(args: Vec<String>) -> ExitCode {
     let (fd, command) = match gated(args) {
         Ok(parsed) => parsed,
@@ -29,7 +27,7 @@ pub(crate) fn gate(args: Vec<String>) -> ExitCode {
         return ExitCode::from(ABANDONED);
     }
     defaults();
-    let error = std::process::Command::new(&command[0]).args(&command[1..]).exec();
+    let error = Command::new(&command[0]).args(&command[1..]).exec();
     eprintln!("jabpipe gate: {}: {error}", command[0]);
     ExitCode::from(UNRUN)
 }
@@ -63,14 +61,14 @@ fn released(fd: RawFd) -> bool {
     }
 }
 
-/// Every disposition the supervisor or the runtime chose put back to its default, the mask cleared.
+/// Every signal disposition back to its default, the signal mask cleared.
 fn defaults() {
     for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGPIPE, libc::SIGTERM, libc::SIGHUP, libc::SIGTSTP, libc::SIGTTIN, libc::SIGTTOU] {
         unsafe { libc::signal(signal, libc::SIG_DFL) };
     }
     unsafe {
-        let mut none = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        let mut none = MaybeUninit::<libc::sigset_t>::uninit();
         libc::sigemptyset(none.as_mut_ptr());
-        libc::sigprocmask(libc::SIG_SETMASK, none.as_ptr(), std::ptr::null_mut());
+        libc::sigprocmask(libc::SIG_SETMASK, none.as_ptr(), ptr::null_mut());
     }
 }

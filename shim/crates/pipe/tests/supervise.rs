@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
@@ -657,4 +658,53 @@ fn the_child_writes_over_no_file_a_run_before_left() {
     assert!(stderr.contains("qemu.stdout, the child's output, made fresh"), "{stderr}");
     assert_eq!(fs::read(dir.join("qemu.stdout")).unwrap(), b"a run before");
     let _ = std::io::stdout().flush();
+}
+
+#[test]
+fn the_bounds_kill_after_ends_a_child_that_refuses_term() {
+    let dir = scratch("killafter");
+    let token = token();
+    let pid = dir.join("qemu.pid");
+    let script = "trap '' TERM; echo $$ > \"$0\"; while :; do sleep 0.1; done";
+    let command = ["timeout", "--signal=TERM", "--kill-after=1s", "1", "sh", "-c", script, pid.to_str().unwrap()];
+    let launch = Launch::start(&dir, schedule(&dir, &token, &command));
+    launch.authorized();
+    let (status, stderr, receipt, took) = launch.finish(Duration::from_secs(10));
+    assert_eq!(status.code(), Some(137), "the bound's KILL took its group, the bound with it: {stderr}");
+    assert_eq!(receipt["signal"], 9);
+    assert!(receipt["failure"].is_null(), "{}", receipt["failure"]);
+    assert!(took >= Duration::from_secs(2) && took < Duration::from_secs(5), "the bound, then its kill-after: {took:?}");
+    let qemu: i64 = fs::read_to_string(&pid).unwrap().trim().parse().unwrap();
+    assert!(!running(qemu), "the stand-in is gone");
+}
+
+/// A lock call of the binary on a lock home of the test's own, its one answer.
+fn lock_call(home: &Path, words: &[&str]) -> Value {
+    let out = Command::new(BIN).arg("lock").args(words).env("JAB_LAUNCH_LOCK", home).output().expect("the lock call");
+    serde_json::from_slice(&out.stdout).expect("the lock's answer")
+}
+
+#[test]
+fn a_cleanup_left_incomplete_refuses_a_launch_until_its_group_is_empty() {
+    let home = scratch("lockcleanup");
+    let mut gone = Command::new("true").spawn().expect("a process gone");
+    let dead = gone.id();
+    gone.wait().unwrap();
+    let mut member = Command::new("sleep").arg("31.5").process_group(0).spawn().expect("the group's member");
+    let group = member.id();
+    let record = json!({
+        "token": "00000000000000a1", "state": "cleanup",
+        "caller": { "pid": dead, "start": 1 }, "supervisor": { "pid": dead, "start": 1 },
+        "gate": { "pid": group, "group": group, "start": 1 }, "replaced": null, "utc": "then",
+    });
+    fs::write(home.join("owner.nuon"), serde_json::to_vec(&record).unwrap()).unwrap();
+    let me = std::process::id().to_string();
+    let refused = lock_call(&home, &["acquire", "--token", "00000000000000b2", "--caller", &me]);
+    assert_eq!(refused["outcome"], "refused", "{refused}");
+    assert!(refused["why"].as_str().unwrap().contains("00000000000000a1 holds the lock, its state cleanup"), "{refused}");
+    member.kill().unwrap();
+    member.wait().unwrap();
+    let taken = lock_call(&home, &["acquire", "--token", "00000000000000b2", "--caller", &me]);
+    assert_eq!(taken["outcome"], "ok", "{taken}");
+    assert_eq!(taken["record"]["replaced"]["token"], "00000000000000a1", "the cleanup's record replaced and named");
 }

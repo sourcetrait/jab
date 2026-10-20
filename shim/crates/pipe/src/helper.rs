@@ -1,8 +1,6 @@
-//! A launch's helpers: run beside its child from the go, each watched and ended with the run.
+//! A launch's helpers, run beside its child from the go and ended with the run.
 
 use crate::*;
-use crate::receipt::HelperEnd;
-use crate::schedule::Helper;
 
 /// How long a helper has to end on its own once the run has.
 pub(crate) const HELPER_END: Duration = Duration::from_secs(1);
@@ -21,7 +19,7 @@ pub(crate) enum Standing {
 pub(crate) struct Running {
     name: String,
     stderr: String,
-    process: Option<std::process::Child>,
+    process: Option<process::Child>,
     started: Option<Instant>,
     ended: Option<Instant>,
     status: Option<i32>,
@@ -30,7 +28,7 @@ pub(crate) struct Running {
 }
 
 impl Running {
-    /// The helper started, its stderr a fresh file; one that cannot start stands never started.
+    /// The helper started, its stderr fresh; one that cannot start stands `Never`.
     pub(crate) fn start(helper: &Helper) -> Running {
         let mut running = Running {
             name: helper.name.clone(),
@@ -43,12 +41,7 @@ impl Running {
             refused: None,
         };
         let spawned = OpenOptions::new().write(true).create_new(true).open(&helper.stderr).and_then(|said| {
-            std::process::Command::new(&helper.command[0])
-                .args(&helper.command[1..])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(said)
-                .spawn()
+            Command::new(&helper.command[0]).args(&helper.command[1..]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(said).spawn()
         });
         match spawned {
             Ok(process) => {
@@ -82,7 +75,7 @@ impl Running {
         if let Some(refused) = &self.refused {
             return refused.clone();
         }
-        let text = std::fs::read(&self.stderr).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+        let text = fs::read(&self.stderr).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
         lines[lines.len().saturating_sub(2)..].join("; ")
     }

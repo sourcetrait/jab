@@ -1,7 +1,6 @@
-//! A caller's forced path: a run's group ended by the record it kept, its supervisor gone silent.
+//! A caller's forced path: a run's group ended by the record it kept.
 
 use crate::*;
-use crate::table::{self, State};
 
 /// How long the group has between TERM and KILL.
 const TERM_GRACE: Duration = Duration::from_secs(1);
@@ -12,10 +11,10 @@ const KILL_BOUND: Duration = Duration::from_secs(2);
 /// How often the group is read while it empties.
 const LOOK: Duration = Duration::from_millis(10);
 
-/// `jabpipe group terminate --group <g> --leader <pid> --start <start>`, one outcome as JSON.
+/// `jabpipe group terminate --group --leader --start`, one answer as JSON.
 pub(crate) fn group(args: Vec<String>) -> ExitCode {
     let (outcome, why, running) = match parsed(args) {
-        Ok((group, leader, start)) => terminate(group, leader, start),
+        Ok((group, leader, start)) => group_terminate(group, leader, start),
         Err(error) => ("error", error.to_string(), Vec::new()),
     };
     let answer = serde_json::json!({ "outcome": outcome, "why": why, "running": running });
@@ -45,17 +44,17 @@ fn parsed(args: Vec<String>) -> PipeResult<(i64, i64, u64)> {
     }
 }
 
-/// The group TERMed, a second's grace, KILLed, and read empty; a group the record does not name left alone.
-pub(crate) fn terminate(group: i64, leader: i64, start: u64) -> (&'static str, String, Vec<i64>) {
-    if table::state(leader) == State::Gone || table::start(leader) != Some(start) || table::group_of(leader) != Some(group) {
-        let running = table::running_members(group).unwrap_or_default();
+/// The group TERMed, KILLed, and read empty; one the record does not name refused.
+pub(crate) fn group_terminate(group: i64, leader: i64, start: u64) -> (&'static str, String, Vec<i64>) {
+    if process_state(leader) == State::Gone || process_start(leader) != Some(start) || group_of(leader) != Some(group) {
+        let running = running_members(group).unwrap_or_default();
         return ("refused", format!("the group {group} is not the record's: its leader {leader} is gone or another process"), running);
     }
     for (signal, bound) in [(libc::SIGTERM, TERM_GRACE), (libc::SIGKILL, KILL_BOUND)] {
         unsafe { libc::kill(-(group as libc::pid_t), signal) };
         let sent = Instant::now();
         loop {
-            match table::running_members(group) {
+            match running_members(group) {
                 Ok(running) if running.is_empty() => return ("ok", format!("the group {group} holds no running member"), running),
                 Ok(running) if sent.elapsed() >= bound && signal == libc::SIGKILL => {
                     return ("left", format!("the group {group} still runs {} past its KILL", running.len()), running);
@@ -66,5 +65,5 @@ pub(crate) fn terminate(group: i64, leader: i64, start: u64) -> (&'static str, S
             }
         }
     }
-    ("left", format!("the group {group} still runs"), table::running_members(group).unwrap_or_default())
+    ("left", format!("the group {group} still runs"), running_members(group).unwrap_or_default())
 }

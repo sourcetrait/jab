@@ -21,7 +21,7 @@ and fails.
 
 ## fn pipe_path
 
-## fn waiting
+## fn pipe_waiting
 
 NotFound is a pipe QEMU has not made yet, ERROR_PIPE_BUSY one held. Any
 other failure, a refusal of access among them, ends the tries at once.

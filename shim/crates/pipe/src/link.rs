@@ -1,10 +1,8 @@
-//! A supervised launch's required relays, each its pipe's one client, run in-process.
+//! A launch's required relays, each its pipe's one client, run in-process.
 
 use crate::*;
-use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::sync::mpsc;
 
-/// How a relay ended: its pipe closed, its connection or I/O failed, or stopped by the supervisor.
+/// How a relay ended: its pipe closed, a failure, or stopped by the supervisor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Ending {
     Clean,
@@ -12,7 +10,7 @@ pub(crate) enum Ending {
     Stopped,
 }
 
-/// What a relay's task tells the supervisor: its connection and its end, each when it happened.
+/// What a relay's task saw: its connection and its end, each when it came.
 #[derive(Debug, Default)]
 pub(crate) struct Seen {
     pub connected: Option<Instant>,
@@ -22,7 +20,7 @@ pub(crate) struct Seen {
 /// A carry's end and when: written whole, or the error that stopped it.
 pub(crate) type Finished = Option<(Instant, Result<(), String>)>;
 
-/// A payload handed to a relay's writer, the bytes its pipe accepted and its end shared.
+/// A payload handed to a relay's writer, its accepted bytes and end shared.
 #[derive(Clone)]
 pub(crate) struct Carry {
     bytes: Arc<[u8]>,
@@ -45,7 +43,7 @@ impl Carry {
         self.result.lock().map(|r| r.clone()).unwrap_or(None)
     }
 
-    /// The payload written whole by an explicit loop of writes, each one's bytes counted.
+    /// The payload written whole by a loop of writes, each one's bytes counted.
     async fn write<W: tokio::io::AsyncWrite + Unpin>(&self, to: &mut W) -> io::Result<()> {
         let mut at = self.accepted() as usize;
         while at < self.bytes.len() {
@@ -69,7 +67,7 @@ impl Carry {
     }
 }
 
-/// A carry in the writer's hands: ended by the pipe's end if the write never finished it.
+/// A carry in the writer's hands, failed if the relay ends before its write does.
 struct InHand(Carry);
 
 impl Drop for InHand {
@@ -78,17 +76,17 @@ impl Drop for InHand {
     }
 }
 
-/// A relay the supervisor runs: its endpoint, its pipe's name, what it saw, and its writer's queue.
+/// A relay the supervisor runs: its endpoint, pipe name, receipts, and queue.
 pub(crate) struct Link {
     pub endpoint: String,
     pub name: String,
     seen: Arc<Mutex<Seen>>,
-    queue: mpsc::UnboundedSender<Carry>,
+    queue: r::mpsc::UnboundedSender<Carry>,
     task: tokio::task::JoinHandle<()>,
 }
 
 impl Link {
-    /// A relay started on `runtime`: connected by `connector` before `deadline`, then relayed.
+    /// A relay started on `runtime`, connected by `deadline`, then relayed.
     pub(crate) fn start<C, S>(
         runtime: &tokio::runtime::Runtime,
         endpoint: &str,
@@ -103,7 +101,7 @@ impl Link {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
     {
         let seen = Arc::new(Mutex::new(Seen::default()));
-        let (queue, carries) = mpsc::unbounded_channel();
+        let (queue, carries) = r::mpsc::unbounded_channel();
         let task = runtime.spawn(serve(connector, seen.clone(), carries, inward, outward, deadline));
         Link { endpoint: endpoint.to_owned(), name: name.to_owned(), seen, queue, task }
     }
@@ -136,11 +134,11 @@ impl Link {
     }
 }
 
-/// A relay's whole life: the connection's tries, then both directions until the pipe ends.
+/// A relay's life: the connection's tries, then both ways until the pipe ends.
 async fn serve<C, S>(
     mut connector: C,
     seen: Arc<Mutex<Seen>>,
-    carries: mpsc::UnboundedReceiver<Carry>,
+    carries: r::mpsc::UnboundedReceiver<Carry>,
     inward: Option<PathBuf>,
     outward: PathBuf,
     deadline: Instant,
@@ -158,10 +156,10 @@ async fn serve<C, S>(
     let stream = loop {
         match connector() {
             Ok(stream) => break stream,
-            Err(error) if connect::waiting(&error) && Instant::now() < deadline => {
-                tokio::time::sleep(connect::CONNECT_RETRY).await;
+            Err(error) if pipe_waiting(&error) && Instant::now() < deadline => {
+                tokio::time::sleep(CONNECT_RETRY).await;
             }
-            Err(error) if connect::waiting(&error) => {
+            Err(error) if pipe_waiting(&error) => {
                 return ended(Ending::Failed(format!("no connection within its allowance: {error}")));
             }
             Err(error) => return ended(Ending::Failed(error.to_string())),
@@ -177,10 +175,10 @@ async fn serve<C, S>(
     ended(end);
 }
 
-/// One pipe relayed with its files and its queue until it ends, the drain biased as `relay` is.
+/// One pipe relayed with its files and its queue until it ends, `relay`'s shape.
 pub(crate) async fn relay_carrying<S>(
     stream: S,
-    carries: mpsc::UnboundedReceiver<Carry>,
+    carries: r::mpsc::UnboundedReceiver<Carry>,
     inward: Option<&Path>,
     outward: &Path,
     poll: Duration,
@@ -215,11 +213,11 @@ where
     }
 }
 
-/// The writing half: the in-file's appended bytes and each queued payload, one at a time, in order.
+/// The writing half: the in-file's bytes and each queued payload, in order.
 async fn write_side<W: tokio::io::AsyncWrite + Unpin>(
     to: &mut W,
     mut input: Option<(File, &Path)>,
-    mut carries: mpsc::UnboundedReceiver<Carry>,
+    mut carries: r::mpsc::UnboundedReceiver<Carry>,
     poll: Duration,
 ) -> PipeError {
     let mut buffer = vec![0u8; 4096];

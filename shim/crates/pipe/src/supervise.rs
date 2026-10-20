@@ -1,16 +1,8 @@
-//! The launch's supervisor: its child's owner, the startup's one decision, the timed actions, the end.
+//! The launch's supervisor: its child's owner from the spawn to the receipt.
 
 use crate::*;
-use crate::child::{self, Child, Ended, Signal};
-use crate::control::{self, AUTHORIZATION, CANCEL, OUTCOME, READINESS, RECEIPT};
-use crate::helper::{HELPER_END, Running, Standing};
-use crate::link::{Ending, Link};
-use crate::payload::{Payload, Step, since};
-use crate::receipt::{Authorization, Clock, Gate, Held, Outcome, Process, Readiness, Receipt, RelayEnd, Taken};
-use crate::schedule::{Mode, Schedule, ns};
-use crate::table::{self, State};
 
-/// The supervisor's exit for a startup that did not go, or a run its caller cancelled.
+/// The exit for a startup that did not go, or a run its caller cancelled.
 pub(crate) const ENDED_EARLY: u8 = 3;
 
 /// The supervisor's exit for a launch it aborted, the failure named on stderr.
@@ -22,7 +14,7 @@ const TICK: Duration = Duration::from_millis(10);
 /// How long a relay has to see its pipe end once the child has exited.
 const RELAY_END: Duration = Duration::from_secs(1);
 
-/// `jabpipe supervise --token <token> --schedule <file>`, run until the child is reaped.
+/// `jabpipe supervise --token <t> --schedule <file>`, run to the child's reap.
 pub(crate) fn supervise(args: Vec<String>) -> ExitCode {
     let started = Instant::now();
     match supervised(args, started) {
@@ -49,7 +41,7 @@ fn parsed(args: Vec<String>) -> PipeResult<(String, PathBuf)> {
     Ok((token.ok_or_else(usage)?, PathBuf::from(schedule.ok_or_else(usage)?)))
 }
 
-/// A test's pause at a named point, `JABPIPE_TEST_PAUSE=<point>:<ms>`, the supervisor unresponsive through it.
+/// A test's pause at a named point, `JABPIPE_TEST_PAUSE=<point>:<ms>`.
 fn pause(point: &str) {
     if let Ok(asked) = env::var("JABPIPE_TEST_PAUSE")
         && let Some((at, ms)) = asked.split_once(':')
@@ -62,24 +54,24 @@ fn pause(point: &str) {
 
 /// Whether a request file there names this launch's token.
 fn requested(path: &Path, token: &str) -> bool {
-    matches!(control::read_json::<Authorization>(path), Ok(Some(request)) if request.token == token)
+    matches!(read_json::<Authorization>(path), Ok(Some(request)) if request.token == token)
 }
 
 /// The startup's one decision and when it was decided: go, cancelled, or expired.
 fn startup(schedule: &Schedule, dir: &Path, started: Instant) -> (&'static str, Instant) {
-    let allowance = ns(schedule.bounds.startup_ns);
+    let allowance = from_ns(schedule.bounds.startup_ns);
     let token = &schedule.token;
     loop {
         if started.elapsed() >= allowance {
             return ("expired", Instant::now());
         }
-        if requested(&control::control_path(dir, token, CANCEL), token) {
+        if requested(&control_path(dir, token, CANCEL), token) {
             return ("cancelled", Instant::now());
         }
-        if requested(&control::control_path(dir, token, AUTHORIZATION), token) {
+        if requested(&control_path(dir, token, AUTHORIZATION), token) {
             return ("go", Instant::now());
         }
-        thread::sleep(ns(schedule.bounds.retry_ns).min(TICK));
+        thread::sleep(from_ns(schedule.bounds.retry_ns).min(TICK));
     }
 }
 
@@ -90,10 +82,10 @@ fn supervised(args: Vec<String>, started: Instant) -> PipeResult<ExitCode> {
         return Err(PipeError::Usage(format!("{} names the token {}, not {token}", path.display(), schedule.token)));
     }
     let dir = PathBuf::from(&schedule.dir);
-    let file = |kind: &str| control::control_path(&dir, &token, kind);
+    let file = |kind: &str| control_path(&dir, &token, kind);
     let interactive = schedule.mode == Mode::Interactive;
     if interactive {
-        child::ignore_interrupts();
+        ignore_interrupts();
     }
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -101,25 +93,25 @@ fn supervised(args: Vec<String>, started: Instant) -> PipeResult<ExitCode> {
         .map_err(PipeError::io("the supervisor's runtime"))?;
     let mut child = Child::spawn(&schedule)?;
     pause("readiness");
-    let me = std::process::id() as i64;
+    let me = process::id() as i64;
     let readiness = Readiness {
         token: token.clone(),
-        supervisor: Process { pid: me, start: table::start(me) },
+        supervisor: Process { pid: me, start: process_start(me) },
         gate: Gate { pid: child.pid(), group: child.group(), start: child.start() },
     };
-    if let Err(error) = control::write_json(&file(READINESS), &readiness) {
+    if let Err(error) = write_json(&file(READINESS), &readiness) {
         return abandoned(&mut child, Err(error));
     }
     let (decision, go) = if interactive { ("go", Instant::now()) } else { startup(&schedule, &dir, started) };
     pause("outcome");
-    let outcome = Outcome { token: token.clone(), decision: decision.to_owned(), go_utc: (decision == "go").then(control::utc_now) };
-    if let Err(error) = control::write_json(&file(OUTCOME), &outcome) {
+    let outcome = Outcome { token: token.clone(), decision: decision.to_owned(), go_utc: (decision == "go").then(utc_now) };
+    if let Err(error) = write_json(&file(OUTCOME), &outcome) {
         return abandoned(&mut child, Err(error));
     }
     if decision != "go" {
         let ended = abandoned(&mut child, Ok(ExitCode::from(ENDED_EARLY)));
         let run = Run::new(&schedule, &runtime, go, started, Vec::new(), Vec::new());
-        control::write_json(&file(RECEIPT), &run.receipt(outcome, None, None))?;
+        write_json(&file(RECEIPT), &run.receipt(outcome, None, None))?;
         return ended;
     }
     if let Err(error) = child.release() {
@@ -131,14 +123,15 @@ fn supervised(args: Vec<String>, started: Instant) -> PipeResult<ExitCode> {
         .iter()
         .map(|r| {
             let inward = (!r.inward.is_empty()).then(|| PathBuf::from(&r.inward));
-            Link::start(&runtime, &r.endpoint, &r.name, connector(&r.name), inward, PathBuf::from(&r.outward), started + ns(schedule.bounds.startup_ns))
+            let deadline = started + from_ns(schedule.bounds.startup_ns);
+            Link::start(&runtime, &r.endpoint, &r.name, connector(&r.name), inward, PathBuf::from(&r.outward), deadline)
         })
         .collect();
     let helpers = schedule.helpers.iter().map(Running::start).collect();
     let mut run = Run::new(&schedule, &runtime, go, started, links, helpers);
     let ended = run.until_end(&mut child, &dir)?;
-    let receipt = run.receipt(outcome, Some(ended), Some(since(go)));
-    control::write_json(&file(RECEIPT), &receipt)?;
+    let receipt = run.receipt(outcome, Some(ended), Some(ns_since(go)));
+    write_json(&file(RECEIPT), &receipt)?;
     Ok(run.exit(ended))
 }
 
@@ -149,9 +142,9 @@ fn abandoned(child: &mut Child, result: PipeResult<ExitCode>) -> PipeResult<Exit
     result
 }
 
-/// A relay's connector: a Windows named pipe's client, or off Windows a Unix socket the tests serve.
+/// A relay's connector: a Windows named pipe's client, else a Unix socket's.
 #[cfg(windows)]
-fn connector(name: &str) -> impl FnMut() -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> + Send + 'static {
+fn connector(name: &str) -> impl FnMut() -> io::Result<r::np::NamedPipeClient> + Send + 'static {
     let pipe = pipe_path(name);
     move || r::np::ClientOptions::new().open(&pipe)
 }
@@ -160,13 +153,13 @@ fn connector(name: &str) -> impl FnMut() -> io::Result<tokio::net::windows::name
 fn connector(name: &str) -> impl FnMut() -> io::Result<tokio::net::UnixStream> + Send + 'static {
     let path = PathBuf::from(name);
     move || {
-        let stream = std::os::unix::net::UnixStream::connect(&path)?;
+        let stream = UnixStream::connect(&path)?;
         stream.set_nonblocking(true)?;
         tokio::net::UnixStream::from_std(stream)
     }
 }
 
-/// A run in progress: its payloads, its readings, its relays, and how far its end has come.
+/// A run in progress: its payloads, readings, relays, helpers, and its end.
 struct Run<'a> {
     schedule: &'a Schedule,
     runtime: &'a tokio::runtime::Runtime,
@@ -240,7 +233,7 @@ impl<'a> Run<'a> {
                 let exited = *self.exited.get_or_insert(now);
                 match child.running() {
                     Ok(running) if running.is_empty() => break,
-                    Ok(_) if self.ending.is_none() && now.duration_since(exited) >= ns(bounds.grace_ns) => {
+                    Ok(_) if self.ending.is_none() && now.duration_since(exited) >= from_ns(bounds.grace_ns) => {
                         self.terminate(child, now);
                     }
                     Ok(_) => {}
@@ -260,23 +253,20 @@ impl<'a> Run<'a> {
             if live && self.exited.is_none() && self.ending.is_none() && self.failure.is_none() && self.suspect.is_none() && self.held.is_none() {
                 self.act(child, now);
             }
-            if let Some((why, since)) = self.suspect.clone()
+            if let Some((why, suspected)) = self.suspect.clone()
                 && self.exited.is_none()
                 && self.ending.is_none()
-                && now.duration_since(since) >= ns(bounds.grace_ns)
+                && now.duration_since(suspected) >= from_ns(bounds.grace_ns)
             {
                 self.fail(why);
                 self.terminate(child, now);
             }
-            if schedule.mode == Mode::Bounded
-                && self.ending.is_none()
-                && requested(&control::control_path(dir, &schedule.token, CANCEL), &schedule.token)
-            {
-                self.cancelled_ns = Some(since(self.go));
+            if schedule.mode == Mode::Bounded && self.ending.is_none() && requested(&control_path(dir, &schedule.token, CANCEL), &schedule.token) {
+                self.cancelled_ns = Some(ns_since(self.go));
                 self.terminate(child, now);
             }
             if let Some((Signal::Term, at)) = self.ending
-                && now.duration_since(at) >= ns(bounds.term_ns)
+                && now.duration_since(at) >= from_ns(bounds.term_ns)
                 && child.running().is_ok_and(|r| !r.is_empty())
             {
                 child.signal(Signal::Kill);
@@ -291,7 +281,7 @@ impl<'a> Run<'a> {
         Ok(ended)
     }
 
-    /// A helper that never started fails the launch; one failing while QEMU runs starts the grace.
+    /// A helper that never started fails the launch; a failing one starts the grace.
     fn watch_helpers(&mut self, child: &mut Child, now: Instant) {
         let mut failed = None;
         for helper in &mut self.helpers {
@@ -338,9 +328,9 @@ impl<'a> Run<'a> {
         if self.qemu_pid.is_some() || self.schedule.pidfile.is_empty() {
             return;
         }
-        if let Ok(text) = std::fs::read_to_string(&self.schedule.pidfile)
+        if let Ok(text) = fs::read_to_string(&self.schedule.pidfile)
             && let Ok(pid) = text.trim().parse::<i64>()
-            && table::state(pid) == State::Live
+            && process_state(pid) == State::Live
         {
             self.qemu_pid = Some(pid);
         }
@@ -351,7 +341,7 @@ impl<'a> Run<'a> {
         if self.schedule.pidfile.is_empty() {
             return self.exited.is_none() && !child.exited();
         }
-        self.qemu_pid.is_some_and(|pid| table::state(pid) == State::Live)
+        self.qemu_pid.is_some_and(|pid| process_state(pid) == State::Live)
     }
 
     /// QEMU's CPU seconds, sampled at its cadence, the last sample kept.
@@ -359,9 +349,9 @@ impl<'a> Run<'a> {
         if now < self.next_cpu {
             return;
         }
-        self.next_cpu = now + ns(self.schedule.bounds.cpu_ns);
+        self.next_cpu = now + from_ns(self.schedule.bounds.cpu_ns);
         if let Some(pid) = self.qemu_pid
-            && let Some(cpu) = table::cpu_seconds(pid)
+            && let Some(cpu) = cpu_seconds(pid)
         {
             self.cpu = Some(cpu);
         }
@@ -374,19 +364,19 @@ impl<'a> Run<'a> {
         };
         let go = self.go;
         for reading in self.readings.iter_mut().filter(|r| r.start_ns.is_none()) {
-            if reading.requested_ns > since(go) {
+            if reading.requested_ns > ns_since(go) {
                 continue;
             }
-            let start_ns = since(go);
-            if let Some(threads) = table::threads(pid) {
+            let start_ns = ns_since(go);
+            if let Some(threads) = process_threads(pid) {
                 reading.threads = Some(threads);
                 reading.start_ns = Some(start_ns);
-                reading.end_ns = Some(since(go));
+                reading.end_ns = Some(ns_since(go));
             }
         }
     }
 
-    /// A relay's failure aborts the launch; its clean end while QEMU runs starts the grace.
+    /// A relay's failure aborts the launch; a clean end while QEMU runs, the grace.
     fn watch_links(&mut self, child: &mut Child, now: Instant) {
         let mut failed = None;
         for link in &self.links {
@@ -424,7 +414,7 @@ impl<'a> Run<'a> {
         }
         while self.cursor < self.payloads.len() {
             let action = &schedule.actions[self.cursor];
-            if action.due_ns > since(go) {
+            if action.due_ns > ns_since(go) {
                 return;
             }
             if let Some(looked) = self.looking {
@@ -435,7 +425,7 @@ impl<'a> Run<'a> {
                 let payload = &mut self.payloads[self.cursor];
                 match whole(&screen.file, &screen.header, screen.size) {
                     Some(true) => {
-                        payload.done.whole_ns = Some(since(go));
+                        payload.done.whole_ns = Some(ns_since(go));
                         payload.done.whole = Some(true);
                         self.looking = None;
                         self.cursor += 1;
@@ -445,12 +435,12 @@ impl<'a> Run<'a> {
                         payload.done.whole = Some(false);
                         return self.hold(format!("the screen {} came at its whole size under another header", screen.file));
                     }
-                    None if now.duration_since(looked) >= ns(schedule.bounds.screen_ns) => {
+                    None if now.duration_since(looked) >= from_ns(schedule.bounds.screen_ns) => {
                         payload.done.whole = Some(false);
                         return self.hold(format!("the screen {} did not come whole within its allowance", screen.file));
                     }
                     None => {
-                        self.next_look = now + ns(schedule.bounds.screen_poll_ns);
+                        self.next_look = now + from_ns(schedule.bounds.screen_poll_ns);
                         return;
                     }
                 }
@@ -458,7 +448,7 @@ impl<'a> Run<'a> {
             match self.payloads[self.cursor].attempt(go, &self.links) {
                 Step::Whole if action.screen.is_some() => {
                     self.looking = Some(Instant::now());
-                    self.next_look = Instant::now() + ns(schedule.bounds.screen_poll_ns);
+                    self.next_look = Instant::now() + from_ns(schedule.bounds.screen_poll_ns);
                     return;
                 }
                 Step::Whole => self.cursor += 1,
@@ -468,7 +458,7 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// A pipe broken with bytes in: QEMU ending inside the grace is a normal end, else the launch fails.
+    /// A pipe broken with bytes in: the grace, then the launch failed.
     fn broke(&mut self, child: &mut Child, why: String, now: Instant) {
         if self.qemu_live(child) {
             self.suspect.get_or_insert((why.clone(), now));
@@ -502,7 +492,7 @@ impl<'a> Run<'a> {
     /// When the loop next has something to do, the tick its latest.
     fn next_wake(&self, now: Instant) -> Instant {
         let mut next = now + TICK;
-        let due = |due_ns: u64| self.go + ns(due_ns);
+        let due = |due_ns: u64| self.go + from_ns(due_ns);
         if let Some(action) = self.schedule.actions.get(self.cursor)
             && self.held.is_none()
         {
@@ -528,7 +518,7 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// The exit receipt: the outcome, every payload, reading, and relay, and the run's end.
+    /// The exit receipt: the outcome, every action, reading, relay, and helper.
     fn receipt(&self, outcome: Outcome, ended: Option<Ended>, end_ns: Option<u64>) -> Receipt {
         let go = self.go;
         let at = |t: Instant| t.saturating_duration_since(go).as_nanos() as u64;
@@ -605,9 +595,9 @@ impl<'a> Run<'a> {
     }
 }
 
-/// Whether a screen is whole: its size the whole file's and its first bytes the header; None while short.
+/// Whether a screen is whole by its size and header; None while it is short.
 fn whole(file: &str, header: &[u8], size: u64) -> Option<bool> {
-    let length = std::fs::metadata(file).ok()?.len();
+    let length = fs::metadata(file).ok()?.len();
     if length != size {
         return None;
     }

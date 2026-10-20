@@ -33,13 +33,13 @@ pub(crate) fn control_path(dir: &Path, token: &str, kind: &str) -> PathBuf {
 /// Bytes written whole: a temporary name beside the file, synced, renamed over it.
 pub(crate) fn write_whole(path: &Path, bytes: &[u8]) -> PipeResult<()> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temporary = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    let temporary = path.with_file_name(format!(".{name}.{}.tmp", process::id()));
     {
         let mut file = File::create(&temporary).map_err(PipeError::io(temporary.display().to_string()))?;
         file.write_all(bytes).map_err(PipeError::io(temporary.display().to_string()))?;
         file.sync_all().map_err(PipeError::io(temporary.display().to_string()))?;
     }
-    std::fs::rename(&temporary, path).map_err(PipeError::io(path.display().to_string()))?;
+    fs::rename(&temporary, path).map_err(PipeError::io(path.display().to_string()))?;
     if let Some(dir) = path.parent()
         && let Ok(handle) = File::open(dir)
     {
@@ -56,7 +56,7 @@ pub(crate) fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> PipeRes
 
 /// A control file's value once it is there, None while it is not.
 pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> PipeResult<Option<T>> {
-    match std::fs::read(path) {
+    match fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes)
             .map(Some)
             .map_err(|e| PipeError::Io { what: path.display().to_string(), source: io::Error::other(e) }),
@@ -67,7 +67,7 @@ pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> PipeResu
 
 /// The realtime clock as UTC text, for dates and provenance alone.
 pub(crate) fn utc_now() -> String {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     let seconds = now.as_secs();
     let (year, month, day) = civil_of(seconds / 86_400);
     let of_day = seconds % 86_400;

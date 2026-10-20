@@ -1,8 +1,6 @@
-//! A payload on its way into one of QEMU's pipes, its progress kept across its attempts.
+//! A payload on its way into one of QEMU's pipes, its progress kept.
 
 use crate::*;
-use crate::link::{Carry, Link};
-use crate::receipt::Done;
 
 /// Where a payload goes: a fifo QEMU reads, or the connection a relay holds.
 enum Route {
@@ -10,7 +8,7 @@ enum Route {
     Link { link: usize, carry: Option<Carry> },
 }
 
-/// What an attempt left: the payload whole, still waiting, or its pipe broken once bytes went in.
+/// What an attempt left: the payload whole, waiting, or its pipe broken.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Step {
     Whole,
@@ -18,7 +16,7 @@ pub(crate) enum Step {
     Broken(String),
 }
 
-/// A payload's bytes, its route, and its account: accepted bytes, its first attempt, its completion.
+/// A payload's bytes, its route, and its account.
 pub(crate) struct Payload {
     pub done: Done,
     bytes: Arc<[u8]>,
@@ -27,7 +25,7 @@ pub(crate) struct Payload {
 }
 
 impl Payload {
-    /// A payload for the pipe `pipe`, its end `path`: a relay's endpoint, else a fifo's path.
+    /// A payload for `pipe`, its end `path`: a relay's endpoint, else a fifo's.
     pub(crate) fn new(kind: &str, index: u64, due_ns: u64, bytes: &[u8], pipe: &str, path: &str, links: &[Link]) -> Payload {
         let route = match links.iter().position(|l| l.endpoint == path) {
             Some(link) => Route::Link { link, carry: None },
@@ -44,10 +42,10 @@ impl Payload {
         Payload { done, bytes: Arc::from(bytes), route, pipe: pipe.to_owned() }
     }
 
-    /// One attempt, every write without blocking: what remains goes in, on the open it began with.
+    /// One attempt without blocking: what remains goes in, on the open it began.
     pub(crate) fn attempt(&mut self, go: Instant, links: &[Link]) -> Step {
         if self.done.first_ns.is_none() {
-            self.done.first_ns = Some(since(go));
+            self.done.first_ns = Some(ns_since(go));
         }
         let step = match &mut self.route {
             Route::Fifo { path, open } => fifo_attempt(path, open, &self.bytes, &mut self.done.accepted, &self.pipe),
@@ -66,12 +64,12 @@ impl Payload {
             }
         };
         if step == Step::Whole && self.done.done_ns.is_none() {
-            self.done.done_ns = Some(since(go));
+            self.done.done_ns = Some(ns_since(go));
         }
         step
     }
 
-    /// The payload's account as the receipt carries it: complete, incomplete, or unattempted.
+    /// The account as the receipt carries it: complete, incomplete, or unattempted.
     pub(crate) fn account(&self) -> Done {
         let mut done = self.done.clone();
         done.state = if done.done_ns.is_some() {
@@ -87,14 +85,12 @@ impl Payload {
 }
 
 /// Nanoseconds since the go, read now.
-pub(crate) fn since(go: Instant) -> u64 {
+pub(crate) fn ns_since(go: Instant) -> u64 {
     go.elapsed().as_nanos() as u64
 }
 
-/// A fifo attempt: opened for writing without blocking, held until the payload is whole.
+/// A fifo attempt: opened without blocking, held until the payload is whole.
 fn fifo_attempt(path: &Path, open: &mut Option<File>, bytes: &[u8], accepted: &mut u64, pipe: &str) -> Step {
-    #[cfg(unix)]
-    use std::os::unix::fs::OpenOptionsExt;
     if open.is_none() {
         let mut options = OpenOptions::new();
         options.write(true);

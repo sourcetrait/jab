@@ -1,4 +1,4 @@
-//! What a supervised launch leaves: its readiness, its startup's outcome, and its exit receipt.
+//! A launch's readiness, its startup's outcome, and its exit receipt.
 
 /// The startup's one decision, published before the supervisor acts on it.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -127,7 +127,7 @@ pub(crate) struct Receipt {
     pub readings: Vec<Taken>,
     pub relays: Vec<RelayEnd>,
     pub helpers: Vec<HelperEnd>,
-    /// The run's end: the child reaped once nothing it owns runs; null when nothing ran.
+    /// The run's end, the child reaped once nothing it owns runs; null with no run.
     pub end_ns: Option<u64>,
     pub cpu_seconds: Option<f64>,
     pub qemu_pid: Option<i64>,

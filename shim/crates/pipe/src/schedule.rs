@@ -2,8 +2,7 @@
 
 use crate::*;
 
-/// The launch's kind: bounded, its QEMU under the resolved timeout in a group of
-/// its own; interactive, QEMU in the terminal's foreground group.
+/// The launch's kind: bounded, in a group of its own, or the terminal's.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Mode {
@@ -21,7 +20,7 @@ pub(crate) struct Schedule {
     pub dir: String,
     /// The measured command the gate runs: the bound's `timeout` and QEMU, or QEMU.
     pub command: Vec<String>,
-    /// The child's environment beside the caller's, the shims' preloads among it; the supervisor's own untouched.
+    /// The child's environment beside the caller's; the supervisor's own untouched.
     #[serde(default)]
     pub env: Vec<Variable>,
     /// Where a bounded child's stdout and stderr go, "" for a terminal's.
@@ -32,12 +31,12 @@ pub(crate) struct Schedule {
     /// QEMU's pidfile, "" with none.
     #[serde(default)]
     pub pidfile: String,
-    /// Each pipe an action writes, by name: a fifo's path, or a Windows relay's endpoint.
+    /// Each pipe an action writes: a fifo's path, or a Windows relay's endpoint.
     #[serde(default)]
     pub pipes: Vec<PipeEnd>,
     /// The pad port's header, written once QEMU is alive, ahead of every action.
     #[serde(default)]
-    pub header: Option<Payload>,
+    pub header: Option<PipeBytes>,
     /// The timed actions in their order, each when due and after the one before.
     #[serde(default)]
     pub actions: Vec<Action>,
@@ -47,13 +46,13 @@ pub(crate) struct Schedule {
     /// The relays a Windows launch requires, one a pipe with no client of its own.
     #[serde(default)]
     pub relays: Vec<Relay>,
-    /// The helpers run beside the child from the go: the pad bridge, a pipe's client of its own.
+    /// The helpers run beside the child from the go, the pad bridge among them.
     #[serde(default)]
     pub helpers: Vec<Helper>,
     pub bounds: Bounds,
 }
 
-/// A helper the launch runs beside its child: its name, its command, the file its stderr goes to.
+/// A helper run beside the child: its name, command, and stderr's file.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub(crate) struct Helper {
     pub name: String,
@@ -77,7 +76,7 @@ pub(crate) struct PipeEnd {
 
 /// Bytes into one of the launch's pipes.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-pub(crate) struct Payload {
+pub(crate) struct PipeBytes {
     pub pipe: String,
     pub bytes: Vec<u8>,
 }
@@ -105,7 +104,7 @@ pub(crate) struct Screen {
     pub size: u64,
 }
 
-/// A thread reading: `held`, the two `--threads` asks, or `at`, one of `--threads-at`.
+/// A thread reading: `held`, of `--threads`, or `at`, of `--threads-at`.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub(crate) struct Reading {
     pub kind: String,
@@ -113,7 +112,7 @@ pub(crate) struct Reading {
     pub requested_ns: u64,
 }
 
-/// A relay a launch requires: its endpoint, its pipe's name, its in-file ("" none), its out-file.
+/// A relay a launch requires: its endpoint, pipe name, in-file, and out-file.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub(crate) struct Relay {
     pub endpoint: String,
@@ -144,7 +143,7 @@ pub(crate) struct Bounds {
 impl Schedule {
     /// The schedule a file holds, held to what the supervisor needs of it.
     pub(crate) fn load(path: &Path) -> PipeResult<Schedule> {
-        let schedule: Schedule = control::read_json(path)?.ok_or_else(|| PipeError::Usage(format!("no schedule at {}", path.display())))?;
+        let schedule: Schedule = read_json(path)?.ok_or_else(|| PipeError::Usage(format!("no schedule at {}", path.display())))?;
         let problems = schedule.problems();
         if !problems.is_empty() {
             return Err(PipeError::Usage(format!("{}: {}", path.display(), problems.join("; "))));
@@ -155,7 +154,7 @@ impl Schedule {
     /// What keeps the schedule from being run, each named.
     pub(crate) fn problems(&self) -> Vec<String> {
         let mut problems = Vec::new();
-        if !control::token_ok(&self.token) {
+        if !token_ok(&self.token) {
             problems.push(format!("the token {:?} is no sixteen lowercase hex digits", self.token));
         }
         if self.command.is_empty() {
@@ -201,6 +200,6 @@ impl Schedule {
 }
 
 /// A bound in nanoseconds as a duration.
-pub(crate) fn ns(value: u64) -> Duration {
+pub(crate) fn from_ns(value: u64) -> Duration {
     Duration::from_nanos(value)
 }

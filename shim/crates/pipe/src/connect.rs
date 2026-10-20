@@ -17,7 +17,7 @@ pub fn pipe_path(name: &str) -> String {
 }
 
 /// Whether an open's failure means only that the pipe cannot take a client yet.
-pub(crate) fn waiting(error: &io::Error) -> bool {
+pub(crate) fn pipe_waiting(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::NotFound || error.raw_os_error() == Some(ERROR_PIPE_BUSY)
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn connect_within<T>(
     loop {
         match open(&pipe) {
             Ok(end) => return Ok(end),
-            Err(source) if waiting(&source) => {
+            Err(source) if pipe_waiting(&source) => {
                 if started.elapsed() >= bound {
                     return Err(PipeError::Connect { pipe, within: Some(bound), source });
                 }

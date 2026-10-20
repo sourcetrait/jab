@@ -1,5 +1,4 @@
 use crate::*;
-use crate::connect::{connect_within, waiting};
 
 #[test]
 fn a_pipes_name_becomes_its_win32_path() {
@@ -8,10 +7,10 @@ fn a_pipes_name_becomes_its_win32_path() {
 
 #[test]
 fn a_missing_or_busy_pipe_is_waited_for_and_nothing_else_is() {
-    assert!(waiting(&io::Error::from(io::ErrorKind::NotFound)), "no pipe yet");
-    assert!(waiting(&io::Error::from_raw_os_error(231)), "ERROR_PIPE_BUSY");
-    assert!(!waiting(&io::Error::from(io::ErrorKind::PermissionDenied)), "refused");
-    assert!(!waiting(&io::Error::from(io::ErrorKind::BrokenPipe)), "a pipe gone");
+    assert!(pipe_waiting(&io::Error::from(io::ErrorKind::NotFound)), "no pipe yet");
+    assert!(pipe_waiting(&io::Error::from_raw_os_error(231)), "ERROR_PIPE_BUSY");
+    assert!(!pipe_waiting(&io::Error::from(io::ErrorKind::PermissionDenied)), "refused");
+    assert!(!pipe_waiting(&io::Error::from(io::ErrorKind::BrokenPipe)), "a pipe gone");
 }
 
 #[test]
