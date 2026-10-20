@@ -88,6 +88,11 @@ export def poses [context: record, records: record]: nothing -> record {
     ]
     assert equal $render_0_expected.unresolved 0 $"render_0 names nothing the content lacks: ($render_0_expected.missing)"
     assert equal $render_0_expected.ambients 5 "render_0 names five ambients"
+    let rooted = (open ($render_0_tree | path join "tile.nuon") | where {|t| $t.source | str starts-with "/" })
+    assert ($rooted | is-empty) $"render_0's tile.nuon names each source under the content, never by a path of this machine: ($rooted | get source)"
+    let game_bytes = ($game | path expand | into binary)
+    let leaked = (glob ($render_0_tree | path join "**" "*") --no-dir | where {|f| (open --raw $f | into binary | bytes index-of $game_bytes) != -1 })
+    assert ($leaked | is-empty) $"render_0's tree holds no path of the checkout that compiled it: ($leaked)"
     {
         render_0_tree: $render_0_tree,
         render_0_source: $render_0_source,

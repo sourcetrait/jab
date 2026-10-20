@@ -358,7 +358,7 @@ def lay-out [src: record, m: record, content: string, out: string]: nothing -> s
             let file = ($dest | path join ($path | str substring 1..))
             mkdir ($file | path dirname)
             cp $source $file
-            $tiles = ($tiles | append { index: $t.index, name: $t.item.name, path: $path, source: $source })
+            $tiles = ($tiles | append { index: $t.index, name: $t.item.name, path: $path, source: ($source | path relative-to $content) })
         } else {
             $unresolved = ($unresolved | append $t.item.name)
             $tiles = ($tiles | append { index: $t.index, name: $t.item.name, path: $path, source: "" })

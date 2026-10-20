@@ -104,6 +104,12 @@ source gives a title, the materials and ambients the map names and
 every sound copied from the content, map.nuon, tile.nuon, and the plan
 views; the summary line.
 
+tile.nuon names each material's index, name, and path in the tree, and
+its source relative to the content, or nothing where the content has
+none. The tree holds no path of the machine that compiled it, so a
+checkout anywhere compiles the same bytes, and a disk made from it hashes
+the same.
+
 `map/title` is written only when the source gives a title, so a tree
 without the file is a map with none, and the loader draws the map's name
 on the load screen in its place; `map/name` is always written, since the
