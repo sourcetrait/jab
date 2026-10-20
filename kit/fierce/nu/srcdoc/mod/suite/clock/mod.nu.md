@@ -30,6 +30,16 @@ of their sector, the distance from the first to the last over the
 difference of their simulation times is 4 m/s within 2 percent under
 every cadence.
 
+Under P2, a `set` holding P2 (JointTiming), each schedule's receipts are
+held to the rule (p2-holds) at FRAME_EPS as timer.S sets it, and its
+contract is read at that eps. Cadence 0 is the order that awaits, then
+draws, then flips, so under P2 its flips land late by their drawing,
+re-anchor, and present every period and the drawing: its fast stage's
+period and its stall's intervals, P0's arithmetic, are left to the rule's
+check, while its slow stage still presents more than 40 ms apart.
+Cadences 1 and 2 prepare first and wait for the tick, which P2 keeps on
+its grid, so every check of theirs holds under both rules.
+
 - the fast stage
 - the frame whose flip is tried before its wait
 - the frame stalled once and the two after it: under 0 its flip a
@@ -39,6 +49,31 @@ every cadence.
   the period; under 2 held to the third tick, then the period
 - the slow stage
 - the rounds, the presses taken in waits, and the wakes a frame
+
+## TIMER
+
+The kernel's timer.S, which sets P2's tolerance FRAME_EPS (frame-eps).
+
+## TICK
+
+The kernel's TICK, 166,666: the period at the cap of 60 in the guest
+clock's 10 MHz ticks, the unit the rule steps a receipt's tick by.
+
+## frame-eps
+
+FRAME_EPS as timer.S sets it, in ticks, the workspace's own: the eps the
+kernel under test was built with when the suite builds it.
+
+## p2-holds
+
+P2's rule on a schedule's receipts: for each two presented flips in
+order, the later one's tick is the earlier's tick a period on when the
+earlier was accepted under eps past its tick, else its acceptance a
+period on; exactly that at cadences 0 and 1, which never let a reported
+tick move the clock between two presents, and that or whole periods past
+it at cadence 2, whose late frames wait for a fresh tick. The read is
+exact, every tick and stamp a receipt's. K holds at eps over every
+acceptance, the contract's count none.
 
 ## submitted
 
