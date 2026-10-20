@@ -29,7 +29,12 @@ following and their clock read, the three cadences on a schedule of
 stalls and trigger reports and on a timed walk (cadence-holds), the
 fight: an android roused and firing, struck down by four rounds from
 the console and one from the trigger, fallen, its magazine taken on a
-walk, the shots heard; the light's view independence, floor points of
+walk, the shots heard; the services under the default two workers,
+ten seconds of play from a pad table at the reference pad's rate with
+the sound recorded, every event the table sent taken by the program
+and none dropped by the kernel's ring or the device, no sound service
+finding its queue empty, and the recording heard in every 50 ms window
+once the ambient plays; the light's view independence, floor points of
 the bay read from the spawn at two yaws on a still copy of Render
 Zero, as lit and with every lumel full bright, the light alone the
 same from both yaws; the alpha policy rendered, a texture of the

@@ -335,6 +335,12 @@ console_frame:
     j 8f
 156:
 .endif
+    li t1, 'Z'
+    bne t0, t1, 157f
+    lbu a0, 4(s2)
+    li a7, JAB_SYS_EXIT
+    ecall                           # the run ended with byte 4's status, the kernel's exit lines written
+157:
     li t1, 'J'
 .ifdef CENSUS
     bne t0, t1, 16f

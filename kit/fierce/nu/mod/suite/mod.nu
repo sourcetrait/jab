@@ -7,6 +7,7 @@ use (path self ./light)
 use (path self ./load)
 use (path self ./render_one)
 use (path self ./render_zero)
+use (path self ./service)
 use (path self ./sound)
 use (path self ./tiles)
 use (path self ./workers)
@@ -66,6 +67,7 @@ export def main [--kernel: path, --image: path, --out: path, --set: string = "",
     $results = ($results | insert "clock walk" (clock walk $ctx ($results | select "render_zero walk")))
     $results = ($results | insert "clock cadences" (clock cadences $ctx {}))
     $results = ($results | insert "render_zero fight" (render_zero fight $ctx ($results | select "render_zero launched")))
+    $results = ($results | insert "service regression" (service regression $ctx ($results | select "render_zero launched")))
     $results = ($results | insert "light independence" (light independence $ctx ($results | select "render_zero poses")))
     $results = ($results | insert "tiles block" (tiles block $ctx ($results | select "light independence")))
     $results = ($results | insert "tiles packet" (tiles packet $ctx ($results | select "light independence" "tiles block")))
@@ -151,6 +153,8 @@ def report [context: record, records: record]: nothing -> nothing {
     print $"fps: the fight: the android fired ($fight_events | where {|e| $e.fields.0 == $FIRED } | length) rounds, the frame struck ($fight_records | where kind == 4 | length) times; struck down through ($struck | each {|r| $r.fields.2 } | str join ', '), ($fight_rounds | length) rounds in all, the magazine taken with ($pickups | get 0.fields.0) rounds; the shots' window peaking at ($shots.peak); the pose's frame in ($fight_frames | last | get us) us with ($fight_frames | last | get sprites) sprites"
     print $"fps: the light from the spawn at yaws ($VIEW_YAWS): ($view_spread | each {|s| $'($s.point) ($s.light | each {|l| $l | math round --precision 1 } | str join ' and ') of 256, ($s.spread | math round --precision 1) apart' } | str join '; ')"
     print $"fps: the alpha fixture: coverage ($fixture_levels.coverage) of 10000 and scales ($fixture_levels.scale) of 65536 by level; ($fixture_runs | transpose name run | each {|r| $'($r.name) at level ($r.run.level) in ($r.run.frame.us) us, ($r.run.frame.tiles_built) tiles built, ($r.run.read | where shows | length) of ($r.run.read | length) patches shown' } | str join '; '); the openings ($openings) identical between the tiles and the lit loop at levels 0, 1, and 2"
+    let service = $records."service regression".service
+    print $"fps: the service under two workers: ($service.pad.accepted) of ($service.sent) pad events into the ring, ($service.pad.taken) taken, ($service.pad.dropped) dropped by the ring and ($service.queue_full) reports by the device; the sound ($service.sound.submitted) periods submitted, ($service.sound.exhausted) services finding the queue empty; every 50 ms window heard from ($service.heard_from) s, ($service.windows) windows"
     print $"fps: the wrong magic out with ($bad_run.status), the short file with ($short_run.status)"
     print "fps: ok"
 }

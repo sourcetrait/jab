@@ -12,9 +12,16 @@ at the next boundary, D on a debug build a surface's tiles read back over the
 API, M on a debug build every block's level raised, H on a debug build the
 graphics grant's harts taken or given back, A on a debug build the actors
 held at their spawn state, X on a LEVELS or debug OWNER build the presented
-frames' snapshots written, J on a debug build the jobs' hold, cancel, and
-fault, Q on a CENSUS build the census's chunk, each reported back as
-REPORT_CONSOLE.
+frames' snapshots written, Z on a debug build the run ended, J on a debug
+build the jobs' hold, cancel, and fault, Q on a CENSUS build the census's
+chunk, each reported back as REPORT_CONSOLE but Z, which ends the run before
+its answer.
+
+Z is the service fixture's end, a debug build's alone (RegressionSuite):
+`jab.sys.exit` with byte 4 as the status, raised at once, so the kernel's
+exit plays the sound stream out and writes its debug counts, the sound's
+and the pad's, on the debug channel, where a run ended by its bound or a
+capture's quit writes none. Play never sends it.
 
 A is the actor fixture's knob, a debug build's alone (JudgedPopulation):
 byte 4 set places every actor at its spawn state again (actor.S's
@@ -197,7 +204,9 @@ marked changed, the trace set or cleared, and a cold start asked when byte
 the dump written before the answer. M: byte 4 into raster.S's level_raise
 and byte 5 into hud.S's hud_stamp at once, the frame's drawing after the
 read taking them. A: byte 4 set calls actors_place and sets actors_held, clear
-only clears it. X: the export written before the answer. I: bytes 4 to 11 into capture_nonce, two words joined
+only clears it. X: the export written before the answer. Z: a raw `ecall`
+of JAB_SYS_EXIT with byte 4 in a0, since the macro takes its status as an
+immediate; nothing returns from it. I: bytes 4 to 11 into capture_nonce, two words joined
 low first. Q: the census's
 chunk from
 bytes 4 to 7, a CENSUS build's alone; under CENSUS the J branch jumps past
