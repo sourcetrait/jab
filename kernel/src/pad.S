@@ -707,7 +707,11 @@ pad_accept:
     ld t2, 0(t2)
     sub t2, t1, t2
     li t3, PAD_RING
+.ifdef DEBUG
+    bgeu t2, t3, 8f
+.else
     bgeu t2, t3, 9f
+.endif
     andi t2, t1, PAD_RING - 1
     slli t2, t2, 3
     la t3, pad_ring
@@ -717,6 +721,18 @@ pad_accept:
     sw a2, 4(t2)
     addi t1, t1, 1
     sd t1, 0(t0)
+.ifdef DEBUG
+    la t0, pad_accepted
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # one more event into the ring
+    ret
+8:
+    la t0, pad_dropped
+    ld t1, 0(t0)
+    addi t1, t1, 1
+    sd t1, 0(t0)                    # one more event the full ring lost
+.endif
 9:
     ret
 
@@ -782,12 +798,61 @@ pad_take:
     lw a2, 4(t3)
     addi t2, t2, 1
     sd t2, 0(t1)
+.ifdef DEBUG
+    la t3, pad_taken
+    ld t4, 0(t3)
+    addi t4, t4, 1
+    sd t4, 0(t3)                    # one more event the program took
+.endif
     ret
 1:
     li a0, 0
     li a1, 0
     li a2, 0
     ret
+
+.ifdef DEBUG
+.global pad_report
+pad_report:
+    la t0, pad_state
+    ld t0, 0(t0)
+    li t1, 1
+    beq t0, t1, 1f
+    li t1, 3
+    bne t0, t1, 9f                  # a pad never opened says nothing
+1:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    la a0, msg_pad_counts
+    call debug_puts
+    la t0, pad_accepted
+    ld a0, 0(t0)
+    call debug_put_dec
+    la a0, msg_pad_taken
+    call debug_puts
+    la t0, pad_taken
+    ld a0, 0(t0)
+    call debug_put_dec
+    la a0, msg_pad_dropped
+    call debug_puts
+    la t0, pad_dropped
+    ld a0, 0(t0)
+    call debug_put_dec
+    li a0, '\n'
+    call debug_putc
+    ld ra, 8(sp)
+    addi sp, sp, 16
+9:
+    ret
+.pushsection .rodata
+msg_pad_counts:
+    .asciz "jab: pad accepted "
+msg_pad_taken:
+    .asciz " taken "
+msg_pad_dropped:
+    .asciz " dropped "
+.popsection
+.endif
 
 pad_normalise:
     addi sp, sp, -16
@@ -897,6 +962,14 @@ pad_source:
     .skip 8
 pad_stream_length:
     .skip 8
+.ifdef DEBUG
+pad_accepted:
+    .skip 8
+pad_taken:
+    .skip 8
+pad_dropped:
+    .skip 8
+.endif
 .balign 8
 pad_stream:
     .skip PAD_STREAM_BYTES

@@ -28,13 +28,14 @@ call local pad_name_read > name pad_name,length pad_name_length u64 [574:601] :r
 call local pad_axis_present code u64 > present a0 bool [603:613]
 call pad_drain > clobber a0-a5 [614:618] :moves every event the pad has delivered, from the device or the port, into the state and the ring
 j local pad_input_drain > clobber a0-a2 [620:671] :the device's events out of its used buffers, each buffer handed back once taken
-call local pad_accept type u16,code u16,value i32 > keys pad_keys u32,raw pad_raw,head pad_head u64 [673:721] :takes one event into the state and the ring, EV_KEY and EV_ABS only
-call local pad_progress > progress a0 u64 [723:726] :the pad's queue's used index
-call local pad_fault > state pad_state u64 [728:734] :its source stuck: 3, the device reset (virtio_reset)
-j pad_port_fault source u64 > state pad_state u64 [735:749] :serial_fault's tail, the serial device's source in a0: a pad open on the port goes to 3 with it, then the serial device reset (virtio_reset)
-call pad_pending > pending a0 bool [750:768]
+call local pad_accept type u16,code u16,value i32 > keys pad_keys u32,raw pad_raw,head pad_head u64 [673:737] :takes one event into the state and the ring, EV_KEY and EV_ABS only
+call local pad_progress > progress a0 u64 [739:742] :the pad's queue's used index
+call local pad_fault > state pad_state u64 [744:750] :its source stuck: 3, the device reset (virtio_reset)
+j pad_port_fault source u64 > state pad_state u64 [751:765] :serial_fault's tail, the serial device's source in a0: a pad open on the port goes to 3 with it, then the serial device reset (virtio_reset)
+call pad_pending > pending a0 bool [766:784]
  pending :1 when a pad event waits in the ring or with the device, or bytes wait on the port
-call local pad_take > type a0 u16,code a1 u16,value a2 i32,tail pad_tail u64 [770:790]
+call local pad_take > type a0 u16,code a1 u16,value a2 i32,tail pad_tail u64 [786:815]
  type :the oldest event's, all three 0 with the ring empty
-call local pad_normalise code u64 > value a0 i16 [792:869]
+call pad_report > clobber a0-a3 [816:855] :under DEBUG, at the exit, the pad's counts on the debug channel, `jab: pad accepted N taken N dropped N`, when a pad was opened
+call local pad_normalise code u64 > value a0 i16 [857:934]
  value :the axis normalised from its own range to JAB_PAD_FULL either way, 0 for an axis the pad lacks

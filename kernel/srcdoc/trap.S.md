@@ -73,7 +73,8 @@ the sound stream plays out (sound.S) and nothing a worker does reaches a
 device the flush is driving; behind a worker's fault the claim parks hart 0
 instead, and the fault ends the run. Then QEMU ends with the status, since
 no launcher exists yet to return to, or with 1 when another hart recorded a
-fault; with DEBUG the status is also reported on the debug channel.
+fault; with DEBUG the pad's counts (pad.S's pad_report) and the status are
+also reported on the debug channel, after the sound's.
 
 ## msg_exit
 

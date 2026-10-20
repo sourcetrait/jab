@@ -13,20 +13,20 @@ call buffer_bounds buffer addr,size u64 [131:141] :ends the run unless the whole
 call copy_bytes destination addr,source addr,size u64 > clobber a0-a2 [142:154]
 call zero_bytes buffer addr,size u64 > clobber a0-a1 [155:165]
 j bad_address [166:168] :an address from the program outside its window, on any hart: its line the hart's fault, the run ended with 1
-ecall local sys_exit status u64 [170:187] :ends the run: every worker stopped where it is, the sound stream played out, then every fault another hart recorded printed, QEMU exiting with the status, or with 1 after such a fault
-j local program_fault [189:197] :a fault in the program, hart 0's or a worker's: its cause, pc, and tval the hart's fault, the run ended with 1
-j local kernel_trap [199:228] :a trap the kernel took itself, sp put back: the release's wake store faulting at its file's address resumes past the store with hart_wake_faulted set, and anything else goes to kernel_fault
-j local kernel_fault [229:245] :a fault in the kernel on any hart: its cause, pc, and tval the hart's fault, the run ended with 1; a second fault on a hart already reporting one ends the run at once
-j local timer_left_enabled [246:255] :under DEBUG, a return to user mode with the timer's enable set, which user mode would take as a fault: its line the hart's fault, the run ended with 1
-j fatal_plain line addr [256:259] :a fault that is its line: the line kept in the hart's record as its fault, then the shutdown and the run ended with 1
-j fatal_dec line addr,value u64 [260:264] :fatal_plain with the value in decimal after the line
-j fatal_hart_dec line addr,value u64 [265:269] :under DEBUG, fatal_dec as the hart's own line: its number, then the line, then the value in decimal
-j fatal_hex line addr,value u64 [270:274] :fatal_plain with the value in hex after the line
-j local fault_recorded [275:280] :t0 a fault's kind, its fields already in the hart's record: the kind published after them, then the shutdown claimed, a hart behind another's claim parking and the owner going on to fatal_exit with 1
-j fatal_exit status u64 [281:318] :the run's end by the shutdown's owner: under the line lock every recorded fault's line, the hart's own first, then each other hart's in order, a line for each hart that did not halt in the shutdown's bound, then QEMU ended with the status, or with 1 after another hart's fault
-call local fault_line record addr > printed a0 bool [320:413] :the record's fault as its line on the UART, the line lock held by the caller
-j trap_return [414:417] :the end of every system call, the program resumed past its ecall with the frame at sp restored
-j local interrupt_return [418:478] :the boundary: under DEBUG the timer's enable checked clear (timer_left_enabled); another hart's shutdown parks the hart, a worker's forced stop ends it (worker_leave), and hart 0 keeps its external interrupts on while workers run; then the frame at sp restored and the program resumed at the instruction the interrupt came before
-j qemu_exit status u64 [479:490] :ends QEMU through the test device, halting if the write does not end it
+ecall local sys_exit status u64 [170:188] :ends the run: every worker stopped where it is, the sound stream played out, then every fault another hart recorded printed, QEMU exiting with the status, or with 1 after such a fault
+j local program_fault [190:198] :a fault in the program, hart 0's or a worker's: its cause, pc, and tval the hart's fault, the run ended with 1
+j local kernel_trap [200:229] :a trap the kernel took itself, sp put back: the release's wake store faulting at its file's address resumes past the store with hart_wake_faulted set, and anything else goes to kernel_fault
+j local kernel_fault [230:246] :a fault in the kernel on any hart: its cause, pc, and tval the hart's fault, the run ended with 1; a second fault on a hart already reporting one ends the run at once
+j local timer_left_enabled [247:256] :under DEBUG, a return to user mode with the timer's enable set, which user mode would take as a fault: its line the hart's fault, the run ended with 1
+j fatal_plain line addr [257:260] :a fault that is its line: the line kept in the hart's record as its fault, then the shutdown and the run ended with 1
+j fatal_dec line addr,value u64 [261:265] :fatal_plain with the value in decimal after the line
+j fatal_hart_dec line addr,value u64 [266:270] :under DEBUG, fatal_dec as the hart's own line: its number, then the line, then the value in decimal
+j fatal_hex line addr,value u64 [271:275] :fatal_plain with the value in hex after the line
+j local fault_recorded [276:281] :t0 a fault's kind, its fields already in the hart's record: the kind published after them, then the shutdown claimed, a hart behind another's claim parking and the owner going on to fatal_exit with 1
+j fatal_exit status u64 [282:319] :the run's end by the shutdown's owner: under the line lock every recorded fault's line, the hart's own first, then each other hart's in order, a line for each hart that did not halt in the shutdown's bound, then QEMU ended with the status, or with 1 after another hart's fault
+call local fault_line record addr > printed a0 bool [321:414] :the record's fault as its line on the UART, the line lock held by the caller
+j trap_return [415:418] :the end of every system call, the program resumed past its ecall with the frame at sp restored
+j local interrupt_return [419:479] :the boundary: under DEBUG the timer's enable checked clear (timer_left_enabled); another hart's shutdown parks the hart, a worker's forced stop ends it (worker_leave), and hart 0 keeps its external interrupts on while workers run; then the frame at sp restored and the program resumed at the instruction the interrupt came before
+j qemu_exit status u64 [480:491] :ends QEMU through the test device, halting if the write does not end it
  status :0 passes, anything else fails with it as the exit code
-j halt [491:493] :the hart waits for good
+j halt [492:494] :the hart waits for good

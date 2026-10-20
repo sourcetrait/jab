@@ -37,6 +37,7 @@ const debug_text = [
     "jab: pad on port"
     "jab: pad port refused"
     "jab: no pad"
+    "jab: pad accepted "
     "jab: gpu at "
     "jab: gpu cmd="
     "jab: display "

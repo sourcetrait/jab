@@ -172,6 +172,7 @@ sys_exit:
     call shutdown_enter                     # every worker stopped where it is, or this hart parked behind a fault
     call sound_flush
 .ifdef DEBUG
+    call pad_report                         # the pad's counts, when a pad was opened
     la a0, msg_exit
     call debug_puts
     mv a0, s0

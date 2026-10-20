@@ -157,7 +157,33 @@ The device may end the name early.
 A key sets or clears its bit in the mask when it is one of the gamepad's,
 an axis stores its raw value when its code is one the record indexes, and
 either goes into the ring unless the ring is full; any other type is
-dropped.
+dropped. Under DEBUG an event the ring takes counts in pad_accepted and one
+the full ring loses in pad_dropped (ServiceQuotas' measured loss), so the
+two sum to the keys and axes the device or the port delivered.
+
+## pad_take
+
+The oldest event in the ring, or zeros when it is empty; under DEBUG each
+event handed out counts in pad_taken.
+
+## pad_report
+
+Under DEBUG, from the exit (trap.S's sys_exit) after the sound's flush: a
+pad opened, its state 1, or failed after it, 3, has its three counts on the
+debug channel, `jab: pad accepted N taken N dropped N`; a pad never opened,
+or none on the machine, says nothing.
+
+## msg_pad_counts
+
+`19 u8`: the pad's counts' line head, under DEBUG only.
+
+## msg_pad_taken
+
+`8 u8`: the taken count's prefix.
+
+## msg_pad_dropped
+
+`10 u8`: the dropped count's prefix.
 
 ## pad_port_fault
 
@@ -228,6 +254,18 @@ device's source stuck (aia.S), or the serial device's for a pad on the port
 ## pad_stream_length
 
 `u64`: the bytes the stream buffer holds.
+
+## pad_accepted
+
+`u64`, DEBUG's: the events the ring took since boot.
+
+## pad_taken
+
+`u64`, DEBUG's: the events sys_pad_input handed the program.
+
+## pad_dropped
+
+`u64`, DEBUG's: the events the full ring lost.
 
 ## pad_stream
 
