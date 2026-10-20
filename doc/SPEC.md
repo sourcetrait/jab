@@ -17,7 +17,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 3
 - Clock: 2Ghz
-- RAM: 4GB
+- RAM: 3GB
 - GPU: None
 - VRAM: None
 - Display: 1080p (1920x1080, 16:9)
@@ -27,7 +27,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 7
 - Clock: 2Ghz
-- RAM: 8GB
+- RAM: 6GB
 - GPU: None
 - VRAM: None
 - Display: 1080p (1920x1080, 16:9)
@@ -37,7 +37,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 7
 - Clock: 2Ghz
-- RAM: 8GB
+- RAM: 6GB
 - GPU: None
 - VRAM: None
 - Display: 1440p (2560x1440, 16:9)
@@ -47,7 +47,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 15
 - Clock: 2Ghz
-- RAM: 16GB
+- RAM: 14GB
 - GPU: None
 - VRAM: None
 - Display: 1440p (2560x1440, 16:9)
@@ -57,7 +57,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 15
 - Clock: 2Ghz
-- RAM: 16GB
+- RAM: 14GB
 - GPU: None
 - VRAM: None
 - Display: 4K (3840x2160, 16:9)
@@ -67,7 +67,7 @@ Nomenclature: `{res}{req}{ver}`
 - ISA Profile: RVA23
 - Cores: 31
 - Clock: 2Ghz
-- RAM: 32GB
+- RAM: 30GB
 - GPU: None
 - VRAM: None
 - Display: 4K (3840x2160, 16:9)
