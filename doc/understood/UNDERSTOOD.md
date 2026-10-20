@@ -486,7 +486,8 @@ probe is generic and sends nothing of its own.
 walk has such a build, `cadence`, which records every frame of a two
 minute window and sends the records over the API when the window ends.
 `example/walk/test/cadence.nu` runs it once with no probe, on a named
-spec's machine: it mints the nonce, sends the nonce's frame, keeps
+spec's machine read from the workspace the script sits in, wherever the
+image and the kernel lie, a package's among them: it mints the nonce, sends the nonce's frame, keeps
 `api.out`, and writes an identity naming the nonce and the digests of
 the image, the kernel, and the romfs. The workbench reads the records.
 

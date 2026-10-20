@@ -2,7 +2,9 @@
 # one run of one condition on the image and the kernel its caller names,
 # nothing built. The build's `flags` and its romfs, `walk.romfs`, sit
 # beside the image, as the build leaves them and an export copies them.
-# The run's capture nonce is minted here and sent as the WNON frame at
+# The workspace is the one this script sits in, wherever the image and
+# the kernel lie, a package's among them: the named spec is read from it
+# and the launch is given it. The run's capture nonce is minted here and sent as the WNON frame at
 # 200 ms, a replay stream after it with `--replay`, and the launch is
 # paired with the nonce on the named spec's machine, headless unless
 # `--window`, the host's sound output with `--live-sound`. The run's
@@ -66,7 +68,7 @@ def main [
     mkdir $out
     let id_file = ($out | path join "identity.nuon")
     $id | to nuon --indent 2 | save --raw -f $id_file
-    let ran = (launch --kernel $kernel --image $image --out $out --set $set --disk $romfs --serial "walk" --api --send $sends --seconds $seconds --spec $machine.spec.name --window=$window --live-sound=$live_sound --capture-nonce $nonce --profile paired)
+    let ran = (launch --kernel $kernel --image $image --out $out --set $set --disk $romfs --serial "walk" --api --send $sends --seconds $seconds --spec $machine.spec.name --window=$window --live-sound=$live_sound --capture-nonce $nonce --profile paired --workspace $ws)
     $id | upsert machine $ran.machine | upsert qemu_binary $ran.qemu_binary | merge $ran.capture | to nuon --indent 2 | save --raw -f $id_file
     $ran | reject api | insert api_bytes ($ran.api | bytes length) | to nuon --indent 2 | save --raw -f ($out | path join "run.nuon")
     let named = (if $label == "" { "" } else { $" ($label)" })
