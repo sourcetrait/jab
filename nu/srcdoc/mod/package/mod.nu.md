@@ -62,7 +62,11 @@ outside the package would run something the package does not hold:
 either is a rebuild by accident, refused before any run. A step's words
 are read as the bench reads them, `{package}` and each `{build:<name>}`,
 the package's `build/<name>`, in place (bench built-words). Gate steps,
-the preflight itself, are left out.
+the preflight itself, are left out. A step whose script is one of
+POSITIONAL, walk's cadence wrapper `example/walk/test/cadence.nu`, names
+its image and kernel as its first two words rather than by flag, its disk
+and flags read from beside the image, so it is held to those two words
+alone: both given, and both inside the package.
 
 ## preflight
 

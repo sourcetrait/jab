@@ -16,6 +16,9 @@ export const MANIFEST = "package.nuon"
 # The words that name a run's guest inputs, each of which a packaged step takes from the package
 const INPUTS = ["--image" "--kernel" "--assets" "--route"]
 
+# The scripts that take a run's image and kernel as their first two words, where other steps name them by flag
+const POSITIONAL = ["example/walk/test/cadence.nu"]
+
 # A file's length in bytes and its SHA-256
 def file-of [file: path]: nothing -> record<bytes: int, sha256: string> {
     { bytes: (ls -D $file | get 0.size | into int), sha256: (open --raw $file | hash sha256) }
@@ -107,17 +110,27 @@ def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
     let b = (open $bench)
     $b.steps | where {|s| not ($s | get -o gate | default false) } | each {|s|
         let words = (bench built-words ($s.run | each {|w| $w | str replace --all "{package}" $root }) ($root | path join "build"))
-        let route_run = ($words | window 2 | any {|pair| $pair.0 == "gauge" and $pair.1 == "run" })
-        let required = (if $route_run { $INPUTS } else { $INPUTS | take 3 })
-        let named = ($required | where {|flag| $flag not-in $words } | each {|flag| $"step ($s.label) names no ($flag), so its run would take the tree's" })
-        let outside = ($INPUTS | each {|flag|
-            let at = ($words | enumerate | where item == $flag | get -o 0.index)
-            if $at == null { null } else {
-                let value = ($words | get -o ($at + 1) | default "")
-                if not ($value | str starts-with $root) { $"step ($s.label)'s ($flag) is ($value), outside the package" }
+        let script = ($words | first)
+        if ($POSITIONAL | any {|p| $script | str ends-with $p }) {
+            let given = ($words | skip 1 | take 2)
+            if ($given | length) < 2 or ($given | any {|w| $w starts-with "-" }) {
+                [$"step ($s.label) names no image and kernel as its first two words, which its script takes"]
+            } else {
+                ["image" "kernel"] | zip $given | each {|pair| if not ($pair.1 | str starts-with $root) { $"step ($s.label)'s ($pair.0) is ($pair.1), outside the package" } } | compact
             }
-        } | compact)
-        $named ++ $outside
+        } else {
+            let route_run = ($words | window 2 | any {|pair| $pair.0 == "gauge" and $pair.1 == "run" })
+            let required = (if $route_run { $INPUTS } else { $INPUTS | take 3 })
+            let named = ($required | where {|flag| $flag not-in $words } | each {|flag| $"step ($s.label) names no ($flag), so its run would take the tree's" })
+            let outside = ($INPUTS | each {|flag|
+                let at = ($words | enumerate | where item == $flag | get -o 0.index)
+                if $at == null { null } else {
+                    let value = ($words | get -o ($at + 1) | default "")
+                    if not ($value | str starts-with $root) { $"step ($s.label)'s ($flag) is ($value), outside the package" }
+                }
+            } | compact)
+            $named ++ $outside
+        }
     } | flatten
 }
 
