@@ -151,8 +151,8 @@ def resolve [elf: path, fault: string]: nothing -> string {
     let flags = ($elf | path dirname | path join "flags")
     if not ($flags | path exists) { return $"no flags beside ($elf)" }
     let prefix = (open --raw $flags | into binary | decode | lines | get 0 | split row " " | last)
-    let symbols = (^$"($prefix)nm" -n $elf | lines | parse --regex '^(?P<addr>[0-9a-f]+) [tT] (?P<name>\S+)$' | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
-    let at = ($epc | str substring 2.. | into int --radix 16)
+    let symbols = (^$"($prefix)nm" -n $elf | lines | parse --regex '^(?P<addr>[0-9a-f]+) [tT] (?P<name>\S+)$' | each {|s| { addr: ($"0x($s.addr)" | into int), name: $s.name } })
+    let at = ($"0x($epc | str substring 2..)" | into int)
     let below = ($symbols | where addr <= $at | last)
     if $below == null { return $"($epc) before every symbol" }
     $"($below.name) + ($at - $below.addr)"

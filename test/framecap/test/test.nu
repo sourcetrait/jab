@@ -146,13 +146,13 @@ def scenario [kernel: path, image: path, out: path, set: string, letter: string,
 def receipts-of [serial: string]: nothing -> table<kind: int, status: int, before: int, a1: int, a2: int, a3: int, after: int> {
     $serial | lines | where {|l| $l | str starts-with "receipt " } | parse "receipt {kind} {status} {before} {a1} {a2} {a3} {after}" | each {|r|
         {
-            kind: ($r.kind | into int --radix 16)
-            status: ($r.status | into int --radix 16)
-            before: ($r.before | into int --radix 16)
-            a1: ($r.a1 | into int --radix 16)
-            a2: ($r.a2 | into int --radix 16)
-            a3: ($r.a3 | into int --radix 16)
-            after: ($r.after | into int --radix 16)
+            kind: ($"0x($r.kind)" | into int)
+            status: ($"0x($r.status)" | into int)
+            before: ($"0x($r.before)" | into int)
+            a1: ($"0x($r.a1)" | into int)
+            a2: ($"0x($r.a2)" | into int)
+            a3: ($"0x($r.a3)" | into int)
+            after: ($"0x($r.after)" | into int)
         }
     }
 }

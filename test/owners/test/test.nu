@@ -176,7 +176,7 @@ def symbols-of [prefix: string, file: path]: nothing -> table<value: int, sectio
     ^$"($prefix)objdump" -t $file | complete | get stdout | lines
     | parse --regex '^(?P<value>[0-9a-f]{16}) (?P<flags>.{7}) (?P<section>\S+)\t[0-9a-f]{16} (?P<name>.+)$'
     | where {|s| not ($s.flags | str contains "d") and $s.section not-in ["*ABS*" "*UND*"] }
-    | each {|s| { value: ($s.value | into int --radix 16), section: $s.section, name: $s.name } }
+    | each {|s| { value: ($"0x($s.value)" | into int), section: $s.section, name: $s.name } }
 }
 
 # A file's sections as objdump -h lists them: each its size, its address,
@@ -184,7 +184,7 @@ def symbols-of [prefix: string, file: path]: nothing -> table<value: int, sectio
 def sections-of [prefix: string, file: path]: nothing -> table<name: string, size: int, vma: int, off: int> {
     ^$"($prefix)objdump" -h $file | complete | get stdout | lines
     | parse --regex '^\s+\d+\s+(?P<name>\S+)\s+(?P<size>[0-9a-f]+)\s+(?P<vma>[0-9a-f]+)\s+[0-9a-f]+\s+(?P<off>[0-9a-f]+)\s+'
-    | each {|s| { name: $s.name, size: ($s.size | into int --radix 16), vma: ($s.vma | into int --radix 16), off: ($s.off | into int --radix 16) } }
+    | each {|s| { name: $s.name, size: ($"0x($s.size)" | into int), vma: ($"0x($s.vma)" | into int), off: ($"0x($s.off)" | into int) } }
 }
 
 # The objects beside a kernel's ELF: each its file, its symbols, and its
@@ -274,8 +274,8 @@ def functions-of [prefix: string, elf: path] {
     | each {|b|
         let ls = ($b | lines)
         let head = ($ls | first | parse --regex '^(?P<addr>[0-9a-f]+) <(?P<name>[^>]+)>:$' | first)
-        let instrs = ($ls | skip 1 | parse --regex '^\s+(?P<addr>[0-9a-f]+):\t[0-9a-f ]+\t(?P<op>\S+)\s*(?P<args>.*)$' | each {|i| { addr: ($i.addr | into int --radix 16), op: $i.op, args: $i.args } })
-        { name: $head.name, start: ($head.addr | into int --radix 16), instrs: $instrs }
+        let instrs = ($ls | skip 1 | parse --regex '^\s+(?P<addr>[0-9a-f]+):\t[0-9a-f ]+\t(?P<op>\S+)\s*(?P<args>.*)$' | each {|i| { addr: ($"0x($i.addr)" | into int), op: $i.op, args: $i.args } })
+        { name: $head.name, start: ($"0x($head.addr)" | into int), instrs: $instrs }
     }
     | sort-by start
 }
@@ -311,7 +311,7 @@ def index-at [values: list<int>, address: int]: nothing -> int {
 # <sound_base>`), or null
 def operand-address [args: string] {
     let p = ($args | parse --regex '(?:^|,)(?P<a>[0-9a-f]+) <[^>]+>$')
-    if ($p | is-empty) { null } else { $p.0.a | into int --radix 16 }
+    if ($p | is-empty) { null } else { $"0x($p.0.a)" | into int }
 }
 def annotated-address [args: string] {
     let p = ($args | parse --regex '# (?P<a>[0-9a-f]+) <[^>]+>$')
@@ -319,7 +319,7 @@ def annotated-address [args: string] {
     # sixteen digits with the top bit set annotate a negative immediate,
     # never an address, and lie past what `into int` takes
     if ($p.0.a | str length) == 16 and ($p.0.a | str substring 0..0) in ["8" "9" "a" "b" "c" "d" "e" "f"] { return null }
-    $p.0.a | into int --radix 16
+    $"0x($p.0.a)" | into int
 }
 
 # An instruction's operands, before any comment

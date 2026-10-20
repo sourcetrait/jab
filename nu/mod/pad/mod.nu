@@ -85,7 +85,7 @@ export def gamepad-plan [found: record]: nothing -> record<args: list<string>, p
     }
 }
 
-# The pad bridge as a supervised launch's helper, its stderr a fresh file in `out`; none without a bridge
+# The pad bridge as a supervised launch's helper; none without a bridge
 export def bridge-helpers [bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pipe: string, ws: string, out: path, root: path]: nothing -> list<record<name: string, command: list<string>, stderr: string>> {
     if $bridge == null { return [] }
     let bin = (tool shim $ws "jabshim_pad" --bin)

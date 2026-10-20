@@ -9,16 +9,6 @@ The QEMU every machine runs on, by its binary's name.
 Whether the process is in the process table, which nushell reads on
 every host; "" is no process at all.
 
-## cpu-seconds
-
-The CPU seconds a process has used, user plus system, from /proc,
-or null where there is no /proc or the process is gone; accounting
-only, never what a launch's actions wait on.
-
-- after the command's closing parenthesis: state, ppid, pgrp,
-  session, tty, tpgid, flags, minflt, cminflt, majflt, cmajflt,
-  utime, stime, in clock ticks of a hundredth
-
 ## jab-pids
 
 The Jab QEMU processes on this host, by their command line, which

@@ -25,7 +25,7 @@ export const grace = 2sec
 # A termination's wait between TERM and KILL
 export const term_grace = 1sec
 
-# A schedule's bounds, each in nanoseconds: the startup, a retry, the screen's look, the CPU's sample, the graces
+# A schedule's bounds in nanoseconds: startup, retry, screen, CPU, and graces
 export def bounds []: nothing -> record<startup_ns: int, retry_ns: int, screen_ns: int, screen_poll_ns: int, cpu_ns: int, grace_ns: int, term_ns: int> {
     {
         startup_ns: ($startup_allowance | into int),
@@ -85,7 +85,7 @@ def retire-controls [dir: path, token: string, root: path]: nothing -> nothing {
     }
 }
 
-# A lock call under the bound, its one outcome; a call the bound ended is `timeout`
+# A lock call under the bound, its answer; one the bound ended is `timeout`
 def lock-call [binary: string, bound: string, words: list<string>]: nothing -> record {
     let r = (^$bound 2 $binary lock ...$words | complete)
     if $r.exit_code == 124 { return { outcome: "timeout", why: "the lock call outlived its bound", record: null } }
@@ -97,7 +97,7 @@ def alarm [tag: int, source: string, after: duration]: nothing -> int {
     job spawn { sleep $after; { token: $tag, source: $source } | job send --tag $tag 0 }
 }
 
-# A launch's next message on its tag within `wait`, or blocking with none; a retired source's discarded
+# A launch's next message on its tag within `wait`, a retired source's discarded
 export def receive [tag: int, retired: list<string>, wait: oneof<duration, nothing>]: nothing -> oneof<record, nothing> {
     loop {
         let message = (if $wait == null { job recv --tag $tag } else { try { job recv --tag $tag --timeout $wait } catch { return null } })
@@ -108,12 +108,12 @@ export def receive [tag: int, retired: list<string>, wait: oneof<duration, nothi
     }
 }
 
-# Every message left on a launch's tag discarded, its sources all received or retired
+# Every message left on a launch's tag discarded, every source received or retired
 def drain [tag: int]: nothing -> nothing {
     while (try { job recv --tag $tag --timeout 0sec; true } catch { false }) {}
 }
 
-# A run's group ended by the record the caller kept: TERM, a second, KILL, confirmed empty
+# A run's group ended by the kept record: TERM, a second, KILL, confirmed empty
 def forced [binary: string, readiness: record]: nothing -> record {
     let gate = $readiness.gate
     if $gate.group == null or $gate.start == null { return { outcome: "refused", why: "the record names no group to end", running: [] } }
@@ -121,7 +121,7 @@ def forced [binary: string, readiness: record]: nothing -> record {
     try { $r.stdout | from json } catch { { outcome: "error", why: $"the group call said ($r.stdout | str trim) ($r.stderr | str trim)", running: [] } }
 }
 
-# A bounded launch run under its supervisor, the caller's side whole: lock, startup, alarms, receipt
+# A bounded launch under its supervisor: lock, startup, alarms, and receipt
 export def bounded [schedule: record, root: path, seconds: int]: nothing -> record<receipt: oneof<record, nothing>, incomplete: oneof<string, nothing>, schedule_sha256: string, launch: string> {
     held $schedule
     let withhold = (($env.JAB_LAUNCH_TEST? | default "") == "withhold")
@@ -228,7 +228,7 @@ export def bounded [schedule: record, root: path, seconds: int]: nothing -> reco
     $record | insert launch $launch_file
 }
 
-# An interactive run in the terminal's foreground under its supervisor; its exit QEMU's status
+# An interactive run under its supervisor in the terminal's foreground
 export def interactive [schedule: record, root: path]: nothing -> nothing {
     held $schedule
     let binary = (binary)

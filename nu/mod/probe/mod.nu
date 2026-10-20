@@ -165,7 +165,7 @@ export def trace-args [qemu: string, log: path]: nothing -> list<string> {
     ["-msg" "timestamp=on" "-trace" "virtio_gpu_cmd_res_flush" "-trace" "virtio_gpu_cmd_set_scanout" "-D" $log]
 }
 
-# A probe's QEMU run under its supervisor to its exit or bound, its sends written at their times
+# A probe's QEMU run under its supervisor, its sends written at their times
 def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>, bound: string, out: path, root: path]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
     for f in ["qemu.stdout" "qemu.stderr"] { target retire ($out | path join $f) $root }
     let actions = (if $api_in == "" { [] } else {

@@ -85,8 +85,8 @@ export def hot [elf: path, names: list<string>]: nothing -> table<name: string, 
     let elf = ($elf | path expand)
     let built = ($elf | path dirname)
     let prefix = (open --raw ($built | path join "flags") | lines | first | split row " " | last)
-    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | where {|s| $s.kind not-in ["a" "A"] } | each {|s| { addr: ($s.addr | into int --radix 16), name: $s.name } })
-    let ecalls = (^$"($prefix)objdump" -d $elf | lines | parse --regex '^\s*(?P<addr>[0-9a-f]+):\s+[0-9a-f]+\s+ecall\b' | each {|d| $d.addr | into int --radix 16 })
+    let symbols = (^$"($prefix)nm" -n $elf | lines | parse "{addr} {kind} {name}" | where {|s| $s.kind not-in ["a" "A"] } | each {|s| { addr: ($"0x($s.addr)" | into int), name: $s.name } })
+    let ecalls = (^$"($prefix)objdump" -d $elf | lines | parse --regex '^\s*(?P<addr>[0-9a-f]+):\s+[0-9a-f]+\s+ecall\b' | each {|d| $"0x($d.addr)" | into int })
     $names | each {|name|
         let at = ($symbols | enumerate | where {|s| $s.item.name == $name } | get -o 0.index)
         if $at == null { error make {msg: $"($name) is not among the symbols of ($elf)"} }

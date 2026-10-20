@@ -50,10 +50,22 @@ On Linux the pad is passed through: JAB_PAD names its evdev path
 outright, else the expected pad's path from the record, and nothing
 goes on the line with none. On macOS and Windows QEMU cannot pass a pad
 through, so with a pad in the record the pad port goes on the line and
-the bridge, jabshim_pad, is to be started beside QEMU with the pad's
-identity, which is what `bridge` carries (doc/padport.md), on Windows
-as the pad pipe's own client (PadWindows); Linux never takes that
-route. Any other host gets no pad.
+the bridge, jabshim_pad, runs beside QEMU with the pad's identity, which
+is what `bridge` carries (doc/padport.md), a helper of the launch's
+(pad bridge-helpers), on Windows as the pad pipe's own client
+(PadWindows); Linux never takes that route. Any other host gets no pad.
+
+## bridge-helpers
+
+The pad bridge as a supervised launch's helper (the schedule's
+`helpers`): `jabshim_pad` built from the workspace (tool shim `--bin`),
+its command the pipe it writes and the pad's name, vendor, and product
+as jabdisco gave them, a vendor or product it lacks passed empty, and
+its stderr `bridge.stderr` in `out`, a previous one retired; none
+without a bridge. The supervisor starts it at the go and ends it with
+the run; on Windows the bridge is the pad pipe's one client, so a bridge
+that cannot start fails the launch at once rather than leave QEMU
+waiting on the pipe.
 
 ## kbm-choice
 

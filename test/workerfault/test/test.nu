@@ -92,5 +92,5 @@ def fault-line [line: string, hart: int, argument: int, address: int]: nothing -
     let parsed = ($line | parse --regex '^jab: worker fault: hart=(?P<hart>\d+) argument=0x(?P<argument>[0-9a-f]{16}) cause=0x(?P<cause>[0-9a-f]{16}) epc=0x(?P<epc>[0-9a-f]{16}) tval=0x(?P<tval>[0-9a-f]{16})$')
     if ($parsed | is-empty) { return false }
     let f = ($parsed | first)
-    (($f.hart | into int) == $hart and ($f.argument | into int --radix 16) == $argument and ($f.cause | into int --radix 16) == 15 and ($f.epc | into int --radix 16) >= 0x80a00000 and ($f.tval | into int --radix 16) == $address)
+    (($f.hart | into int) == $hart and ($"0x($f.argument)" | into int) == $argument and ($"0x($f.cause)" | into int) == 15 and ($"0x($f.epc)" | into int) >= 0x80a00000 and ($"0x($f.tval)" | into int) == $address)
 }

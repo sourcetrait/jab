@@ -43,7 +43,8 @@ def sdl-table [object: record, nm: bool]: nothing -> record {
 def sdl-table-from [text: string, source: string]: nothing -> record {
     let functions = ($text | lines
         | parse --regex '^(?P<name>\S+) (?P<type>[tTwW]) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$'
-        | into int --radix 16 value size
+        | update value {|r| $"0x($r.value)" | into int }
+        | update size {|r| $"0x($r.size)" | into int }
         | where size > 0
         | str replace --regex '^([^.]+)\..*$' '$1' name
         | sort-by value)

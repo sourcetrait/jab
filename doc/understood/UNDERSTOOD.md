@@ -29,9 +29,10 @@ runs only under QEMU's `virt` machine.
   integration test at `test/test.nu`.
 - `shim/` the preload shims, a cargo workspace, a crate each under
   `crates/`: `sdl` for the probe, `sdl_harness`, a small binary that
-  tests the probe's capture, `evdev` for the pad tests, `pipe`, the
-  relay `jabpipe` a Windows launch runs for each of QEMU's pipes, and
-  `pad`, the bridge that carries a gamepad to QEMU on macOS and Windows.
+  tests the probe's capture, `evdev` for the pad tests, `pipe`,
+  `jabpipe`, the launch's supervisor, which owns every QEMU a launch or
+  a run starts and on Windows holds each of QEMU's pipes, and `pad`, the
+  bridge that carries a gamepad to QEMU on macOS and Windows.
 - `tool/` the host tools, a cargo workspace, a crate each under
   `crates/`: `disco`, the library `jabdisco` and its binary
   `jabdisco`, which find the gamepad a run attaches and the audio
@@ -139,12 +140,14 @@ pacman packages for the riscv64 toolchain and genromfs; and MSYS2's
 The tool picks the window there, `sdl,gl=on`, and the sound, `dsound`.
 Each of QEMU's pipes there, the monitor's, the API's, and the pad port's,
 is one named pipe that QEMU waits for a client of before it starts, so
-the tool names each by the run, `jab-<nonce>-<endpoint>`, and puts its
-client beside QEMU: `jabpipe`, built with cargo from `shim/crates/pipe`,
-holds a pipe's one connection for the run, forwarding what the tool
-appends to `<endpoint>.in` into the pipe and writing what the pipe gives
-to `<endpoint>.out`, and the pad bridge is the pad port's own client, so
-a gamepad takes the route it takes on macOS. That route is built and
+the tool names each by the run, `jab-<nonce>-<endpoint>`, and the
+launch's supervisor, `jabpipe`, built with cargo from
+`shim/crates/pipe`, holds each pipe's one connection for the run,
+writing the launch's inputs and whatever is appended to `<endpoint>.in`
+into the pipe and what the pipe gives to `<endpoint>.out`; a pipe it
+cannot connect to ends the run with the pipe named. The pad bridge is
+the pad port's own client, so a gamepad takes the route it takes on
+macOS. That route is built and
 held by its tests here on Linux, its Windows half untried on Windows
 yet. A program the workspace does not list, `kit/fierce`
 the first, builds against it: its kernel is built here with the same
@@ -322,23 +325,37 @@ Every kernel carries it and any build runs with or without it: `./do
 run example/wasd --api` puts the port on the machine, and without the
 flag the calls report that there is none. The host's end sits beside
 the build output: `api.in`, a named pipe the host writes into, on
-Windows a plain file the pipe's relay forwards, and `api.out`, a file
+Windows a plain file whose appended bytes the launch's supervisor
+forwards into the pipe, and `api.out`, a file
 the program's bytes land in, which a test drives through `launch
 --api --send`. `example/wasd` speaks a small binary
 API over it, its records at the top of its `main.S`.
 
+Every QEMU a launch, a probe, or a run starts runs under `jabpipe
+supervise`, the launch's supervisor. It owns QEMU from its spawn to its
+reap, holds it inert until the caller allows it to go, and writes every
+timed input at its time, timing each on its own monotonic clock from the
+run's go. A launch first takes the host's launch lock, so measured runs
+never overlap: `jab/launch/` under the user's state home, outside every
+checkout and target. A launch leaves `launch.nuon` in its output
+directory, the run's record: every input's state and time, every thread
+reading, and the run's end. The supervisor's control files there,
+`launch-<token>.*.json`, are cleared away once it ends.
+
 A test takes the screen with `launch --capture <at>`, which ends the
 run once the screen is whole, or with `--screen <at>`, which takes it
-while the run goes on to its bound. Each turn of the launch's loop takes
-the timed inputs, the keys, the API's bytes, and the pad's events, in
-the order of their times, and the screen after those due before its time
-and ahead of those due at or after it, which wait until its file is
-whole: the PPM's header and every pixel of the display. `launch due-order`
-is that order as a function of the inputs and the time, so a test can
-hold it on a late turn of the loop without a run. A screen that fails
-leaves the result no screen and every input after it unwritten. The
-result carries when the screen was asked and completed and when each of
-the API's writes went in, seconds from the launch's start.
+while the run goes on to its bound; `--stop <at>` ends the run at its
+time with no screen. The supervisor writes the timed inputs, the keys,
+the API's bytes, and the pad's events, in the order of their times, each
+once QEMU runs and whole before the next, and the screen after those due
+before its time and ahead of those due at or after it, which wait until
+its file is whole: the PPM's header and every pixel of the display.
+`launch due-order` is that order as a function of the inputs and the
+time, so a test can hold it without a run. A screen that fails leaves
+the result no screen and every input after it unwritten. The result
+carries when the screen was asked and completed, when each of the API's
+writes and the run's quit went in, seconds from the run's go, and every
+input left unfinished.
 
 A run prints nothing of its own; what the kernel says in a debug build
 is in `debug.log` beside the program's build output, and what a program
@@ -367,8 +384,8 @@ a row that changed identity during the recording is reported with
 
 A test reads the threads itself with `launch --threads <at>`: every
 QEMU thread's CPU at that time and again a second on, each reading timed
-as it is taken, since the launch's loop polls and the span is a second
-give or take a poll. Each thread comes back with the CPU seconds it used
+by the supervisor as it is taken, the span the two readings' own
+interval. Each thread comes back with the CPU seconds it used
 between the readings and those over the span, its share of a core, the
 span beside them. `test/harts` and `test/jobs` hold an idle hart under
 0.05 of a core that way.
@@ -484,8 +501,9 @@ or the wrong thing. On Linux the run passes the pad through
 as `virtio-input-host-device`, QEMU holding it for the run;
 `JAB_PAD=/dev/input/eventN` names one outright. On macOS and Windows
 QEMU cannot carry a gamepad by any device of its own, so the run puts a
-port on the machine's serial device, `jab.pad`, and starts `jabshim_pad`
-beside QEMU, a bridge built with cargo from `shim/crates/pad` that
+port on the machine's serial device, `jab.pad`, and runs `jabshim_pad`
+beside QEMU as the launch's helper, a bridge built with cargo from
+`shim/crates/pad` that
 reads the pad through gilrs and writes its name, its ranges, and every
 event into the port in evdev's shapes (`doc/padport.md`); the kernel
 takes the port as the pad. On Windows the bridge connects to the port's

@@ -100,7 +100,7 @@ def write-log [
 def symbols-of [file: path, flags: list<string>]: nothing -> table<name: string, type: string, value: int, size: int> {
     let read = (^nm -P -t x --defined-only ...$flags $file | complete)
     assert equal $read.exit_code 0 $"fixture: nm reads ($file | path basename): ($read.stderr)"
-    $read.stdout | lines | parse --regex '^(?P<name>\S+) (?P<type>\S) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$' | into int --radix 16 value size
+    $read.stdout | lines | parse --regex '^(?P<name>\S+) (?P<type>\S) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$' | update value {|r| $"0x($r.value)" | into int } | update size {|r| $"0x($r.size)" | into int }
 }
 
 # What the report made of a log: the counts that tell its make_currents
@@ -778,7 +778,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let harness = (tool shim $ws "jabshim_sdl_harness" --static)
     let header = (^readelf -h $harness | complete | get stdout)
     assert ($header =~ 'Type:\s+EXEC') $"harness: an EXEC: ($header | lines | where {|l| $l =~ 'Type:' } | str join '')"
-    let loads = (^readelf -lW $harness | complete | get stdout | lines | parse --regex '^\s+LOAD\s+0x[0-9a-f]+\s+0x(?P<vaddr>[0-9a-f]+)' | into int --radix 16 vaddr)
+    let loads = (^readelf -lW $harness | complete | get stdout | lines | parse --regex '^\s+LOAD\s+0x[0-9a-f]+\s+0x(?P<vaddr>[0-9a-f]+)' | update vaddr {|r| $"0x($r.vaddr)" | into int })
     assert ((not ($loads | is-empty)) and (($loads | first | get vaddr) > 0)) $"harness: its first segment sits above 0: ($loads | to nuon)"
     let harness_log = ($dir | path join "harness.log")
     let ran = (with-env { LD_PRELOAD: $library, SDL_SHIM_LOG: $harness_log } { ^$harness | complete })

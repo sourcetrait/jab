@@ -33,25 +33,28 @@ the window given (null for the one a run would open), the UART where
 QEMU starts (spec-listed). The ports' files sit beside the build
 output, named in the README. With a pad on the port, `bridge` is the
 pad's identity and `bridge_pipe` the pipe the bridge writes
-(bridge-pipe); on Windows the API's pipe takes a relay, `relays` and
-`relay_binary` as plan names them, none and "" elsewhere. `image` and
-`kernel` are the files the line loads, which a probe's identity names
-(probe build-fields).
+(bridge-pipe); on Windows the API's pipe takes a relay, `relays` as
+plan names them, none elsewhere. `image` and `kernel` are the files the
+line loads, which a probe's identity names (probe build-fields).
 
 - a Windows run's pipes are named pipes, named by a nonce of its own,
   the API's taking a relay and the pad port's client the bridge
 
 ## run-program
 
-Run a program with the console window, the UART on stdio; QEMU's exit
-code is the program's exit status. A run says nothing of its own.
-With a pad on the port, the bridge runs beside QEMU, started first
-so it is writing the header as the kernel comes up, and ended with
-it; the bridge ends itself as well once its pipe has no reader. On
-Windows the relays run-line names start ahead of QEMU too, which waits
-for each pipe's client as it makes the pipe, and once QEMU has ended
-each is given a second to end with its pipe, any left stopped, and one
-that ended in failure said on stderr, naming its pipe.
+Run a program with the console window, the UART on stdio, under the
+launch's supervisor in the terminal's foreground (supervise
+interactive); QEMU's exit code is the program's exit status. A run says
+nothing of its own. QEMU stays in the terminal's group, so the
+interrupt and the quit keys reach it as they would with no supervisor,
+which ignores them, reaps QEMU, and puts the terminal back however QEMU
+ended. With a pad on the port, the bridge runs as the launch's helper
+(pad bridge-helpers), started at the go and ended with the run, a
+bridge that cannot start or fails while QEMU runs naming itself; the
+bridge ends itself as well once its pipe has no reader. On Windows the
+relays run-line names are the supervisor's, each connected as QEMU
+makes its pipe, a relay that never connects or fails ending the run
+with its pipe named.
 
 ## test-under
 

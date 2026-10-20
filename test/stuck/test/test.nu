@@ -111,6 +111,6 @@ def scenario [kernel: path, image: path, out: path, set: string, letter: string,
 def mmio-source [debug: string, head: string] {
     let line = ($debug | lines | where {|l| $l starts-with $head } | get -o 0)
     if $line == null { error make {msg: $"no `($head)` line on the debug channel: ($debug)"} }
-    let at = ($line | str replace $head "" | into int --radix 16)
+    let at = ($"0x($line | str replace $head '')" | into int)
     ($at - $VIRTIO0) // $STRIDE + 1
 }

@@ -96,13 +96,15 @@ refused on a QEMU whose trace events do not list both.
 
 ## probe-launch
 
-A probe's QEMU run to its exit or its bound, `seconds`, polled as a
-launch polls (launch): QEMU's pid kept from `pidfile` at the first poll
-that finds it alive, since QEMU unlinks the file as it exits, and each
-entry of `sends` written into `api_in` once its time has come, in
-order, through fifo-write. The exit, QEMU's stderr, the pid, null where
-QEMU never came up, and each entry's write in seconds from the start,
-null where it never went in.
+A probe's QEMU run to its exit or its bound, `seconds`, under the
+launch's supervisor (supervise bounded): the schedule's command QEMU
+under `timeout` with `--kill-after`, its environment the shim's, its one
+pipe the API's, and each entry of `sends` an action at its time, in
+order. The exit, the status or 128 and the signal; QEMU's stderr; QEMU's
+pid as the supervisor read it from `pidfile` while QEMU lived, null
+where it never came up; and each entry's write in seconds from the go,
+null where it never went in. A run that left no receipt, a startup that
+did not go, and a failure the receipt names are refused.
 
 ## main
 

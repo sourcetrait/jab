@@ -287,7 +287,7 @@ def seconds-of [ns: oneof<int, nothing>]: nothing -> oneof<float, nothing> {
     if $ns == null { null } else { $ns / 1e9 }
 }
 
-# A receipt's exit as a launch's status: the child's, else 128 and its signal; null with none
+# A receipt's exit as the launch's status: the child's, else 128 and its signal
 def status-of [receipt: oneof<record, nothing>]: nothing -> oneof<int, nothing> {
     if $receipt == null { return null }
     if $receipt.status != null { return $receipt.status }
@@ -300,7 +300,7 @@ def ended-text [receipt: record]: nothing -> string {
     if $receipt.status != null { $"status ($receipt.status)" } else if $receipt.signal != null { $"signal ($receipt.signal)" } else { "no status" }
 }
 
-# A launch's schedule: its command under the bound, its pipes, its actions in due order, its readings
+# A launch's schedule: QEMU under the bound, its pipes, actions, and readings
 export def schedule-of [machine: record, token: string, line: list<string>, seconds: int, keys: table<at: duration, key: string, hold: int>, pads: record, --capture: duration = 0sec, --screen: duration = 0sec, --stop: duration = 0sec, --threads: duration = 0sec, --threads-at: list<duration> = [], --helpers: list<any> = []]: nothing -> record {
     let windows = ($nu.os-info.name == "windows")
     let end = {|endpoint: string, fifo: string| if $windows { $endpoint } else { $fifo } }

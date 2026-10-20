@@ -7,10 +7,14 @@ the CPU readings' whole window opens here, past the load (gauge cpu requests)
 ## outcome
 
 What a launch came to: its status, a fault line on the UART, the CPU
-and wall seconds, each QEMU thread's CPU over a second `jab launch
---threads` held with that span, empty and null when none was held, every
-reading `--threads-at` asked for kept whole, and the machine it ran on,
-its line and its record.
+and wall seconds, its end, each QEMU thread's CPU over a second `jab
+launch --threads` held with that span, empty and null when none was
+held, every reading `--threads-at` asked for kept whole, and the machine
+it ran on, its line and its record. Its end is the supervisor's: when
+the stop's quit went in (`quit_seconds`), the actions left unfinished
+with their states, what ended a run that left no receipt
+(`incomplete`), and the launch's own record, `launch.nuon` (`launch`).
+Every time is seconds from the go, on the supervisor's clock.
 
 ## requests
 

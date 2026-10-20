@@ -20,13 +20,14 @@
 # refused by name, by the kernel and by check-image; and a kernel without
 # the check running a new image through its jump. Then the launch's bound
 # (LaunchBound): the one GNU timeout a run resolves, a stand-in refused or
-# passed over, its bound on a child, a fifo nobody reads, and a program
-# that never exits ending at its bound. Then Windows' pipes (PipeShape):
+# passed over, its bound on a child, and a program that never exits ending
+# at its bound. Then Windows' pipes (PipeShape):
 # the chardev's path on each host, the pipe pairs, and a plan's relays.
 # Then the launch's supervision (RelaySupervision), the caller's side: the
 # lock refusing and taking over a stale record, the records and their
 # models, a stop, the backstop, a withheld go, a silent supervisor's forced
-# end, and the launch's tag. Last the default, in a
+# end after its go and before its go is published, the launch's tag, and
+# the host's lock outside every target. Last the default, in a
 # scratch XDG config home: `jab/config.toml` seeded from
 # asset/default/config.toml byte for byte, one there never written over,
 # JAB_SPEC ahead of it, one naming no spec refused, a home that is not
@@ -241,8 +242,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # run, GNU's on PATH here; JAB_TIMEOUT naming a stand-in whose --version
     # is not GNU's refused naming it; with no override a stand-in first on
     # PATH passed over for the real one; the real one bounding a child of
-    # 30 s at a second, 124 within two; fifo-write into a fifo nobody reads
-    # giving up within two; the stand-ins and the fifo on every host but
+    # 30 s at a second, 124 within two; the stand-ins on every host but
     # Windows; and a launch of a program that never exits ending at its
     # --seconds 2 with 124 and the resolved timeout in its result
     let real = (with-env { JAB_TIMEOUT: "" } { bound timeout })
@@ -332,9 +332,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # and a stop beside a capture refused; the caller's backstop on a
     # supervisor paused before its readiness, nothing measured run; a startup
     # the caller withholds its go from, expired; a supervisor silent after
-    # its go, the run ended by the record kept and reported incomplete; and
-    # the launch's tag, a retired alarm's message and another launch's
-    # discarded ahead of the supervisor's result
+    # its go, the run ended by the record kept and reported incomplete; one
+    # silent once it has decided the go and before publishing it, the inert
+    # gate ended by the record kept and nothing measured run; and the
+    # launch's tag, a retired alarm's message and another launch's discarded
+    # ahead of the supervisor's result
     let locks = ($out | path join "locks")
     target retire $locks
     mkdir $locks
@@ -387,6 +389,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal [$record.receipt ($record.incomplete | str contains "the completion alarm")] [null true] $"its record says so: ($record.incomplete)"
         assert (ps -l | where {|p| $p.command | str contains ($out | path join "silent") } | is-empty) "no QEMU of it left, nor its supervisor"
         assert equal (open --raw ($locks | path join "owner.nuon") | decode | from json | get state) "released" "the lock released once the group was empty"
+        let o0 = (date now)
+        let unpublished = (with-env { JABPIPE_TEST_PAUSE: "outcome:16000" } { launch --kernel $kernel --image $image --out ($out | path join "unpublished") --set $set --spec 1ka1 --seconds 20 })
+        let waited = (((date now) - $o0) / 1sec)
+        assert ($unpublished.incomplete | default "" | str contains "the startup alarm") $"a supervisor silent before its go is published, the run reported incomplete: ($unpublished.incomplete)"
+        assert ($waited >= 14 and $waited < 18) $"the backstop's 14 s: ($waited) s"
+        assert equal $unpublished.status null "no status for a run that never went"
+        assert (not ($out | path join "unpublished" "serial.log" | path exists)) "nothing measured ran before the go was published"
+        assert (ps -l | where {|p| $p.command | str contains ($out | path join "unpublished") } | is-empty) "no gate of it left, nor its supervisor"
+        assert equal (open --raw ($locks | path join "owner.nuon") | decode | from json | get state) "released" "the lock released once the gate's group was empty"
         let tag = 4242
         { token: $tag, source: "startup" } | job send --tag $tag 0
         { token: 7, source: "supervisor" } | job send --tag $tag 0
@@ -395,6 +406,18 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert equal [$got.source $got.result.exit_code] ["supervisor" 0] $"the result taken past a retired alarm's message and another launch's: ($got)"
         assert equal (supervise receive $tag [] 0sec) null "the tag empty after it"
     }
+
+    # the host's own lock, which this test's launches outside that block
+    # took, lies outside the workspace and every checkout's target, so no
+    # clean or retirement ever takes it
+    let state = (match $nu.os-info.name {
+        "windows" => $env.LOCALAPPDATA
+        _ => (if ($env.XDG_STATE_HOME? | default "") == "" { $env.HOME | path join ".local" "state" } else { $env.XDG_STATE_HOME })
+    })
+    let host_lock = ($state | path join "jab" "launch")
+    let targets = (target root $ws | path dirname)
+    assert ($host_lock | path join "lock" | path exists) $"the host's launch lock where this test's launches took it: ($host_lock)"
+    assert (not ($host_lock | str starts-with $targets) and not ($host_lock | str starts-with $ws)) $"the lock outside the targets and the workspace: ($host_lock)"
 
     # the default, in a scratch XDG config home
     let xdg = ($out | path join "xdg")

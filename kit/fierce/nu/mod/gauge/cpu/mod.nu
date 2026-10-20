@@ -1,7 +1,7 @@
 # When the CPU readings' whole window opens, past the load
 const CPU_FROM = 5sec
 
-# What a launch came to: status, fault, CPU and wall time, its end, threads, machine
+# What a launch came to: status, fault, CPU, wall time, its end, threads, machine
 export def outcome [launched: record]: nothing -> record {
     {
         status: $launched.status,

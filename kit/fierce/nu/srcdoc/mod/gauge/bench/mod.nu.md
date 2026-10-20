@@ -52,23 +52,36 @@ names the host's own pad, else a batch of the route; its selection, its
 cadence, workers, and grain asked, and its period from its cap; the
 machine and the QEMU it records; its standing and reasons as a
 comparison classifies it (standing-of); its CPU seconds over wall
-seconds, its outcomes, and its frames (presented-calls). A step with no
-gauge.nuon holds no runs.
+seconds, or null with `cpu_why` saying why it cannot be taken
+(cpu-why); its outcomes; and its frames (presented-calls). A step with
+no gauge.nuon holds no runs.
+
+## cpu-why
+
+Why a run's CPU over wall cannot be taken, null when it can: a run
+record older than its wall time; no wall time, its launch having left no
+receipt, with what ended it (the outcome's `incomplete`); a wall time not
+past zero; or no CPU seconds. A missing wall time is never read as zero,
+so a ratio is never made of a run whose end went unrecorded.
 
 ## bench-cadence
 
 A group of a bench's runs, one kind's at one cadence and period: the
 valid runs (standing-of) pooled, their CPU seconds over wall seconds and
-their frames (bench-frames) at the group's period; every other run, one
-on a diagnostic machine among them, kept apart with its standing, its
-reasons, and its own frames, a diagnostic outside the pool; and each
-run's standing and outcomes.
+their frames (bench-frames) at the group's period, a pooled run whose
+ratio cannot be taken named in `cpu_left` with why (cpu-why); every
+other run, one on a diagnostic machine among them, kept apart with its
+standing, its reasons, and its own frames, a diagnostic outside the
+pool; and each run's standing and outcomes.
 
 ## bench-cadence-text
 
 A cadence's lines in a bench's report, milliseconds to a tenth as
 least, median, 95th, 99th, and greatest, the pool's critical path at
-the median against the ceiling leading, its tail beside.
+the median against the ceiling leading, its tail beside. The head's CPU
+figure says how many of the pooled runs it covers and names each run
+left out of it with why, so a figure over fewer runs never reads as the
+pool's.
 
 ## bench-text
 

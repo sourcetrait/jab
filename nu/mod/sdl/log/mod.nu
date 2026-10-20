@@ -61,7 +61,7 @@ export def main [log: path]: nothing -> record<objects: table, events: table, pr
                 | split row " "
                 | compact --empty
                 | parse --regex '^(?P<object>\d+|\?)\+(?P<hex>[0-9a-f]+)$'
-                | each {|f| { object: (if $f.object == "?" { null } else { $f.object | into int }), hex: $f.hex, address: ($f.hex | into int --radix 16) } })
+                | each {|f| { object: (if $f.object == "?" { null } else { $f.object | into int }), hex: $f.hex, address: ($"0x($f.hex)" | into int) } })
             let shim = ($frames | take while {|f| $f.object == 1 } | length)
             let next = ($happened | get -o ($r.index + 1))
             let render = ($next != null and $next.name == "size" and ($next.ts - $e.ts) < 0.002)

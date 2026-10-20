@@ -8,7 +8,9 @@ file at parse time.
 ## DRAIN
 
 after the E the final records and the end marker land within this,
-then the capture ends the run; the run's bound is past both
+then the stop's quit ends the run (launch `--stop`), no screen taken;
+the run's bound, BOUND_PAST later, is past both, so the run's end is the
+stop's and never the bound's
 
 ## nuon-list
 
@@ -23,7 +25,7 @@ route's placements, its legs' `sends` (console command frames by their
 one-letter kind, each at its `at`), and its pad rows, an R with the
 run's seed and a C with the cadence before the first frame, with
 `--workers` a W with the workers and the grain beside them, the E at
-the route's end, the capture when the final records have landed. Headless with the sound
+the route's end, and the stop once the final records have landed. Headless with the sound
 recorded, or with `--host` in the window and the audio a run of the
 program has. `--qemu` words go on each launch's line after its own, and
 each run's identity then takes the machine and the words the launch
@@ -76,8 +78,8 @@ launch's own words, which makes the run diagnostic, the oracle set.
 
 Put the build in the host's window, with its audio and its own
 gamepad, for a person to play from the spawn: an R with the seed and a
-C with the cadence before the first frame, the E after `seconds`, the
-capture once the final records have landed, which closes the window.
+C with the cadence before the first frame, the E after `seconds`, and
+the stop once the final records have landed, which closes the window.
 `--qemu` as `run` takes it, and an image whose build flags contradict the
 tree asked is refused as `run` refuses it.
 
