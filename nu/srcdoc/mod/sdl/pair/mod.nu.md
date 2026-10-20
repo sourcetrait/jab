@@ -1,18 +1,15 @@
 # sdl/pair
 
+The pairing's limits: the binding exact under its assumptions, the bracket
+a consistency check that cannot prove the absence of compensating edits or
+reject every stream shift, the host stamp's closed microsecond, stalls
+reported, walk's TIMING-off frame bracket, the fit a diagnostic.
+
 ## workspace
 
 The workspace the module ships in, four levels above its file, whose tool
 workspace builds jabpair; a workbench importing the module from a sibling
 checkout reaches jab's.
-
-## pair_limits
-
-The pairing's limits, printed with every reading (sdl pair): the binding
-exact under its assumptions, the bracket a consistency check that cannot
-prove the absence of compensating edits or reject every stream shift, the
-host stamp's closed microsecond, stalls reported, walk's TIMING-off frame
-bracket, the fit a diagnostic.
 
 ## main
 

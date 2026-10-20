@@ -695,7 +695,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal ($paired.shifts | get status) ["infeasible" "infeasible"] $"pair_regular: the load's gap rules out either shift: ($paired.shifts | to nuon)"
     assert (($paired.stalls | is-empty) and ($paired.pairs | all {|p| $p.place.first_ms <= 0.3 and $p.place.last_ms >= 0.3 })) "pair_regular: no stall, every upload's place holding its 0.3 ms"
     assert ((($paired.fit.drift - 1.0) | math abs) < 0.0001) $"pair_regular: the fit a diagnostic, drift 1: ($paired.fit | to nuon)"
-    assert ($paired.limits | str contains "cannot uniquely reject every stream shift") "pair_regular: the limits printed with the reading"
     # a refused flip and a frame with no flip after frame 10, both unpaired
     let unpaired = (sdl pair $regular.events ($regular.flips | take 12 | append [{ status: 1, ordinal: 13, lo: 0, hi: 0 } { status: 255, ordinal: 13, lo: 0, hi: 0 }] | append ($regular.flips | skip 12)))
     assert equal [$unpaired.verdict ($unpaired.pairs | length)] ["admitted" 122] $"pair_unpaired: a refused flip and a frame with no flip go unpaired: ($unpaired.refusals | to nuon)"
@@ -744,13 +743,12 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal [$open.verdict ($open.shifts | where status == "feasible" | get name)] ["ambiguous" ["later"]] $"pair_ambiguous: the shifted mapping feasible too: ($open.shifts | to nuon)"
     # Astra's compensating loss and addition: frame 60's upload lost and one
     # added; a quarter period on, past its call, refused and named; inside
-    # its call, passing, the limit the reading states
+    # its call, passing
     let swapped = {|at: float| do $made $frames 1500.0 | enumerate | each {|e| if $e.index == 121 { do $upload (($frames | get 60) + $at) } else { $e.item } } }
     let past_call = (sdl pair (do $swapped 4.1667) (do $flipped $frames))
     assert equal [$past_call.verdict $past_call.bracket.binding.floor] ["refused" [62]] $"pair_compensated: an addition past its call refused and named: ($past_call.bracket | to nuon)"
     let in_call = (sdl pair (do $swapped 1.0) (do $flipped $frames))
     assert equal $in_call.verdict "ambiguous" $"pair_compensated_inside: an addition inside its call passes: ($in_call.refusals | to nuon)"
-    assert ($in_call.limits | str contains "a loss and an addition fall inside one call") "pair_compensated_inside: the limit stated with it"
     # the refusals, each at its own rule
     let late = ($starts | skip 2 | last 10 | each {|ms| $ms + 10 * $period_ms })
     let tail = {|times: list<float>| $times | each {|ms| [(do $upload ($ms + 0.3)) (do $render $ms)] } | flatten }

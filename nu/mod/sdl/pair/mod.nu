@@ -4,11 +4,8 @@ use (path self ../../tool)
 # The workspace this module ships in, whose tool workspace builds jabpair
 const workspace = (path self ../../../..)
 
-# The pairing's limits, printed with every reading
-const pair_limits = "the pairing is exact under the run binding, which ties the guest's records to the log, and under the log's assumptions, that it records every upload once and that every flush the device accepted makes one upload. The bracket is a consistency check under a correspondence fitted from the same stream: it cannot in general prove the absence of compensating edits, it cannot uniquely reject every stream shift, and it does not establish that a loss and an addition fall inside one call; a host stamp is read as the closed microsecond after it, admitting the one point no instant logged there holds. A stall is reported, never refused. walk's TIMING-off arm pairs on a frame bracket alone. The fit is a diagnostic, giving intervals and jitter and no absolute guest-to-SDL latency."
-
 # A probed run's presents paired with the host's flip uploads, the bracket on top
-export def main [events: list<any>, flips: list<record<status: int, ordinal: int, lo: int, hi: int>>, --period: float = 0.016666666666666666, --drift-ppm: int = 50, --stall-ms: float = 4.2]: nothing -> record<ok: bool, verdict: string, refusals: list<record<refusal: string, count: int>>, bracket: oneof<record, nothing>, shifts: list<any>, stalls: list<any>, pairs: list<any>, fit: oneof<record, nothing>, window: oneof<record, nothing>, limits: string> {
+export def main [events: list<any>, flips: list<record<status: int, ordinal: int, lo: int, hi: int>>, --period: float = 0.016666666666666666, --drift-ppm: int = 50, --stall-ms: float = 4.2]: nothing -> record<ok: bool, verdict: string, refusals: list<record<refusal: string, count: int>>, bracket: oneof<record, nothing>, shifts: list<any>, stalls: list<any>, pairs: list<any>, fit: oneof<record, nothing>, window: oneof<record, nothing>> {
     let host = ($events | each {|e| { ts: (if ($e | get -o ts) != null { $e.ts } else { $e.stamp | into float }), us: (micros $e), name: $e.name, kind: ($e | get -o kind | default $e.name), key: ($e | get -o key | default "") } })
     let presented = ($flips | where status == 0)
     let uploads = ($host | where kind == "upload")
@@ -72,7 +69,6 @@ export def main [events: list<any>, flips: list<record<status: int, ordinal: int
         pairs: $pairs,
         fit: (if $fit == null { null } else { { offset_s: ($fit.base + $fit.offset), drift: $fit.drift, max_residual_ms: ($fit.residuals_ms | each {|r| $r | math abs } | math max) } }),
         window: (if ($presented | is-empty) { null } else { { first: ($presented | first | get ordinal), last: $last, presents: ($presented | length), uploads: ($uploads | length) } }),
-        limits: $pair_limits,
     }
 }
 
