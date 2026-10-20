@@ -1,4 +1,5 @@
 use (path self ../chardev)
+use (path self ../target)
 use (path self ../tool)
 use (path self ../word)
 
@@ -82,6 +83,17 @@ export def gamepad-plan [found: record]: nothing -> record<args: list<string>, p
         },
         _ => $none,
     }
+}
+
+# The pad bridge as a supervised launch's helper, its stderr a fresh file in `out`; none without a bridge
+export def bridge-helpers [bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, pipe: string, ws: string, out: path, root: path]: nothing -> list<record<name: string, command: list<string>, stderr: string>> {
+    if $bridge == null { return [] }
+    let bin = (tool shim $ws "jabshim_pad" --bin)
+    let vendor = (if $bridge.vendor == null { "" } else { $bridge.vendor | into string })
+    let product = (if $bridge.product == null { "" } else { $bridge.product | into string })
+    let said = ($out | path join "bridge.stderr")
+    target retire $said $root
+    [{ name: "pad bridge", command: [$bin $pipe $bridge.name $vendor $product], stderr: $said }]
 }
 
 # Whether the keyboard and the tablet go on the line; both flags refused

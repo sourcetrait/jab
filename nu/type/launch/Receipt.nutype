@@ -1,0 +1,67 @@
+# A supervised launch's exit receipt as the supervisor writes it, held after `from json`.
+# Every time is nanoseconds from the go on the supervisor's monotonic clock.
+record<
+    token: string,
+    outcome: record<token: string, decision: string, go_utc: oneof<string, nothing>>,
+    header: oneof<record<
+        kind: string,
+        index: int,
+        due_ns: int,
+        length: int,
+        accepted: int,
+        state: string,
+        first_ns: oneof<int, nothing>,
+        done_ns: oneof<int, nothing>,
+        whole_ns: oneof<int, nothing>,
+        whole: oneof<bool, nothing>
+    >, nothing>,
+    actions: table<
+        kind: string,
+        index: int,
+        due_ns: int,
+        length: int,
+        accepted: int,
+        state: string,
+        first_ns: oneof<int, nothing>,
+        done_ns: oneof<int, nothing>,
+        whole_ns: oneof<int, nothing>,
+        whole: oneof<bool, nothing>
+    >,
+    held: oneof<record<kind: string, index: int, why: string>, nothing>,
+    readings: table<
+        kind: string,
+        index: int,
+        requested_ns: int,
+        start_ns: oneof<int, nothing>,
+        end_ns: oneof<int, nothing>,
+        threads: oneof<table<id: string, name: string, cpu: float>, nothing>
+    >,
+    relays: table<
+        endpoint: string,
+        name: string,
+        connected_ns: oneof<int, nothing>,
+        ended_ns: oneof<int, nothing>,
+        state: string,
+        said: string
+    >,
+    helpers: table<
+        name: string,
+        pid: oneof<int, nothing>,
+        started_ns: oneof<int, nothing>,
+        ended_ns: oneof<int, nothing>,
+        status: oneof<int, nothing>,
+        state: string,
+        said: string
+    >,
+    end_ns: oneof<int, nothing>,
+    cpu_seconds: oneof<float, nothing>,
+    qemu_pid: oneof<int, nothing>,
+    status: oneof<int, nothing>,
+    signal: oneof<int, nothing>,
+    stdout: string,
+    stderr: string,
+    failure: oneof<string, nothing>,
+    cancelled_ns: oneof<int, nothing>,
+    startup_ns: int,
+    clock: record<origin: string, unit: string, go_utc: oneof<string, nothing>>
+>

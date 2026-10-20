@@ -3,6 +3,7 @@
 use crate::*;
 use crate::child::{self, Child, Ended, Signal};
 use crate::control::{self, AUTHORIZATION, CANCEL, OUTCOME, READINESS, RECEIPT};
+use crate::helper::{HELPER_END, Running, Standing};
 use crate::link::{Ending, Link};
 use crate::payload::{Payload, Step, since};
 use crate::receipt::{Authorization, Clock, Gate, Held, Outcome, Process, Readiness, Receipt, RelayEnd, Taken};
@@ -117,7 +118,7 @@ fn supervised(args: Vec<String>, started: Instant) -> PipeResult<ExitCode> {
     }
     if decision != "go" {
         let ended = abandoned(&mut child, Ok(ExitCode::from(ENDED_EARLY)));
-        let run = Run::new(&schedule, &runtime, go, started, Vec::new());
+        let run = Run::new(&schedule, &runtime, go, started, Vec::new(), Vec::new());
         control::write_json(&file(RECEIPT), &run.receipt(outcome, None, None))?;
         return ended;
     }
@@ -133,7 +134,8 @@ fn supervised(args: Vec<String>, started: Instant) -> PipeResult<ExitCode> {
             Link::start(&runtime, &r.endpoint, &r.name, connector(&r.name), inward, PathBuf::from(&r.outward), started + ns(schedule.bounds.startup_ns))
         })
         .collect();
-    let mut run = Run::new(&schedule, &runtime, go, started, links);
+    let helpers = schedule.helpers.iter().map(Running::start).collect();
+    let mut run = Run::new(&schedule, &runtime, go, started, links, helpers);
     let ended = run.until_end(&mut child, &dir)?;
     let receipt = run.receipt(outcome, Some(ended), Some(since(go)));
     control::write_json(&file(RECEIPT), &receipt)?;
@@ -171,6 +173,7 @@ struct Run<'a> {
     go: Instant,
     started: Instant,
     links: Vec<Link>,
+    helpers: Vec<Running>,
     header: Option<Payload>,
     payloads: Vec<Payload>,
     cursor: usize,
@@ -189,7 +192,7 @@ struct Run<'a> {
 }
 
 impl<'a> Run<'a> {
-    fn new(schedule: &'a Schedule, runtime: &'a tokio::runtime::Runtime, go: Instant, started: Instant, links: Vec<Link>) -> Run<'a> {
+    fn new(schedule: &'a Schedule, runtime: &'a tokio::runtime::Runtime, go: Instant, started: Instant, links: Vec<Link>, helpers: Vec<Running>) -> Run<'a> {
         let end_of = |pipe: &str| schedule.pipe(pipe).map(|p| p.path.clone()).unwrap_or_default();
         let header = schedule.header.as_ref().map(|h| Payload::new("header", 0, 0, &h.bytes, &h.pipe, &end_of(&h.pipe), &links));
         let payloads = schedule
@@ -208,6 +211,7 @@ impl<'a> Run<'a> {
             go,
             started,
             links,
+            helpers,
             header,
             payloads,
             cursor: 0,
@@ -252,6 +256,7 @@ impl<'a> Run<'a> {
             let live = self.qemu_live(child);
             self.read_threads(live);
             self.watch_links(child, now);
+            self.watch_helpers(child, now);
             if live && self.exited.is_none() && self.ending.is_none() && self.failure.is_none() && self.suspect.is_none() && self.held.is_none() {
                 self.act(child, now);
             }
@@ -282,7 +287,45 @@ impl<'a> Run<'a> {
         }
         let ended = child.reap()?;
         self.close_links();
+        self.close_helpers();
         Ok(ended)
+    }
+
+    /// A helper that never started fails the launch; one failing while QEMU runs starts the grace.
+    fn watch_helpers(&mut self, child: &mut Child, now: Instant) {
+        let mut failed = None;
+        for helper in &mut self.helpers {
+            let ended = helper.poll();
+            if helper.standing() == Standing::Never && failed.is_none() {
+                failed = Some(helper.failure());
+            } else if ended == Some(Standing::Failed) && self.exited.is_none() && self.suspect.is_none() {
+                self.suspect = Some((helper.failure(), now));
+            }
+        }
+        if let Some(why) = failed
+            && self.ending.is_none()
+            && self.exited.is_none()
+        {
+            self.fail(why);
+            self.terminate(child, now);
+        }
+    }
+
+    /// The helpers given a second to end on their own, the rest stopped.
+    fn close_helpers(&mut self) {
+        let deadline = Instant::now() + HELPER_END;
+        loop {
+            for helper in &mut self.helpers {
+                helper.poll();
+            }
+            if Instant::now() >= deadline || self.helpers.iter().all(|h| h.standing() != Standing::Running) {
+                break;
+            }
+            thread::sleep(TICK);
+        }
+        for helper in &mut self.helpers {
+            helper.stop();
+        }
     }
 
     /// The loop's wait, the relays' tasks driven through it.
@@ -526,6 +569,7 @@ impl<'a> Run<'a> {
             held: self.held.clone(),
             readings: self.readings.clone(),
             relays,
+            helpers: self.helpers.iter().map(|h| h.end(go)).collect(),
             end_ns,
             cpu_seconds: self.cpu,
             qemu_pid: self.qemu_pid,

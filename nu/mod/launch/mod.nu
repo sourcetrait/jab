@@ -10,6 +10,8 @@ use (path self ../machine)
 use (path self ../nonce)
 use (path self ../pad)
 use (path self ../process)
+use (path self ../spec)
+use (path self ../supervise)
 use (path self ../target)
 use (path self ../tool)
 use (path self ../machine) [rng_device]
@@ -51,7 +53,7 @@ export def plan [
     --capture-nonce: int = 0
     --profile: string = ""
     --workspace: path = ""
-]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, timeout_override: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<qemu_binary: string, timeout_binary: string, timeout_version: string, timeout_override: string, qemu: list<string>, env: record, out: string, serial_log: string, qemu_log: string, screen: string, pidfile: string, monitor: string, debug_log: string, api_in: string, api_out: string, pad_fifo: string, pad_pipe_in: string, pad_port: bool, pad_header: string, sound: string, workspace: string, target: string, window: string, audio: string, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string>>, machine: record, bootargs: string, demand: oneof<record, nothing>, sends: table<at: duration, bytes: binary>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     let out = ($out | path expand)
     let ws = (if $workspace != "" { $workspace | path expand } else { image workspace $kernel $image $out })
     let asked = (machine resolve $ws $spec $harts)
@@ -92,8 +94,7 @@ export def plan [
     let piped = (if not $windows { [] } else {
         [{ endpoint: "monitor", pipe: $watch } { endpoint: "api", pipe: $ports.api }] ++ (if $hosted.port { [] } else { [{ endpoint: "padport", pipe: $ports.pad }] })
     })
-    let relays = (chardev relays-of $out $piped)
-    let relay_binary = (chardev relay-build $relays $ws)
+    let relays = (chardev relays-of $piped)
     let inputs = (if $no_kbm { [] } else { $input_devices })
     let wav = (if $sound { $out | path join "sound.wav" } else { "" })
     if $wav != "" { target retire $wav $root }
@@ -146,7 +147,6 @@ export def plan [
         bridge: $hosted.bridge,
         bridge_pipe: (chardev bridge-pipe $ports.pad),
         relays: $relays,
-        relay_binary: $relay_binary,
         machine: $machine,
         bootargs: $line,
         demand: $demand,
@@ -181,6 +181,7 @@ export def main [
     --seconds: int = 10
     --capture: duration = 0sec
     --screen: duration = 0sec
+    --stop: duration = 0sec
     --keys: table<at: duration, key: string, hold: int> = []
     --api
     --send: table<at: duration, bytes: binary> = []
@@ -206,136 +207,49 @@ export def main [
     --capture-nonce: int = 0
     --profile: string = ""
     --workspace: path = ""
-]: nothing -> record<status: int, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: float, wall_seconds: float, sound: string, qemu_binary: string, timeout_binary: string, timeout_version: string, timeout_override: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
+]: nothing -> record<status: oneof<int, nothing>, serial: string, debug: string, api: binary, screen: string, qemu_log: string, stderr: string, cpu_seconds: oneof<float, nothing>, wall_seconds: oneof<float, nothing>, sound: string, qemu_binary: string, timeout_binary: string, timeout_version: string, timeout_override: string, qemu: list<string>, overrides: list<string>, window: string, audio: string, machine: record, threads: list<record<name: string, delta: float, rate: float>>, threads_span: oneof<float, nothing>, thread_readings: list<any>, screen_started: oneof<float, nothing>, screen_completed: oneof<float, nothing>, send_seconds: list<oneof<float, nothing>>, quit_seconds: oneof<float, nothing>, unfinished: list<record<kind: string, index: int, state: string, accepted: int, length: int>>, incomplete: oneof<string, nothing>, launch: string, declared: bool, diagnostic: bool, qemu_pid: oneof<int, nothing>, sdl_log: string, shim: string, capture_nonce: oneof<int, nothing>, profile: string, capture: record> {
     if $kbm and $no_kbm { error make {msg: "--kbm and --no-kbm together: one or the other"} }
     if $capture != 0sec and $screen != 0sec { error make {msg: "--capture and --screen together: one screen a run, ending it or not"} }
+    if $capture != 0sec and $stop != 0sec { error make {msg: "--capture and --stop together: a capture's quit ends the run at its screen, a stop's at its own time; one or the other"} }
     let gamepad = (pad pad-table $pad)
     let nonce = (nonce mint $capture_nonce ($sdl_probe != ""))
     let machine = (plan --kernel $kernel --image $image --out $out --api=$api --send $send --disk $disk --serial $serial --set $set --gamepad=(not ($pad | is-empty)) --pad-port=$pad_port --no-kbm=$no_kbm --sound=$sound --window=$window --live-sound=$live_sound --host-pad=$host_pad --spec $spec --harts $harts --bootargs $bootargs --dtb $dtb --sdl-probe $sdl_probe --capture-nonce $nonce --profile $profile --workspace $workspace)
-    let send = $machine.sends
     let out = $machine.out
-    let log = $machine.serial_log
-    let qemu_log = $machine.qemu_log
-    let screen_file = $machine.screen
-    let pidfile = $machine.pidfile
-    let monitor = $machine.monitor
-    let ports = { debug_log: $machine.debug_log }
-    let wav = $machine.sound
     let line = ($machine.qemu ++ $qemu)
-    let disked = (["--signal=TERM" $"($seconds)" $machine.qemu_binary] ++ $line)
-    let api_out = $machine.api_out
-    let api_in = $machine.api_in
-    let pad_in = $machine.pad_pipe_in
-    let gamepad = ($gamepad | merge { port: $machine.pad_port, fifo: $machine.pad_fifo, header: ($machine.pad_header | decode hex), env: $machine.env })
-    let bridge = (if $machine.bridge == null { null } else {
-        let bin = (tool shim $machine.workspace "jabshim_pad" --bin)
-        let b = $machine.bridge
-        let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
-        let product = (if $b.product == null { "" } else { $b.product | into string })
-        let pipe = $machine.bridge_pipe
-        job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
-    })
-    let events = ([
-        ($keys | enumerate | each {|e| { kind: "key", index: $e.index, at: $e.item.at } })
-        ($send | enumerate | each {|e| { kind: "send", index: $e.index, at: $e.item.at } })
-        ($gamepad.groups | enumerate | each {|e| { kind: "pad", index: $e.index, at: $e.item.at } })
-    ] | flatten | enumerate | each {|e| $e.item | insert order $e.index } | sort-by at order | reject -o order)
-    let started = (date now)
-    let bound = $machine.timeout_binary
-    job spawn { with-env $gamepad.env { ^$bound ...$disked | complete } | job send 0 }
-    let relays = (chardev relays-start $machine.relays $machine.relay_binary $machine.target)
-    mut result: any = null
-    mut cpu = 0.0
-    mut events_taken = 0
-    mut screen_due = (if $capture != 0sec { $capture } else if $screen != 0sec { $screen } else { null })
-    mut screen_started: any = null
-    mut screen_completed: any = null
-    mut held = false
-    mut send_seconds = ($send | each --keep-empty {|_| null })
-    mut header_sent = (not $gamepad.port)
-    mut threads_first: any = null
-    mut threads_held: any = null
-    let thread_requests = ($threads_at | sort)
-    mut readings = []
-    mut taken = 0
-    mut qemu_pid: any = null
-    while $result == null {
-        $result = (try { job recv --timeout 100ms } catch { null })
-        let pid = (try { open --raw $pidfile | str trim } catch { "" })
-        let alive = ($result == null and (process process-alive $pid))
-        if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
-        let sample = (if $pid == "" { null } else { process cpu-seconds $pid })
-        if $sample != null { $cpu = $sample }
-        let elapsed = ((date now) - $started)
-        if (not $header_sent) and $alive {
-            chardev pipe-write $pad_in $gamepad.header $bound | ignore
-            $header_sent = true
-        }
-        if not $held {
-            for action in (due-order ($events | skip $events_taken) $screen_due $elapsed) {
-                if $action.kind == "screen" {
-                    $screen_started = (((date now) - $started) / 1sec)
-                    let asked = (if $alive { chardev monitor-send $monitor $"screendump (chardev hmp-quoted $screen_file)" $bound } else { false })
-                    if not ($asked and (chardev screen-whole $screen_file)) {
-                        $held = true
-                        break
-                    }
-                    $screen_completed = (((date now) - $started) / 1sec)
-                    $screen_due = null
-                    if $capture != 0sec {
-                        if (process process-alive $pid) { chardev monitor-send $monitor "quit" $bound | ignore }
-                        $held = true
-                        break
-                    }
-                } else {
-                    let written = (if not $alive { false } else if $action.kind == "key" {
-                        let k = ($keys | get $action.index)
-                        chardev monitor-send $monitor $"sendkey ($k.key) ($k.hold)" $bound
-                    } else if $action.kind == "send" {
-                        if $api_in == "" { false } else { chardev pipe-write $api_in ($send | get $action.index | get bytes) $bound }
-                    } else {
-                        let g = ($gamepad.groups | get $action.index)
-                        if $gamepad.port { chardev pipe-write $pad_in (pad pad-frames $g.items) $bound } else if $gamepad.fifo != "" { chardev fifo-write $gamepad.fifo (pad pad-report $g.items) $bound } else { false }
-                    })
-                    if $written and $action.kind == "send" {
-                        $send_seconds = ($send_seconds | update $action.index (((date now) - $started) / 1sec))
-                    }
-                    $events_taken += 1
-                }
-            }
-        }
-        if $threads != 0sec and $alive {
-            if $threads_first == null and $elapsed >= $threads {
-                let reading = (process threads-of ($pid | into int))
-                $threads_first = { threads: $reading, at: (date now) }
-            } else if $threads_first != null and $threads_held == null and $elapsed >= ($threads + 1sec) {
-                let reading = (process threads-of ($pid | into int))
-                let at = (date now)
-                $threads_held = (process threads-between $threads_first.threads $reading (($at - $threads_first.at) / 1sec))
-            }
-        }
-        while $alive and $taken < ($thread_requests | length) and ($thread_requests | get $taken) <= $elapsed {
-            let threads = (process threads-of ($pid | into int))
-            $readings = ($readings | append { requested: (($thread_requests | get $taken) / 1sec), at: (((date now) - $started) / 1sec), threads: $threads })
-            $taken += 1
-        }
+    for f in ["qemu.stdout" "qemu.stderr"] { target retire ($out | path join $f) $machine.target }
+    let pads = ($gamepad | merge { port: $machine.pad_port, fifo: $machine.pad_fifo, header: ($machine.pad_header | decode hex) })
+    let helpers = (pad bridge-helpers $machine.bridge $machine.bridge_pipe $machine.workspace $out $machine.target)
+    let schedule = (schedule-of $machine (supervise hex (supervise token)) $line $seconds $keys $pads --capture $capture --screen $screen --stop $stop --threads $threads --threads-at $threads_at --helpers $helpers)
+    let supervised = (supervise bounded $schedule $machine.target $seconds)
+    let receipt = $supervised.receipt
+    if $receipt != null and $receipt.outcome.decision != "go" { error make {msg: $"the launch's startup ended ($receipt.outcome.decision), so nothing measured ran"} }
+    let stderr = (if $receipt != null and ($receipt.stderr | path exists) { open --raw $receipt.stderr | decode } else { "" })
+    if $receipt != null and $receipt.failure != null {
+        let said = ($stderr | str trim)
+        error make {msg: $"($receipt.failure); QEMU ended with (ended-text $receipt)(if $said == '' { '' } else { $', saying: ($said)' })"}
     }
-    let unread = ($thread_requests | skip $taken | each {|r| { requested: ($r / 1sec), at: null, threads: null } })
-    let relayed = (chardev relays-stop $relays)
-    if $bridge != null { try { job kill $bridge } }
-    chardev relays-held $relayed $result
     let ran_on = ($machine.machine | update overrides $qemu)
+    let actions = (if $receipt == null { [] } else { $receipt.actions })
+    let shot = ($actions | where {|a| $a.kind == "screen" } | get -o 0)
+    let whole = ($shot != null and $shot.whole == true)
+    let quit = ($actions | where {|a| $a.kind == "quit" } | get -o 0)
+    let readings = (if $receipt == null { [] } else { $receipt.readings })
+    let held = ($readings | where {|r| $r.kind == "held" } | sort-by index)
+    let span = (if ($held | length) == 2 and ($held | all {|r| $r.threads != null }) {
+        process threads-between $held.0.threads $held.1.threads (seconds-of ($held.1.start_ns - $held.0.start_ns))
+    } else { null })
+    let qemu_pid = (if $receipt == null { null } else { $receipt.qemu_pid })
     {
-        status: $result.exit_code,
-        serial: (if ($log | path exists) { open --raw $log | decode } else { "" }),
-        debug: (if $ports.debug_log != "" and ($ports.debug_log | path exists) { open --raw $ports.debug_log | decode } else { "" }),
-        api: (if $api_out != "" and ($api_out | path exists) { open --raw $api_out | into binary } else { 0x[] }),
-        screen: (if $screen_completed != null { $screen_file } else { "" }),
-        qemu_log: $qemu_log,
-        stderr: $result.stderr,
-        cpu_seconds: $cpu,
-        wall_seconds: (((date now) - $started) / 1sec),
-        sound: (if $wav != "" and ($wav | path exists) { $wav } else { "" }),
+        status: (status-of $receipt),
+        serial: (if ($machine.serial_log | path exists) { open --raw $machine.serial_log | decode } else { "" }),
+        debug: (if $machine.debug_log != "" and ($machine.debug_log | path exists) { open --raw $machine.debug_log | decode } else { "" }),
+        api: (if $machine.api_out != "" and ($machine.api_out | path exists) { open --raw $machine.api_out | into binary } else { 0x[] }),
+        screen: (if $whole { $machine.screen } else { "" }),
+        qemu_log: $machine.qemu_log,
+        stderr: $stderr,
+        cpu_seconds: (if $receipt == null { null } else { $receipt.cpu_seconds }),
+        wall_seconds: (if $receipt == null { null } else { seconds-of $receipt.end_ns }),
+        sound: (if $machine.sound != "" and ($machine.sound | path exists) { $machine.sound } else { "" }),
         qemu_binary: $machine.qemu_binary,
         timeout_binary: $machine.timeout_binary,
         timeout_version: $machine.timeout_version, timeout_override: $machine.timeout_override,
@@ -344,12 +258,19 @@ export def main [
         window: $machine.window,
         audio: $machine.audio,
         machine: $ran_on,
-        threads: (if $threads_held == null { [] } else { $threads_held.threads }),
-        threads_span: (if $threads_held == null { null } else { $threads_held.span }),
-        thread_readings: ($readings | append $unread),
-        screen_started: $screen_started,
-        screen_completed: $screen_completed,
-        send_seconds: $send_seconds,
+        threads: (if $span == null { [] } else { $span.threads }),
+        threads_span: (if $span == null { null } else { $span.span }),
+        thread_readings: ($readings | where {|r| $r.kind == "at" } | sort-by index | each {|r| { requested: (seconds-of $r.requested_ns), at: (seconds-of $r.start_ns), threads: $r.threads } }),
+        screen_started: (if $shot == null { null } else { seconds-of $shot.first_ns }),
+        screen_completed: (if $whole { seconds-of $shot.whole_ns } else { null }),
+        send_seconds: ($machine.sends | enumerate | each --keep-empty {|e|
+            let sent = ($actions | where {|a| $a.kind == "send" and $a.index == $e.index } | get -o 0)
+            if $sent == null { null } else { seconds-of $sent.done_ns }
+        }),
+        quit_seconds: (if $quit == null { null } else { seconds-of $quit.done_ns }),
+        unfinished: ($actions | where {|a| $a.state != "complete" } | each {|a| { kind: $a.kind, index: $a.index, state: $a.state, accepted: $a.accepted, length: $a.length } }),
+        incomplete: $supervised.incomplete,
+        launch: $supervised.launch,
         declared: ($machine.demand != null),
         diagnostic: ($ran_on.diagnostic != null or (not ($qemu | is-empty)) or $machine.demand == null or ($ran_on | get -o below_minimum | default false)),
         qemu_pid: $qemu_pid,
@@ -358,6 +279,69 @@ export def main [
         capture_nonce: $machine.capture_nonce,
         profile: $machine.profile,
         capture: (capture-identity $machine $qemu_pid),
+    }
+}
+
+# Nanoseconds as seconds, a float; null stays null
+def seconds-of [ns: oneof<int, nothing>]: nothing -> oneof<float, nothing> {
+    if $ns == null { null } else { $ns / 1e9 }
+}
+
+# A receipt's exit as a launch's status: the child's, else 128 and its signal; null with none
+def status-of [receipt: oneof<record, nothing>]: nothing -> oneof<int, nothing> {
+    if $receipt == null { return null }
+    if $receipt.status != null { return $receipt.status }
+    if $receipt.signal != null { return (128 + $receipt.signal) }
+    null
+}
+
+# A receipt's exit as words: its status or its signal
+def ended-text [receipt: record]: nothing -> string {
+    if $receipt.status != null { $"status ($receipt.status)" } else if $receipt.signal != null { $"signal ($receipt.signal)" } else { "no status" }
+}
+
+# A launch's schedule: its command under the bound, its pipes, its actions in due order, its readings
+export def schedule-of [machine: record, token: string, line: list<string>, seconds: int, keys: table<at: duration, key: string, hold: int>, pads: record, --capture: duration = 0sec, --screen: duration = 0sec, --stop: duration = 0sec, --threads: duration = 0sec, --threads-at: list<duration> = [], --helpers: list<any> = []]: nothing -> record {
+    let windows = ($nu.os-info.name == "windows")
+    let end = {|endpoint: string, fifo: string| if $windows { $endpoint } else { $fifo } }
+    let monitor = [{ name: "monitor", path: (do $end "monitor" ($machine.monitor + ".in")) }]
+    let api = (if $machine.api_in == "" { [] } else { [{ name: "api", path: (do $end "api" $machine.api_in) }] })
+    let pad = (if $pads.port { [{ name: "pad", path: (do $end "padport" $machine.pad_pipe_in) }] } else if $pads.fifo != "" { [{ name: "pad", path: $pads.fifo }] } else { [] })
+    let line_of = {|text: string| $text | into binary }
+    let events = ([
+        ($keys | enumerate | each {|e| { kind: "key", index: $e.index, at: $e.item.at, pipe: "monitor", bytes: (do $line_of $"sendkey ($e.item.key) ($e.item.hold)\n") } })
+        ($machine.sends | enumerate | each {|e| { kind: "send", index: $e.index, at: $e.item.at, pipe: "api", bytes: $e.item.bytes } })
+        ($pads.groups | enumerate | each {|e| { kind: "pad", index: $e.index, at: $e.item.at, pipe: "pad", bytes: (if $pads.port { pad pad-frames $e.item.items } else { pad pad-report $e.item.items }) } })
+    ] | flatten | enumerate | each {|e| $e.item | insert rank 1 | insert order $e.index | insert screen null })
+    let shot = (if $capture != 0sec { $capture } else if $screen != 0sec { $screen } else { null })
+    let size = $spec.display_size
+    let header = ($"P6\n($size.width) ($size.height)\n255\n" | into binary)
+    let quit = { kind: "quit", index: 0, pipe: "monitor", bytes: (do $line_of "quit\n"), rank: 0, screen: null }
+    let screens = (if $shot == null { [] } else {
+        let shooting = { kind: "screen", index: 0, at: $shot, pipe: "monitor", bytes: (do $line_of $"screendump (chardev hmp-quoted $machine.screen)\n"), rank: 0, order: 0, screen: { file: $machine.screen, header: $header, size: (($header | bytes length) + $size.width * $size.height * 3) } }
+        let ending = (if $capture != 0sec { [($quit | insert at $shot | insert order 1)] } else { [] })
+        [$shooting] ++ $ending
+    })
+    let stops = (if $stop == 0sec { [] } else { [($quit | insert at $stop | insert order 2)] })
+    let actions = ($events ++ $screens ++ $stops | sort-by at rank order | each {|a| { kind: $a.kind, index: $a.index, due_ns: ($a.at | into int), pipe: $a.pipe, bytes: $a.bytes, screen: $a.screen } })
+    let held = (if $threads == 0sec { [] } else { [{ kind: "held", index: 0, requested_ns: ($threads | into int) } { kind: "held", index: 1, requested_ns: (($threads + 1sec) | into int) }] })
+    let asked = ($threads_at | sort | enumerate | each {|e| { kind: "at", index: $e.index, requested_ns: ($e.item | into int) } })
+    {
+        token: $token,
+        mode: "bounded",
+        dir: $machine.out,
+        command: ([$machine.timeout_binary "--signal=TERM" $"--kill-after=($supervise.kill_after / 1sec | into int)s" ($seconds | into string) $machine.qemu_binary] ++ $line),
+        env: ($machine.env | transpose name value | each {|v| { name: $v.name, value: ($v.value | into string) } }),
+        stdout: ($machine.out | path join "qemu.stdout"),
+        stderr: ($machine.out | path join "qemu.stderr"),
+        pidfile: $machine.pidfile,
+        pipes: ($monitor ++ $api ++ $pad),
+        header: (if $pads.port and ($pads.header | bytes length) > 0 { { pipe: "pad", bytes: $pads.header } } else { null }),
+        actions: $actions,
+        readings: ($held ++ $asked),
+        relays: (if $windows { $machine.relays | each {|r| { endpoint: $r.endpoint, name: $r.name, inward: $r.inward, outward: $r.outward } } } else { [] }),
+        helpers: $helpers,
+        bounds: (supervise bounds),
     }
 }
 

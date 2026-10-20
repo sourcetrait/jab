@@ -30,6 +30,7 @@ mod error;
 mod gate;
 #[cfg(unix)]
 mod group;
+mod helper;
 mod link;
 mod lock;
 mod payload;

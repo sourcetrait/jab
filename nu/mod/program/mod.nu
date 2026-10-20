@@ -7,6 +7,7 @@ use (path self ../disk)
 use (path self ../launch)
 use (path self ../machine)
 use (path self ../pad)
+use (path self ../supervise)
 use (path self ../tool)
 use (path self ../workspace)
 
@@ -42,7 +43,7 @@ def test-args [ready: record]: nothing -> list<string> {
 }
 
 # The QEMU line that runs a program, built first, on the machine asked for
-export def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string, done: string>>, relay_binary: string, machine: record, image: string, kernel: string> {
+export def run-line [dir: path, names: list<string>, api: bool, window: oneof<string, nothing>, serial: string, kbm: bool, pad: bool, sound: bool, --spec: string = "", --harts: int = 0]: nothing -> record<qemu_binary: string, args: list<string>, window: string, context: record, bridge: oneof<record<name: string, vendor: oneof<int, nothing>, product: oneof<int, nothing>>, nothing>, bridge_pipe: string, relays: list<record<endpoint: string, name: string, inward: string, outward: string>>, machine: record, image: string, kernel: string> {
     let ready = (prepared $dir $names)
     let c = $ready.context
     let m = (machine resolve $c.workspace $spec $harts)
@@ -63,8 +64,7 @@ export def run-line [dir: path, names: list<string>, api: bool, window: oneof<st
     let windows = ($nu.os-info.name == "windows")
     let nonce = (if $windows { random int 1.. } else { 0 })
     let ports = (chardev ports $c.symbols $c.out $api $gamepad.port $c.root $nonce)
-    let relays = (if $windows { chardev relays-of $c.out [{ endpoint: "api", pipe: $ports.api }] } else { [] })
-    let relay_binary = (chardev relay-build $relays $c.workspace)
+    let relays = (if $windows { chardev relays-of [{ endpoint: "api", pipe: $ports.api }] } else { [] })
     let inputs = (if $kbm { $launch.input_devices } else { [] })
     let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
     let args = ($machine ++ (machine name-args $c.manifest.name) ++ (machine memory-args $m) ++ $launch.display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
@@ -76,7 +76,7 @@ export def run-line [dir: path, names: list<string>, api: bool, window: oneof<st
     if $count > $transport_limit {
         error make {msg: $"the machine line carries ($count) virtio transports and virt has ($transport_limit): drop --api or --set debug, which share one, or run with --no-kbm, which frees two"}
     }
-    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (chardev bridge-pipe $ports.pad), relays: $relays, relay_binary: $relay_binary, machine: $m, image: $ready.image, kernel: $ready.kernel }
+    { qemu_binary: $qemu, args: $args, window: $shown, context: $c, bridge: $gamepad.bridge, bridge_pipe: (chardev bridge-pipe $ports.pad), relays: $relays, machine: $m, image: $ready.image, kernel: $ready.kernel }
 }
 
 # A program run in its window with the UART on stdio; QEMU's exit its status
@@ -85,22 +85,25 @@ def run-program [dir: path, names: list<string>, api: bool, kbm: bool, pad: bool
     if ($line.window | str starts-with "vnc=") {
         print "no display server here, so this is a development run: the display is served over VNC on 127.0.0.1:5930; tunnel it with `ssh -N -L 5930:127.0.0.1:5930 <this host>` and view it with `vncviewer 127.0.0.1:5930`"
     }
-    let bridge = (if $line.bridge == null { null } else {
-        let bin = (tool shim $line.context.workspace "jabshim_pad" --bin)
-        let pipe = $line.bridge_pipe
-        let b = $line.bridge
-        let vendor = (if $b.vendor == null { "" } else { $b.vendor | into string })
-        let product = (if $b.product == null { "" } else { $b.product | into string })
-        job spawn { ^$bin $pipe $b.name $vendor $product | complete | ignore }
-    })
-    let relays = (chardev relays-start $line.relays $line.relay_binary $line.context.root)
-    let qemu = $line.qemu_binary
-    ^$qemu ...$line.args
-    let relayed = (chardev relays-stop $relays)
-    if $bridge != null { try { job kill $bridge } }
-    for r in ($relayed | where {|r| $r.exit != null and $r.exit != 0 }) {
-        print -e $"jab: the ($r.endpoint) pipe's relay, for ($r.name), ended with ($r.exit): ($r.said | str trim)"
+    let helpers = (pad bridge-helpers $line.bridge $line.bridge_pipe ($line.context.workspace | default "") $line.context.out $line.context.root)
+    let schedule = {
+        token: (supervise hex (supervise token)),
+        mode: "interactive",
+        dir: $line.context.out,
+        command: ([$line.qemu_binary] ++ $line.args),
+        env: [],
+        stdout: "",
+        stderr: "",
+        pidfile: "",
+        pipes: [],
+        header: null,
+        actions: [],
+        readings: [],
+        relays: ($line.relays | each {|r| { endpoint: $r.endpoint, name: $r.name, inward: $r.inward, outward: $r.outward } }),
+        helpers: $helpers,
+        bounds: (supervise bounds),
     }
+    supervise interactive $schedule $line.context.root
 }
 
 # The programs at or under a path tested, each one's output, then a summary

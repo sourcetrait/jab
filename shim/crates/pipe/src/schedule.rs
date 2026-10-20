@@ -47,7 +47,18 @@ pub(crate) struct Schedule {
     /// The relays a Windows launch requires, one a pipe with no client of its own.
     #[serde(default)]
     pub relays: Vec<Relay>,
+    /// The helpers run beside the child from the go: the pad bridge, a pipe's client of its own.
+    #[serde(default)]
+    pub helpers: Vec<Helper>,
     pub bounds: Bounds,
+}
+
+/// A helper the launch runs beside its child: its name, its command, the file its stderr goes to.
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub(crate) struct Helper {
+    pub name: String,
+    pub command: Vec<String>,
+    pub stderr: String,
 }
 
 /// One variable of the child's environment.
@@ -156,6 +167,11 @@ impl Schedule {
         for (at, relay) in self.relays.iter().enumerate() {
             if self.relays[..at].iter().any(|r| r.endpoint == relay.endpoint) {
                 problems.push(format!("the relay endpoint {:?} named twice", relay.endpoint));
+            }
+        }
+        for helper in &self.helpers {
+            if helper.command.is_empty() || helper.stderr.is_empty() {
+                problems.push(format!("the helper {:?} names no command or no file for its stderr", helper.name));
             }
         }
         let named = |pipe: &str| self.pipes.iter().any(|p| p.name == pipe);

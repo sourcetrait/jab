@@ -1,11 +1,10 @@
 use (path self ../bound)
 use (path self ../build)
-use (path self ../chardev)
 use (path self ../nonce)
-use (path self ../process)
 use (path self ../program)
 use (path self ../sdl/bundle)
 use (path self ../sdl/report)
+use (path self ../supervise)
 use (path self ../target)
 use (path self ../tool)
 use (path self ../workspace)
@@ -64,7 +63,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     let binary = $line.qemu_binary
     let api_in = (if $api_on { $line.context.out | path join "api.in" } else { "" })
     let bound = (bound timeout)
-    let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends $bound.path)
+    let run = (probe-launch $binary ($line.args ++ ["-pidfile" $pidfile] ++ $traced) $extra $seconds $pidfile $api_in $sends $bound.path $out $line.context.root)
     if not ($log | path exists) { error make {msg: $"QEMU wrote no shim log; its stderr:\n($run.stderr)"} }
     if $api_on { cp ($line.context.out | path join "api.out") $kept }
     let qemu = (^$binary --version | complete | get stdout | lines | get -o 0 | default "")
@@ -166,28 +165,41 @@ export def trace-args [qemu: string, log: path]: nothing -> list<string> {
     ["-msg" "timestamp=on" "-trace" "virtio_gpu_cmd_res_flush" "-trace" "virtio_gpu_cmd_set_scanout" "-D" $log]
 }
 
-# A probe's QEMU run to its exit or bound, its pid kept and its sends written
-def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>, bound: string]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
-    let started = (date now)
-    job spawn { with-env $environment { ^$bound --signal=TERM ($seconds | into string) $binary ...$args | complete } | job send 0 }
-    mut result: any = null
-    mut qemu_pid: any = null
-    mut written = ($sends | each --keep-empty {|_| null })
-    mut taken = 0
-    while $result == null {
-        $result = (try { job recv --timeout 100ms } catch { null })
-        let pid = (try { open --raw $pidfile | str trim } catch { "" })
-        let alive = ($result == null and (process process-alive $pid))
-        if $alive and $qemu_pid == null { $qemu_pid = ($pid | into int) }
-        let elapsed = ((date now) - $started)
-        while $alive and $taken < ($sends | length) and ($sends | get $taken | get at) <= $elapsed {
-            if $api_in != "" and (chardev fifo-write $api_in ($sends | get $taken | get bytes) $bound) {
-                $written = ($written | update $taken (((date now) - $started) / 1sec))
-            }
-            $taken += 1
-        }
+# A probe's QEMU run under its supervisor to its exit or bound, its sends written at their times
+def probe-launch [binary: string, args: list<string>, environment: record, seconds: int, pidfile: path, api_in: string, sends: list<record<at: duration, bytes: binary>>, bound: string, out: path, root: path]: nothing -> record<exit: int, stderr: string, qemu_pid: oneof<int, nothing>, send_seconds: list<oneof<float, nothing>>> {
+    for f in ["qemu.stdout" "qemu.stderr"] { target retire ($out | path join $f) $root }
+    let actions = (if $api_in == "" { [] } else {
+        $sends | enumerate | each {|e| { kind: "send", index: $e.index, at: $e.item.at, bytes: $e.item.bytes } } | sort-by at index | each {|s| { kind: "send", index: $s.index, due_ns: ($s.at | into int), pipe: "api", bytes: $s.bytes, screen: null } }
+    })
+    let schedule = {
+        token: (supervise hex (supervise token)),
+        mode: "bounded",
+        dir: $out,
+        command: ([$bound "--signal=TERM" $"--kill-after=($supervise.kill_after / 1sec | into int)s" ($seconds | into string) $binary] ++ $args),
+        env: ($environment | transpose name value | each {|v| { name: $v.name, value: ($v.value | into string) } }),
+        stdout: ($out | path join "qemu.stdout"),
+        stderr: ($out | path join "qemu.stderr"),
+        pidfile: $pidfile,
+        pipes: (if $api_in == "" { [] } else { [{ name: "api", path: $api_in }] }),
+        header: null,
+        actions: $actions,
+        readings: [],
+        relays: [],
+        helpers: [],
+        bounds: (supervise bounds),
     }
-    { exit: $result.exit_code, stderr: $result.stderr, qemu_pid: $qemu_pid, send_seconds: $written }
+    let supervised = (supervise bounded $schedule $root $seconds)
+    let receipt = $supervised.receipt
+    if $receipt == null { error make {msg: $"the probe's run left no receipt: ($supervised.incomplete)"} }
+    if $receipt.outcome.decision != "go" { error make {msg: $"the probe's startup ended ($receipt.outcome.decision), so nothing ran"} }
+    let stderr = (if ($receipt.stderr | path exists) { open --raw $receipt.stderr | decode } else { "" })
+    if $receipt.failure != null { error make {msg: $"($receipt.failure); QEMU said: ($stderr | str trim)"} }
+    let status = (if $receipt.status != null { $receipt.status } else { 128 + ($receipt.signal | default 0) })
+    let written = ($sends | enumerate | each --keep-empty {|e|
+        let sent = ($receipt.actions | where {|a| $a.kind == "send" and $a.index == $e.index } | get -o 0)
+        if $sent == null or $sent.done_ns == null { null } else { $sent.done_ns / 1e9 }
+    })
+    { exit: $status, stderr: $stderr, qemu_pid: $receipt.qemu_pid, send_seconds: $written }
 }
 
 # One program probed under a window, one NUON record on how its flips reached it

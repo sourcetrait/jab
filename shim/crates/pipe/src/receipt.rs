@@ -95,6 +95,19 @@ pub(crate) struct RelayEnd {
     pub said: String,
 }
 
+/// A helper's run: its start, its end, and how it ended.
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub(crate) struct HelperEnd {
+    pub name: String,
+    pub pid: Option<i64>,
+    pub started_ns: Option<u64>,
+    pub ended_ns: Option<u64>,
+    pub status: Option<i32>,
+    /// `clean`, `failed`, `stopped`, or `never`.
+    pub state: String,
+    pub said: String,
+}
+
 /// The clock every time of the receipt is on.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub(crate) struct Clock {
@@ -113,6 +126,7 @@ pub(crate) struct Receipt {
     pub held: Option<Held>,
     pub readings: Vec<Taken>,
     pub relays: Vec<RelayEnd>,
+    pub helpers: Vec<HelperEnd>,
     /// The run's end: the child reaped once nothing it owns runs; null when nothing ran.
     pub end_ns: Option<u64>,
     pub cpu_seconds: Option<f64>,

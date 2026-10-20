@@ -1,13 +1,17 @@
 # When the CPU readings' whole window opens, past the load
 const CPU_FROM = 5sec
 
-# What a launch came to: status, fault, CPU and wall time, threads, machine
+# What a launch came to: status, fault, CPU and wall time, its end, threads, machine
 export def outcome [launched: record]: nothing -> record {
     {
         status: $launched.status,
         fault: ($launched.serial | lines | where {|l| $l starts-with "jab: " } | get -o 0),
         cpu_seconds: $launched.cpu_seconds,
         wall_seconds: $launched.wall_seconds,
+        quit_seconds: ($launched | get -o quit_seconds),
+        unfinished: ($launched | get -o unfinished | default []),
+        incomplete: ($launched | get -o incomplete),
+        launch: ($launched | get -o launch | default ""),
         threads: ($launched | get -o threads | default []),
         threads_span: ($launched | get -o threads_span),
         thread_readings: ($launched | get -o thread_readings | default []),

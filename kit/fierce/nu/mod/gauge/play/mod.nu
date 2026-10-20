@@ -16,10 +16,10 @@ use (path self ../measure) [CADENCES CAP SCREEN_ROWS]
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..
 
-# The time after the E for the final records and marker to land
+# The time after the E for the final records and marker to land, before the stop
 const DRAIN = 2sec
 
-# How far a run's bound lies past its capture
+# How far a run's bound lies past its stop
 const BOUND_PAST = 3sec
 
 # A script flag's NUON list, refused unless every item is of the kind named
@@ -92,9 +92,9 @@ export def route [
         let id = (identity new $at $set $map_name $route_file $mode $machine $words | merge { profile: "paired", capture_nonce: $nonce })
         $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
         let launched = (if $host {
-            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --api --pad $pad --disk $disk --serial "fps" --send $sends --stop $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
         } else {
-            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --capture $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
+            launch --kernel $at.kernel --image $at.image --out $run_out --set $set --sound --api --pad $pad --disk $disk --serial "fps" --send $sends --stop $capture --seconds $seconds --spec $spec --harts $harts --qemu $words --threads-at $requests --capture-nonce $nonce --profile paired --sdl-probe $probe_log --workspace $at.workspace
         })
         let ran = (cpu outcome $launched)
         $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
@@ -149,7 +149,7 @@ export def host [
     let id = (identity new $at $set "render_0" null $mode $machine $qemu)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
     print $"gauge: play until the window closes, ($seconds) seconds measured from the start"
-    let launched = (launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --capture $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu --workspace $at.workspace)
+    let launched = (launch --kernel $at.kernel --image $at.image --out $run_out --set $set --live-sound --window --host-pad --api --disk $disk --serial "fps" --send $sends --stop $capture --seconds $bound --spec $spec --harts $harts --qemu $qemu --workspace $at.workspace)
     let ran = (cpu outcome $launched)
     $ran | to nuon --indent 2 | save --raw -f ($run_out | path join "run.nuon")
     let ran_id = (identity launched-identity $id $launched)

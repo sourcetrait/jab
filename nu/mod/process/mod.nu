@@ -9,14 +9,6 @@ export def process-alive [pid: string]: nothing -> bool {
     ps | where pid == $id | is-not-empty
 }
 
-# A process's user and system CPU seconds from /proc, or null
-export def cpu-seconds [pid: string]: nothing -> oneof<float, nothing> {
-    let stat = (try { open --raw ("/proc" | path join $pid "stat") | decode } catch { "" })
-    if $stat == "" { return null }
-    let fields = ($stat | split row ") " | last | split row " ")
-    (($fields | get 11 | into int) + ($fields | get 12 | into int)) / 100.0
-}
-
 # The pids of the Jab QEMU processes on this host, never their timeouts
 export def jab-pids []: nothing -> list<int> {
     ps -l | where {|p| ((command-binary $p.command | path basename) == $qemu_name) and ($p.command | str contains "-name jab") } | get pid

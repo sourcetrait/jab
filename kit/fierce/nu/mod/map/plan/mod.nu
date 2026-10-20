@@ -28,7 +28,7 @@ def font-glyphs []: nothing -> record {
             $code = ($t | parse --regex '^# (?P<code>\d+) ' | get 0.code | into int)
             $rows = []
         } else if ($t | str starts-with ".2byte ") {
-            $rows = ($rows ++ ($t | str substring 7.. | split row "," | each {|v| $v | str trim | str substring 2.. | into int --radix 16 }))
+            $rows = ($rows ++ ($t | str substring 7.. | split row "," | each {|v| $v | str trim | into int }))
         }
     }
     if $code >= 0 { $glyphs = ($glyphs | insert ($code | into string) $rows) }

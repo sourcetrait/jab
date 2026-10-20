@@ -48,6 +48,7 @@ fn schedule(dir: &Path, token: &str, command: &[&str]) -> Value {
         "actions": [],
         "readings": [],
         "relays": [],
+        "helpers": [],
         "bounds": {
             "startup_ns": 3000 * MS,
             "retry_ns": 10 * MS,
@@ -585,6 +586,61 @@ fn a_test_pause_before_the_readiness_delays_it() {
     let (status, _, receipt, _) = launch.finish(Duration::from_secs(5));
     assert_eq!(status.code(), Some(0));
     assert_eq!(receipt["outcome"]["decision"], "go");
+}
+
+/// A helper of the schedule: a name, a shell body, its stderr's file in `dir`.
+fn helper(dir: &Path, name: &str, body: &str) -> Value {
+    json!({ "name": name, "command": ["sh", "-c", body], "stderr": dir.join(format!("{}.stderr", name.replace(' ', "_"))) })
+}
+
+#[test]
+fn a_helper_failing_while_the_child_runs_aborts_the_launch_past_the_grace() {
+    let dir = scratch("helperfail");
+    let token = token();
+    let mut planned = schedule(&dir, &token, &["sleep", "30"]);
+    planned["pidfile"] = json!("");
+    planned["helpers"] = json!([helper(&dir, "pad bridge", "echo no pipe within 10 s >&2; exit 4")]);
+    let launch = Launch::start(&dir, planned);
+    launch.authorized();
+    let (status, _, receipt, took) = launch.finish(Duration::from_secs(10));
+    assert_eq!(status.code(), Some(1));
+    assert_eq!(receipt["failure"], "the pad bridge failed with status 4: no pipe within 10 s");
+    assert_eq!(receipt["helpers"][0]["state"], "failed");
+    assert!(took >= Duration::from_secs(2) && took < Duration::from_secs(5), "after the grace: {took:?}");
+}
+
+#[test]
+fn a_helper_that_cannot_start_aborts_the_launch_at_once() {
+    let dir = scratch("helpernever");
+    let token = token();
+    let mut planned = schedule(&dir, &token, &["sleep", "30"]);
+    planned["pidfile"] = json!("");
+    planned["helpers"] = json!([{ "name": "pad bridge", "command": [dir.join("absent")], "stderr": dir.join("bridge.stderr") }]);
+    let launch = Launch::start(&dir, planned);
+    launch.authorized();
+    let (status, _, receipt, took) = launch.finish(Duration::from_secs(10));
+    assert_eq!(status.code(), Some(1));
+    assert!(receipt["failure"].as_str().unwrap().starts_with("the pad bridge could not start:"), "{}", receipt["failure"]);
+    assert_eq!(receipt["helpers"][0]["state"], "never");
+    assert!(took < Duration::from_secs(2), "{took:?}");
+}
+
+#[test]
+fn a_helper_ending_as_the_child_ends_is_no_failure_and_one_running_on_is_stopped() {
+    let dir = scratch("helperend");
+    let token = token();
+    let mut planned = schedule(&dir, &token, &["sh", "-c", "sleep 0.5"]);
+    planned["pidfile"] = json!("");
+    planned["helpers"] = json!([helper(&dir, "pad bridge", "sleep 0.45; exit 1"), helper(&dir, "lingering", "exec sleep 31.75")]);
+    let launch = Launch::start(&dir, planned);
+    launch.authorized();
+    let (status, stderr, receipt, _) = launch.finish(Duration::from_secs(10));
+    assert_eq!(status.code(), Some(0), "{stderr}");
+    assert!(receipt["failure"].is_null(), "{}", receipt["failure"]);
+    assert_eq!(receipt["helpers"][0]["state"], "failed", "its own end kept");
+    assert_eq!(receipt["helpers"][1]["state"], "stopped");
+    let lingering = receipt["helpers"][1]["pid"].as_i64().unwrap();
+    assert!(!running(lingering), "the helper running on is gone");
 }
 
 #[test]

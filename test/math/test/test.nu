@@ -208,7 +208,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
 # A single from its eight hex digits.
 def f32-of [hex: string]: nothing -> float {
-    let b = ($hex | into int --radix 16)
+    let b = ($"0x($hex)" | into int)
     let sign = (if (($b bit-shr 31) bit-and 1) == 1 { -1.0 } else { 1.0 })
     let e = (($b bit-shr 23) bit-and 0xff)
     let m = ($b bit-and 0x7fffff)
@@ -220,8 +220,8 @@ def f32-of [hex: string]: nothing -> float {
 # A double from its sixteen hex digits, read as two halves so the sign
 # bit never makes a value past an int.
 def f64-of [hex: string]: nothing -> float {
-    let hi = ($hex | str substring 0..<8 | into int --radix 16)
-    let lo = ($hex | str substring 8..<16 | into int --radix 16)
+    let hi = ($"0x($hex | str substring 0..<8)" | into int)
+    let lo = ($"0x($hex | str substring 8..<16)" | into int)
     let sign = (if (($hi bit-shr 31) bit-and 1) == 1 { -1.0 } else { 1.0 })
     let e = (($hi bit-shr 20) bit-and 0x7ff)
     let m = ((($hi bit-and 0xfffff) * 4294967296) + $lo)
@@ -263,8 +263,8 @@ def norm-check [w: list<string>, --single]: nothing -> record<err: float> {
 # x ^= x << 17, the byte bits 24 to 31; n bytes as two hex digits each.
 def xorshift-bytes [seed: string, n: int]: nothing -> list<string> {
     let mask = 0xffffffff
-    mut hi = ($seed | str substring 0..<8 | into int --radix 16)
-    mut lo = ($seed | str substring 8..<16 | into int --radix 16)
+    mut hi = ($"0x($seed | str substring 0..<8)" | into int)
+    mut lo = ($"0x($seed | str substring 8..<16)" | into int)
     mut out = []
     for _ in 0..<$n {
         let a_hi = ((($hi bit-shl 13) bit-or ($lo bit-shr 19)) bit-and $mask)

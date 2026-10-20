@@ -22,9 +22,11 @@
 # (LaunchBound): the one GNU timeout a run resolves, a stand-in refused or
 # passed over, its bound on a child, a fifo nobody reads, and a program
 # that never exits ending at its bound. Then Windows' pipes (PipeShape):
-# the chardev's path on each host, the pipe pairs, a plan's relays, and
-# the relays a Windows launch starts, held to how they end with stand-ins
-# for the relay. Last the default, in a
+# the chardev's path on each host, the pipe pairs, and a plan's relays.
+# Then the launch's supervision (RelaySupervision), the caller's side: the
+# lock refusing and taking over a stale record, the records and their
+# models, a stop, the backstop, a withheld go, a silent supervisor's forced
+# end, and the launch's tag. Last the default, in a
 # scratch XDG config home: `jab/config.toml` seeded from
 # asset/default/config.toml byte for byte, one there never written over,
 # JAB_SPEC ahead of it, one naming no spec refused, a home that is not
@@ -39,6 +41,8 @@ use ../../../nu/mod/demand
 use ../../../nu/mod/build
 use ../../../nu/mod/machine
 use ../../../nu/mod/launch
+use ../../../nu/mod/nutype
+use ../../../nu/mod/supervise
 use std/assert
 
 const GIB = 1073741824
@@ -254,12 +258,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         assert ($forced | str contains $"JAB_TIMEOUT names ($fake)") $"a JAB_TIMEOUT not GNU's refused naming it, GNU's on PATH: ($forced)"
         let shadowed = (with-env { JAB_TIMEOUT: "", PATH: ([$stand] ++ $env.PATH) } { bound timeout })
         assert equal $shadowed.path $real.path $"a stand-in first on PATH passed over for GNU's: ($shadowed)"
-        let fifo = ($stand | path join "nobody")
-        ^mkfifo $fifo
-        let w0 = (date now)
-        let wrote = (chardev fifo-write $fifo "x" $real.path)
-        let waited = (((date now) - $w0) / 1sec)
-        assert ((not $wrote) and $waited < 2) $"fifo-write into a fifo nobody reads gives up within two seconds: ($wrote) in ($waited) s"
         # the override resolved once (ResolvedOverride): an absolute path, a
         # path relative to another working directory, and a bare name on PATH
         # each resolved to GNU's one absolute path and recorded as given; a
@@ -291,12 +289,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # host's `<out>/<endpoint>` and Windows' bare name by the run's nonce,
     # none without one; Windows' pair of two plain files and, elsewhere,
     # this host's, a fifo in and a plain file out, each made empty with a
-    # previous run's retired; a plan's relays, the monitor's and the API's
-    # on Windows and none elsewhere, the monitor and the API on fifos as
-    # before; and the relays a Windows launch starts, held here with
-    # stand-ins for the relay on every host but Windows: one ending on its
-    # own, one ending in failure, which fails the launch naming its pipe,
-    # and one still running a second after QEMU's end, stopped
+    # previous run's retired; and a plan's relays, the monitor's and the
+    # API's on Windows and none elsewhere, the monitor and the API on fifos
+    # as before. The relays run in the launch's supervisor, its crate's
+    # tests holding them over stand-ins (TestRelay)
     let pipes = ($out | path join "pipes")
     let root = (target root $ws)
     target retire $pipes
@@ -317,29 +313,87 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     if $nu.os-info.name == "windows" {
         assert equal ($piped.relays | each {|r| $r.endpoint }) ["monitor" "api"] $"the monitor's relay and the API's: ($piped.relays)"
         assert ((after $piped.qemu "-monitor") | str starts-with "pipe:jab-") $"the monitor on a named pipe: ($piped.qemu)"
-        assert equal [($piped.api_in | path type) ($piped.relay_binary | path type)] ["file" "file"] $"the API's in-file a plain file, the relay built: ($piped.api_in), ($piped.relay_binary)"
+        assert equal ($piped.api_in | path type) "file" $"the API's in-file a plain file: ($piped.api_in)"
     } else {
         let here = (chardev pipe-pair $pipes "api" 0 $nu.os-info.name $root)
         assert equal [$here.name ($here.inward | path type) ($here.outward | path type) (ls $here.outward | get 0.size)] [($pipes | path join "api") "pipe" "file" 0B] $"this host's pair, a fifo in and an empty file out: ($here)"
-        assert equal [$piped.relays $piped.relay_binary $piped.bridge_pipe] [[] "" ""] $"no relay and no bridge's pipe: ($piped.relays), ($piped.relay_binary), ($piped.bridge_pipe)"
+        assert equal [$piped.relays $piped.bridge_pipe] [[] ""] $"no relay and no bridge's pipe: ($piped.relays), ($piped.bridge_pipe)"
         assert equal [(after $piped.qemu "-monitor") ($piped.api_in | path type)] [$"pipe:($piped.monitor)" "pipe"] $"the monitor's pair and the API's fifo as before: ($piped.qemu)"
         let watched = (chardev pipe-pair $pipes "monitor" 42 "windows" $root)
-        let relays = (chardev relays-of $pipes [{ endpoint: "monitor", pipe: $watched } { endpoint: "padport", pipe: null }])
-        assert equal ($relays | each {|r| [$r.endpoint $r.name $r.done] }) [["monitor" "jab-000000000000002a-monitor" ($pipes | path join "monitor.relay.nuon")]] $"a relay for each pipe the machine has: ($relays)"
-        let stands = ($pipes | path join "stands")
-        mkdir $stands
-        let ended = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "ending" "exit 0") $root))
-        assert equal ($ended | each {|r| [$r.endpoint $r.exit $r.said] }) [["monitor" 0 ""]] $"a relay ending on its own: ($ended)"
-        chardev relays-held $ended { exit_code: 0, stderr: "" }
-        let failed = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "failing" "echo 'no connection within 10 s' >&2\nexit 1") $root))
-        let held = (refusal { chardev relays-held $failed { exit_code: 124, stderr: "" } })
-        assert ($held | str contains "the monitor pipe's relay, for jab-000000000000002a-monitor, ended with 1: no connection within 10 s; QEMU ended with 124") $"a relay ending in failure fails the launch, naming its pipe: ($held)"
-        let s0 = (date now)
-        let stopped = (chardev relays-stop (chardev relays-start $relays (stand-in $stands "staying" "exec sleep 31.4159") $root))
-        let took = (((date now) - $s0) / 1sec)
-        assert ($stopped.0.exit == null and $took < 3) $"a relay still running a second after QEMU's end stopped: ($stopped) in ($took) s"
-        sleep 200ms
-        assert (ps -l | where {|p| $p.command | str contains "31.4159" } | is-empty) "the stopped relay's process gone"
+        let relays = (chardev relays-of [{ endpoint: "monitor", pipe: $watched } { endpoint: "padport", pipe: null }])
+        assert equal ($relays | each {|r| [$r.endpoint $r.name $r.inward $r.outward] }) [["monitor" "jab-000000000000002a-monitor" $watched.inward $watched.outward]] $"a relay for each pipe the machine has: ($relays)"
+    }
+
+    # the launch's supervision (RelaySupervision), the caller's side, on a
+    # lock home of the test's own: a launch refused while another holds the
+    # lock, naming it; a stale record replaced and named; two launches, each
+    # its own token, each record held to its model, its control files gone;
+    # a stop's quit at its time after the sends due before it, no screen,
+    # and a stop beside a capture refused; the caller's backstop on a
+    # supervisor paused before its readiness, nothing measured run; a startup
+    # the caller withholds its go from, expired; a supervisor silent after
+    # its go, the run ended by the record kept and reported incomplete; and
+    # the launch's tag, a retired alarm's message and another launch's
+    # discarded ahead of the supervisor's result
+    let locks = ($out | path join "locks")
+    target retire $locks
+    mkdir $locks
+    with-env { JAB_LAUNCH_LOCK: $locks } {
+        let binary = (supervise binary)
+        let lock = {|words: list<string>| ^$binary lock ...$words | complete | get stdout | from json }
+        let holder = (do $lock ["acquire" "--token" "00000000000000a1" "--caller" ($nu.pid | into string)])
+        assert equal $holder.outcome "ok" $"the test holds the lock: ($holder)"
+        let refused = (refusal { launch --kernel $kernel --image $image --out ($out | path join "locked") --set $set --spec 1ka1 --seconds 20 })
+        assert ($refused | str contains "the launch 00000000000000a1 holds the lock") $"a launch refused while another holds the lock, naming it: ($refused)"
+        assert equal (do $lock ["release" "--token" "00000000000000a1"] | get outcome) "ok" "the test's hold released"
+        let dead = (^sh -c 'echo $$' | str trim | into int)
+        let stale = { token: "00000000000000b2", state: "running", caller: { pid: $dead, start: 1 }, supervisor: { pid: $dead, start: 1 }, gate: null, replaced: null, utc: "then" }
+        $stale | to json | save --raw -f ($locks | path join "owner.nuon")
+        let one = (launch --kernel $kernel --image $image --out ($out | path join "token_one") --set $set --spec 1ka1 --seconds 20)
+        let owner = (open --raw ($locks | path join "owner.nuon") | decode | from json)
+        assert equal [$owner.state $owner.replaced.token] ["released" "00000000000000b2"] $"the stale record replaced and named, then released: ($owner)"
+        let two = (launch --kernel $kernel --image $image --out ($out | path join "token_two") --set $set --spec 1ka1 --seconds 20)
+        let records = ([$one $two] | each {|r| open --raw $r.launch | decode | from nuon })
+        assert ($records.0.receipt.token != $records.1.receipt.token) $"two launches, two tokens: ($records | each {|r| $r.receipt.token })"
+        let model = (open --raw ($ws | path join "nu" "type" "launch" "Launch.nutype") | decode)
+        for r in $records {
+            assert equal (nutype problems $r $model "Launch.nutype") [] "a launch's record held to its model"
+        }
+        for r in [$one $two] {
+            assert (glob ($r.launch | path dirname | path join "launch-*.json") | is-empty) $"its control files gone: ($r.launch | path dirname)"
+        }
+        let stopped = (launch --kernel $kernel --image $forever --out ($out | path join "stopped") --set $set --harts 1 --send [[at bytes]; [500ms 0x[01 02]]] --stop 1500ms --seconds 20)
+        assert equal [$stopped.status $stopped.screen] [0 ""] $"a stop ends the run with no screen: ($stopped.status)"
+        assert ($stopped.send_seconds.0 < $stopped.quit_seconds and $stopped.quit_seconds >= 1.5 and $stopped.quit_seconds < 2.5) $"the send, then the quit at its time: ($stopped.send_seconds), ($stopped.quit_seconds)"
+        assert ($stopped.wall_seconds >= $stopped.quit_seconds and $stopped.wall_seconds < ($stopped.quit_seconds + 3)) $"the run's end after its quit: ($stopped.wall_seconds)"
+        let both_ends = (refusal { launch --kernel $kernel --image $forever --out ($out | path join "both_ends") --set $set --harts 1 --capture 1sec --stop 2sec --seconds 20 })
+        assert ($both_ends | str contains "--capture and --stop together") $"a stop beside a capture refused: ($both_ends)"
+        let b0 = (date now)
+        let backstopped = (refusal { with-env { JABPIPE_TEST_PAUSE: "readiness:16000" } { launch --kernel $kernel --image $image --out ($out | path join "backstop") --set $set --spec 1ka1 --seconds 20 } })
+        let held = (((date now) - $b0) / 1sec)
+        assert ($backstopped | str contains "gave no outcome within the caller's backstop") $"a supervisor silent before its readiness refused at the backstop: ($backstopped)"
+        assert ($held >= 14 and $held < 18) $"the backstop's 14 s: ($held) s"
+        assert (not ($out | path join "backstop" "serial.log" | path exists)) "nothing measured ran under the backstop"
+        let w0 = (date now)
+        let withheld = (refusal { with-env { JAB_LAUNCH_TEST: "withhold" } { launch --kernel $kernel --image $image --out ($out | path join "withheld") --set $set --spec 1ka1 --seconds 20 } })
+        let expired = (((date now) - $w0) / 1sec)
+        assert ($withheld | str contains "the launch's startup ended expired") $"a go withheld past the allowance: ($withheld)"
+        assert ($expired >= 11 and $expired < 15) $"the allowance's 11 s: ($expired) s"
+        assert (not ($out | path join "withheld" "serial.log" | path exists)) "nothing measured ran with the go withheld"
+        let silent = (with-env { JABPIPE_TEST_PAUSE: "run:30000" } { launch --kernel $kernel --image $forever --out ($out | path join "silent") --set $set --harts 1 --seconds 2 })
+        assert ($silent.incomplete | default "" | str contains "the completion alarm") $"a supervisor silent after its go, the run reported incomplete: ($silent.incomplete)"
+        assert equal [$silent.status $silent.wall_seconds $silent.cpu_seconds] [null null null] "an incomplete run's status and times null, never zero"
+        let record = (open --raw $silent.launch | decode | from nuon)
+        assert equal [$record.receipt ($record.incomplete | str contains "the completion alarm")] [null true] $"its record says so: ($record.incomplete)"
+        assert (ps -l | where {|p| $p.command | str contains ($out | path join "silent") } | is-empty) "no QEMU of it left, nor its supervisor"
+        assert equal (open --raw ($locks | path join "owner.nuon") | decode | from json | get state) "released" "the lock released once the group was empty"
+        let tag = 4242
+        { token: $tag, source: "startup" } | job send --tag $tag 0
+        { token: 7, source: "supervisor" } | job send --tag $tag 0
+        { token: $tag, source: "supervisor", result: { exit_code: 0 } } | job send --tag $tag 0
+        let got = (supervise receive $tag ["startup"] null)
+        assert equal [$got.source $got.result.exit_code] ["supervisor" 0] $"the result taken past a retired alarm's message and another launch's: ($got)"
+        assert equal (supervise receive $tag [] 0sec) null "the tag empty after it"
     }
 
     # the default, in a scratch XDG config home
@@ -366,7 +420,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let absent = (refusal { with-env { XDG_CONFIG_HOME: $gone, JAB_SPEC: "" } { spec configured $ws } })
     assert ($absent | str contains $"the XDG config home ($gone) is not there") $"a home that is not there refused: ($absent)"
     assert (($gone | path type) == null) $"the XDG config home never made: ($gone)"
-    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path); Windows' pipes and their relays"
+    print $"spec: ($provisioned | length) specs provisioned, each line and tree from the table; ($specs | length) defined; the startup check's ($CHECKS | length) machines, the minimum, the legacy path twice, ($malformed | length) malformed first pages, and a kernel without the check; the launch's bound, ($real.path); Windows' pipes; the launch's supervision"
     print "spec: ok"
 }
 
@@ -448,15 +502,6 @@ def unchecked-kernel [ws: path, kernel: path, set: string, dir: path]: nothing -
     let elf = ($dir | path join "jab.elf")
     ^$"($prefix)ld" -T ($dir | path join "src" "link.ld") -nostdlib ...$objects -o $elf
     $elf
-}
-
-# A stand-in for the relay's binary in `dir`, a shell script named `name`
-# taking the relay's arguments and doing only what `body` says. Its path.
-def stand-in [dir: path, name: string, body: string]: nothing -> string {
-    let file = ($dir | path join $name)
-    $"#!/bin/sh\n($body)\n" | save -f $file
-    ^chmod +x $file
-    $file
 }
 
 # The message a call raises, "" when it raises none.

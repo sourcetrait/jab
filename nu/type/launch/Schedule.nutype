@@ -1,0 +1,34 @@
+# A supervised launch's schedule as the SDK prepares it, held before `to json`.
+# Times are nanoseconds from the go; bounds nanoseconds; bytes as written.
+record<
+    token: string,
+    mode: string,
+    dir: string,
+    command: list<string>,
+    env: table<name: string, value: string>,
+    stdout: string,
+    stderr: string,
+    pidfile: string,
+    pipes: table<name: string, path: string>,
+    header: oneof<record<pipe: string, bytes: binary>, nothing>,
+    actions: table<
+        kind: string,
+        index: int,
+        due_ns: int,
+        pipe: string,
+        bytes: binary,
+        screen: oneof<record<file: string, header: binary, size: int>, nothing>
+    >,
+    readings: table<kind: string, index: int, requested_ns: int>,
+    relays: table<endpoint: string, name: string, inward: string, outward: string>,
+    helpers: table<name: string, command: list<string>, stderr: string>,
+    bounds: record<
+        startup_ns: int,
+        retry_ns: int,
+        screen_ns: int,
+        screen_poll_ns: int,
+        cpu_ns: int,
+        grace_ns: int,
+        term_ns: int
+    >
+>

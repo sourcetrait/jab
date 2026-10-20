@@ -95,8 +95,9 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
         let asked = { workers: $request.workers, grain: $request.grain }
         let standing = (compare standing-of $m $rows "critical_us" $request.cadence $asked $request.machine ($request.identity | get -o overrides))
         let ran = ($r | get -o ran | default {})
-        let wall = ($ran | get -o wall_seconds | default 0)
+        let wall = ($ran | get -o wall_seconds)
         let cpu = ($ran | get -o cpu_seconds)
+        let why = (cpu-why $ran $wall $cpu)
         let period = (1000000 / ($request.cap | default $CAP))
         {
             label: $label, run: $r.run, seed: ($r | get -o seed),
@@ -105,12 +106,22 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
             machine: $request.machine, qemu: $request.qemu,
             standing: $standing.standing,
             reasons: $standing.reasons,
-            cpu_over_wall: (if $wall == 0 or $cpu == null { null } else { $cpu / $wall }),
+            cpu_over_wall: (if $why == null { $cpu / $wall } else { null }),
+            cpu_why: $why,
             outcomes: ($m | get -o outcomes),
             rows: (presented-calls $rows $period),
         }
     })
     { label: $label, state: $state, file: $file, runs: $runs }
+}
+
+# Why a run's CPU over wall cannot be taken, null when it can
+def cpu-why [ran: record, wall: any, cpu: any]: nothing -> oneof<string, nothing> {
+    if "wall_seconds" not-in ($ran | columns) { return "a record older than its wall time" }
+    if $wall == null { return $"no wall time, its launch's receipt absent: ($ran | get -o incomplete | default 'no receipt')" }
+    if $wall <= 0 { return $"a wall time of ($wall) s" }
+    if $cpu == null { return "no CPU seconds" }
+    null
 }
 
 # A bench group at one cadence: valid runs pooled, every other kept apart
@@ -127,6 +138,7 @@ def bench-cadence [runs: list<any>]: nothing -> record {
         valid: ($pooled | length),
         standings: ($runs | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reasons: $r.reasons } }),
         cpu_over_wall: ($pooled | each {|r| $r.cpu_over_wall }),
+        cpu_left: ($pooled | where {|r| $r.cpu_over_wall == null } | each {|r| { label: $r.label, run: $r.run, why: $r.cpu_why } }),
         outcomes: ($runs | each {|r| { label: $r.label, run: $r.run, outcomes: $r.outcomes } }),
         frames: (bench-frames ($pooled | each {|r| $r.rows } | flatten) $period),
         apart: ($apart | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reasons: $r.reasons, cpu_over_wall: $r.cpu_over_wall, frames: (bench-frames $r.rows $period) } }),
@@ -138,7 +150,10 @@ def bench-cadence-text [c: record]: nothing -> list<string> {
     let f = $c.frames
     let cpu = ($c.cpu_over_wall | compact)
     let core = (if ($cpu | is-empty) { "-" } else if (($cpu | math max) - ($cpu | math min)) < 0.005 { $"($cpu | first | math round --precision 2)" } else { $"($cpu | math min | math round --precision 2) to ($cpu | math max | math round --precision 2)" })
-    let head = $"  cadence ($c.cadence | default 'none asked') at a period of (report ms $c.period_us) ms, ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core"
+    let left = ($c | get -o cpu_left | default [])
+    let covered = $"over ($cpu | length) of ($c.valid) pooled runs"
+    let named = (if ($left | is-empty) { "" } else { $"; left out of it: ($left | each {|l| $'($l.label) run ($l.run), ($l.why)' } | str join '; ')" })
+    let head = $"  cadence ($c.cadence | default 'none asked') at a period of (report ms $c.period_us) ms, ($c.steps | str join ' '): ($c.runs) runs, ($c.valid) valid and pooled; the process at ($core) of a core ($covered)($named)"
     let apart = ($c.apart | each {|a|
         let seen = (if $a.frames.frames == 0 { "no frames" } else { $"($a.frames.frames) frames, accepted every (report ms $a.frames.acceptance.median) and completed every (report ms $a.frames.completion.median) ms at the median" })
         $"    left out of the pool, a diagnostic: ($a.label) run ($a.run), ($a.standing): ($a.reasons | str join '; '); ($seen)"
