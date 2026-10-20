@@ -110,6 +110,7 @@
 .set JAB_SYS_HARTS_CLAIM, 58
 .set JAB_SYS_HARTS_RELEASE, 59
 .set JAB_SYS_HARTS_OWNED, 60
+.set JAB_SYS_FRAME_STEP, 61
 
 .set JAB_HARTS_MAX, 8
 .set JAB_MAIN_STACK, 0x800000
@@ -611,6 +612,14 @@
 .macro jab.sys.harts.owned owner
     mv a0, \owner
     li a7, JAB_SYS_HARTS_OWNED
+    ecall
+.endm
+
+.macro jab.sys.frame.step tick, stamp, end
+    mv a2, \end
+    mv a1, \stamp
+    mv a0, \tick
+    li a7, JAB_SYS_FRAME_STEP
     ecall
 .endm
 

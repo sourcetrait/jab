@@ -60,6 +60,7 @@ sys_display_flip:
 .endif
     li a1, 3
     bnez a0, 3f
+    ld a0, 88(sp)                   # the acceptance the clock steps from
     call frame_flipped
     li a0, 0
     j 1f
@@ -126,6 +127,7 @@ sys_display_flip_rect:
     call display_present_rect
     li a1, 3
     bnez a0, 7f
+    mv a0, s0                       # the acceptance the clock steps from
     call frame_flipped
     li a0, 0
     j 10f
@@ -194,6 +196,7 @@ sys_display_flip_rects:
     mv a1, s1
     call display_present_rects
     bnez a0, 7f
+    ld a0, 88(sp)                   # the acceptance the clock steps from
     call frame_flipped
     li a0, 0
     j 10f

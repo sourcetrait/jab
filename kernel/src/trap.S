@@ -3,7 +3,11 @@
 .include "jab.inc"
 .include "hart.inc"
 
+.ifdef DEBUG
+.set SYSCALL_LAST, JAB_SYS_FRAME_STEP
+.else
 .set SYSCALL_LAST, JAB_SYS_HARTS_OWNED
+.endif
 .set UART_PRINT_TICK, 1024
 
 .section .text
@@ -557,6 +561,9 @@ syscall_table:
     .quad sys_harts_claim
     .quad sys_harts_release
     .quad sys_harts_owned
+.ifdef DEBUG
+    .quad sys_frame_step
+.endif
 msg_bad_syscall:
     .asciz "jab: unknown system call "
 msg_bad_address:

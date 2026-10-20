@@ -28,6 +28,10 @@
 .set KIND_HELD, 16
 .set KIND_FAILED, 17
 .set KIND_AFTER, 18
+.set KIND_STEP, 19
+
+.set STEP_CASES, 64
+.set STEP_BYTES, 24
 
 .macro flip_whole kind
     rdtime s8
@@ -87,6 +91,8 @@ _start:
     beq t0, t1, flush
     li t1, 's'
     beq t0, t1, held
+    li t1, 'k'
+    beq t0, t1, steps
 no_scenario:
     jab.sys.uart.print msg_no_scenario
     jab.sys.exit 2
@@ -205,6 +211,56 @@ held:
     li a2, SENTINEL
     li a3, SENTINEL
     flip_whole KIND_FAILED
+    call report
+    jab.sys.uart.print msg_done
+    jab.sys.exit 0
+
+steps:
+    rdtime s7
+    li t0, SELECT_WAIT
+    add s7, s7, t0                          # the cases' deadline
+    li s1, 0                                # the bytes read
+    li s2, 8                                # the bytes wanted, the count first
+    li s3, 0                                # the cases, once the count is read
+1:
+    la a0, step_cases
+    add a0, a0, s1
+    sub a1, s2, s1
+    li a7, JAB_SYS_API_READ
+    ecall                                   # the macro's capacity is an immediate
+    add s1, s1, a0
+    bgeu s1, s2, 2f
+    rdtime t0
+    bgeu t0, s7, no_scenario
+    jab.sys.await JAB_AWAIT_DISPLAY | JAB_AWAIT_API
+    j 1b
+2:
+    bnez s3, 3f
+    la t0, step_cases
+    ld s3, 0(t0)
+    beqz s3, no_scenario
+    li t1, STEP_CASES
+    bgtu s3, t1, no_scenario
+    li t1, STEP_BYTES
+    mul t1, s3, t1
+    addi s2, t1, 8                          # then every case
+    j 1b
+3:
+    la s4, step_cases
+    addi s4, s4, 8
+4:
+    ld s8, 0(s4)                            # the tick
+    ld s5, 8(s4)                            # the acceptance
+    ld s6, 16(s4)                           # the present's end
+    jab.sys.frame.step s8, s5, s6
+    mv a2, s5
+    mv a3, s6
+    li s9, 0
+    li t6, KIND_STEP
+    call keep                               # its status, the next tick, and the case
+    addi s4, s4, STEP_BYTES
+    addi s3, s3, -1
+    bnez s3, 4b
     call report
     jab.sys.uart.print msg_done
     jab.sys.exit 0
@@ -386,3 +442,5 @@ receipts:
     .skip RECEIPTS * RECEIPT_BYTES
 selector:
     .skip 8
+step_cases:
+    .skip 8 + STEP_CASES * STEP_BYTES

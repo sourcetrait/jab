@@ -27,6 +27,14 @@ data of this file; test/owners holds that on the built kernels.
 A device that stops returning raises no line (sound.S), so a wait on the
 sound stream alone wakes on this timer to look.
 
+## .set FRAME_EPS
+
+`u64`, under the build symbol P2 alone: P2's on-time tolerance in ticks, a
+multiple of 100 from 100 to 10,000, an assembly `.error` otherwise. Its value
+is JointTiming's calibration, the wake delays' 99.9th percentile on the
+baseline's P0 runs rounded up to 100 ticks; until that lands it is the
+contract's cap, 10,000 (1 ms).
+
 ## frame_ready
 
 Beside the readiness it answers the `rdtime` it read in a1 and the tick it
@@ -34,9 +42,29 @@ held it against in a2, the flips' receipt.
 
 ## frame_flipped
 
-A punctual program keeps an exact cadence and a slow one is never refused.
-The tick the program was told of is answered by this flip, so the wait no
-longer owes it a move.
+The flip's acceptance in a0, its receipt's own stamp, which the caller kept;
+the present's end read here. The next tick is `frame_next`'s, so the flip and
+the DEBUG step call run one rule. The tick the program was told of is
+answered by this flip, so the wait no longer owes it a move.
+
+## frame_next
+
+The rule, one routine for every build: P0 by default, a period on from the
+tick while the present ended within a period of it, so a punctual program
+keeps an exact cadence and a slow one is never refused, else a period from
+the present's end; under the build symbol P2, a period on from the tick while
+the acceptance is under FRAME_EPS past it, else a period from the
+acceptance, so no two presented flips stand nearer than a period less the
+tolerance (JointTiming's K) and the present's own length stays out of the
+grid. The lateness is taken unsigned; a presented flip's acceptance is never
+before its tick, the ready rule's.
+
+## sys_frame_step
+
+DEBUG alone (JointTiming's function cases): the rule over a tick, an
+acceptance, and an end the program gives, nothing presented and the clock
+untouched, so the arithmetic is tested at exact ticks. An acceptance before
+the tick is refused as an early flip is, 1 with the tick as it stood.
 
 ## sys_await
 

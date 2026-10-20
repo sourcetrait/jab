@@ -27,8 +27,13 @@ until it fails. After `t`'s and `f`'s refused flip, the pixel at the
 origin is flipped at once: the tick it reads is the one the refused flip
 left, so the receipt shows whether a refusal moved the frame clock, and a
 pixel away from the screen's middle keeps `t`'s capture the old frame's.
-A zero-length API write asks whether the port is there: it answers 1
-with none.
+`k` takes the frame clock's rule at exact ticks, under no knob: after the
+letter, a u64 count of cases and each case's tick, acceptance, and
+present's end as u64, read by a bounded wait; each case through
+`jab.sys.frame.step`, a DEBUG kernel's call, its receipt the kind, the
+status, the tick in the before field, the next tick in a1, and the case's
+acceptance and end in a2 and a3. A zero-length API write asks whether the
+port is there: it answers 1 with none.
 
 ## .set FLIPS
 
@@ -139,6 +144,18 @@ thirty-one.
 
 `u64`: the held scenario's flip after it failed.
 
+## .set KIND_STEP
+
+`u64`: a receipt of `k`'s, one a step case.
+
+## .set STEP_CASES
+
+`u64`: the most step cases a scenario takes.
+
+## .set STEP_BYTES
+
+`u64`: a step case's bytes, its tick, acceptance, and end as u64.
+
 ## .set KIND_AFTER
 
 `u64`: the pixel's flip right after a refused whole flip.
@@ -212,3 +229,8 @@ the last ending the line, written over in place for each receipt.
 
 `8 u8`: where the scenario's letter lands, and the zero-length write's
 buffer.
+
+## step_cases
+
+`8 + STEP_CASES * STEP_BYTES u8`: `k`'s count, a u64, and its cases as they
+came over the API.

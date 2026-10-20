@@ -45,7 +45,9 @@ recorded line under the line lock, its own first.
 
 ## .set SYSCALL_LAST
 
-`u64`: the highest system call number syscall_table holds.
+`u64`: the highest system call number syscall_table holds, a DEBUG
+kernel's jab.sys.frame.step past a release kernel's last, so a release
+kernel answers that number as an unknown call.
 
 ## .set UART_PRINT_TICK
 

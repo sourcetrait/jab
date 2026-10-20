@@ -431,6 +431,11 @@ table of record.
 
 `u64`.
 
+## .set JAB_SYS_FRAME_STEP
+
+`u64`: a DEBUG kernel's call alone; a release kernel answers it as an
+unknown call.
+
 ## .set JAB_HARTS_MAX
 
 `u64`: the most harts the ABI names, 8, room for the seven of
@@ -1403,6 +1408,14 @@ once the claim's workers are stopped.
 The harts an owner holds, read at the call from the harts online then, so
 a hart that has failed has left its grant. A grant is reported as a mask,
 so a program and its records name its harts, never their count alone.
+
+## .macro jab.sys.frame.step
+
+The frame clock's rule at exact ticks for a test, a DEBUG kernel's alone:
+the tick, a flip's acceptance, and its present's end in, the status and
+the next tick out, nothing presented and the clock untouched. The rule is
+the kernel's build's, P0, or P2 under its symbol (JointTiming), so a test
+holds the arithmetic the flips run.
 
 ## .macro jab.sys.api.write
 
