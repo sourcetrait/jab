@@ -38,9 +38,9 @@ const ACCEL = 184320
 const TOP_SPEED = 199680
 const BALL_VX = 53760
 const BALL_VY = 38400
-# A stop is a jump to zero from at least this, more than a frame's
-# drag at any cap of thirty or above, so a sphere that slowed to a
-# stop on its own is not mistaken for a stopped one
+# A stop is a jump to zero from at least this on either axis, more
+# than a frame's drag at any cap of thirty or above, so a sphere that
+# slowed to a stop on its own is not mistaken for a stopped one
 const STOP_LEAST = 8192
 # Where a contact point lies on a wall: a centre at LEFT or TOP less a
 # radius is 0, at RIGHT or BOTTOM plus a radius the last pixel
@@ -123,11 +123,12 @@ def exercise [route: string, kernel: path, image: path, out: path, set: string] 
     let after = ($numbered | where {|r| $r.index > $off_at and $r.item.kind == $REPORT_VELOCITY and $r.item.sphere == $SPHERE_PLAYER } | first | get item.x)
     assert (($after | math abs) < ($before | math abs)) $"slowing once the push is off: ($after) after ($before)"
     if $played {
-        # a stop is a jump to zero from more than one frame's slowing;
-        # THUMBR comes a fifth of a second after the push is off, while
-        # the sphere still moves however the ball has sent it
-        let stopped = ($xs | window 2 | any {|w| (($w | first) | math abs) > $STOP_LEAST and ($w | last) == 0 })
-        assert $stopped $"THUMBR stopped your sphere outright: ($xs)"
+        # a stop is a jump to zero on both axes from more than one frame's
+        # slowing on either; THUMBR comes a fifth of a second after the
+        # push is off, while the sphere still moves however the ball has
+        # sent it, along y as well when they have met
+        let stopped = ($mine | window 2 | any {|w| ([($w.0.x | math abs) ($w.0.y | math abs)] | math max) > $STOP_LEAST and $w.1.x == 0 and $w.1.y == 0 })
+        assert $stopped $"THUMBR stopped your sphere outright: ($mine | select x y)"
         # a wall or the ball may have turned it since, at a higher cap
         # within the same real time, so the sign is not the test
         assert (($xs | last) != 0) $"and the right stick set it going again: ($xs | last)"
