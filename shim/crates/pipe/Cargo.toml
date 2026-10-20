@@ -1,6 +1,6 @@
 [package]
 name = "jabpipe"
-description = "The pipe relay of a Windows launch: the one client QEMU's pipe chardev serves there, holding its connection for the run, forwarding into the pipe every byte the launch appends to a file and writing what the pipe gives into another."
+description = "The pipe relay and the launch supervisor: on Windows the one client QEMU's pipe chardev serves, holding its connection for the run; on every host the owner of a launch's QEMU, its startup, its timed actions, and its end."
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -14,4 +14,15 @@ name = "jabpipe"
 path = "src/main.rs"
 
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mach2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

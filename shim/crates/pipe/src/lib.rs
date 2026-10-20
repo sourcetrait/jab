@@ -6,8 +6,9 @@ pub(crate) use std::{
     fmt,
     fs::{File, OpenOptions},
     io::{self, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::ExitCode,
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -21,10 +22,23 @@ pub(crate) mod r {
     }
 }
 
+mod child;
 mod connect;
+mod control;
 mod error;
+#[cfg(unix)]
+mod gate;
+#[cfg(unix)]
+mod group;
+mod link;
+mod lock;
+mod payload;
+mod receipt;
 mod relay;
 mod run;
+mod schedule;
+mod supervise;
+mod table;
 
 pub(crate) use relay::*;
 
@@ -35,5 +49,7 @@ pub use run::run;
 #[cfg(test)]
 mod tests {
     mod connect;
+    mod link;
+    mod lock;
     mod relay;
 }

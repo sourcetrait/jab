@@ -1,22 +1,32 @@
-//! The relay's command line.
+//! The binary's command line: the relay, the supervisor and its gate, the lock, and a group's end.
 
 use crate::*;
 
-/// `jabpipe <name> <in-file> <out-file>`, relayed until QEMU closes the pipe.
+/// `jabpipe <name> <in-file> <out-file>`, or a mode: `supervise`, `gate`, `lock`, `group`.
 pub fn run() -> ExitCode {
-    match relayed(env::args().skip(1).collect()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("jabpipe: {error}");
-            ExitCode::from(error.exit_code())
-        }
+    let args: Vec<String> = env::args().skip(1).collect();
+    let rest = || args[1..].to_vec();
+    match args.first().map(String::as_str) {
+        Some("supervise") => supervise::supervise(rest()),
+        #[cfg(unix)]
+        Some("gate") => gate::gate(rest()),
+        Some("lock") => lock::lock(rest()),
+        #[cfg(unix)]
+        Some("group") => group::group(rest()),
+        _ => match relayed(args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("jabpipe: {error}");
+                ExitCode::from(error.exit_code())
+            }
+        },
     }
 }
 
 /// The relay the arguments name.
 fn relayed(args: Vec<String>) -> PipeResult<()> {
     let [name, inward, outward] = <[String; 3]>::try_from(args)
-        .map_err(|_| PipeError::Usage("jabpipe <name> <in-file> <out-file>".to_owned()))?;
+        .map_err(|_| PipeError::Usage("jabpipe <name> <in-file> <out-file> | supervise | lock | group".to_owned()))?;
     duplex(&name, Path::new(&inward), Path::new(&outward))
 }
 
