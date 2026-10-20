@@ -12,6 +12,12 @@ then the stop's quit ends the run (launch `--stop`), no screen taken;
 the run's bound, BOUND_PAST later, is past both, so the run's end is the
 stop's and never the bound's
 
+## SERVICE_STOP_BEFORE
+
+How far before the E a run's service stops: the stop and the E reach the
+program in that order, so the window's END and EVIDENCE records land before
+the end marker, inside the measurement the stream reads.
+
 ## nuon-list
 
 A script flag's NUON list, as a command line carries one, every item of
@@ -40,6 +46,11 @@ logs each run to its sdl.log under sdl,gl=on and the run is bundled as
 its last step (jab sdl-bundle) into its bundle/, and with `--trace`
 QEMU's flush and set_scanout trace goes to its trace.log through the
 launch's own words, which makes the run diagnostic, the oracle set.
+With `--service`, a SERVICE build's synthetic service runs through the
+route (service-sends), its quota of messages every frame, SceneOwnership's
+steady load at 2; an image whose flags define no SERVICE is refused before
+any launch, the quota is the identity's mode's `service`, and each run's
+service line follows its outcome (gauge report service-line).
 
 - `--tree`: the build tree the kernel and the image come from, release or debug
 - `--kernel`: the kernel's ELF, the tree's own unless given
@@ -71,6 +82,8 @@ launch's own words, which makes the run diagnostic, the oracle set.
 - `--sdl-probe`: the sdl shim on each run under sdl,gl=on, each run bundled last
 - `--trace`: QEMU's flush and set_scanout trace to each run's trace.log, the
   runs then diagnostic
+- `--service`: the synthetic service's messages every frame on a SERVICE
+  build, -1 for none
 
 - the run's capture nonce, minted here, the outermost layer, once
 
@@ -104,6 +117,42 @@ tree asked is refused as `run` refuses it.
   then diagnostic
 - `--qemu`: words on the launch's line after its own, a NUON list, the run then
   diagnostic
+
+## audio
+
+RegressionSuite's fixture as a bench step, the qualification's audio row:
+a debug build alone, the kernel's pad and sound counts being DEBUG's, an
+image whose flags contradict it refused. The pad table (gauge audio
+play-table) through ten seconds of play from the spawn under the default
+workers, the E closing the measurement and the Z's exit writing the counts
+(gauge audio sends), QEMU tracing its dropped reports into its log; with
+`--host` in the host's window with live sound, else headless with the
+sound recorded. The identity's mode records the pad `table`, no seed, and
+no cadence; the trace's words are its QEMU words, so its standing is
+diagnostic. The reading (gauge audio reading) is kept as audio.nuon beside
+the run and in the report's run, its line printed after the run's.
+
+- `--tree`: debug, the one tree it takes
+- `--kernel`: the kernel's ELF, the tree's own unless given
+- `--image`: the program's image, the tree's own unless given
+- `--assets`: the compiled map tree the disk is made from, the checkout's
+  asset shard's unless given, a package's on a host
+- `--host`: the host's window and live sound in place of none and the
+  recording
+- `--out`: where the run lands, a stamped directory under the tree's unless
+  given
+- `--label`: a name for the build in the summary
+- `--spec (-s)`: the named spec the machine is, the configured default unless
+  given
+- `--harts`: a custom machine of 1 to 8 harts in place of a named spec
+- `--qemu`: words on the launch's line after its own and the trace's, a NUON
+  list
+
+## service-sends
+
+A run's V frames asking the service: its start at SEED_AT with `quota`
+messages every frame, the V's total with no quota frames, and its stop
+SERVICE_STOP_BEFORE the E; none for a quota under 0.
 
 ## places
 

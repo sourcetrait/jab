@@ -1,3 +1,4 @@
+use (path self ../bench)
 use (path self ../identity)
 use (path self ../launch)
 use (path self ../machine)
@@ -105,7 +106,7 @@ def artifact [root: string, m: record, rel: string, role: string]: nothing -> re
 def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
     let b = (open $bench)
     $b.steps | where {|s| not ($s | get -o gate | default false) } | each {|s|
-        let words = ($s.run | each {|w| $w | str replace --all "{package}" $root })
+        let words = (bench built-words ($s.run | each {|w| $w | str replace --all "{package}" $root }) ($root | path join "build"))
         let route_run = ($words | window 2 | any {|pair| $pair.0 == "gauge" and $pair.1 == "run" })
         let required = (if $route_run { $INPUTS } else { $INPUTS | take 3 })
         let named = ($required | where {|flag| $flag not-in $words } | each {|flag| $"step ($s.label) names no ($flag), so its run would take the tree's" })

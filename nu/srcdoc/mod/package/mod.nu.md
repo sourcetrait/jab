@@ -59,8 +59,10 @@ A packaged step that names no image, kernel, or asset tree, or a route
 run that names no route, would take the tree's build or the checkout's
 shard and route, and one whose image, kernel, asset tree, or route lies
 outside the package would run something the package does not hold:
-either is a rebuild by accident, refused before any run. Gate steps, the
-preflight itself, are left out.
+either is a rebuild by accident, refused before any run. A step's words
+are read as the bench reads them, `{package}` and each `{build:<name>}`,
+the package's `build/<name>`, in place (bench built-words). Gate steps,
+the preflight itself, are left out.
 
 ## preflight
 

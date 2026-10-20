@@ -1,3 +1,4 @@
+export use (path self ./audio)
 export use (path self ./bench)
 export use (path self ./compare)
 export use (path self ./identity)

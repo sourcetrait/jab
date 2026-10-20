@@ -34,6 +34,8 @@ def read-capture [api: path, route: string, out: string, label: string]: nothing
     let measured = (measure (open --raw $file | into binary) $legs --cap ($id | get -o cap | default $CAP))
     print (report run-line $label 1 $measured $ran)
     print (report outcome-line 1 $measured $ran)
+    let served = (report service-line 1 $measured)
+    if $served != null { print $served }
     let target = (if $out == "" { $dir } else { $out | path expand })
     mkdir $target
     let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu windows $ran.thread_readings $legs ($id | get -o mode.end | default 0sec) })
@@ -67,8 +69,16 @@ def batch-run [label: string, n: int, dir: string]: nothing -> record {
     let measured = (measure (open --raw ($dir | path join "api.out") | into binary) $chosen.legs --cap ($id | get -o cap | default $CAP))
     print (report run-line $label $n $measured $ran)
     print (report outcome-line $n $measured $ran)
+    let served = (report service-line $n $measured)
+    if $served != null { print $served }
     let windows = (if ($ran | get -o thread_readings | default [] | is-empty) or $chosen.route == null { null } else { cpu windows $ran.thread_readings $chosen.legs ($id | get -o mode.end | default 0sec) })
-    { run: $n, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured, identity: $id, corrections: $read.corrections, identity_sha256: ($raw | hash sha256), cpu: $windows }
+    { run: $n, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured, identity: $id, corrections: $read.corrections, identity_sha256: ($raw | hash sha256), cpu: $windows, audio: (kept-audio $dir) }
+}
+
+# A run's audio reading as its play kept it, audio.nuon beside its stream, null for none
+def kept-audio [dir: string]: nothing -> any {
+    let file = ($dir | path join "audio.nuon")
+    if ($file | path exists) { open $file } else { null }
 }
 
 # The run record a read writes: its seed, own identity, provenance, and result
@@ -78,6 +88,6 @@ def read-run [read_id: record, dir: string, ran: record, measured: record, windo
     {
         run: 1, seed: $seed, out: $dir, ran: $ran, measured: $measured, identity: (if $own { $read_id.identity } else { null }), corrections: $read_id.corrections,
         identity_sha256: $read_id.identity_sha256, identity_from: $read_id.from, binding: $read_id.binding,
-        passed: $read_id.passed, reports: $read_id.reports, cpu: $windows,
+        passed: $read_id.passed, reports: $read_id.reports, cpu: $windows, audio: (kept-audio $dir),
     }
 }

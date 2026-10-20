@@ -48,13 +48,22 @@ a field leaves it.
 One step of a bench's run as its gauge.nuon holds it, its label, state,
 and file, and every run of it as its own identity asks it
 (gauge identity request), never the report's summary: a play when that identity
-names the host's own pad, else a batch of the route; its selection, its
+names the host's own pad, an audio run when it names the pad table (gauge
+play audio), else a batch of the route; its selection, its
 cadence, workers, and grain asked, and its period from its cap; the
 machine and the QEMU it records; its standing and reasons as a
 comparison classifies it (standing-of); its CPU seconds over wall
 seconds, or null with `cpu_why` saying why it cannot be taken
-(cpu-why); its outcomes; and its frames (presented-calls). A step with
-no gauge.nuon holds no runs.
+(cpu-why); its outcomes; a SERVICE build's service reading; an audio run's
+reading; and its frames (presented-calls). A step with no gauge.nuon holds
+no runs.
+
+## service-text
+
+A run's service in a bench report's words: each window's offered count and
+rate, its applied, dropped, rejected, and discarded, the quotas skipped, its
+handoff, and its apply phase in microseconds, a reduced load named; or the
+start's refusal; held, or broken with its problems.
 
 ## cpu-why
 
@@ -86,8 +95,9 @@ pool's.
 ## bench-text
 
 A bench's report as text: the steps, each machine and QEMU with the runs
-that ran on it, `<step> run <n>` each once, each kind's cadences, then
-the comparisons.
+that ran on it, `<step> run <n>` each once, each kind's cadences, the
+comparisons, then each SERVICE run's window (service-text) and each audio
+run's reading, a diagnostic (gauge audio line).
 
 ## doc
 
@@ -105,6 +115,8 @@ critical_us and draw_us, a build a cadence, its batches its steps
 diagnostic admitting it, marked. A report mixing plays and route runs
 refuses the route comparison on every field, even as a diagnostic,
 naming the report and its kinds, since compare reads a report whole.
+Audio runs join no group and no comparison; the runs carrying a service
+reading and the audio runs are listed apart, each with its reading.
 
 ## report
 

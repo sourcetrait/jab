@@ -3186,9 +3186,11 @@ microseconds as a u32.
 ## .set CONSOLE_STATUS
 ## .set CONSOLE_HARTS
 ## .set CONSOLE_GENERATION
+## .set CONSOLE_MODE
 
 `u32`: a V's answer's fields in the console record: the status an i32, the
-service's harts, and the window's generation.
+service's harts, the window's generation, and the V's byte 4, 1 for a
+start's answer and 0 for a stop's.
 
 ## .set ROUND_SERVICE
 ## .set JOB_SERVICE

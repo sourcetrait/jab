@@ -215,9 +215,10 @@ it, where a build without the symbol falls through to the answer.
 V, a SERVICE build's in every tree, release among them, since the service's
 performance runs are release: byte 4 set starts the service with its load,
 clear stops it (service_command, service.S); its answer carries the status,
-the service's harts, and the window's generation in the record's words from
-8, which the answer clears once written, so no other command's answer
-carries them. A build without SERVICE answers a V as an unknown kind.
+the service's harts, the window's generation, and whether it answers a start
+or a stop in the record's words from 8, which the answer clears once
+written, so no other command's answer carries them. A build without SERVICE
+answers a V as an unknown kind.
 
 ## k_thousand_d
 
@@ -230,7 +231,7 @@ carries them. A build without SERVICE answers a V as an unknown kind.
 ## console_record
 
 `REPORT_SIZE u8`: the console's answer; a V's from 8, CONSOLE_STATUS,
-CONSOLE_HARTS, and CONSOLE_GENERATION, zero otherwise.
+CONSOLE_HARTS, CONSOLE_GENERATION, and CONSOLE_MODE, zero otherwise.
 
 ## capture_nonce
 

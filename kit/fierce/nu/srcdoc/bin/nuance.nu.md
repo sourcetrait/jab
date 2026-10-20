@@ -42,7 +42,14 @@ and config record printed, or a socket served.
 `gauge play route`: the route played on a build `--runs` times, every
 frame of each run read from the program's records, each run's files and
 the batch's gauge.nuon kept; `--assets` a compiled map tree in place of
-the checkout's shard.
+the checkout's shard; `--service` the synthetic service's messages every
+frame on a SERVICE build.
+
+## main gauge audio
+
+`gauge play audio`: RegressionSuite's play on a debug build as a bench
+step, live sound in the host's window with `--host`, its reading kept as
+audio.nuon and in its gauge.nuon.
 
 ## main gauge play
 

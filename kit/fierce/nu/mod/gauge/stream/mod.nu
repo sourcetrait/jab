@@ -207,6 +207,7 @@ export def main [api: binary]: nothing -> record<states: list<any>, events: list
             if $command == $CONSOLE_V {
                 $service_answers = ($service_answers | append {
                     states: ($states | length), status: (i32-at $r 8), harts: (u32-at $r 12), generation: (u32-at $r 16),
+                    start: ((u32-at $r 20) == 1),
                 })
             }
         } else if $kind == $KIND_STATE {

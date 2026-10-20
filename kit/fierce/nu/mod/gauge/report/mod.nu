@@ -52,6 +52,25 @@ export def outcome-line [n: int, m: record, ran: record]: nothing -> string {
     $"gauge:   run ($n) played: rounds ($rounds); androids ($androids); struck ($o.struck); pickups ($o.pickups); window ($window), audio ($audio)"
 }
 
+# One line on a run's service, a SERVICE build's: each window's accounting,
+# or the start's refusal; null for a capture without the service's records
+export def service-line [n: int, m: record]: nothing -> oneof<string, nothing> {
+    let sv = ($m | get -o service)
+    if $sv == null { return null }
+    if not $sv.started {
+        let why = (if ($sv.refusals | is-empty) { "never started" } else { $"refused, status ($sv.refusals | each {|v| $v | into string } | str join ', ')" })
+        return $"gauge:   run ($n) service: ($why); ($sv.frames) frames recorded, none running"
+    }
+    let windows = ($sv.windows | each {|w|
+        let ending = (if $w.valid { "a valid handoff" } else { "forced" })
+        let rate = (if $w.per_frame == null { "" } else { $", ($w.per_frame | math round --precision 2) a frame over ($w.frames)" })
+        $"window ($w.generation), frames ($w.started) to ($w.stopped), ($ending): offered ($w.offered)($rate); applied ($w.applied), dropped ($w.dropped), rejected ($w.rejected), discarded ($w.discarded); quotas skipped ($w.skipped); apply ($w.apply.median) us median, ($w.apply.max) us most; the oldest applied's age ($w.age.median) us median"
+    } | str join "; ")
+    let reduced = (if $sv.reduced { ", a reduced load" } else { "" })
+    let state = (if ($sv.problems | is-empty) { "held" } else { $"broken: ($sv.problems | str join '; ')" })
+    $"gauge:   run ($n) service: ($windows)($reduced); ($state)"
+}
+
 # A spread in milliseconds: least / median / 95th / 99th / greatest
 export def spread [s: record]: nothing -> string {
     [$s.min $s.median $s.p95 $s.p99 $s.max] | each {|v| ms $v } | str join " / "
@@ -72,7 +91,7 @@ def report-doc [label: string, id: record, runs: list<any>, reread: any]: nothin
             run: $r.run, seed: $r.seed, out: $r.out, ran: $r.ran, measured: ($r.measured | reject rows),
             identity: ($r | get -o identity), corrections: ($r | get -o corrections), identity_sha256: ($r | get -o identity_sha256),
             identity_from: ($r | get -o identity_from), binding: ($r | get -o binding), passed: ($r | get -o passed),
-            reports: ($r | get -o reports), cpu: ($r | get -o cpu),
+            reports: ($r | get -o reports), cpu: ($r | get -o cpu), audio: ($r | get -o audio),
         } }),
         rows: ($runs | each {|r| $r.measured.rows | each {|row| $row | insert run $r.run } } | flatten),
     }

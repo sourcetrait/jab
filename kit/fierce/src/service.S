@@ -291,6 +291,8 @@ service_command:
     la t1, service_header
     ld t1, HEADER_GENERATION(t1)
     sw t1, CONSOLE_GENERATION(t0)   # its window's generation
+    lbu t1, V_MODE(s2)
+    sw t1, CONSOLE_MODE(t0)         # which it answers, 1 a start and 0 a stop
     ld ra, 8(sp)
     ld s2, 0(sp)
     addi sp, sp, 16

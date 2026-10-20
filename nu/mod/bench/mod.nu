@@ -17,6 +17,66 @@ def packaged-words [words: list<string>, package: path]: nothing -> list<string>
     $words | each {|w| $w | str replace --all "{package}" $package }
 }
 
+# A bench's named builds, each its name and its set, held to their shape
+def builds-of [def: record, file: path]: nothing -> list<any> {
+    let builds = ($def | get -o builds | default [])
+    for x in $builds {
+        let name = ($x | get -o name | default "")
+        if not ($name =~ '^[a-z][a-z0-9_]*$') { error make {msg: $"($file): a build's name is a snake, a lowercase letter first, not `($name)`"} }
+        if (($x | get -o set) | describe) != "string" { error make {msg: $"($file): the build ($name) needs its set, the symbols it builds with"} }
+    }
+    let names = ($builds | each {|x| $x.name })
+    if ($names | uniq | length) != ($names | length) { error make {msg: $"($file): every build needs a name of its own"} }
+    $builds
+}
+
+# The builds a step's words name, each `{build:<name>}`
+def builds-named [words: list<string>]: nothing -> list<string> {
+    $words | each {|w| $w | parse --regex '\{build:(?P<name>[^}]*)\}' | each {|p| $p.name } } | flatten | uniq
+}
+
+# A step's words, every `{build:<name>}` that build's directory under `root`
+export def built-words [words: list<string>, root: path]: nothing -> list<string> {
+    $words | each {|w|
+        let named = ($w | parse --regex '\{build:(?P<name>[a-z][a-z0-9_]*)\}' | each {|p| $p.name } | uniq)
+        $named | reduce --fold $w {|n, acc| $acc | str replace --all $"{build:($n)}" ($root | path join $n) }
+    }
+}
+
+# A program built with a set's symbols alone into the tree they pick, the
+# kernel with that tree's own, a program's symbols being nothing the kernel
+# reads: the tree, its output, the kernel, and the image's stem
+export def build-set [ws: path, program: path, set: string]: nothing -> record<tree: string, out: string, kernel: string, stem: string> {
+    let names = (build symbols $set)
+    let tree = (if "DEBUG" in $names { "debug" } else { "release" })
+    let m = (open ($ws | path join "workspace.jab.toml"))
+    build build-kernel ($ws | path join $m.kernel) (target tree-symbols $tree)
+    build prepare $program "build"
+    build build-program $program $names
+    { tree: $tree, out: (build program-out $program $tree), kernel: (build program-kernel $program $tree), stem: (open ($program | path join "program.jab.toml") | get name) }
+}
+
+# A named build of a program, build-set's, copied out of its tree into `into`,
+# a directory made here, before the tree is built again: the image, its ELF,
+# flags, demand, and home, and the kernel as jab.elf
+export def build-named [ws: path, program: path, set: string, into: path]: nothing -> nothing {
+    if ($into | path exists) { error make {msg: $"($into) exists; a named build is copied out once"} }
+    let b = (build-set $ws $program $set)
+    mkdir $into
+    for f in [$"($b.stem).jab" $"($b.stem).elf" "flags" "demand.nuon" "home"] {
+        let from = ($b.out | path join $f)
+        if ($from | path exists) { cp $from ($into | path join $f) }
+    }
+    cp $b.kernel ($into | path join "jab.elf")
+}
+
+# A named build's directory as a bench's record keeps it, its files' SHA-256
+def build-record [x: record, root: path, stem: string]: nothing -> record {
+    let dir = ($root | path join $x.name)
+    let sha = {|f: string| let p = ($dir | path join $f); if ($p | path exists) { open --raw $p | hash sha256 } else { null } }
+    $x | merge { dir: $dir, image_sha256: (do $sha $"($stem).jab"), elf_sha256: (do $sha $"($stem).elf"), kernel_sha256: (do $sha "jab.elf") }
+}
+
 # The bench a name names, held to its shape; a package's own when one is given
 export def bench-at [ws: path, name: string, --package: string = ""] {
     let words = ($name | split row "/" | where {|w| $w != "" })
@@ -34,7 +94,11 @@ export def bench-at [ws: path, name: string, --package: string = ""] {
     if ($def.steps | any {|s| ($s | get -o run | default [] | is-empty) }) { error make {msg: $"($file): every step needs `run`, its script and the script's arguments"} }
     if ($def | get -o build | default "tree") not-in [tree none] { error make {msg: $"($file): `build` is tree, the program built in the tree first, or none"} }
     if $package != "" and ($def | get -o build) != "none" { error make {msg: $"($file): a packaged bench runs the package's artifacts, so it builds nothing, `build: none`"} }
-    { name: $"($program)/($bench)", program: $program, dir: ($ws | path expand | path join $program), bench: $bench, file: $file, def: $def, package: (if $package == "" { null } else { $package | path expand }) }
+    let builds = (builds-of $def $file)
+    let declared = ($builds | each {|x| $x.name })
+    let unknown = ($def.steps | each {|s| builds-named $s.run } | flatten | uniq | where {|n| $n not-in $declared })
+    if not ($unknown | is-empty) { error make {msg: $"($file): its steps name builds it does not declare: ($unknown | str join ', ')"} }
+    { name: $"($program)/($bench)", program: $program, dir: ($ws | path expand | path join $program), bench: $bench, file: $file, def: $def, builds: $builds, package: (if $package == "" { null } else { $package | path expand }) }
 }
 
 # Where a bench's runs land, beside the state file a watch reads
@@ -88,22 +152,26 @@ export def main [ws: path, name?: string, --only: string = "", --package: string
     let picked = ($only | split row "," | each {|l| $l | str trim } | where {|l| $l != "" })
     let unknown = ($picked | where {|l| $l not-in $labels })
     if not ($unknown | is-empty) { error make {msg: $"($b.name) has no step ($unknown | str join ', '); its steps: ($labels | str join ', ')"} }
-    let steps = (if ($picked | is-empty) { $b.def.steps } else { $b.def.steps | where {|s| $s.label in $picked } })
     let tree = ($b.def | get -o tree | default "release")
     let names = (target tree-symbols $tree)
     let home = (bench-home $b)
     let stamp = (date now | format date "%Y%m%d-%H%M%S")
     let dir = ($home | path join $stamp)
     if ($dir | path exists) { error make {msg: $"a run of ($b.name) started this second, at ($dir)"} }
+    let root = (if $b.package == null { $dir | path join "build" } else { $b.package | path join "build" })
+    let chosen = (if ($picked | is-empty) { $b.def.steps } else { $b.def.steps | where {|s| $s.label in $picked } })
+    let steps = ($chosen | each {|s| $s | update run (built-words $s.run $root) })
     mkdir $dir
     let state_file = ($home | path join "state.nuon")
     let record_file = ($dir | path join "bench.nuon")
     let total = ($steps | length)
     let base = { bench: $b.name, stamp: $stamp, dir: $dir, pid: $nu.pid, started: (date now | format date "%Y-%m-%dT%H:%M:%S"), total: $total }
     let built = (($b.def | get -o build | default "tree") == "tree")
+    let stem = (open ($b.dir | path join "program.jab.toml") | get name)
     mut record: record = {
         bench: $b.name, summary: $b.def.summary, tree: $tree, stamp: $stamp, started: $base.started, file: $b.file,
         file_sha256: (open --raw $b.file | hash sha256), build: (if $built { "tree" } else { "none" }), package: $b.package,
+        build_root: $root, builds: ($b.builds | each {|x| $x | insert dir ($root | path join $x.name) }),
         steps: ($steps | each {|s| { label: $s.label, attend: ($s | get -o attend), gate: ($s | get -o gate | default false), run: $s.run, state: "pending", exit: null, seconds: null } }),
         report: null, state: (if $built { "building" } else { "running" }),
     }
@@ -112,6 +180,7 @@ export def main [ws: path, name?: string, --only: string = "", --package: string
     print $"jab bench: ($b.name), ($total) steps, into ($dir): ($b.def.summary)"
     let broken = (if not $built { null } else { try {
         let m = (open ($ws | path join "workspace.jab.toml"))
+        for x in $b.builds { build-named $ws $b.dir $x.set ($root | path join $x.name) }
         build build-kernel ($ws | path join $m.kernel) $names
         build prepare $b.dir "build"
         build build-program $b.dir $names
@@ -123,6 +192,8 @@ export def main [ws: path, name?: string, --only: string = "", --package: string
         bench-save-state $state_file ($base | merge { step: 0, label: "", state: "failed" })
         error make {msg: $"($b.name): the build failed: ($broken)"}
     }
+    $record = ($record | merge { builds: ($b.builds | each {|x| build-record $x $root $stem }) })
+    $record | to nuon --indent 2 | save --raw -f $record_file
     mut gated = false
     for entry in ($steps | enumerate) {
         let s = $entry.item

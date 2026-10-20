@@ -11,6 +11,42 @@ A packaged bench names its package's files as `{package}/<path>`, since
 where a package lies is known only where it is extracted; the run reads
 each word with the package's directory in its place.
 
+## builds-of
+
+A bench's named builds, `builds`, each a name, a snake starting with a
+lowercase letter, and a set, the symbols it builds with; every name its
+own.
+
+## builds-named
+
+The builds a step's words name, each `{build:<name>}` among them.
+
+## built-words
+
+A step's words with every `{build:<name>}` that build's directory under
+`root`: a bench run's `build/` built, or a package's `build/` laid.
+
+## build-set
+
+A program built with a set's symbols alone into the tree they pick, debug
+with DEBUG and release otherwise, and the kernel with that tree's own
+symbols, a program's symbols being nothing the kernel reads, so a named
+build runs the kernel its tree's builds run: the tree, its output
+directory, the kernel's ELF, and the image's stem.
+
+## build-named
+
+A named build made (build-set) and copied out of its tree into `into`, a
+directory this makes and refuses to find: the image, its ELF, flags,
+demand, and home, and the kernel as jab.elf; the tree is then free for the
+next build.
+
+## build-record
+
+A named build's directory as a bench's record keeps it: its name, its set,
+the directory, and the SHA-256 of its image, ELF, and kernel, null for
+a file not there.
+
 ## bench-at
 
 The bench `name` names, `<program>/<bench>`, the program by its path
@@ -23,7 +59,8 @@ words read at the package's directory (packaged-words), and it must say
 `build: none`, since a packaged bench runs the frozen guest bytes the
 package carries and a tree build beside them could stand in for them.
 The program still names the scripts, which come from the checkout.
-Untyped because it ends in an error.
+Its named builds (builds-of) are its `builds`, and a step naming a build it
+does not declare is refused. Untyped because it ends in an error.
 
 ## bench-home
 
@@ -90,6 +127,17 @@ step after it runs, each recorded `not run`, and the run fails, so a
 package's preflight refuses before the long battery. bench.nuon records
 the bench file's SHA-256, the build, the package's directory, and each
 step's gate beside the rest.
+
+A bench's named builds, `builds`, each its name and set, are images its
+steps run beside the tree's: a step names one as `{build:<name>}`, its
+directory, in its words, `{build:service}/fierce.jab` its image and
+`{build:service}/jab.elf` its kernel. A built bench makes each, in
+order, before the tree's own (build-named) into `build/<name>` under the
+run, so the tree holds the bench's own build when the steps begin; a
+packaged bench's are the package's `build/<name>`. Every step's words are
+read with each build's directory in its place (built-words) and recorded
+so in bench.nuon, beside `build_root`, where the builds lie, and `builds`,
+each with its directory and SHA-256s once made (build-record).
 
 ## bench-qemus
 

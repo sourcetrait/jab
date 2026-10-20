@@ -1,4 +1,5 @@
 use (path self ../../../../../../nu/mod/target)
+use (path self ../audio)
 use (path self ../compare)
 use (path self ../identity)
 use (path self ../measure)
@@ -101,7 +102,7 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
         let period = (1000000 / ($request.cap | default $CAP))
         {
             label: $label, run: $r.run, seed: ($r | get -o seed),
-            kind: (if $request.pad == "host" { "play" } else { "route" }), cadence: $request.cadence, period_us: $period,
+            kind: (match $request.pad { "host" => "play", "table" => "audio", _ => "route" }), cadence: $request.cadence, period_us: $period,
             selection: $request.selection, workers: $request.workers, grain: $request.grain,
             machine: $request.machine, qemu: $request.qemu,
             standing: $standing.standing,
@@ -109,10 +110,27 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
             cpu_over_wall: (if $why == null { $cpu / $wall } else { null }),
             cpu_why: $why,
             outcomes: ($m | get -o outcomes),
+            service: ($m | get -o service),
+            audio: ($r | get -o audio),
             rows: (presented-calls $rows $period),
         }
     })
     { label: $label, state: $state, file: $file, runs: $runs }
+}
+
+# A run's service in a bench report's words: its windows' accounting, or its refusal
+def service-text [label: string, run: int, sv: record]: nothing -> string {
+    let state = (if ($sv.problems | is-empty) { "held" } else { $"broken: ($sv.problems | str join '; ')" })
+    if not $sv.started {
+        let why = (if ($sv.refusals | is-empty) { "never started" } else { $"refused, status ($sv.refusals | each {|v| $v | into string } | str join ', ')" })
+        return $"  ($label) run ($run): ($why), ($sv.frames) frames none running; ($state)"
+    }
+    let windows = ($sv.windows | each {|w|
+        let rate = (if $w.per_frame == null { "" } else { $", ($w.per_frame | math round --precision 2) a frame" })
+        $"offered ($w.offered)($rate), applied ($w.applied), dropped ($w.dropped), rejected ($w.rejected), discarded ($w.discarded), quotas skipped ($w.skipped), (if $w.valid { 'a valid handoff' } else { 'forced' }), apply ($w.apply.median) us median and ($w.apply.max) us most"
+    } | str join "; ")
+    let reduced = (if $sv.reduced { ", a reduced load" } else { "" })
+    $"  ($label) run ($run): ($windows)($reduced); ($state)"
 }
 
 # Why a run's CPU over wall cannot be taken, null when it can
@@ -205,7 +223,13 @@ def bench-text [doc: record]: nothing -> string {
             })
         }
     } | flatten)
-    $head ++ $kinds ++ $compared | str join "\n"
+    let served = (if ($doc.services | is-empty) { [] } else {
+        ["the synthetic service, each run's window:"] ++ ($doc.services | each {|s| service-text $s.label $s.run $s.service })
+    })
+    let heard = (if ($doc.audio | is-empty) { [] } else {
+        ["the audio's debug runs, a diagnostic:"] ++ ($doc.audio | each {|a| $"  ($a.label) run ($a.run), ($a.standing): (if $a.reading == null { 'no reading' } else { audio line $a.reading | str replace 'gauge:   audio ' '' })" })
+    })
+    $head ++ $kinds ++ $compared ++ $served ++ $heard | str join "\n"
 }
 
 # A bench's report over its steps: runs grouped by kind and cadence, compared
@@ -245,6 +269,8 @@ export def doc [dir: path]: nothing -> record {
         runs: ($runs | each {|r| $r | select label run seed kind selection cadence workers grain period_us machine qemu standing reasons }),
         groups: $groups,
         compared: $compared,
+        services: ($runs | where {|r| $r.service != null } | each {|r| { label: $r.label, run: $r.run, service: $r.service } }),
+        audio: ($runs | where kind == "audio" | each {|r| { label: $r.label, run: $r.run, standing: $r.standing, reading: $r.audio } }),
     }
 }
 

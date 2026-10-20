@@ -19,6 +19,15 @@ One line on what a run played and on what: the rounds by what they
 met, the androids' events, the times the player was struck, the
 pickups, the window, and the audio backend's driver.
 
+## service-line
+
+One line on a run's service, a SERVICE build's (gauge measure service-of):
+each window's frames, its handoff, its offered count and rate, its
+applied, dropped, rejected, and discarded, the quotas skipped, its apply
+phase in microseconds, and its oldest applied message's age; a reduced
+load named; held, or broken with its problems; a start refused with its
+status; null for a capture without the service's records.
+
 ## spread
 
 A spread in milliseconds: least, median, 95th, 99th, greatest.
@@ -34,8 +43,9 @@ report's one, the ceiling, every run with its outcome, its measurement
 less its rows, its effective identity and correction provenance, the
 SHA-256 of its identity file as recorded, null where none is, and from
 a read where the identity came from, its binding, the directories
-passed over, and the reports read, and its CPU windows, null without
-readings, and every row with its run. A report made again from kept runs
+passed over, and the reports read, its CPU windows, null without
+readings, and an audio run's reading, null for any other, and every row
+with its run. A report made again from kept runs
 (read's batch) carries `reread`, the reader's revision, the step it read,
 and when, so its bytes name their own analysis and the old report's
 SHA-256 the old one.

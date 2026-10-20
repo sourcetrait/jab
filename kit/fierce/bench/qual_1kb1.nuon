@@ -1,16 +1,23 @@
 # The qualification on 1KB1, the frozen candidate's release build in your
 # window with live audio, launched as 1KB1 by name: the factory route in
 # two batches, your own play, the presentation's probed batches beside
-# their shim control, and the worker scaling control, each batch three
-# seeded runs. The automatic workers' batches are one build and carry one
-# name, auto, as the bench's comparison reads a build: auto_1 and auto_2
-# the factory route, auto_3 and auto_4 the shim control's unprobed arm,
-# auto_5 and auto_6 the scaling control's automatic arm. `./do bench
-# kit/fierce/qual_1kb1` runs it, `nu/bin/nuance.nu watch bench
-# kit/fierce/qual_1kb1` in a second terminal records every run of it.
+# their shim control, the worker scaling control, the route with the
+# synthetic service's steady load on its io hart, and the audio's debug
+# run, each batch three seeded runs. The automatic workers' batches are one
+# build and carry one name, auto, as the bench's comparison reads a build:
+# auto_1 and auto_2 the factory route, auto_3 and auto_4 the shim control's
+# unprobed arm, auto_5 and auto_6 the scaling control's automatic arm. The
+# service's batches run the service build, the audio its debug build, each
+# built beside the tree before the steps. `./do bench kit/fierce/qual_1kb1`
+# runs it, `nu/bin/nuance.nu watch bench kit/fierce/qual_1kb1` in a second
+# terminal records every run of it.
 {
-  summary: "the qualification on 1KB1: the factory route twice, your play, the probed batches and their shim control, two workers against the automatic choice"
+  summary: "the qualification on 1KB1: the factory route twice, your play, the probed batches and their shim control, two workers against the automatic choice, the service active, the audio's debug run"
   tree: "release"
+  builds: [
+    { name: "service", set: "service" }
+    { name: "debug", set: "debug" }
+  ]
   steps: [
     { label: "auto_1", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--runs" "3" "--seeds" "[1 2 3]" "--host" "--spec" "1kb1" "--cpu"] }
     { label: "auto_2", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--runs" "3" "--seeds" "[3 2 1]" "--host" "--spec" "1kb1" "--cpu"] }
@@ -23,6 +30,9 @@
     { label: "auto_5", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
     { label: "auto_6", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--cpu"] }
     { label: "forced2_2", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--runs" "3" "--host" "--spec" "1kb1" "--workers" "2" "--cpu"] }
+    { label: "service_1", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--image" "{build:service}/fierce.jab" "--kernel" "{build:service}/jab.elf" "--runs" "3" "--seeds" "[1 2 3]" "--host" "--spec" "1kb1" "--cpu" "--service" "2"] }
+    { label: "service_2", run: ["nu/bin/nuance.nu" "gauge" "run" "--tree" "release" "--image" "{build:service}/fierce.jab" "--kernel" "{build:service}/jab.elf" "--runs" "3" "--seeds" "[3 2 1]" "--host" "--spec" "1kb1" "--cpu" "--service" "2"] }
+    { label: "audio", run: ["nu/bin/nuance.nu" "gauge" "audio" "--tree" "debug" "--image" "{build:debug}/fierce.jab" "--kernel" "{build:debug}/jab.elf" "--host" "--spec" "1kb1"] }
   ]
   report: ["nu/bin/nuance.nu" "gauge" "bench-report"]
 }

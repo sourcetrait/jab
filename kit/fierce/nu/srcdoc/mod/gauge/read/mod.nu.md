@@ -25,8 +25,8 @@ evidence the report's identity and never the run's own (read-run); the
 run.nuon its launch wrote beside it; the legs from `route`, else the
 route kept beside the capture, else the one the identity names, refused
 unless it is the route that played (gauge report legs-for), and one leg, play,
-when no route is recorded; the report written in `out`, beside the capture
-when empty.
+when no route is recorded; a SERVICE build's service line printed after
+the outcome; the report written in `out`, beside the capture when empty.
 
 ## batch
 
@@ -40,7 +40,8 @@ revision: this checkout's commit and state, taken as the batch starts so
 a checkout moving during its reads is never named in place of the code
 read, the step it read, and when the report was written.
 The kept inputs are each run's identity.nuon, run.nuon, api.out, and
-route.nuon; the step's original gauge.nuon is never read, since the
+route.nuon, and an audio run's audio.nuon, its play's reading kept as data;
+the step's original gauge.nuon is never read, since the
 retention keeps it as its SHA-256 alone (EvidenceRetention). A reread
 reproduces the original's runs, seeds, frames, medians, legs, identity
 hashes, and CPU windows where the readers agree, as 1KA1's preparation
@@ -59,7 +60,13 @@ legs from the route kept beside it, held to the identity's route
 SHA-256 (report legs-for); its run.nuon the outcome; its stream
 measured at the identity's cap; its CPU windows from the run record's
 thread readings over the route's legs, none for a play or a run without
-readings; its seed the identity's mode's.
+readings; its seed the identity's mode's; its audio reading kept-audio's;
+a SERVICE build's service line printed after its outcome.
+
+## kept-audio
+
+A run's audio reading as its play kept it, audio.nuon beside its stream
+(gauge play audio), null for a run without one.
 
 ## read-run
 
@@ -69,5 +76,5 @@ file or embedded, that identity's, else null, never a report's one
 identity's; the identity the run's own for a file or an embedded
 reading, else null, a report's one identity or the placeholder its
 report's identity alone; the corrections, hash, source, binding, passes,
-and reports as read; the capture's directory, outcome, measurement, and
-CPU windows.
+and reports as read; the capture's directory, outcome, measurement, CPU
+windows, and audio reading (kept-audio).

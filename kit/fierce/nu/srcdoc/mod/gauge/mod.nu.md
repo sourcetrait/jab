@@ -88,13 +88,20 @@ one identity; a comparison names each run's source and corrections.
 `run` and `play` refuse an image whose build flags contradict the tree
 asked. `run --cpu` reads every QEMU thread's CPU at 5 s, at each
 placement, and at the route's end, kept whole in run.nuon and reported
-as host-time windows (gauge cpu windows).
+as host-time windows (gauge cpu windows). A SERVICE build's capture carries
+its service's records, outside the clock kinds (SceneOwnership), one a
+frame held complete beside the clock's; `run --service` runs the synthetic
+service through the route, and the measurement reads its windows (gauge
+measure service-of), a broken window making the run invalid. `audio`, the
+`nuance.nu gauge audio` step, runs RegressionSuite's fixture as a bench
+step and keeps its reading.
 
 The gauge parts in one import for a consumer: a `use` of
 `kit/fierce/nu/mod/gauge` by its path from the consumer, then
 `gauge <part> <verb>`, a part's `main` by the part's name. No part
 imports it; each imports its siblings by path.
 
+- `gauge audio`: gauge/audio.
 - `gauge bench`: gauge/bench.
 - `gauge compare`: gauge/compare.
 - `gauge identity`: gauge/identity.

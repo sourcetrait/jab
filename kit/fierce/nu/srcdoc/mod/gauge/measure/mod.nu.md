@@ -127,7 +127,10 @@ capture. A frame is fast when its critical path is under the period of
 kinds, 7 to 10, 12 to 15, and 18, is a build older than them: its rows
 are its state records' alone and it holds no window. Any one of them
 marks the capture clocked and holds it to its window. The measurement
-carries the grants and the active masks its frames hold.
+carries the grants and the active masks its frames hold. A SERVICE
+build's capture carries `service`, its service read (service-of), null
+for any other; a complete window whose service breaks is invalid for it,
+its problems among the measurement's invalidities.
 
 ## screen-frame
 
@@ -196,8 +199,10 @@ does not take, a clock record at a schema other than the capture's, a
 record numbered out of order or twice, and a frame short of a record or
 one too many, the presentation records counted from schema 2, the
 packet records from schema 3, the tile and storage records from schema
-5, the harts records from schema 6, and the receipt records from schema
-7, beside which a load record, one and before the first state, is held;
+5, the harts records from schema 6, the receipt records from schema
+7, and a SERVICE build's service records, one a frame as the frame's
+ninth record, whenever the capture holds any, beside which a load record,
+one and before the first state, is held;
 from 5 a frame with no configuration in force, none from it
 or before, leaves the window incomplete too, as does a configuration
 arriving other than after exactly `from` state records and `from` frame
@@ -331,6 +336,38 @@ than the configuration's in force; and the tile bytes other than the
 slots in use times the configuration's tile, BUILDING slots counted as
 occupied. Each rule reads one copy of a quantity against another, so
 two contradictory records cannot each pass alone.
+
+## SVC_RUNNING
+
+A service record's flags this reader reads: running after the frame's
+boundary, a raster worker's read of the packet's word torn, and the frame
+its window started in.
+
+## service-of
+
+A SERVICE build's service read from its capture's records before the end
+marker, null for a capture holding none of its records or answers: the
+frames recorded and those running; the V's answers, and whether a start
+was answered 0; every start's refusal status; each closed window
+(service-window), the quotas skipped over them, and whether any skipped,
+a reduced load; the apply phase over every frame; and its problems: a
+window started and never closed, a frame whose packet's word a raster
+worker read torn, a frame whose packet's word is not its boundary's last
+applied sequence, and each window's own.
+
+## service-window
+
+A closed window, its END and EVIDENCE records of its generation, held to
+the accounting (SceneOwnership): offered conserved as applied, dropped,
+rejected, and discarded; on a valid handoff hart 0's applied chain the
+producer's expected one, the sequences' gaps the messages lost, and the
+last sequence offered the offered count's; its rejection records its
+rejected count. A forced stop is its problem, the window incomplete. Its
+boundaries are the frames after the one marking its start through its
+stop's, the quotas it paced; their apply phase, the oldest applied
+message's age where a boundary applied any, and the deepest ring are
+read over them, and its offered rate a boundary and, by the clock's
+start times from its start's frame to its stop's, a second.
 
 ## rows-of
 
