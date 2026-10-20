@@ -62,7 +62,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let pad = (scenario $kernel $image ($out | path join "pad") $set "p" --bootargs "jab.hold=3" --pad $table --pad-port)
     assert equal $pad.status 0 $"pad: exit status ($pad.status): ($pad.serial)"
     let serial = (mmio-source $pad.debug "jab: serial at 0x")
-    assert equal ($pad.serial | lines) ["stuck: scenario pad" $"jab: interrupt source ($serial) stalled" "stuck pad: read 0, await 0, read 1" "jab: exit 0"] $"pad: the serial device's source masked, the pad on its port failing with it, the await ending, and the debug channel's last line falling to the UART: ($pad.serial)"
+    assert equal ($pad.serial | lines) ["stuck: scenario pad" $"jab: interrupt source ($serial) stalled" "stuck pad: read 0, await 0, read 1" "jab: pad accepted 0 taken 0 dropped 0" "jab: exit 0"] $"pad: the serial device's source masked, the pad on its port failing with it, the await ending, and the debug channel's last lines, the pad's counts and the exit, falling to the UART: ($pad.serial)"
     assert ($pad.debug | str contains "jab: pad on port") $"pad: the pad came up on the port: ($pad.debug)"
 
     let api = (scenario $kernel $image ($out | path join "api") $set "a" --bootargs "jab.hold=3 jab.unsent=3")
