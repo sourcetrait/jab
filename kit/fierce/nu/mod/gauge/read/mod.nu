@@ -42,6 +42,7 @@ def read-capture [api: path, route: string, out: string, label: string]: nothing
 
 # A kept bench step's report made again from its runs, each stream measured anew
 export def batch [step: path, --label: string = "", --out: string = ""] {
+    let reader = (identity repo-of $WORKSPACE)
     let dir = ($step | path expand)
     let kept = (glob ($dir | path join "run_*") | where {|d| ($d | path type) == "dir" and (($d | path basename) =~ '^run_[0-9]+$') })
     if ($kept | is-empty) { error make { msg: $"($dir) holds no run_<n> directory, so it is no kept step" } }
@@ -49,7 +50,7 @@ export def batch [step: path, --label: string = "", --out: string = ""] {
     let runs = ($kept | each {|d| { n: ($d | path basename | str substring 4.. | into int), dir: $d } } | sort-by n | each {|r| batch-run $name $r.n $r.dir })
     let target = (if $out == "" { $dir } else { $out | path expand })
     mkdir $target
-    let revision = { reader: (identity repo-of $WORKSPACE), from: $dir, written: (date now | format date "%Y-%m-%dT%H:%M:%S%z") }
+    let revision = { reader: $reader, from: $dir, written: (date now | format date "%Y-%m-%dT%H:%M:%S%z") }
     report write $name ($runs | first | get identity) $runs $target --reread $revision
 }
 

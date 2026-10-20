@@ -36,7 +36,9 @@ step's streams read one by one rebuild neither the step nor its run
 numbers. Each `run_<n>` under the step, in order, read by batch-run
 under the step's label, the report's one identity its first run's as
 `route` writes it, written by report's `write` with `--reread`, the
-revision: this checkout's commit and state, the step it read, and when.
+revision: this checkout's commit and state, taken as the batch starts so
+a checkout moving during its reads is never named in place of the code
+read, the step it read, and when the report was written.
 The kept inputs are each run's identity.nuon, run.nuon, api.out, and
 route.nuon; the step's original gauge.nuon is never read, since the
 retention keeps it as its SHA-256 alone (EvidenceRetention). A reread
