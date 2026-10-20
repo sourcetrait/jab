@@ -1,0 +1,57 @@
+# JointTiming's host bench on 1KA1, run from its package as your host's half of the
+# comparison of the kernel's presentation rules, P0 against P2: the preflight,
+# then fps's display battery at cadence 1 in your window with live audio, P0 and
+# P2 probed and unprobed in the order P0 probed, P2 probed, P0, P2, P2, P0, P2
+# probed, P0 probed, three seeded runs a step, every probed run bundled; then
+# walk's battery through its wrapper in your window with live sound, a step a
+# run, P0 await, P2 await, and P2 prepare with TIMING on, P0 await and P2
+# prepare with it off, those five then reversed, three runs each. Every image
+# and kernel is the package's frozen export, and nothing is built. Extract the
+# package, then `./do bench kit/fierce/jointtiming_1ka1 --package <its directory>`,
+# with `nu/bin/nuance.nu watch bench kit/fierce/jointtiming_1ka1` in a second terminal.
+{
+  summary: "JointTiming's host bench on 1KA1: fps's display battery, probed and unprobed, then walk's battery, P0 against P2 from the package"
+  tree: "release"
+  build: "none"
+  steps: [
+    {label: preflight, gate: true, run: ["../../nu/bin/nuance/package.nu", preflight, "{package}", --spec, "1ka1", --image, "fierce/fierce.jab", --kernel, "kernel/p0/jab.elf", --tree, "asset/render_0", --serial, fps, --bench, "bench/jointtiming_1ka1.nuon"]}
+    {label: "p0_probed_1", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --sdl-probe, --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p0/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p2_probed_1", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --sdl-probe, --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p2/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p0_1", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p0/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p2_1", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p2/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p2_2", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p2/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p0_2", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p0/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p2_probed_2", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --sdl-probe, --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p2/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p0_probed_2", run: ["nu/bin/nuance.nu", gauge, run, --tree, release, --runs, "3", --seeds, "[1 2 3]", --cadence, "1", --eps, "3700", --host, --spec, "1ka1", --sdl-probe, --image, "{package}/fierce/fierce.jab", --kernel, "{package}/kernel/p0/jab.elf", --assets, "{package}/asset/render_0", --route, "{package}/route/route_render_0.nuon"]}
+    {label: "p0_await_on_1_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_on_1_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_on_1_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_1_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_1_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_1_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_1_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_1_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_1_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_1_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_1_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_1_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_1_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_1_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_1_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_2_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_2_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_off_2_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_2_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_2_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_off_2_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_2_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_2_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_prepare_on_2_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/prepare_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_2_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_2_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p2_await_on_2_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p2/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_on_2_1", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_on_2_2", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+    {label: "p0_await_on_2_3", run: ["../../example/walk/test/cadence.nu", "{package}/walk/await_timing/walk.jab", "{package}/kernel/p0/jab.elf", --spec, "1ka1", --window, --live-sound]}
+  ]
+}
