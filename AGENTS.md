@@ -39,7 +39,7 @@ directory and, optionally, specific relative file or directory.
 - Jab Kernel
 - Jab SDK
 - Jab Launch
-- Jab Metal
+- Jab Metal / LowKick
 - Jab Dash
 - JabIO
 - jab (term)
@@ -48,9 +48,9 @@ directory and, optionally, specific relative file or directory.
 Distribution for desktop systems (Linux, MacOS, Windows) including its
 self-named launcher app.
 
-### Metal
-Distribution for dedicated hardware, including its own self-named customized
-Alpine Linux distro.
+### Metal / LowKick
+Distribution for dedicated hardware, including LowKick, a customized Ubuntu
+(RISC-V) distro.
 
 ### Dash
 The system dashboard provided with Jab Metal and mirrored within Jab Launch.
