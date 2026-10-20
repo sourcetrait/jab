@@ -5,7 +5,7 @@
 .set TICK, (QEMU_VIRT_TIMEBASE / JAB_DISPLAY_FPS_CAP)
 .set SOUND_POLL, (QEMU_VIRT_TIMEBASE / 2)
 .ifdef P2
-.set FRAME_EPS, 10000
+.set FRAME_EPS, 3700
 .if (FRAME_EPS < 100) || (FRAME_EPS > 10000) || ((FRAME_EPS % 100) != 0)
 .error "FRAME_EPS is a multiple of 100 ticks from 100 to 10000"
 .endif

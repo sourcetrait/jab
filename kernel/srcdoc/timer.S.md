@@ -30,10 +30,16 @@ sound stream alone wakes on this timer to look.
 ## .set FRAME_EPS
 
 `u64`, under the build symbol P2 alone: P2's on-time tolerance in ticks, a
-multiple of 100 from 100 to 10,000, an assembly `.error` otherwise. Its value
-is JointTiming's calibration, the wake delays' 99.9th percentile on the
-baseline's P0 runs rounded up to 100 ticks; until that lands it is the
-contract's cap, 10,000 (1 ms).
+multiple of 100 from 100 to 10,000, an assembly `.error` otherwise. Its value,
+3,700 ticks (0.37 ms), is JointTiming's calibration: the wake delays' 99.9th
+percentile on the baseline's P0 runs, the larger target's, rounded up to 100
+ticks. The capture: fps's release export at c804ccb on P0's kernel exported at
+d83e192, the factory route at cadence 1, headless and unprobed, two batches of
+three seeded runs on each target; a wake delay is a receipt's acceptance less
+its tick on a frame at cadence 1 that waited and presented. 1KA1 gave 19,445
+such frames, the 99.9th at 3,655 ticks; 1KB1 19,812, the 99.9th at 3,559; none
+past the 10,000-tick cap. A wake at or past it re-anchors the grid by design,
+and every run's late wakes count them.
 
 ## frame_ready
 
