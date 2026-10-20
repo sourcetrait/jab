@@ -13,6 +13,8 @@ Read a capture, a run's api.out (read-capture).
 - `--route`: the route the capture played, for its legs
 - `--out`: where gauge.nuon lands, beside the capture unless given
 - `--label`: a name for the build in the summary
+- `--eps`: the contract's on-time tolerance in ticks, the cap's 10,000 unless
+  given (gauge measure contract-of)
 
 ## read-capture
 
@@ -25,8 +27,9 @@ evidence the report's identity and never the run's own (read-run); the
 run.nuon its launch wrote beside it; the legs from `route`, else the
 route kept beside the capture, else the one the identity names, refused
 unless it is the route that played (gauge report legs-for), and one leg, play,
-when no route is recorded; a SERVICE build's service line printed after
-the outcome; the report written in `out`, beside the capture when empty.
+when no route is recorded; the contract read at `eps` and its line printed
+after the outcome, then a SERVICE build's service line; the report written
+in `out`, beside the capture when empty.
 
 ## batch
 
@@ -51,6 +54,7 @@ design.
 - `step`: a kept step's directory, its runs under it
 - `--label`: the step's label, its directory's name unless given
 - `--out`: where gauge.nuon lands, the step's directory unless given
+- `--eps`: the contract's on-time tolerance in ticks, as `main` takes it
 
 ## batch-run
 
@@ -58,7 +62,8 @@ One kept run read anew: its identity file with any correction sidecar
 applied (identity corrected) and its raw SHA-256 the binding hash; its
 legs from the route kept beside it, held to the identity's route
 SHA-256 (report legs-for); its run.nuon the outcome; its stream
-measured at the identity's cap; its CPU windows from the run record's
+measured at the identity's cap, its contract at `eps` and its line printed
+after its outcome; its CPU windows from the run record's
 thread readings over the route's legs, none for a play or a run without
 readings; its seed the identity's mode's; its audio reading kept-audio's;
 a SERVICE build's service line printed after its outcome.

@@ -64,6 +64,24 @@ microsecond
 the program's own US_TICKS, the same ten as an integer, which a
 microsecond field multiplies back to ticks for bounds kept exact
 
+## HZ
+
+the guest clock's ticks a second, its 10 MHz; a period in ticks is it
+over the cap, 166,666 at 60, the kernel's TICK
+
+## EPS_CAP
+
+the presentation contract's on-time tolerance at most, 10,000 ticks, 1
+ms (JointTiming): eps is above 0 and at most this, so `--eps` outside it
+is refused
+
+## CADENCE_IF_EARLY
+
+the cadence that waits only while presenting would be early, 1: its
+frames that waited end their wait on the display's bit and flip at once,
+so a receipt's acceptance less its tick is a wake delay alone
+(wake-delays)
+
 ## ANDROID_EVENTS
 
 the android events and what a round met, as the program reports them
@@ -116,9 +134,11 @@ schema 8 their recorded calls' bounds (bracket-invalidity); complete at
 8 besides holds exactly one bounds record, after the load record and
 before the first state. The
 measurement carries `nonce_set` and `late_nonce`, an I answered before
-the first state or after it, `load`, the load record, and `acceptance`,
+the first state or after it, `load`, the load record, `acceptance`,
 whether its rows' acceptance intervals stand and why not where not
-(acceptance-of, accepted). A valid
+(acceptance-of, accepted), and `contract`, the presentation contract
+read on its receipts at `eps`, 1 to EPS_CAP ticks, 10,000 unless given
+(contract-of). A valid
 window is under the ceiling when its critical path's median is under
 CEILING_US, `under` null for one not valid; its frames at or over the
 ceiling, each row's `over`, are its tail, counted in any clocked
@@ -295,6 +315,38 @@ the load record's cleared screen, consecutive by their present ordinals,
 in microseconds to the tenth. A frame that refused its flip or made none
 adds no present and breaks no adjacency: its field stays null and the
 interval across it lands on the next present.
+
+## contract-of
+
+The presentation contract read on a measurement's receipts at eps
+(JointTiming), only where the acceptance stands, so on a present sequence
+the receipt stage passed: its eps, the period in ticks (HZ over the cap),
+`available` and `reason` as acceptance-of gives them, and then:
+
+- `k_violations`: K's violations over the presented frames' acceptances
+  in order (jab's `present k-violations`), every later flip short of K
+  against the running maximum counted, so one flip accepted late under
+  P0 is the witness of every on-grid flip after it; `k_first` the first
+  eight, each with its frame and its witness's frame
+- `late_wakes`: the wake delays at or past eps (wake-delays), the flips
+  that re-anchor under P2
+- `catch_ups`: the presented frames accepted under half a period after
+  the present before them, by their acceptance intervals; K at eps under
+  half a period admits none, so any is P0's catch-up
+
+Unavailable, the three are null and `k_first` empty. The bench's own
+`catch_up` (gauge bench) is another count: presenting calls' intervals
+under half a period after a frame past the period, read from the calls'
+starts, never from the receipts.
+
+## wake-delays
+
+A measurement's wake delays, s less T in ticks: its frames at
+CADENCE_IF_EARLY that waited and presented, each its receipt's
+acceptance less the tick it was judged against. The population eps is
+calibrated from (jab-stress's timing selector) and the late wakes count
+in; frames that never waited are left out, their s less T lateness
+rather than a wake.
 
 ## popcount
 

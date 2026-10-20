@@ -43,8 +43,8 @@ def "main play" [target: string = "mcp", map: string = "render_0", seconds: int 
 }
 
 # A route played and measured from the command line by gauge play route
-def "main gauge run" [--tree: string = "release", --kernel: string = "", --image: string = "", --route: string = "", --map: string = "", --assets: string = "", --runs: int = 3, --seeds: string = "[]", --cadence: int = 1, --workers: int = -1, --grain: int = 32, --host, --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]", --cpu, --sdl-probe, --trace, --service: int = -1] {
-    gauge play route --tree $tree --kernel $kernel --image $image --route $route --map $map --assets $assets --runs $runs --seeds $seeds --cadence $cadence --workers $workers --grain $grain --host=$host --out $out --label $label --spec $spec --harts $harts --qemu $qemu --cpu=$cpu --sdl-probe=$sdl_probe --trace=$trace --service $service
+def "main gauge run" [--tree: string = "release", --kernel: string = "", --image: string = "", --route: string = "", --map: string = "", --assets: string = "", --runs: int = 3, --seeds: string = "[]", --cadence: int = 1, --workers: int = -1, --grain: int = 32, --host, --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]", --cpu, --sdl-probe, --trace, --service: int = -1, --eps: int = 10000] {
+    gauge play route --tree $tree --kernel $kernel --image $image --route $route --map $map --assets $assets --runs $runs --seeds $seeds --cadence $cadence --workers $workers --grain $grain --host=$host --out $out --label $label --spec $spec --harts $harts --qemu $qemu --cpu=$cpu --sdl-probe=$sdl_probe --trace=$trace --service $service --eps $eps
 }
 
 # RegressionSuite's fixture as a bench step from the command line by gauge play audio
@@ -53,18 +53,18 @@ def "main gauge audio" [--tree: string = "debug", --kernel: string = "", --image
 }
 
 # A host play from the command line by gauge play host
-def "main gauge play" [--tree: string = "release", --kernel: string = "", --image: string = "", --seconds: int = 120, --seed: int = 1, --cadence: int = 1, --workers: int = -1, --grain: int = 32, --assets: string = "", --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]"] {
-    gauge play host --tree $tree --kernel $kernel --image $image --seconds $seconds --seed $seed --cadence $cadence --workers $workers --grain $grain --assets $assets --out $out --label $label --spec $spec --harts $harts --qemu $qemu
+def "main gauge play" [--tree: string = "release", --kernel: string = "", --image: string = "", --seconds: int = 120, --seed: int = 1, --cadence: int = 1, --workers: int = -1, --grain: int = 32, --assets: string = "", --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]", --eps: int = 10000] {
+    gauge play host --tree $tree --kernel $kernel --image $image --seconds $seconds --seed $seed --cadence $cadence --workers $workers --grain $grain --assets $assets --out $out --label $label --spec $spec --harts $harts --qemu $qemu --eps $eps
 }
 
 # A capture read from the command line by gauge read
-def "main gauge read" [api: path, --route: string = "", --out: string = "", --label: string = ""] {
-    gauge read $api --route $route --out $out --label $label
+def "main gauge read" [api: path, --route: string = "", --out: string = "", --label: string = "", --eps: int = 10000] {
+    gauge read $api --route $route --out $out --label $label --eps $eps
 }
 
 # A kept bench step's report made again by gauge read batch
-def "main gauge read batch" [step: path, --label: string = "", --out: string = ""] {
-    gauge read batch $step --label $label --out $out
+def "main gauge read batch" [step: path, --label: string = "", --out: string = "", --eps: int = 10000] {
+    gauge read batch $step --label $label --out $out --eps $eps
 }
 
 # Builds compared from the command line by gauge compare report

@@ -71,6 +71,19 @@ export def service-line [n: int, m: record]: nothing -> oneof<string, nothing> {
     $"gauge:   run ($n) service: ($windows)($reduced); ($state)"
 }
 
+# One line on a run's presentation contract at its eps: K's violations, the
+# first named by its frames, the late wakes, and the catch-ups; or why its
+# receipts give none
+export def contract-line [n: int, m: record]: nothing -> string {
+    let c = $m.contract
+    if not $c.available { return $"gauge:   run ($n) contract at eps ($c.eps) ticks: not read, ($c.reason)" }
+    let first = (if ($c.k_first | is-empty) { "" } else {
+        let v = ($c.k_first | first)
+        $", the first at frame ($v.frame) against frame ($v.witness_frame), ($v.gap) ticks apart where K asks more than ($v.bound)"
+    })
+    $"gauge:   run ($n) contract at eps ($c.eps) ticks: ($c.k_violations) K violations($first); ($c.late_wakes) late wakes; ($c.catch_ups) catch-ups"
+}
+
 # A spread in milliseconds: least / median / 95th / 99th / greatest
 export def spread [s: record]: nothing -> string {
     [$s.min $s.median $s.p95 $s.p99 $s.max] | each {|v| ms $v } | str join " / "

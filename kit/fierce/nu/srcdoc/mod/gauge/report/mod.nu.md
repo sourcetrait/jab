@@ -28,6 +28,14 @@ phase in microseconds, and its oldest applied message's age; a reduced
 load named; held, or broken with its problems; a start refused with its
 status; null for a capture without the service's records.
 
+## contract-line
+
+One line on a run's presentation contract at its eps (gauge measure
+contract-of): K's violations, the first named by its frame and its
+witness's with their gap and K's bound, the late wakes, and the
+catch-ups; or not read, with the acceptance's reason. A line of its own
+beside run-line, which other tools parse and which stays as it was.
+
 ## spread
 
 A spread in milliseconds: least, median, 95th, 99th, greatest.

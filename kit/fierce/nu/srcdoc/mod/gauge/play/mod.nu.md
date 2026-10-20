@@ -50,7 +50,9 @@ With `--service`, a SERVICE build's synthetic service runs through the
 route (service-sends), its quota of messages every frame, SceneOwnership's
 steady load at 2; an image whose flags define no SERVICE is refused before
 any launch, the quota is the identity's mode's `service`, and each run's
-service line follows its outcome (gauge report service-line).
+service line follows its outcome (gauge report service-line). Each run is
+measured with the contract read at `--eps` and its contract line printed
+after its outcome (gauge report contract-line).
 
 - `--tree`: the build tree the kernel and the image come from, release or debug
 - `--kernel`: the kernel's ELF, the tree's own unless given
@@ -84,6 +86,8 @@ service line follows its outcome (gauge report service-line).
   runs then diagnostic
 - `--service`: the synthetic service's messages every frame on a SERVICE
   build, -1 for none
+- `--eps`: the contract's on-time tolerance in ticks, the cap's 10,000 unless
+  given, a calibrated eps for a comparison
 
 - the run's capture nonce, minted here, the outermost layer, once
 
@@ -94,7 +98,8 @@ gamepad, for a person to play from the spawn: an R with the seed and a
 C with the cadence before the first frame, the E after `seconds`, and
 the stop once the final records have landed, which closes the window.
 `--qemu` as `run` takes it, and an image whose build flags contradict the
-tree asked is refused as `run` refuses it.
+tree asked is refused as `run` refuses it. The run's contract is read at
+`--eps` and its line printed as `run` prints it.
 
 - `--tree`: the build tree, release or debug
 - `--kernel`: the kernel's ELF, the tree's own unless given
@@ -117,6 +122,7 @@ tree asked is refused as `run` refuses it.
   then diagnostic
 - `--qemu`: words on the launch's line after its own, a NUON list, the run then
   diagnostic
+- `--eps`: the contract's on-time tolerance in ticks, as `run` takes it
 
 ## audio
 

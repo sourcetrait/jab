@@ -60,6 +60,7 @@ export def route [
     --sdl-probe
     --trace
     --service: int = -1
+    --eps: int = 10000
 ] {
     let seeds = (nuon-list $seeds "--seeds" "int")
     let qemu = (nuon-list $qemu "--qemu" "string")
@@ -110,9 +111,10 @@ export def route [
         let ran_id = (identity launched-identity $id $launched)
         let id_sha = (identity write $ran_id $run_out)
         let bundle = (if $sdl_probe { bundle $run_out ($run_out | path join "bundle") --profile paired | ignore; $run_out | path join "bundle" } else { null })
-        let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP))
+        let measured = (measure $launched.api $r.legs --cap ($id.cap | default $CAP) --eps $eps)
         print (report run-line $label $n $measured $ran)
         print (report outcome-line $n $measured $ran)
+        print (report contract-line $n $measured)
         let served = (report service-line $n $measured)
         if $served != null { print $served }
         let windows = (if $cpu { cpu windows $ran.thread_readings $r.legs $r.end } else { null })
@@ -137,6 +139,7 @@ export def host [
     --spec (-s): string = ""
     --harts: int = 0
     --qemu: string = "[]"
+    --eps: int = 10000
 ] {
     let qemu = (nuon-list $qemu "--qemu" "string")
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
@@ -166,9 +169,10 @@ export def host [
     let ran_id = (identity launched-identity $id $launched)
     let id_sha = (identity write $ran_id $run_out)
     let legs = [{ name: "play", places: [], pad: [] }]
-    let measured = (measure $launched.api $legs --cap ($id.cap | default $CAP))
+    let measured = (measure $launched.api $legs --cap ($id.cap | default $CAP) --eps $eps)
     print (report run-line $label 1 $measured $ran)
     print (report outcome-line 1 $measured $ran)
+    print (report contract-line 1 $measured)
     report write $label $ran_id [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: null }] $at.out
 }
 

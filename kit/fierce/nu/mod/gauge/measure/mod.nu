@@ -23,6 +23,9 @@ const HARTS_MAX = 8
 # The cadence that awaits after its flip
 export const CADENCE_AFTER_FLIP = 0
 
+# The cadence that waits only while early, its waits the wakes eps is read from
+const CADENCE_IF_EARLY = 1
+
 # The cap a frame's period comes from when the identity names none
 export const CAP = 60
 
@@ -62,6 +65,12 @@ const TICKS_PER_US = 10.0
 # The program's US_TICKS, the guest clock's ticks a microsecond as an integer
 const US_TICKS = 10
 
+# The guest clock's ticks a second, its 10 MHz, a period's numerator
+const HZ = 10000000
+
+# The presentation contract's on-time tolerance at most, in ticks: 1 ms
+export const EPS_CAP = 10000
+
 # A flip's status preset at a frame's start, kept when it reaches no flip
 const FLIP_NONE = 255
 
@@ -82,8 +91,10 @@ const SVC_RUNNING = 1
 const SVC_TORN = 2
 const SVC_STARTED = 8
 
-# A capture measured: its window, rows, legs, outliers, outcomes, validity
-export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> record {
+# A capture measured: its window, rows, legs, outliers, outcomes, validity,
+# and the presentation contract read at eps
+export def main [api: binary, legs: list<any>, --cap: int = 60, --eps: int = 10000]: nothing -> record {
+    if $eps <= 0 or $eps > $EPS_CAP { error make { msg: $"--eps is 1 to ($EPS_CAP) ticks, not ($eps)" } }
     let s = (stream $api)
     let clocked = (([$s.frames $s.draws $s.presents $s.packets $s.tiles $s.storages $s.configs $s.harts $s.receipts] | any {|k| not ($k | is-empty) }) or $s.end != null)
     let schema = (if $clocked { stream schema-of $s } else { null })
@@ -126,6 +137,7 @@ export def main [api: binary, legs: list<any>, --cap: int = 60]: nothing -> reco
         load: ($s.loads | get -o 0),
         bounds: ($s.bounds | get -o 0),
         acceptance: $acceptance,
+        contract: (contract-of $rows $acceptance $cap $eps),
         workers: ($rows | get -o workers | compact | uniq | sort),
         grains: ($rows | get -o grain | compact | uniq | sort),
         grants: ($rows | get -o grant | compact | uniq | sort),
@@ -462,6 +474,34 @@ def accepted [rows: list<any>, anchor: int]: nothing -> list<any> {
         }
     }
     $out
+}
+
+# The presentation contract read on a measurement's receipts at eps, where its
+# receipt stage passed: K's violations over the presented acceptances, the
+# first eight named, the late wakes, and the catch-ups; else none, its reason
+def contract-of [rows: list<any>, acceptance: record, cap: int, eps: int]: nothing -> record {
+    let period = ($HZ // $cap)
+    let read = { eps: $eps, period: $period, available: $acceptance.available, reason: $acceptance.reason }
+    if not $acceptance.available { return ($read | merge { k_violations: null, k_first: [], late_wakes: null, catch_ups: null }) }
+    let presented = ($rows | where {|r| $r.flip_status == $FLIP_PRESENTED })
+    let k = (present k-violations ($presented | each {|r| $r.receipt_stamp }) $period $eps)
+    let half_us = ($period / $TICKS_PER_US / 2)
+    let named = ($k | first 8 | each {|v| $v | insert frame ($presented | get $v.index | get frame) | insert witness_frame ($presented | get $v.witness | get frame) })
+    $read | merge {
+        k_violations: ($k | length),
+        k_first: $named,
+        late_wakes: (wake-delays $rows | where {|d| $d >= $eps } | length),
+        catch_ups: ($presented | where {|r| $r.acceptance_interval_us < $half_us } | length),
+    }
+}
+
+# A measurement's wake delays, s less T in ticks: its frames at the cadence
+# that waits only while early which waited and presented, each its receipt's
+# acceptance less the tick it was judged against
+export def wake-delays [rows: list<any>]: nothing -> list<int> {
+    $rows
+    | where {|r| $r.cadence == $CADENCE_IF_EARLY and ($r.wait_us | default 0) > 0 and $r.flip_status == $FLIP_PRESENTED and $r.receipt_stamp != null and $r.receipt_tick != null }
+    | each {|r| $r.receipt_stamp - $r.receipt_tick }
 }
 
 # The count of harts a mask holds
