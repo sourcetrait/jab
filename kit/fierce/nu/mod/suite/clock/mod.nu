@@ -36,8 +36,8 @@ const CADENCE_SKIP = 5
 # The fast stage from 1.5 s: a 4 ms standing stall, a 500 us consume spin
 const SCHEDULE_FAST = { at: 1500ms, stall: 4000, spin: 500 }
 
-# The ten trigger reports' times, 400 ms apart from 1.8 s
-const SCHEDULE_TRIGGERS = [1800ms 2200ms 2600ms 3000ms 3400ms 3800ms 4200ms 4600ms 5000ms 5400ms]
+# The ten trigger reports' times from 1.8 s, 410 ms apart, across the period
+const SCHEDULE_TRIGGERS = [1800ms 2210ms 2620ms 3030ms 3440ms 3850ms 4260ms 4670ms 5080ms 5490ms]
 
 # When the frame whose flip is tried before its wait is asked
 const SCHEDULE_FORCED = 5900ms

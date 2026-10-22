@@ -7,7 +7,7 @@ launch a cadence of each fixture, the debug build's S frames standing
 stalls in place of the drawing, each window held complete and valid at
 the program's schema before anything is read from it. CadenceSchedule,
 on Render One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
-500 us spin inside every consume; ten trigger reports from 1.8 s, 400
+500 us spin inside every consume; ten trigger reports from 1.8 s, 410
 ms apart, each pressed and released in one report; at 5.9 s a frame
 whose flip is tried before its wait; at 6.3 s a frame stalled 38 ms;
 from 7 s a 25 ms standing stall; the E at 9 s. A sustained stage sets
@@ -30,6 +30,13 @@ facing north, a 25 ms standing stall, the stick held forward from 2 to
 of their sector, the distance from the first to the last over the
 difference of their simulation times is 4 m/s within 2 percent under
 every cadence.
+
+The trigger reports are 410 ms apart, 24.6 periods, so each lands 0.6 of
+a period past the one before on the tick grid and the ten fall at five
+phases a fifth of a period apart, twice: a fast stage frame's work holds
+at most two of them, so at least three lie in its wait wherever the grid
+sits, which each late flip before the stage sets anew. Reports a whole
+number of periods apart share one phase, all in the waits or none.
 
 Each schedule's receipts are held to the frame rule (rule-holds) at
 FRAME_EPS as timer.S sets it, and its contract is read at that eps.
