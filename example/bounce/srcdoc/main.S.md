@@ -2,17 +2,14 @@
 
 bounce: a ball bouncing around the display, Jab's display example.
 Opens the display, black as the framebuffer starts, then each frame
-waits for the tick, reads the clock, erases the ball, moves it by its
-speed over the time since the frame before, draws it, and flips the
-one rectangle holding where it was and where it is. The ball moves
-by time, never by frames, so the frame cap and a late frame change
-when it is seen and never where it is. Runs until the window closes.
-
-Built with PREPARE, a candidate under measurement, each frame works
-first and waits after: it reads the clock, erases, moves, and draws the
-ball, keeps the rectangle in memory, waits for the tick, and flips the
-rectangle it kept, waiting again if the flip comes back early. Without
-the symbol the image is the one before it, byte for byte.
+works first and waits after: it reads the clock, erases the ball,
+moves it by its speed over the time since the frame before, draws it,
+keeps the one rectangle holding where it was and where it is, waits
+for the tick, and flips that rectangle, waiting again if the flip
+comes back early. Drawn before its wait, each frame flips on its tick,
+every period. The ball moves by time, never by frames, so the frame
+cap and a late frame change when it is seen and never where it is.
+Runs until the window closes.
 
 ## .set RADIUS
 
@@ -75,13 +72,13 @@ pixels, and the clock is noted in last_time before the first frame.
 Where the ball was, in pixels, is kept in s4 and s5 and erased. The ball goes
 on by its speed over the frame's time, then off the walls: a centre past a
 limit is put back on it and that speed turned. Once drawn, the rectangle
-holding the old square and the new is flipped: from the lesser centre less
-the radius to the greater plus it, inclusive.
+holding the old square and the new goes to present: from the lesser centre
+less the radius to the greater plus it, inclusive.
 
 ## present
 
-Under PREPARE: the rectangle goes to flip_rect before the wait, since the
-wait's answer lands in a0, and the flip reads it back from there.
+The rectangle goes to flip_rect before the wait, since the wait's answer
+lands in a0, and the flip reads it back from there.
 
 ## last_time
 
@@ -93,8 +90,8 @@ wait's answer lands in a0, and the flip reads it back from there.
 
 ## flip_rect
 
-`4 u32`: under PREPARE, the rectangle the frame flips once its wait is
-over, x, y, width, and height.
+`4 u32`: the rectangle the frame flips once its wait is over, x, y, width,
+and height.
 
 ## msg_no_display
 

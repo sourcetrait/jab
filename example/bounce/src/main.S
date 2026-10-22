@@ -26,9 +26,6 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
-.ifndef PREPARE
-    jab.sys.display.await
-.endif
     call elapsed
     srai s4, s0, FIX
     srai s5, s1, FIX
@@ -93,18 +90,13 @@ frame:
 8:
     addi a3, a3, RADIUS + 1
     sub a3, a3, a1
-.ifdef PREPARE
     call present
-.else
-    jab.sys.display.flip.rect
-.endif
     j frame
 
 no_display:
     jab.sys.uart.print msg_no_display
     jab.sys.exit 1
 
-.ifdef PREPARE
 present:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -126,7 +118,6 @@ present:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
-.endif
 
 elapsed:
     rdtime t0
@@ -208,10 +199,8 @@ last_time:
     .skip 8
 dt:
     .skip 8
-.ifdef PREPARE
 flip_rect:
     .skip JAB_RECT_SIZE
-.endif
 
 .section .rodata
 msg_no_display:

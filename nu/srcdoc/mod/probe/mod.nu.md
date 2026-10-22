@@ -65,8 +65,9 @@ probe's identity and walk's unprobed wrapper
 (`example/walk/test/cadence.nu`), so a reader holds either run's stream
 to the build its identity names: `workload`, the program's path in the
 workspace and
-its loop order, `prepare` where the build sets PREPARE and `await`
-otherwise; `image` and `kernel`, each file's path and SHA-256; `flags`,
+its loop order as the build declares it, `prepare` where it sets
+PREPARE, `await` for a CADENCE build without it, and `undeclared` for any
+other, whose flags name no loop; `image` and `kernel`, each file's path and SHA-256; `flags`,
 the first line of the `flags` file the build left beside the image,
 whose absence is refused; `cadence`, the CADENCE symbols among the
 flags' `--defsym`s; and `replay`, a REPLAY build's stream as

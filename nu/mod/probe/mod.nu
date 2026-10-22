@@ -128,7 +128,7 @@ export def build-fields [program: string, image: path, kernel: path, --replay: p
     if $replaying and $replay == null { error make {msg: $"the image is a REPLAY build and no replay stream was given: ($image)"} }
     if (not $replaying) and $replay != null { error make {msg: $"a replay stream was given and the image is no REPLAY build: ($image)"} }
     {
-        workload: { program: $program, order: (if "PREPARE" in $symbols { "prepare" } else { "await" }) },
+        workload: { program: $program, order: (if "PREPARE" in $symbols { "prepare" } else if "CADENCE" in $symbols { "await" } else { "undeclared" }) },
         image: (file-of $image),
         kernel: (file-of $kernel),
         flags: $flags,

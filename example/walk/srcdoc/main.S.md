@@ -10,7 +10,7 @@ chosen for a new one is clear, no walker in the lane within a stride
 of that edge, one enters, at once for an empty lane and otherwise
 after a random wait, so the crowd staggers. A walker entering from
 the right is the same frames mirrored. The screen stays black, as
-the framebuffer starts. Each frame tick the clock is read, and
+the framebuffer starts. Each frame the clock is read, and
 everything moves by the time since the frame before, never by a
 count of frames: every walker's last shape is cleared by drawing the
 same frame solid in black, which touches its own pixels and not its
@@ -22,11 +22,9 @@ one, so the host copies and paints the walkers' own areas and not
 the screen. Over the API, when a run has it, a record per walker
 that enters and per walker that leaves, for the test.
 
-PREPARE, a candidate under measurement, puts the work first in the
-ordinary build as it does in CADENCE's: the frame clears, moves, and
-draws, then waits for the tick every iteration, one with nothing noted
-too, and flips the noted rectangles, waiting again if the flip comes back
-early. Without the symbol the image is the one before it, byte for byte.
+Each frame works first and waits after: it clears, moves, and draws,
+then waits for the tick every iteration, one with nothing noted too, and
+flips the noted rectangles, waiting again if the flip comes back early.
 
 CADENCE is the measurement build, a symbol as WHOLE is one, and a
 release build carries none of it. Before the anchor the program reads
@@ -43,9 +41,9 @@ a buffer in place of their writes, so no write falls inside the window.
 The window closes at a frame's end: at WINDOW_TICKS, or under REPLAY
 after the stream's frames; at a full frame buffer; at too little event
 room; at an offset past 2^32 ticks. TRAIL_PERIODS waits with no flip
-follow it, then the export, then the exit. The loop takes walk's order,
-the wait at its head, or with PREPARE the work first and one wait every
-iteration before the flip. CADENCE_TEST makes the build its own
+follow it, then the export, then the exit. The loop takes the await order,
+the wait at its head, or with PREPARE the ordinary build's, the work first
+and one wait every iteration before the flip. CADENCE_TEST makes the build its own
 fixture: a window of ten seconds, QUIET_FRAMES with no walker, the
 stall frames, and the clamp frame. EVENT_ROOM, one of CADENCE_TEST's
 variants, shrinks the event buffer to four past the headroom, so the
@@ -581,7 +579,7 @@ A frame with nothing noted flips nothing.
 Under CADENCE the frame's record is made ready first, the wait is stamped
 where its order puts it, the frame's start follows elapsed, and
 frame_present ends the frame; the loop goes on until a window's end holds,
-then to trail. The phases in walk's order: the wait's start, its end, the
+then to trail. The phases in the await order: the wait's start, its end, the
 frame's start, the work's end, the call's start, its end; with PREPARE: the
 frame's start, the work's end, the wait's start, its end, the call's start,
 its end. The drawing is the work's end less the frame's start in both.
@@ -589,7 +587,7 @@ Under CADENCE_TEST the quiet frames call no admit.
 
 ## present
 
-Under PREPARE without CADENCE: the frame's one wait, then its flip from the
+Without CADENCE: the frame's one wait, then its flip from the
 rectangles noted, or WHOLE's whole flip; the image stays as drawn across a
 second wait after an early answer.
 

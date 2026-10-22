@@ -202,10 +202,6 @@ frame:
 .ifndef PREPARE
     call await_stamped
 .endif
-.else
-.ifndef PREPARE
-    jab.sys.display.await
-.endif
 .endif
     call elapsed
 .ifdef CADENCE
@@ -352,19 +348,7 @@ frame:
     beqz a0, frame
     j trail
 .else
-.ifdef PREPARE
     call present
-.else
-.ifdef WHOLE
-    jab.sys.display.flip
-.else
-    la t0, rect_count
-    ld t1, 0(t0)
-    beqz t1, frame
-    la t0, rects
-    jab.sys.display.flip.rects t0, t1
-.endif
-.endif
     j frame
 .endif
 
@@ -662,7 +646,6 @@ random:
     ret
 
 .ifndef CADENCE
-.ifdef PREPARE
 present:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -683,7 +666,6 @@ present:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
-.endif
 .endif
 
 .ifdef CADENCE

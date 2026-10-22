@@ -13,14 +13,12 @@ before and moves and pushes by that, never by a count of frames, so
 the frame cap and a late frame change when a sphere is seen and not
 where it is.
 
-Built with PREPARE, a candidate under measurement, each frame works
-first and waits after: it takes every key event and API record that has
-come, without waiting for either, moves, collides, reports, draws, keeps
-the rectangle in memory and the drawn centres for the next erase, then
-waits for the display's tick alone and flips the rectangle it kept,
-waiting again if the flip comes back early. Input that arrives during the
-wait takes effect the frame after. Without the symbol the image is the
-one before it, byte for byte.
+Each frame works first and waits after: it takes every key event and
+API record that has come, without waiting for either, moves, collides,
+reports, draws, keeps the rectangle in memory and the drawn centres for
+the next erase, then waits for the display's tick alone and flips the
+rectangle it kept, waiting again if the flip comes back early. Input that
+arrives during the wait takes effect the frame after.
 
 Over the API, records both ways, little-endian, each field at its own
 width. The host drives with key events of CMD_SIZE bytes, the shape
@@ -233,13 +231,13 @@ it on a hit, and the bottom one otherwise.
 ## render
 
 The rectangle runs from the least of the four centres less the radius to the
-greatest plus it, on each axis. Under PREPARE it goes to flip_rect, and the
-flip and the remembered centres are the loop's.
+greatest plus it, on each axis. It goes to flip_rect, and the flip and the
+remembered centres are the loop's.
 
 ## present
 
-Under PREPARE: the wait for the display's tick, then the flip of flip_rect,
-read back after the wait, whose answer lands in a0.
+The wait for the display's tick, then the flip of flip_rect, read back
+after the wait, whose answer lands in a0.
 
 ## last_time
 
@@ -251,8 +249,8 @@ read back after the wait, whose answer lands in a0.
 
 ## flip_rect
 
-`4 u32`: under PREPARE, the rectangle the frame flips once its wait is
-over, x, y, width, and height.
+`4 u32`: the rectangle the frame flips once its wait is over, x, y, width,
+and height.
 
 ## player_x
 

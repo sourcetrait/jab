@@ -140,25 +140,12 @@ _start:
     la t1, last_time
     sd t0, 0(t1)
 frame:
-.ifdef PREPARE
     call read_keys
     call read_api
     call read_pad
     la t0, pad_state
     jab.sys.pad.read t0
     call elapsed
-.else
-    jab.sys.await JAB_AWAIT_DISPLAY | JAB_AWAIT_KEYBOARD | JAB_AWAIT_API | JAB_AWAIT_PAD
-    mv s0, a0
-    call read_keys
-    call read_api
-    call read_pad
-    andi t0, s0, JAB_AWAIT_DISPLAY
-    beqz t0, frame
-    call elapsed
-    la t0, pad_state
-    jab.sys.pad.read t0
-.endif
     call label_tick
     call right_stick
     call move_player
@@ -166,10 +153,8 @@ frame:
     call collide
     call report
     call render
-.ifdef PREPARE
     call remember
     call present
-.endif
     j frame
 
 no_display:
@@ -1180,7 +1165,6 @@ render:
     li t1, LABEL_HEIGHT
     sw t1, (JAB_RECT_SIZE + JAB_RECT_HEIGHT)(t0)
     call draw_label
-.ifdef PREPARE
     li t1, 2                    # the list of two
     j 6f
 5:
@@ -1193,21 +1177,10 @@ render:
 6:
     la t0, flip_count
     sd t1, 0(t0)
-.else
-    la t0, rects
-    li t1, 2
-    jab.sys.display.flip.rects t0, t1
-    j 6f
-5:
-    jab.sys.display.flip.rect
-6:
-    call remember
-.endif
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
 
-.ifdef PREPARE
 present:
     addi sp, sp, -16
     sd ra, 8(sp)
@@ -1233,7 +1206,6 @@ present:
     ld ra, 8(sp)
     addi sp, sp, 16
     ret
-.endif
 
 draw_label:
     addi sp, sp, -16
@@ -1453,10 +1425,8 @@ last_time:
     .skip 8
 dt:
     .skip 8
-.ifdef PREPARE
 flip_count:
     .skip 8
-.endif
 report_buffer:
     .skip REPORT_MAX * REPORT_SIZE
 cmd_read:

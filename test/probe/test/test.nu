@@ -256,7 +256,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # the build's fields, the one producer of the probe's identity and
     # walk's wrapper: the flags beside the image, the CADENCE symbols among
-    # them in the header's order, the loop order by PREPARE, the files'
+    # them in the header's order, the loop order the build declares, the files'
     # SHA-256, a REPLAY build's stream with its frames and bound; and each
     # refusal by name
     let fields_dir = ($dir | path join "fields")
@@ -279,7 +279,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $timed.replay null "fields_unreplayed: no stream for a build without REPLAY"
     let plain_dir = (do $build_dir "plain" $"-I ../../sdk/src --defsym DEBUG=1 ($toolchain)")
     let plain = (probe build-fields "test/probe" ($plain_dir | path join "walk.jab") ($plain_dir | path join "jab.elf"))
-    assert equal [$plain.cadence $plain.workload.order] [[] "await"] "fields_plain: no CADENCE symbol, the await order"
+    assert equal [$plain.cadence $plain.workload.order] [[] "undeclared"] "fields_plain: no CADENCE symbol, and no loop order its flags declare"
     let replayed_dir = (do $build_dir "replayed" $"-I ../../sdk/src --defsym CADENCE=1 --defsym REPLAY=1 --defsym TIMING=1 ($toolchain)")
     let word = {|v: int, n: int| $v | into binary --endian little | bytes at 0..<$n }
     let stream = ([(do $word 0x4c505257 4) (do $word 1 4) (do $word 3 4) (do $word 0 4) (do $word 7 8) (do $word 0 8) (0..<32 | each { 0x[00] } | bytes collect) (do $word 166666 4) (do $word 166667 4) (do $word 1000000 4)] | bytes collect)
@@ -287,6 +287,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     $stream | save --raw $stream_file
     let replayed = (probe build-fields "example/walk" ($replayed_dir | path join "walk.jab") ($replayed_dir | path join "jab.elf") --replay $stream_file)
     assert equal $replayed.replay { file: $stream_file, sha256: ($stream | hash sha256), frames: 3, window_s: 0.1333333, bound: 61 } "fields_replay: the stream's file, SHA-256, frames, dt summed, and bound"
+    assert equal $replayed.workload.order "await" "fields_order_await: a CADENCE build without PREPARE, the await order"
     let refused = {|run: closure| try { do $run | ignore; "" } catch {|e| $e.msg } }
     let refusals = [
         { name: "fields_no_flags", run: {|| probe build-fields "example/walk" ($fields_dir | path join "stream.wrpl") ($timed_dir | path join "jab.elf") }, says: "the image has no build flags beside it" }
