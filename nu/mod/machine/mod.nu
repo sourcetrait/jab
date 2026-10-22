@@ -8,6 +8,9 @@ use (path self ../spec) [harts_allowed]
 # A custom machine's RAM in GiB, the 4 every machine had before named specs
 const custom_ram_gib = 4
 
+# The kernel's command line at most, in bytes: harts.S's BOOT_ARGS_BYTES less one
+const boot_args_max = 255
+
 # The CPU every machine runs: RVA23's supervisor profile with PMP
 const cpu_profile = "rva23s64,pmp=true"
 
@@ -80,8 +83,24 @@ export def resolve [ws: oneof<string, nothing>, spec: string, harts: int]: nothi
 
 # A launch's kernel command line: its bootargs, then a named spec's jab.spec
 export def spec-bootargs [m: record, bootargs: string]: nothing -> string {
-    if $m.spec == null { return $bootargs }
-    [$bootargs $"jab.spec=($m.spec.name)"] | where {|w| $w != "" } | str join " "
+    if $m.spec != null {
+        let named = ($bootargs | split row " " | where {|w| $w starts-with "jab.spec=" })
+        if ($named | is-not-empty) {
+            error make {msg: $"--bootargs holds ($named | first), and this launch names the spec ($m.spec.name): its jab.spec= is the launcher's alone"}
+        }
+    }
+    let line = (if $m.spec == null { $bootargs } else { [$bootargs $"jab.spec=($m.spec.name)"] | where {|w| $w != "" } | str join " " })
+    let length = ($line | into binary | bytes length)
+    if $length > $boot_args_max {
+        error make {msg: $"the kernel's command line is ($length) bytes, past the ($boot_args_max) the kernel reads: ($line)"}
+    }
+    $line
+}
+
+# The GPU at the machine's display: a named spec's, a custom machine's the ABI's
+export def gpu-args [m: record]: nothing -> list<string> {
+    let size = (if $m.spec == null { $spec.display_size } else { $m.spec.display })
+    ["-device" $"virtio-gpu-device,xres=($size.width),yres=($size.height)"]
 }
 
 # A debug kernel's knob from a command line: `<name>=` and digits, else null

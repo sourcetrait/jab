@@ -67,7 +67,7 @@ export def run-line [dir: path, names: list<string>, api: bool, window: oneof<st
     let relays = (if $windows { chardev relays-of [{ endpoint: "api", pipe: $ports.api }] } else { [] })
     let inputs = (if $kbm { $launch.input_devices } else { [] })
     let audio = (if $sound { audio sound-args (audio audio-plan ($found | get -o audio)) } else { [] })
-    let args = ($machine ++ (machine name-args $c.manifest.name) ++ (machine memory-args $m) ++ $launch.display_device ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
+    let args = ($machine ++ (machine name-args $c.manifest.name) ++ (machine memory-args $m) ++ (machine gpu-args $m) ++ $inputs ++ $gamepad.args ++ $devices ++ $audio ++ (disk disks-args (disk machine-disks $disk $disk_serial ($assets != "") $c.workspace)) ++ $ports.args ++ [
         "-bios" "none" "-kernel" $ready.kernel
         "-device" $"loader,file=($ready.image),addr=($launch.program_base),force-raw=on"
         "-display" $shown "-serial" $serial "-monitor" "none"

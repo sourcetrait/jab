@@ -5,6 +5,13 @@
 A custom machine's RAM, the 4 GiB every machine had before named specs;
 a named spec's is its own.
 
+## boot_args_max
+
+The longest command line the kernel reads, 255 bytes: `harts.S` copies
+`/chosen/bootargs` into BOOT_ARGS_BYTES, 256, its terminator among them,
+so a longer line would boot with its tail, a named spec's `jab.spec=`
+there, cut off.
+
 ## cpu_profile
 
 RVA23 is the profile Jab pins, so everything it mandates is on whether
@@ -76,7 +83,23 @@ refused, naming both, before QEMU starts.
 ## spec-bootargs
 
 A launch's command line for the kernel: `bootargs`, then a named spec's
-`jab.spec=<name>`; a custom machine's `bootargs` alone.
+`jab.spec=<name>`; a custom machine's `bootargs` alone. The one composer
+every line takes, `launch plan` with the caller's words, the run with
+none, and `dump-tree`. A named spec's launch is refused before QEMU starts
+when the caller's words hold a token starting `jab.spec=`, the words split
+on spaces as the kernel's `spec_name` reads them, naming the token: the
+kernel holds the machine to the first such token, so a caller's would put
+the check on another spec under a record naming the launcher's. A custom
+machine's line, which carries no name of the launcher's, passes the
+caller's through, the injection test/spec's checks use. Every line past
+boot_args_max is refused, its length named.
+
+## gpu-args
+
+The GPU at the machine's display: a named spec's own (its row's
+`display`), a custom machine's the ABI's (spec's `display_size`), so the
+device follows the spec the launch provisions rather than a constant.
+`launch` and the run's line both take it.
 
 ## knob-of
 

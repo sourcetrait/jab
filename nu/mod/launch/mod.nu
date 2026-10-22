@@ -19,9 +19,6 @@ use (path self ../machine) [rng_device]
 # The program window's base, past the kernel's and the framebuffer's MiB
 export const program_base = "0x80a00000"
 
-# The GPU device at the ABI's display size
-export const display_device = ["-device" "virtio-gpu-device,xres=1920,yres=1080"]
-
 # The keyboard and the tablet, virtio-input devices on the line
 export const input_devices = [
     "-device" "virtio-keyboard-device"
@@ -114,7 +111,7 @@ export def plan [
     })
     let line = (machine spec-bootargs $machine $bootargs)
     let append = (if $line == "" { [] } else { ["-append" $line] }) ++ (if $dtb == "" { [] } else { ["-dtb" ($dtb | path expand)] })
-    let args = ((machine machine-args $qemu $machine) ++ (machine name-args ($image | path parse | get stem)) ++ (machine memory-args $machine) ++ $display_device ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
+    let args = ((machine machine-args $qemu $machine) ++ (machine name-args ($image | path parse | get stem)) ++ (machine memory-args $machine) ++ (machine gpu-args $machine) ++ $inputs ++ $hosted.args ++ $rng_device ++ $audio ++ $ports.args ++ $pad.args ++ [
         "-bios" "none" "-kernel" ($kernel | path expand)
         "-device" $"loader,file=($image | path expand),addr=($program_base),force-raw=on"
         "-display" $shown "-monitor" $"pipe:($watch.name)" "-serial" $"file:($log)"
