@@ -1,13 +1,8 @@
-# suite/tiles
+# suite/tiles/handoff
 
-## LUMAP_PLANES
-
-render.inc's LUMAP_PLANES, map.inc's MAX_SECTORS twice: a wall's
-surface is its index past them
-
-## TILE_SHIFT
-
-render.inc's TILE_SHIFT: a tile's side, 64 texels of its level
+The handoff's measurement: the handoff fixture's wall tiled against lit
+by level and light, head-on and oblique, partial residency among its runs,
+and the count lines a COUNT build reports.
 
 ## HANDOFF_BOUNDS
 
@@ -37,34 +32,6 @@ ones in the four-block part; levels 0 to HANDOFF_OBLIQUE_LEVELS - 1
 a COUNT build's count line, every count the reported frame's own; with
 FOOTPRINT besides, the blocks whose row derivative saturated after it
 
-## PACKET_CAPS
-
-The packet's bounds, through the console's K frame on a debug build.
-The still copy of Render Zero's spawn view, settled on its tiles,
-drawn in packets of at most PACKET_CAPS' commands and spans, so a frame
-flushes many times, each full packet rendered whole before preparation
-goes on: the capture the uncapped one's
-
-## POOL_LIFTED
-
-The tile pool's own fixtures (pool-holds) on the still copy's spawn
-view, each a cold start through the console's O frame with the view
-placed at POOL_PLACE_AT and the measurement closed at POOL_END_AT:
-the O frame's modes, the quota, the allowance, and the merge's share
-lifted, construction frozen, an eviction leaving its entries; the
-rotation's admission, a tier of one request and an open ring of four
-under a merge's share of a microsecond, so the ring overflows and the
-merge stops after a surface, drawn by two workers in bands of 16 rows
-in packets of PACKET_CAPS; and TILE_CONTEXTS, every context a tier
-admits in, hart 0's and a slot's for each secondary the ABI allows, so
-a surface merges at most its tier times them in a pass
-
-## POOL_STALE_SLOTS
-
-the stale entries' cap, under the 272 tiles the spawn view asks, so
-every pass evicts and builds, and the capture's time, past the E since
-a capture ends its run
-
 ## handoff-unsettled
 
 What keeps a handoff run's window as its kind requires, each problem
@@ -75,67 +42,6 @@ dropped, filtered, or built), held (nothing read from a tile, nothing
 built, no BUILDING tile), or partial (nothing built, no BUILDING tile,
 `slots` slots in use, nothing evicted, the tiled pixels one count
 throughout, and requests admitted and filtered every frame).
-
-## pool-trace
-
-The passes a trace of the pool printed (pool-frame's `--trace`): each
-frame's boundary with the surfaces whose requests its batch held, the
-surfaces merged with their keys, and the surfaces whose tiles it built,
-a list's lines joined.
-
-## pool-holds
-
-The tile pool's own fixtures on the still copy's spawn view, each
-launch a cold start with the view placed (pool-frame's `--cold`), read
-from the frame of the cold start, the configuration's first, through
-gauge measure, complete and valid at CLOCK_SCHEMA:
-- the rotation, under POOL_ROTATION's admission with the pool's trace:
-  every surface the passes find requesting built within the most
-  surfaces one pass found requesting of its first request, the merge's
-  start moving on at every pass while two or more surfaces request, no
-  surface merging past its tier in every context though its requests
-  span bands and flushes, the ring overflowing and the merge stopping
-  short;
-- first sight under the ordinary budget: the cold start's frame drawing
-  blocks without their tiles and asking for them, the view settled at a
-  frame with no block drawn without its tile, no BUILDING tile, and
-  nothing admitted, dropped, filtered, or built, read from the records,
-  and every frame after it settled, the tiles built to it the slots it
-  holds, none evicted;
-- the rings under the lift with a tier of one request: the frame after
-  first sight merging and building every request the cold start's frame
-  made, past what the tiers can hold, and asking for none, the warming
-  frame valid; the view settled at the frame after it;
-- the stale entries: the bright view under the lift, the stale mode,
-  and a cap of POOL_STALE_SLOTS, every pass evicting and building, each
-  evicted tile's entry left naming its slot's next tile, the capture
-  the lit loop's picture (`lit`) byte for byte and every frame valid,
-  the generation check alone keeping a stale entry from its slot.
-Returns the most surfaces a rotation pass found requesting and the
-longest wait, the frames first sight took to settle and the slots it
-holds, the keys the warming frame merged, and the stale run's evictions.
-
-- a surface leads two passes running only after a pass that merged
-  every requesting surface: a pass whose share runs out on the last
-  surface of a wrapped scan resumes past it, and its first may lead
-  again, every surface merged
-
-## builder-holds
-
-The builder's assertion on the builder fixture's tree: one run, under
-the bright, the gradient, and the parity lumels in turn, every tile of
-the wall at every level of its chain built by the B frame and read back
-by the D frame; every dump whole, its records each in its place
-(tiles' read), and the host's oracle (tiles/builder's builder-tile, in a
-nu of its own) holding every texel of every tile, the bright's the
-chain's exactly, the others within the build's rounding, the alpha the
-chain's; every key of the wall's grids dumped once under each, with the
-map's k, W, and H as lumap_frame's rule gives them; levels below, at,
-and above k in the chain; at every level texels past the last node, and
-texels where a light at the corner reads past twice the rounding under
-the gradient or the parity.
-
-- a loop, so a failing assertion is the error raised, not the each's
 
 ## count-of
 
@@ -227,37 +133,3 @@ stamp, the early fixture's reading, and the oblique runs' re-entries.
   oblique run's reported frame under each light, a whole interval of
   two blocks, of four, and one cut short by the span's end, whose step
   is the per-lane division's
-
-## block
-
-one level a block, and the pool's tiles the chain's texels under
-the bright frame: the still copy's spawn view settled on its tiles
-against the tiles held off by frozen construction, identical over
-the whole screen, every block at its own level reading the same
-texel from its tile or the chain
-
-## packet
-
-the packet bounded: the same view settled on its tiles, drawn in
-packets of a few commands and spans (PACKET_CAPS), each full packet
-rendered whole before preparation goes on, the capture the uncapped
-one's over the whole screen
-
-## frozen
-
-the frozen frame across flushes: frames whose boundary built tiles
-drawn in flushed packets, the debug build holding the pool unchanged
-at every packet's render through the run
-
-## pool
-
-the tile pool's own fixtures (pool-holds): the merge's rotation,
-first sight settling, and the rings at the warming frame
-
-## builder
-
-the builder's assertion (suite tiles builder-holds): every tile of the builder
-fixture's wall at every level of its chain, built by the B frame and
-read back by the D frame under the bright, the gradient, and the
-parity lumels, held texel by texel to the host's oracle of the light
-of each texel's centre
