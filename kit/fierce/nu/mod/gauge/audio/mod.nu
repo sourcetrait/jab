@@ -75,7 +75,7 @@ export def heard [peaks: list<int>]: nothing -> record {
     {
         windows: ($peaks | length),
         first: $first,
-        heard_from: (if $first == null { null } else { $first * $WINDOW_SECONDS }),
+        heard_from: (if $first == null { null } else { $first * $WINDOW_SECONDS | math round --precision 3 }),
         reached: ($last < ($peaks | length)),
         read: (if $first == null { 0 } else { $last - $first }),
         quiet: $quiet,
@@ -117,7 +117,7 @@ export def reading [run: record, sent: int]: nothing -> record {
         (if $sound != null and $sound.failed != 0 { $"($sound.failed) periods failed" })
         (if $windows != null and $windows.first == null { "the ambient never heard in the recording" })
         (if $windows != null and $windows.first != null and (not $windows.reached) { $"the recording ends at ($windows.windows) windows, short of ($HEARD_TO) s" })
-        (if $windows != null and not ($windows.quiet | is-empty) { $"($windows.quiet | length) quiet 50 ms windows after the ambient's first, the first at ($windows.quiet | first | $in * $WINDOW_SECONDS) s" })
+        (if $windows != null and not ($windows.quiet | is-empty) { $"($windows.quiet | length) quiet 50 ms windows after the ambient's first, the first at ($windows.quiet | first | $in * $WINDOW_SECONDS | math round --precision 3) s" })
     ] | compact
     {
         sent: $sent,
