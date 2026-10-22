@@ -1245,7 +1245,17 @@ JAB_ROMFS_TYPE and JAB_ROMFS_EXEC mask leaves the offset. A name is at most
 
 ## .macro jab.sys.display.flip
 
-A program awaits the tick, or asks jab.sys.display.ready, before it flips.
+The program loop that keeps the cap: take what arrived without waiting, each
+input until it answers none; draw the frame by the time since the last one,
+keeping what it flips in memory; await the display's tick; then flip. A
+presented flip sets the next tick a period on from the one it was judged
+against when it was accepted under 3,700 ticks (0.37 ms) past that tick, else
+a period from its acceptance, so a late frame is never followed by a burst. A
+loop drawn first waits for its tick and flips on it, every period while its
+drawing fits one; a loop that awaits the tick and then draws flips each frame
+late by its wake and drawing, a period plus those apart, under the cap. An
+early flip, 1, shows and moves nothing: await the tick again and flip the
+same image.
 
 Every flip answers its receipt beside its status, the flips' observations
 in every build: the decision's stamp, the eligibility tick, and the present
@@ -1286,6 +1296,11 @@ Call it until a0 is 0 to take everything that arrived.
 A program names the inputs it reads and the wait is for those alone: an
 input in the mask that the program never reads stays waiting and ends every
 wait at once.
+
+In the program loop (jab.sys.display.flip) the wait names the display's tick
+alone, the inputs taken at the loop's head without waiting. What arrives
+during the wait stays with the kernel, up to 64 key events, 256 pad events,
+and 2 KiB of the API's bytes, and takes effect with the next frame.
 
 ## .macro jab.sys.pad.input
 

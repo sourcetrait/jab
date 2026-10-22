@@ -303,10 +303,16 @@ whole flip's transfer and flush as one batch with one wait, as a list's
 are sent, so a refused transfer is followed by the flush, which shows the
 frame before again and counts; `./do test test/framecap --set flip_batch`
 holds it, and a kernel built without the symbol is byte for byte the one
-before it. bounce, walk, wasd, and pad built with `PREPARE`, the
-candidate loop beside it, draw first and wait for the tick after, then
-flip what they kept; `./do test example/<name> --set prepare` holds each,
-and without the symbol each image is the one before it. The game built
+before it. A program's loop takes what arrived without waiting, draws
+its frame by the time since the last, keeps what it will flip, awaits
+the display's tick, and then flips, an early answer awaited and flipped
+again; bounce, walk, wasd, and pad run that loop. A presented flip sets
+the next tick a period on from its own when it was accepted under 3,700
+ticks (0.37 ms) past it, else a period from the acceptance, so a frame
+drawn first flips on its tick every period while its drawing fits one,
+and a loop that awaits the tick and then draws flips a period plus its
+wake and drawing apart, under the cap. Input that arrives during the
+wait takes effect with the next frame. The game built
 with `FOOTPRINT`, a candidate, takes each block's mip level from the row
 derivative at the block's own start, and a debug build with `LEVELS`
 stores each pixel's block level, offset, and span in place of its
