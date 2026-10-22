@@ -133,8 +133,10 @@ image whose flags contradict it refused. The pad table (gauge audio
 play-table) through ten seconds of play from the spawn under the default
 workers, the E closing the measurement and the Z's exit writing the counts
 (gauge audio sends), QEMU tracing its dropped reports into its log; with
-`--host` in the host's window with live sound, else headless with the
-sound recorded. The identity's mode records the pad `table`, no seed, and
+`--host` in the host's window, its sound live where the host has an output
+and recorded where it has none (live-output), as on the box, so the box's
+row is the recording and its continuity is read; else headless with the
+sound recorded. The identity's mode records which, the pad `table`, no seed, and
 no cadence; the trace's words are its QEMU words, so its standing is
 diagnostic. The reading (gauge audio reading) is kept as audio.nuon beside
 the run and in the report's run, its line printed after the run's.
@@ -144,8 +146,8 @@ the run and in the report's run, its line printed after the run's.
 - `--image`: the program's image, the tree's own unless given
 - `--assets`: the compiled map tree the disk is made from, the checkout's
   asset shard's unless given, a package's on a host
-- `--host`: the host's window and live sound in place of none and the
-  recording
+- `--host`: the host's window in place of none, and live sound in place of
+  the recording where the host has an output
 - `--out`: where the run lands, a stamped directory under the tree's unless
   given
 - `--label`: a name for the build in the summary
@@ -154,6 +156,13 @@ the run and in the report's run, its line printed after the run's.
 - `--harts`: a custom machine of 1 to 8 harts in place of a named spec
 - `--qemu`: words on the launch's line after its own and the trace's, a NUON
   list
+
+## live-output
+
+Whether this host plays a run's sound live: the SDK's audio plan over
+discovery's audio output, `JAB_AUDIO` first, names an output other than
+`none`. On a host with no output, as the box, a live run would play into
+QEMU's `none` backend and keep nothing, so audio's `--host` records it.
 
 ## service-sends
 
