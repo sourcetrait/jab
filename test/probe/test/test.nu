@@ -53,130 +53,11 @@ use ../../../nu/mod/tool
 use ../../../nu/mod/launch
 use ../../../nu/mod/probe
 use std/assert
-
-# An address as the shim writes one, in lowercase hex.
-def hex [n: int]: nothing -> string { $n | format number | get lowerhex | str replace "0x" "" }
-
-# A file's object-table line as the shim writes it, from the file as it
-# stands: `later` moves its modification time on, `named` writes another
-# path in its place.
-def object-line [index: int, file: path, --later: int = 0, --named: string = ""]: nothing -> string {
-    let f = (ls -l $file | first)
-    let path = (if $named == "" { $file } else { $named })
-    $"object ($index) ($f.inode) ($f.size | into int) (($f.modified | into int) + $later) ($path)"
-}
-
-# A shim log of the test's own: each line stamped 10 ms after the last,
-# a window-size call half a millisecond after its make_current, so the
-# timing rule reads that make_current as a render. A `written` line goes
-# in as given, its stamp its own, and a closing `fragment` is stamped as
-# the next line and written with no newline after it, a write the run's
-# end cut short.
-def write-log [
-    file: path,
-    lines: list<oneof<string, record<written: string>, record<fragment: string>>>,
-]: nothing -> nothing {
-    mut us = 1792000000000000
-    mut out: list<string> = []
-    mut tail = ""
-    for l in $lines {
-        let given = ($l | describe | str starts-with "record")
-        if $given and ($l | get -o written) != null {
-            $out = ($out ++ [$l.written])
-            continue
-        }
-        let event = (if $given { $l.fragment } else { $l })
-        $us += (if $event == "size" { 500 } else { 10000 })
-        let fraction = ($us mod 1000000 | into string | fill --alignment right --character "0" --width 6)
-        let line = $"($us // 1000000).($fraction) ($event)"
-        if $given { $tail = $line } else { $out = ($out ++ [$line]) }
-    }
-    ($out | str join "\n") + "\n" + $tail | save -f $file
-}
-
-# A file's defined symbols that carry a size, as nm's POSIX form gives
-# them; `flags` holds -D for the dynamic table.
-def symbols-of [file: path, flags: list<string>]: nothing -> table<name: string, type: string, value: int, size: int> {
-    let read = (^nm -P -t x --defined-only ...$flags $file | complete)
-    assert equal $read.exit_code 0 $"fixture: nm reads ($file | path basename): ($read.stderr)"
-    $read.stdout | lines | parse --regex '^(?P<name>\S+) (?P<type>\S) (?P<value>[0-9a-f]+) (?P<size>[0-9a-f]+)$' | update value {|r| $"0x($r.value)" | into int } | update size {|r| $"0x($r.size)" | into int }
-}
-
-# What the report made of a log: the counts that tell its make_currents
-# apart, or the refusal it raised.
-def reading [log: path]: nothing -> record<flips: int, console: int, switches: int, renders: int, refused: string> {
-    try {
-        let r = (sdl report $log)
-        { flips: $r.flips, console: $r.other_uploads, switches: $r.switches, renders: $r.renders, refused: "" }
-    } catch {|e|
-        { flips: 0, console: 0, switches: 0, renders: 0, refused: $e.msg }
-    }
-}
-
-# What sdl-resolve made of a log's first make_current: how many of the
-# shim's frames it dropped, the functions of each frame after them, where
-# the device's code reads, and each object's table by index.
-def first-made [log: path]: nothing -> record<shim_frames: int, functions: list<any>, virtio_gpu_in: string, sources: record> {
-    try {
-        let read = (sdl resolve $log)
-        let made = ($read.events | where name == "make_current" | first)
-        {
-            shim_frames: $made.shim_frames,
-            functions: ($made.frames | each {|f| $f.functions }),
-            virtio_gpu_in: $read.virtio_gpu_in,
-            sources: ($read.objects | reduce --fold {} {|o, all| $all | insert ($o.index | into string) $o.source }),
-        }
-    } catch {|e|
-        { shim_frames: -1, functions: [], virtio_gpu_in: $"raised: ($e.msg)", sources: {} }
-    }
-}
-
-# What a bundle's check made of a bundle: the stage that refused it, with
-# its words, or stage 0 and its reading where it was admitted.
-def checked [bundle: path, guest: closure]: nothing -> record<stage: int, refused: string, result: any> {
-    try {
-        { stage: 0, refused: "", result: (sdl bundle-check $bundle --guest $guest) }
-    } catch {|e|
-        { stage: ($e.msg | parse --regex 'refused at stage (?P<n>\d+)' | get -o 0.n | default "-1" | into int), refused: $e.msg, result: null }
-    }
-}
-
-# A bundle's manifest rewritten with each file it lists that lies there,
-# its SHA-256 and size as they are now, and each object's table_sha256 its
-# table's, so a negative past the inventory reaches its own stage.
-def rehash [bundle: path]: nothing -> nothing {
-    let file = ($bundle | path join "bundle.nuon")
-    let m = (open --raw $file | into binary | decode | from nuon)
-    let files = ($m.files | where {|f| $bundle | path join $f.path | path exists } | each {|f|
-        let p = ($bundle | path join $f.path)
-        { path: $f.path, sha256: (open --raw $p | hash sha256), size: (ls -D $p | get 0.size | into int) }
-    })
-    let objects = ($m.objects | each {|o| if $o.table == null { $o } else { $o | update table_sha256 ($files | where path == $o.table | get -o 0.sha256) } })
-    $m | update files $files | update objects $objects | to nuon --indent 1 | save --raw -f $file
-}
-
-# A text in a file replaced, held to occur there exactly once first, so a
-# negative is the fault it names and no other.
-def swap-once [file: path, find: string, put: string]: nothing -> nothing {
-    let text = (open --raw $file | into binary | decode)
-    let n = (($text | split row $find | length) - 1)
-    assert equal $n 1 $"negative: ($find) occurs once in ($file | path basename), not ($n) times"
-    $text | str replace $find $put | save --raw -f $file
-}
-
-# The one line of a file holding a text taken out.
-def drop-line [file: path, holding: string]: nothing -> nothing {
-    let lines = (open --raw $file | into binary | decode | lines)
-    let kept = ($lines | where {|l| not ($l | str contains $holding) })
-    assert equal (($lines | length) - ($kept | length)) 1 $"negative: one line of ($file | path basename) holds ($holding)"
-    ($kept | str join "\n") + "\n" | save --raw -f $file
-}
-
-# A NUON file rewritten through `change`.
-def nuon-edit [file: path, change: closure]: nothing -> nothing {
-    let value = (open --raw $file | into binary | decode | from nuon)
-    do $change $value | to nuon --indent 1 | save --raw -f $file
-}
+use ./bundles.nu
+use ./logs.nu
+use ./pairing.nu
+use ./bundles.nu [checked rehash]
+use ./logs.nu [first-made reading symbols-of]
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     if $nu.os-info.name != "linux" {
@@ -228,53 +109,19 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert (($next.value - $update_end) >= 0x20) $"fixture: a gap follows qemu_console_update, the next function ($next.name) at ($next.value | format number | get lowerhex)"
     let gap = ($update_end + 0x10)
 
-    # frames: a function's at a return address 4 bytes in, at its end, or
-    # an address outright, each in an object of the table by index
-    let inside = {|index: int, name: string| $"($index)+(hex ((do $symbol $name).value + 4))" }
-    let ending = {|index: int, name: string| let s = (do $symbol $name); $"($index)+(hex ($s.value + $s.size))" }
-    let at = {|index: int, address: int| $"($index)+(hex $address)" }
-    let made = {|frames: list<string>| $"make_current ($frames | str join ' ')" }
-    let shim = "1+1000"
-    let shim_line = "object 1 - - - libjabshim_sdl.so"
-    let exe = [(object-line 0 $fixture) $shim_line]
-    let modular = ($exe ++ [(object-line 2 $front) (object-line 3 $module)])
-    let flip_chain = (do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd") (do $inside 0 "virtio_gpu_process_cmdq")])
-    let registration_chain = (do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])
-    let switch_chain = (do $made [$shim (do $inside 0 "sdl2_gl_switch") (do $inside 0 "displaychangelistener_gfx_switch")])
-    let render_chain = (do $made [$shim (do $inside 0 "sdl2_gl_render_surface") (do $inside 0 "sdl2_gl_refresh")])
-    let front_render = (do $made [$shim (do $inside 2 "sdl2_gl_render_surface") (do $inside 0 "sdl2_gl_refresh")])
-    let log = {|name: string, lines: list<oneof<string, record<written: string>, record<fragment: string>>>|
-        let file = ($dir | path join $"($name).log")
-        write-log $file $lines
-        $file
-    }
-    let none = { flips: 0, console: 0, switches: 0, renders: 0, refused: "" }
-    let flip = ($none | update flips 1)
-    let console = ($none | update console 1)
-    let switched = ($none | update switches 1)
-    let rendered = ($none | update renders 1)
+    let shim_logs = (logs frames $symbol $fixture $front $module $dir)
+    let exe = $shim_logs.exe
+    let flip_chain = $shim_logs.flip_chain
+    let registration_chain = $shim_logs.registration_chain
+    let switch_chain = $shim_logs.switch_chain
+    let render_chain = $shim_logs.render_chain
+    let log = $shim_logs.log
+    let none = $shim_logs.none
+    let flip = $shim_logs.flip
 
     # decided logs, each read as one make_current, some with sdl-resolve's
     # reading of a frame checked beside it
-    let decided = [
-        { name: "shim_one", what: "the console's own", read: $console, lines: ($exe ++ [$registration_chain]), resolve: { shim_frames: 1, frame: 0, functions: ["sdl2_gl_update"] } }
-        { name: "shim_two", what: "the console's own", read: $console, lines: ($exe ++ [(do $made [$shim "1+1100" (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])]), resolve: { shim_frames: 2, frame: 0, functions: ["sdl2_gl_update"] } }
-        { name: "flip", what: "a flip's upload", read: $flip, lines: ($exe ++ [$flip_chain]) }
-        { name: "fragment_accepted", what: "a flip's upload, the fragment after it left out", read: $flip, lines: ($exe ++ [$flip_chain { fragment: "make_current 1+" }]) }
-        { name: "registration", what: "the console's own", read: $console, lines: ($exe ++ [$registration_chain]) }
-        { name: "switch", what: "a switch", read: $switched, lines: ($exe ++ [$switch_chain]) }
-        { name: "redraw", what: "the console's own", read: $console, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "displaychangelistener_gfx_switch") (do $inside 0 "virtio_gpu_reset_bh")])]) }
-        { name: "render_anchor", what: "a render by its anchor", read: $rendered, lines: ($exe ++ [$render_chain "size"]) }
-        { name: "render_late", what: "a render by its anchor, its size call 3 ms late", read: $rendered, lines: ($exe ++ [$render_chain { written: "1792000000.033000 size" }]) }
-        { name: "render_timed", what: "a render read by timing through a front end's dynamic symbols alone", read: $rendered, lines: ($modular ++ [$front_render "size"]), resolve: { frame: 0, functions: [], source: { object: "2", is: "dynsym" } } }
-        { name: "function_end", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $ending 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), resolve: { frame: 1, functions: ["qemu_console_update"] } }
-        { name: "gap", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $at 0 $gap) (do $inside 0 "virtio_gpu_simple_process_cmd")])]), resolve: { frame: 2, functions: [] } }
-        { name: "cold", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_process_cmdq.cold")])]), resolve: { frame: 2, functions: ["virtio_gpu_process_cmdq"] } }
-        { name: "alias", what: "a flip's upload", read: $flip, lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "gpu_ctrl_entry")])]), resolve: { frame: 2, functions: ["gpu_ctrl_entry" "virtio_gpu_ctrl_bh"] } }
-        { name: "module_flip", what: "a flip's upload", read: $flip, lines: ($modular ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "dpy_gfx_update") (do $inside 3 "virtio_gpu_simple_process_cmd")])]), resolve: { virtio_gpu_in: "module" } }
-        { name: "module_exception", what: "the console's own", read: $console, lines: ($modular ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $at 0 $gap)])]) }
-        { name: "module_dynsym", what: "a flip's upload", read: $flip, lines: ($modular ++ [(do $made [$shim (do $inside 2 "sdl2_gl_update") (do $inside 0 "dpy_gfx_update") (do $inside 3 "virtio_gpu_process_cmdq")])]), resolve: { frame: 0, functions: ["sdl2_gl_update"], source: { object: "2", is: "dynsym" } } }
-    ]
+    let decided = (logs decided $shim_logs $gap)
     for c in $decided {
         let file = (do $log $c.name $c.lines)
         assert equal (reading $file) $c.read $"($c.name): read as ($c.what)"
@@ -300,47 +147,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # refused logs, each naming its fault, in the order the probe checks:
     # the lines the shim writes and its stop notices first, the third line
     # here stamped 1792000000.030000
-    let stripped_exe = [(object-line 0 $stripped) $shim_line (object-line 2 $front) (object-line 3 $module)]
-    let unwritten = "the log has a line the shim does not write: 1 line, among them"
-    let fixture_stat = (ls -l $fixture | first)
-    let mixed_line = $"object 0 ($fixture_stat.inode) - ($fixture_stat.modified | into int) ($fixture)"
-    let refusals = [
-        { name: "timestamp_malformed", lines: ($exe ++ [{ written: $"1792000000.03x000 ($flip_chain)" }]), says: $"($unwritten) line 3: 1792000000.03x000 make_current " }
-        { name: "event_unknown", lines: ($exe ++ [($flip_chain | str replace "make_current" "make_currenx")]), says: $"($unwritten) line 3: 1792000000.030000 make_currenx " }
-        { name: "fragment_complete", lines: ($exe ++ [$flip_chain "make_current 1+"]), newline_of: "fragment_accepted", says: $"($unwritten) line 4: 1792000000.040000 make_current 1+" }
-        { name: "object_mixed", lines: [$mixed_line $shim_line $flip_chain], says: $"($unwritten) line 1: 1792000000.010000 object 0 " }
-        { name: "stopped_libsdl", lines: ($exe ++ [$flip_chain "libSDL2 not found"]), says: "the shim stopped the run: libSDL2 not found: 1 line" }
-        { name: "stopped_symbol", lines: ($exe ++ [$flip_chain "symbol not found"]), says: "the shim stopped the run: symbol not found: 1 line" }
-        { name: "no_table", lines: [(do $made [$shim (do $inside 0 "sdl2_gl_update")])], says: "the log has no object table: 1 make_current" }
-        { name: "table_line", lines: ["object 0 x y z table.so" $shim_line $registration_chain], says: $"($unwritten) line 1: 1792000000.010000 object 0 x y z table.so" }
-        { name: "index_twice", lines: ($exe ++ [(object-line 0 $module) $registration_chain]), says: "the object table gives an index twice" }
-        { name: "frame_written", lines: ($exe ++ [(do $made [$shim "0+zz"])]), says: $"($unwritten) line 3: 1792000000.030000 make_current 1+1000 0+zz" }
-        { name: "absent_index", lines: ($exe ++ [(do $made [$shim "7+10"])]), says: "a frame names an object the table has no line for ahead of it: 1 make_current, among them 7+10" }
-        { name: "outside", lines: ($exe ++ [(do $made [(do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_register_listener")])]), says: "a make_current's frames do not start in the shim's own library" }
-        { name: "nm_absent", path: [], lines: ($exe ++ [$flip_chain]), says: "binutils' nm is not on PATH" }
-        { name: "changed", lines: [(object-line 0 $fixture --later 1) $shim_line $flip_chain], says: $"($fixture) is not the file its line in the object table names" }
-        { name: "deleted", lines: [(object-line 0 $fixture --named $"($fixture) \(deleted)") $shim_line $flip_chain], says: $"the executable at ($fixture) was deleted after it started" }
-        { name: "unreadable", lines: [(object-line 0 $text) $shim_line (do $made [$shim "0+10"])], says: $"nm cannot read ($text)" }
-        { name: "anchor_console", lines: ($exe ++ [(do $made [$shim (do $inside 0 "qemu_console_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), says: "a make_current's immediate caller is not in the SDL front end" }
-        { name: "anchor_stripped", lines: [(object-line 0 $stripped) $shim_line (do $made [$shim (do $inside 0 "sdl2_gl_render_surface")])], says: $"the executable at ($stripped) keeps no symbol table" }
-        { name: "unmodelled", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_scanout_flush")]) "size"]), says: "a make_current comes from a front-end function the probe does not model" }
-        { name: "render_nowhere", lines: ($exe ++ [(do $made [$shim "?+7f0000001000" "?+7f0000002000"]) "size"]), says: "a make_current's immediate caller is not in the SDL front end, and it lies in no object" }
-        { name: "inlined_refresh", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_refresh")]) "size"]), says: "a make_current comes from sdl2_gl_refresh or sdl2_gl_redraw" }
-        { name: "inlined_redraw", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_redraw")]) "size"]), says: "a make_current comes from sdl2_gl_refresh or sdl2_gl_redraw" }
-        { name: "overlap", lines: ($exe ++ [(do $made [$shim (do $inside 0 "overlap_inner")]) "size"]), says: $"a frame's return address lies in the symbols of more than one function, which no reading tells apart, in ($fixture)" }
-        { name: "timed_late", lines: ($modular ++ [$front_render { written: "1792000000.053000 size" }]), says: "its size call comes past the 2 ms a render read by timing allows" }
-        { name: "render_changed", lines: [(object-line 0 $fixture --later 1) $shim_line $render_chain "size"], says: $"($fixture) is not the file its line in the object table names" }
-        { name: "render_unreadable", lines: [(object-line 0 $text) $shim_line (do $made [$shim "0+10"]) "size"], says: $"nm cannot read ($text)" }
-        { name: "render_gone", lines: [$"object 0 1 100 1000 ($gone)" $shim_line $render_chain "size"], says: $"($gone) is not the file its line in the object table names" }
-        { name: "device_after", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), says: "an upload's second frame is the device's own code" }
-        { name: "exe_unresolved", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $at 0 $gap)])]), says: "an upload's second frame resolves in no table" }
-        { name: "absent", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update")])]), says: "an upload's chain ends at its immediate caller" }
-        { name: "nowhere", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") "?+7f0000003000"])]), says: "an upload's second frame lies in no object" }
-        { name: "other_object", lines: ($modular ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 2 "sdl2_gl_render_surface")])]), says: $"an upload's second frame resolves in no table, and ($front) keeps no symbol table" }
-        { name: "exe_lacking", lines: ($stripped_exe ++ [(do $made [$shim (do $inside 3 "sdl2_gl_update") (do $at 0 $gap)])]), says: $"an upload's second frame resolves in no table, and the executable at ($stripped) keeps no symbol table" }
-        { name: "cut_short", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "qemu_console_update") (do $inside 0 "qemu_console_register_listener")])]), says: "a console update has no device frame after it: 1 make_current" }
-        { name: "first_refusal", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $at 0 $gap)]) (do $made [$shim (do $inside 0 "qemu_console_update")])]), says: "a make_current's immediate caller is not in the SDL front end", unsaid: "resolves in no table" }
-    ]
+    let refusals = (logs refusals $shim_logs $gap $fixture $stripped $front $module $text $gone)
     for c in $refusals {
         let file = (do $log $c.name $c.lines)
         let accepted = ($c | get -o newline_of)
@@ -382,16 +189,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal (reading $lined) $flip "lined: the run's lines beside a flip's upload, read as one"
     assert equal (sdl log $lined | select process nonce) { process: 4242, nonce: $nonce_text } "lined: the log's process and nonce read apart"
     assert equal (sdl log (do $log "unlined" ($exe ++ [$flip_chain])) | select process nonce) { process: null, nonce: null } "unlined: a log with neither line, written before them, reads none"
-    let run_refusals = [
-        { name: "process_twice", lines: ($exe ++ ["process 4242" "process 4243" $flip_chain]), says: "the log gives its process line twice: 2 lines" }
-        { name: "nonce_twice", lines: ($exe ++ $run_lines ++ [$"nonce ($nonce_text)" $flip_chain]), says: "the log gives its nonce line twice: 2 lines" }
-        { name: "process_malformed", lines: ($exe ++ ["process 42x" $flip_chain]), says: "the log's process line is malformed" }
-        { name: "nonce_malformed", lines: ($exe ++ ["process 4242" "nonce 123456789ABCDEF0" $flip_chain]), says: "the log's nonce line is malformed" }
-        { name: "nonce_zero", lines: ($exe ++ ["process 4242" "nonce 0000000000000000" $flip_chain]), says: "the log's nonce line is malformed" }
-        { name: "nonce_ahead", lines: ($exe ++ [$"nonce ($nonce_text)" "process 4242" $flip_chain]), says: "the log's nonce line comes with no process line ahead of it" }
-        { name: "process_late", lines: ($exe ++ [$flip_chain "process 4242"]), says: "the log's process line is out of its place, the first event" }
-        { name: "nonce_late", lines: ($exe ++ ["process 4242" $flip_chain $"nonce ($nonce_text)"]), says: "the log's nonce line is out of its place, the second event" }
-    ]
+    let run_refusals = (logs run-refusals $shim_logs $run_lines $nonce_text)
     for c in $run_refusals {
         let said = (reading (do $log $c.name $c.lines))
         assert (($said.refused | str starts-with "the sdl probe refuses the log: ") and ($said.refused | str contains $c.says)) $"($c.name): refused, saying ($c.says): ($said | to nuon)"
@@ -519,23 +317,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let bundles = ($dir | path join "bundles")
     mkdir $bundles
     let guest = {|api_out: path| open --raw $api_out | into binary | into int --endian little }
-    let capture = {|name: string, run_nonce: int, pid: int|
-        let probe = ($bundles | path join $"($name)_probe")
-        mkdir $probe
-        let sdl = ($probe | path join "sdl.log")
-        write-log $sdl ($exe ++ [$"process ($pid)" $"nonce (nonce hex $run_nonce)" $flip_chain $registration_chain $switch_chain $render_chain "size"])
-        let upload = (sdl log $sdl | get events | where name == "make_current" | first)
-        let flushed = (($upload.ts - 0.002) * 1e9 | into int | into datetime | format date "%Y-%m-%dT%H:%M:%S%.6fZ")
-        $"($flushed) virtio_gpu_cmd_res_flush res 0x1, x 0, y 0, w 1920, h 1080\n" | save --raw ($probe | path join "trace.log")
-        $run_nonce | into binary --endian little | save --raw ($probe | path join "api.out")
-        { profile: "paired", capture_nonce: $run_nonce, qemu_pid: $pid, sdl_log: $sdl, shim: "", window: "sdl,gl=on", api: true, sends: [] } | to nuon | save --raw ($probe | path join "identity.nuon")
-        let bundle = ($bundles | path join $name)
-        let manifest = (sdl bundle $probe $bundle)
-        # the fixture object 0 is no QEMU, so its manifest names the one the
-        # trace bracket rests on
-        nuon-edit ($bundle | path join "bundle.nuon") {|m| $m | update host.qemu.version "QEMU emulator version 11.1.2" }
-        { probe: $probe, bundle: $bundle, manifest: $manifest }
-    }
+    let capture = (bundles capture $bundles $shim_logs)
     let first = (do $capture "paired_a" $nonce 4242)
     let second = (do $capture "paired_b" ($nonce + 1) 4343)
     assert equal [$first.manifest.profile ($first.manifest.files | get path)] ["paired" ["api.out" "classified.nuon" "identity.nuon" "sdl.log" "tables/0.nm" "trace.log"]] $"bundle_made: a paired bundle of the log, its table, the classification, and the run's files: ($first.manifest.files | get path)"
@@ -551,29 +333,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $admitted.stage 0 $"bundle_admitted: the check admits the bundle by replay: ($admitted.refused)"
     assert equal [$admitted.result.profile $admitted.result.run.process $admitted.result.run.guest_nonce $admitted.result.trace.flushes ($admitted.result.events | where kind == "upload" | length)] ["paired" 4242 $nonce 1 1] "bundle_admitted: paired, bound by its pid and its nonce, the trace's one flush paired with its upload"
     assert equal ($admitted.result.events | where kind == "render" | get evidence) ["anchor"] "bundle_admitted: the render carries the replay's evidence, its anchor"
-    let switch_frame = (do $inside 0 "displaychangelistener_gfx_switch")
-    let moved_frame = $"0+(hex ((do $symbol 'displaychangelistener_gfx_switch').value + 8))"
-    let registration_frame = (do $inside 0 "qemu_console_register_listener")
-    let negatives = [
-        { name: "bundle_log_byte", stage: 1, rehash: false, change: {|b| swap-once ($b | path join "sdl.log") "process 4242" "process 4243" } }
-        { name: "bundle_file_added", stage: 1, rehash: false, change: {|b| "a file the manifest does not list\n" | save --raw ($b | path join "added.txt") } }
-        { name: "bundle_hash_altered", stage: 1, rehash: false, change: {|b| nuon-edit ($b | path join "bundle.nuon") {|m| $m | update files ($m.files | each {|f| if $f.path == "classified.nuon" { $f | update sha256 ("0" | fill --character "0" --width 64) } else { $f } }) } } }
-        { name: "bundle_inode", stage: 2, rehash: false, change: {|b| nuon-edit ($b | path join "bundle.nuon") {|m| $m | update objects ($m.objects | each {|o| if $o.index == 0 { $o | update inode ($o.inode + 1) } else { $o } }) } } }
-        { name: "bundle_table_removed", stage: 2, rehash: true, change: {|b| rm ($b | path join "tables" "0.nm") } }
-        { name: "bundle_event_altered", stage: 3, rehash: true, change: {|b| swap-once ($b | path join "sdl.log") $switch_frame $moved_frame } }
-        { name: "bundle_event_removed", stage: 3, rehash: true, change: {|b| drop-line ($b | path join "sdl.log") $registration_frame } }
-        { name: "bundle_classified_dropped", stage: 3, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | drop 1) } } }
-        { name: "bundle_kind_altered", stage: 4, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | each {|e| if $e.kind == "upload" { $e | update kind "console" } else { $e } }) } } }
-        { name: "bundle_table_renamed", stage: 4, rehash: true, change: {|b| swap-once ($b | path join "tables" "0.nm") "sdl2_gl_update " "sdl2_gl_updatf " } }
-        { name: "bundle_evidence_altered", stage: 4, rehash: true, change: {|b| nuon-edit ($b | path join "classified.nuon") {|c| $c | update events ($c.events | each {|e| if $e.kind == "render" { $e | update evidence "timing" } else { $e } }) } } }
-        { name: "bundle_pid_altered", stage: 5, rehash: true, change: {|b| swap-once ($b | path join "sdl.log") "process 4242" "process 4243" } }
-        { name: "bundle_flush_removed", stage: 5, rehash: true, change: {|b| drop-line ($b | path join "trace.log") "virtio_gpu_cmd_res_flush" } }
-        { name: "bundle_pid_unrecorded", stage: 5, rehash: true, change: {|b| nuon-edit ($b | path join "identity.nuon") {|i| $i | reject qemu_pid } } }
-        { name: "bundle_guest_zero", stage: 5, rehash: true, change: {|b| 0 | into binary --endian little | save --raw -f ($b | path join "api.out") } }
-        { name: "bundle_exchanged", stage: 5, rehash: true, change: {|b| cp -f ($second.bundle | path join "api.out") ($b | path join "api.out") } }
-        { name: "bundle_qemu_unsupported", stage: 5, rehash: false, change: {|b| nuon-edit ($b | path join "bundle.nuon") {|m| $m | update host.qemu.version "QEMU emulator version 10.2.2" } } }
-        { name: "bundle_flush_after", stage: 5, rehash: true, change: {|b| let up = (open --raw ($b | path join "classified.nuon") | decode | from nuon | get events | where kind == "upload" | first | get stamp | split row "."); let us = (($up.0 | into int) * 1000000 + ($up.1 | into int) + 1); $"((($us * 1000) | into datetime | format date "%Y-%m-%dT%H:%M:%S%.6fZ")) virtio_gpu_cmd_res_flush res 0x1, x 0, y 0, w 1920, h 1080\n" | save --raw -f ($b | path join "trace.log") } }
-    ]
+    let negatives = (bundles negatives $shim_logs $symbol $second)
     for n in $negatives {
         let copy = ($bundles | path join $n.name)
         cp -r $first.bundle $copy
@@ -625,16 +385,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # the receipt stage's function: each present one past the last, every
     # other frame the last, the first held to the anchor, one fault one
     # violation, each rule its own case
-    let p = {|ordinal: int| { presented: true, ordinal: $ordinal } }
-    let n = {|ordinal: int| { presented: false, ordinal: $ordinal } }
-    let violations = [
-        { name: "ordinals_held", frames: [(do $p 4) (do $n 4) (do $p 5) (do $n 5) (do $p 6)], wanted: [] }
-        { name: "ordinals_skip", frames: [(do $p 4) (do $p 6) (do $p 7)], wanted: [{ index: 1, rule: "skip", ordinal: 6, wanted: 5 }] }
-        { name: "ordinals_repeat", frames: [(do $p 4) (do $p 4)], wanted: [{ index: 1, rule: "repeat", ordinal: 4, wanted: 5 }] }
-        { name: "ordinals_backward", frames: [(do $p 4) (do $p 3)], wanted: [{ index: 1, rule: "backward", ordinal: 3, wanted: 5 }] }
-        { name: "ordinals_advance", frames: [(do $p 4) (do $n 5)], wanted: [{ index: 1, rule: "advance", ordinal: 5, wanted: 4 }] }
-        { name: "ordinals_first", frames: [(do $p 5) (do $p 6)], wanted: [{ index: 0, rule: "skip", ordinal: 5, wanted: 4 }] }
-    ]
+    let violations = (pairing ordinals)
     for v in $violations {
         assert equal (present ordinal-violations 3 $v.frames) $v.wanted $"($v.name): the violations as the rules name them"
     }
@@ -645,19 +396,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # 1792000000 s on logged by the microsecond, the open's upload first, a
     # render after each upload, and a poll 1.5 s past the last; each case
     # the regular run changed
-    let period_ms = (1000.0 / 60.0)
-    let base = 1792000000.0
-    let starts = ([100.0 1500.0] ++ (0..<120 | each {|i| 1600.0 + $i * $period_ms }))
-    let stamped = {|ms: float, name: string, kind: string, key: string| { ts: ($base + ($ms * 1000.0 | math floor) / 1000000.0), name: $name, kind: $kind, key: $key } }
-    let upload = {|ms: float| do $stamped $ms "make_current" "upload" "chain:0+10" }
-    let render = {|ms: float| do $stamped ($ms + 5.0) "make_current" "render" "chain:?+20" }
-    let poll = {|ms: float| do $stamped $ms "poll" "poll" "chain:" }
-    let made_at = {|times: list<float>, offsets: list<float>, after: float| [(do $upload 50.0)] ++ ($times | zip $offsets | each {|t| [(do $upload ($t.0 + $t.1)) (do $render $t.0)] } | flatten) ++ [(do $poll (($times | last) + $after))] }
-    let made = {|times: list<float>, after: float| do $made_at $times ($times | each { 0.3 }) $after }
-    let ticks = {|ms: float| $ms * 10000.0 | math round | into int }
-    let flipped_at = {|times: list<float>, lengths: list<float>| $times | zip $lengths | enumerate | each {|e| { status: 0, ordinal: ($e.index + 2), lo: (do $ticks $e.item.0), hi: (do $ticks ($e.item.0 + $e.item.1)) } } }
-    let flipped = {|times: list<float>| do $flipped_at $times ($times | each { 1.5 }) }
-    let regular = { events: (do $made $starts 1500.0), flips: (do $flipped $starts) }
+    let runs = (pairing runs)
+    let period_ms = $runs.period_ms
+    let starts = $runs.starts
+    let upload = $runs.upload
+    let render = $runs.render
+    let poll = $runs.poll
+    let made_at = $runs.made_at
+    let made = $runs.made
+    let flipped_at = $runs.flipped_at
+    let flipped = $runs.flipped
+    let regular = $runs.regular
     let paired = (sdl pair $regular.events $regular.flips)
     assert equal [$paired.verdict ($paired.pairs | length) $paired.window.first $paired.window.last $paired.bracket.status] ["admitted" 122 2 123 "feasible"] $"pair_regular: the regular run paired whole, its bracket feasible: ($paired.refusals | to nuon)"
     assert equal ($paired.shifts | get status) ["infeasible" "infeasible"] $"pair_regular: the load's gap rules out either shift: ($paired.shifts | to nuon)"
@@ -718,22 +467,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let in_call = (sdl pair (do $swapped 1.0) (do $flipped $frames))
     assert equal $in_call.verdict "ambiguous" $"pair_compensated_inside: an addition inside its call passes: ($in_call.refusals | to nuon)"
     # the refusals, each at its own rule
-    let late = ($starts | skip 2 | last 10 | each {|ms| $ms + 10 * $period_ms })
-    let tail = {|times: list<float>| $times | each {|ms| [(do $upload ($ms + 0.3)) (do $render $ms)] } | flatten }
-    let extra = {|at: float, count: int| 1..$count | each {|i| do $upload ($at + 5.0 + $i) } }
-    let model = "the bracket: the clock model holds at no drift, a pause, a real-clock step, or an upload outside its call"
-    let refusals = [
-        { name: "pair_three_uploads", says: $model, events: ((do $made ($starts | take 50) 0.0 | drop 1) ++ (do $extra ($starts | get 49) 2) ++ (do $tail (($starts | skip 50) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
-        { name: "pair_upload_missing", says: $model, events: ((do $made ($starts | take 60) 0.0 | drop 1) ++ (do $tail (($starts | skip 61) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
-        { name: "pair_duplicated", says: "a duplicated event", events: ($regular.events | take 41 | append ($regular.events | get 40) | append ($regular.events | skip 41)), flips: $regular.flips }
-        { name: "pair_gap", says: "an ordinal gap in the guest's presents", events: ((do $made ($starts | take 30) 0.0 | drop 1) ++ [(do $upload (($starts | get 29) + 5.5))] ++ (do $tail ($starts | skip 30)) ++ [(do $poll (($starts | last) + 1500.0))]), flips: ($regular.flips | take 30 | append ($regular.flips | skip 30 | each {|f| $f | update ordinal ($f.ordinal + 1) })) }
-        { name: "pair_shifted", says: $model, events: ([(do $upload 10.0)] ++ $regular.events), flips: $regular.flips }
-        { name: "pair_slip", says: $model, events: ((do $made ($starts | take 62) 0.0 | drop 1) ++ [(do $upload (($starts | get 61) + 8.0))] ++ (do $tail (($starts | skip 62) ++ $late)) ++ [(do $poll (($late | last) + 1500.0))]), flips: $regular.flips }
-        { name: "pair_backwards", says: "a stamp going backwards", events: ($regular.events | update 82 {|e| $e | update ts ($e.ts - 0.5) }), flips: $regular.flips }
-        { name: "pair_device", says: "a device error in the window", events: $regular.events, flips: ($regular.flips | take 70 | append { status: 3, ordinal: 71, lo: 0, hi: 0 } | append ($regular.flips | skip 70)) }
-        { name: "pair_cut", says: "the log ending under 1 s past the window's last upload", events: (do $made $starts 500.0), flips: $regular.flips }
-        { name: "pair_short", says: "the log short of an ordinal", events: (do $made ($starts | drop 3) 1500.0), flips: $regular.flips }
-    ]
+    let refusals = (pairing refusals $runs)
     for c in $refusals {
         let read = (sdl pair $c.events $c.flips)
         assert (($read.verdict == "refused") and (($read.refusals | get refusal) == [$c.says])) $"($c.name): refused, saying ($c.says) and nothing else: ($read.refusals | to nuon)"
