@@ -8,9 +8,11 @@
 # starts, naming why: cores past the eight harts a machine takes, or a
 # display other than the ABI's. --spec with --harts refused by plan,
 # launch, and dump-tree, naming both, with no QEMU run; a custom machine of
-# three harts recorded diagnostic, its 4 GiB and no `jab.spec`; a name the
-# spec data does not define refused; a program listing 1KA1 alone refused
-# on 1KB1, naming both. Then the startup check (ProgramMinimums): this
+# three harts recorded diagnostic, its 4 GiB and no `jab.spec`; a named
+# launch whose bootargs carry a `jab.spec=` of the caller's refused, and a
+# kernel command line of 256 bytes refused, its length named, 255 taken; a
+# name the spec data does not define refused; a program listing 1KA1 alone
+# refused on 1KB1, naming both. Then the startup check (ProgramMinimums): this
 # program's first page read back, its declaration the spec data's; the
 # kernel refusing machines off the spec their command line names (CHECKS);
 # a program's base demand held on a custom machine, its refusal skipped by
@@ -102,6 +104,17 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert (not ($custom.qemu | any {|w| $w =~ 'jab\.spec=' })) $"no jab.spec on a custom machine's line: ($custom.qemu)"
     let custom_run = (launch --kernel $kernel --image $image --out ($out | path join "custom_run") --set $set --harts 3 --seconds 20)
     assert equal [$custom_run.status $custom_run.declared $custom_run.diagnostic] [0 true true] $"a custom machine's run declared and diagnostic: ($custom_run.serial)"
+
+    # the kernel's command line (SpecSelection's S4), refused before QEMU
+    # starts: a named launch's bootargs holding a jab.spec= of the caller's,
+    # the launcher's name the only one; and a line past the 255 bytes the
+    # kernel reads, its length named, a line of 255 taken whole
+    let renamed = (refusal { launch plan --kernel $kernel --image $image --out ($out | path join "renamed") --spec 1ka1 --bootargs "jab.late=2 jab.spec=1kb1" })
+    assert ($renamed | str contains "--bootargs holds jab.spec=1kb1, and this launch names the spec 1ka1") $"a named launch's own jab.spec= refused: ($renamed)"
+    let long = (refusal { launch plan --kernel $kernel --image $image --out ($out | path join "long") --spec 1ka1 --bootargs ("" | fill --character "x" --width 242) })
+    assert ($long | str contains "the kernel's command line is 256 bytes, past the 255 the kernel reads") $"a line of 256 bytes refused, its length named: ($long)"
+    let edge = (launch plan --kernel $kernel --image $image --out ($out | path join "edge") --spec 1ka1 --bootargs ("" | fill --character "x" --width 241))
+    assert equal (after $edge.qemu "-append" | str length) 255 $"a line of 255 bytes taken whole: ($edge.qemu)"
 
     # a name the data does not define
     let unknown = (refusal { launch plan --kernel $kernel --image $image --out ($out | path join "unknown") --spec 9zz9 })
