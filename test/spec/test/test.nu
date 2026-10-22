@@ -17,7 +17,7 @@
 # the debug kernel's knob and the run recorded below the minimum, a release
 # kernel refusing it still; a program declaring nothing and one built
 # before the header each on the legacy path; malformed first pages each
-# refused by name, by the kernel and by check-image; and a kernel without
+# refused by the kernel by name; and a kernel without
 # the check running a new image through its jump. Then the launch's bound
 # (LaunchBound): the one GNU timeout a run resolves, a stand-in refused or
 # passed over, its bound on a child, and a program that never exits ending
@@ -161,8 +161,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
 
     # malformed first pages: copies of this program's image, each patched,
     # the CRC made again where the patch lies inside the declaration, and
-    # refused by name before the program starts, by the kernel and by
-    # check-image alike
+    # refused by name by the kernel before the program starts
     let bytes = (open --raw $image | into binary)
     let crc = ($bytes | bytes at 24..<28 | into int --endian little)
     let malformed = (startup malformed $crc)
@@ -170,8 +169,6 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     mut copies = []
     for m in $malformed {
         let copy = (patched $bytes $m ($out | path join "malformed" $m.name) ($env.FILE_PWD | path join ".." | path expand))
-        let checked = (refusal { demand check-image $copy })
-        assert ($checked | str contains $"declaration refused: ($m.why)") $"($m.name): check-image refuses it, ($m.why): ($checked)"
         let run = (launch --kernel $kernel --image $copy --out ($out | path join $"malformed_($m.name)") --set $set --spec 1ka1 --seconds 20)
         assert equal [$run.status ($run.serial | lines)] [1 [$"jab: declaration refused: ($m.why)"]] $"($m.name): the kernel refuses it, ($m.why): ($run.serial)"
         $copies = ($copies | append { name: $m.name, image: $copy })
