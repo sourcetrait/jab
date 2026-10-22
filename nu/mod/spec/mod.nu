@@ -39,7 +39,7 @@ export def configured [ws: path]: nothing -> string {
 }
 
 # A spec table held to its type and its meaning, every problem named a line each
-export def read [data: path, type: path]: nothing -> table<name: string, isa: string, isa_profile: string, cores: int, clock_ghz: int, ram: filesize, gpu: oneof<string, nothing>, vram: oneof<filesize, nothing>, display: record<width: int, height: int>, fps: int> {
+export def read [data: path, type: path]: nothing -> table {
     for f in [$type $data] { if not ($f | path exists) { error make {msg: $"($f): no such file"} } }
     let text = (try { open --raw $type | decode } catch {|e| error make {msg: $"($type): unreadable: ($e.msg)"} })
     let schema = (nutype model $text $type)
@@ -61,7 +61,7 @@ export def read [data: path, type: path]: nothing -> table<name: string, isa: st
 }
 
 # The workspace's spec data, asset/spec.nuon held to asset/spec.nutype
-export def data [ws: path]: nothing -> table<name: string, isa: string, isa_profile: string, cores: int, clock_ghz: int, ram: filesize, gpu: oneof<string, nothing>, vram: oneof<filesize, nothing>, display: record<width: int, height: int>, fps: int> {
+export def data [ws: path]: nothing -> table {
     let asset = ($ws | path expand | path join "asset")
     read ($asset | path join "spec.nuon") ($asset | path join "spec.nutype")
 }
