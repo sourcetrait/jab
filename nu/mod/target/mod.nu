@@ -32,7 +32,7 @@ export def retire-home [target: path]: nothing -> record<tmp: string, base: stri
 }
 
 # A path moved aside whole into the retire home in place of deleting it
-export def retire [path: path, root?: path, --stamp: string = ""] {
+export def retire [path: path, root?: path, --stamp: string = ""]: nothing -> nothing {
     let from = ($path | path expand --no-symlink)
     if ($from | path type) == null { return }
     let target = (if $root != null { $root | path expand } else { target-of $from })

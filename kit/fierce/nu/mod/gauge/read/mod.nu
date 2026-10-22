@@ -15,7 +15,7 @@ export def main [
     --out: string = ""
     --label: string = ""
     --eps: int = 10000
-] {
+]: nothing -> nothing {
     read-capture $api $route $out $label $eps
 }
 
@@ -45,7 +45,7 @@ def read-capture [api: path, route: string, out: string, label: string, eps: int
 }
 
 # A kept bench step's report made again from its runs, each stream measured anew
-export def batch [step: path, --label: string = "", --out: string = "", --eps: int = 10000] {
+export def batch [step: path, --label: string = "", --out: string = "", --eps: int = 10000]: nothing -> nothing {
     let reader = (identity repo-of $WORKSPACE)
     let dir = ($step | path expand)
     let kept = (glob ($dir | path join "run_*") | where {|d| ($d | path type) == "dir" and (($d | path basename) =~ '^run_[0-9]+$') })

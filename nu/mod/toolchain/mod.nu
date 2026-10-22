@@ -37,7 +37,7 @@ export def tool-prefix [toolchain: oneof<string, nothing>] {
 }
 
 # Refuses an assembler that takes no RVA23 profile, naming its version
-export def march-check [asm: string, march: string, dir: path] {
+export def march-check [asm: string, march: string, dir: path]: nothing -> nothing {
     let probe = ($dir | path join "march")
     mkdir $probe
     let source = ($probe | path join "march.S")

@@ -20,7 +20,7 @@ use (path self ./render_zero) [FIRED]
 const WORKSPACE = path self ../../../../..
 
 # The suite whole: CENSUS and HANDOFF sets first, then every case, report last
-export def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""] {
+export def main [--kernel: path, --image: path, --out: path, --set: string = "", --assets: path = ""]: nothing -> nothing {
     assert (($assets | path exists)) "the sdk built the assets image"
     let base = {kernel: $kernel, image: $image, out: $out, set: $set, assets: $assets, game: ($WORKSPACE | path join "kit" "fierce")}
     if ("CENSUS" in ($set | split row ",")) {

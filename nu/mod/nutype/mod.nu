@@ -2,7 +2,7 @@
 const spec_scalars = [string int float number bool filesize duration datetime binary nothing path directory]
 
 # A type's text parsed into its parts; any form the checker cannot hold refused
-export def model [text: string, file: string] {
+export def model [text: string, file: string]: nothing -> record {
     let body = ($text | lines | where {|l| not ($l | str trim | str starts-with "#") } | str join " ")
     let tokens = ($body | str replace --all --regex '([<>,:])' ' $1 ' | split row --regex '\s+' | where {|t| $t != "" })
     if ($tokens | is-empty) { error make {msg: $"($file): no type in it"} }

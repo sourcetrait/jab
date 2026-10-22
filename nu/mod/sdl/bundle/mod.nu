@@ -9,7 +9,7 @@ use (path self ../../walk)
 const traced_qemu = "11.1.2"
 
 # A probed run's capture bundled with its tables and manifest, on its host
-export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []] {
+export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []]: nothing -> record<bundle_schema: int, profile: string, reader: record, host: record<os: string, kernel: string, hostname: string, qemu: record<path: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>>, objects: list<record>, files: list<record<path: string, sha256: string, size: int>>, events: int, run: record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, capture_nonce: oneof<int, nothing>, qemu_pid: oneof<int, nothing>, api: oneof<bool, nothing>, sends: oneof<list<any>, nothing>>> {
     let reader = (sdl-reader)
     let probe = ($probe | path expand)
     let bundle = ($bundle | path expand)
@@ -89,7 +89,7 @@ def sdl-qemu-of [exe: oneof<record, nothing>, sha256: oneof<string, nothing>]: n
 }
 
 # A bundle held to its manifest stage by stage, the first failing refusing it
-export def bundle-check [bundle: path, --guest: closure] {
+export def bundle-check [bundle: path, --guest: closure]: nothing -> record<profile: string, run: record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, capture_nonce: oneof<int, nothing>, qemu_pid: oneof<int, nothing>, guest_nonce: oneof<int, nothing>>, reader: record<host: any, box: record, same: bool>, trace: oneof<record, nothing>, events: list<record>> {
     let box = (sdl-reader)
     let dir = ($bundle | path expand)
     let refuse = {|stage: int, name: string, why: string| error make {msg: $"the bundle is refused at stage ($stage), ($name): ($why)"} }

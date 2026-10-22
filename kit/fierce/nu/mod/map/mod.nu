@@ -20,7 +20,7 @@ const surface_size = 24
 export const classes = [spawn light sprite waypoint android magazine]
 
 # A map's counts and its spawn printed as one NUON record
-export def show [map: path] {
+export def show [map: path]: nothing -> nothing {
     let m = (read $map)
     summary $m | to nuon | print
 }

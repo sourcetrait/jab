@@ -275,7 +275,7 @@ export def doc [dir: path]: nothing -> record {
 }
 
 # A bench's report saved as report.nuon and report.txt, the text printed
-export def report [dir: path] {
+export def report [dir: path]: nothing -> nothing {
     let dir = ($dir | path expand)
     let doc = (doc $dir)
     let text = (bench-text $doc)

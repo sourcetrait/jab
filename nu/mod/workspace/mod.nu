@@ -66,7 +66,7 @@ export def program-path [ws: path, words: list<string>]: nothing -> string {
 }
 
 # The programs at or under a path, every program for none; no match refused
-export def programs-under [ws: path, words: list<string>] {
+export def programs-under [ws: path, words: list<string>]: nothing -> list<string> {
     let at = (program-path $ws $words)
     let all = (programs-of $ws)
     let picked = (if $at == "" { $all } else { $all | where {|p| $p == $at or ($p | str starts-with $"($at)/") } })
@@ -75,7 +75,7 @@ export def programs-under [ws: path, words: list<string>] {
 }
 
 # The one program at a path in the workspace, its directory
-export def program-at [ws: path, words: list<string>] {
+export def program-at [ws: path, words: list<string>]: nothing -> string {
     let at = (program-path $ws $words)
     if $at == "" { error make {msg: "a program by its path from the workspace, or its shortcut: example/bounce, kit/fierce, fierce"} }
     let all = (programs-of $ws)
@@ -89,7 +89,7 @@ def is-test [at: string]: nothing -> bool {
 }
 
 # The one program a run takes at a path: any program but a test
-export def run-target [ws: path, words: list<string>] {
+export def run-target [ws: path, words: list<string>]: nothing -> string {
     let at = (program-path $ws $words)
     let all = (programs-of $ws)
     let runnable = ($all | where {|p| not (is-test $p) })

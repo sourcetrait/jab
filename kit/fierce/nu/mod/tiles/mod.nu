@@ -122,13 +122,13 @@ export def read [api: binary, --hash]: nothing -> record<dumps: list<any>, probl
 }
 
 # A capture's whole tiles a dump and every problem, saved to `out` as NUON
-export def dumps [api: path, out: path] {
+export def dumps [api: path, out: path]: nothing -> nothing {
     let read = (read (open --raw $api | into binary))
     { tiles: ($read.dumps | each {|d| $d | length }), problems: $read.problems } | to nuon | save -f $out
 }
 
 # A capture's dumps keyed by tile header and texels' SHA-256, saved as NUON
-export def keys [api: path, out: path] {
+export def keys [api: path, out: path]: nothing -> nothing {
     let read = (read (open --raw $api | into binary) --hash)
     { dumps: $read.dumps, problems: $read.problems } | to nuon | save -f $out
 }

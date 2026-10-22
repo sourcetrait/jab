@@ -142,7 +142,7 @@ def segment [a: record, b: record, t: any, y: int, run: record<from: int, to: in
 }
 
 # The handoff pair at `index` compared, its statistics saved to `out` as NUON
-export def main [spec: path, index: int, out: path] {
+export def main [spec: path, index: int, out: path]: nothing -> nothing {
     let s = (open $spec)
     let ch = $s.crosshair
     let stamp = $s.stamp

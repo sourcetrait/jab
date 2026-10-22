@@ -6,7 +6,7 @@ use (path self ../../../../../nu/mod/tool)
 const WORKSPACE = path self ../../../../..
 
 # A map's machine planned for robojab: its MCP config, or a socket served
-export def serve [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"] {
+export def serve [--kernel: path, --image: path, --out: path, --map: string = "render_0", --set: string = "DEBUG", --seconds: int = 600, --target: string = "mcp"]: nothing -> any {
     let game = ($WORKSPACE | path join "kit" "fierce")
     let workspace = ($game | path join ".." ".." | path expand)
     let tree = (build program-shard $game "asset" | path join $map)

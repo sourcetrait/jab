@@ -5,11 +5,11 @@ export def hex [n: int]: nothing -> string { $n | format number | get lowerhex }
 # The address an operand list names before its symbol (`80000820
 # <irq_serve>`), or the one its annotation names (`# 80049468
 # <sound_base>`), or null
-export def operand-address [args: string] {
+export def operand-address [args: string]: nothing -> oneof<int, nothing> {
     let p = ($args | parse --regex '(?:^|,)(?P<a>[0-9a-f]+) <[^>]+>$')
     if ($p | is-empty) { null } else { $"0x($p.0.a)" | into int }
 }
-export def annotated-address [args: string] {
+export def annotated-address [args: string]: nothing -> oneof<int, nothing> {
     let p = ($args | parse --regex '# (?P<a>[0-9a-f]+) <[^>]+>$')
     if ($p | is-empty) { return null }
     # sixteen digits with the top bit set annotate a negative immediate,
@@ -54,7 +54,7 @@ def jump-register [op: string, args: string]: nothing -> string {
 # or null for none. A jalr or jr is a direct call or jump only right after
 # the auipc of the register it goes through, as the call and tail pseudos
 # emit it; any other is indirect.
-export def transfer-of [i: record, before: any] {
+export def transfer-of [i: record, before: any]: nothing -> oneof<record<kind: string, to: oneof<int, nothing>>, nothing> {
     if $i.op in [ret sret mret] { return { kind: end, to: null } }
     if $i.op == "j" { return { kind: jump, to: (operand-address $i.args) } }
     if $i.op == "jal" { return { kind: call, to: (operand-address $i.args) } }

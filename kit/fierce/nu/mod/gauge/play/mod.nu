@@ -63,7 +63,7 @@ export def route [
     --trace
     --service: int = -1
     --eps: int = 10000
-] {
+]: nothing -> nothing {
     let seeds = (nuon-list $seeds "--seeds" "int")
     let qemu = (nuon-list $qemu "--qemu" "string")
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
@@ -142,7 +142,7 @@ export def host [
     --harts: int = 0
     --qemu: string = "[]"
     --eps: int = 10000
-] {
+]: nothing -> nothing {
     let qemu = (nuon-list $qemu "--qemu" "string")
     if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
@@ -193,7 +193,7 @@ export def audio [
     --spec (-s): string = ""
     --harts: int = 0
     --qemu: string = "[]"
-] {
+]: nothing -> nothing {
     let qemu = (nuon-list $qemu "--qemu" "string")
     if $tree != "debug" { error make { msg: $"--tree is debug: the kernel's pad and sound counts are a debug build's, not the ($tree) tree's" } }
     let at = (places $tree $kernel $image $out)

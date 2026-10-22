@@ -217,7 +217,7 @@ export def clean [ws: path, ...words: string]: nothing -> nothing {
 }
 
 # The kernel and every program, or those at or under a path, or one program
-export def main [dir: path, ...words: string, --kernel, --set: string = ""] {
+export def main [dir: path, ...words: string, --kernel, --set: string = ""]: nothing -> nothing {
     let names = (symbols $set)
     let s = (workspace subject $dir $words)
     if (workspace is-workspace $s.dir) { build-under $s.dir $s.words $names; return }
@@ -228,7 +228,7 @@ export def main [dir: path, ...words: string, --kernel, --set: string = ""] {
 }
 
 # Everything retired deleted, the workspace checked first
-export def retire [ws: path] {
+export def retire [ws: path]: nothing -> nothing {
     if not (workspace is-workspace $ws) { error make {msg: $"($ws | path expand) is no workspace's root"} }
     target retire-all ($ws | path expand)
 }

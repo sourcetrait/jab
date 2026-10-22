@@ -491,7 +491,7 @@ export def report [
     --bin-cm: int = 50
     --out: string = ""
     --diagnostic
-] {
+]: nothing -> nothing {
     let result = (main $files $field $bin_cm --diagnostic=$diagnostic)
     let target = (if $out == "" { build program-shard ($WORKSPACE | path join "kit" "fierce") "gauge" | path join "compare.nuon" } else { $out | path expand })
     mkdir ($target | path dirname)

@@ -129,7 +129,7 @@ export def builder-tile [tile: record, lighting: string, nodes: list<any>, chain
 }
 
 # The builder's oracle over a capture: each lighting's tiles held, as NUON
-export def main [api: path, spec: string, out: path] {
+export def main [api: path, spec: string, out: path]: nothing -> nothing {
     let s = ($spec | from nuon)
     let read = (tiles read (open --raw $api | into binary))
     let found = $read.dumps

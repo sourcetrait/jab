@@ -26,7 +26,7 @@ def watch-header [pid: int, started: datetime]: nothing -> record {
 }
 
 # The running Jab QEMU recorded per thread each second, reported when it ends
-export def main [ws: path, --skip: float = 5.0] {
+export def main [ws: path, --skip: float = 5.0]: nothing -> nothing {
     let pids = (process jab-pids)
     if ($pids | is-empty) { error make {msg: "no jab is running"} }
     let pid = ($pids | first)
@@ -123,7 +123,7 @@ def watch-rates [file: path, span: int]: nothing -> string {
 }
 
 # Every QEMU of a bench's run recorded per step, reported and packed at its end
-export def bench [ws: path, name?: string, --skip: float = 5.0] {
+export def bench [ws: path, name?: string, --skip: float = 5.0]: nothing -> nothing {
     let ws = ($ws | path expand)
     if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     if $name == null { print (bench bench-list $ws); return }

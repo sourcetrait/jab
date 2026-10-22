@@ -23,7 +23,7 @@ def build [set: string]: nothing -> nothing {
 }
 
 # Every asset under content/ rendered to the file beside it the engine reads
-export def render [] {
+export def render []: nothing -> nothing {
     let p = (places)
     let tool = ($p.game | path join "rust" "target" "release" "svg2png")
     if not ($tool | path exists) { ^cargo build --release --manifest-path ($p.game | path join "rust" "Cargo.toml") }
@@ -33,7 +33,7 @@ export def render [] {
 }
 
 # A debug build's captures of a map from placed poses, PNGs under `out`
-export def pose [map: string, poses: path, out: path, --set: string = "debug"] {
+export def pose [map: string, poses: path, out: path, --set: string = "debug"]: nothing -> nothing {
     build $set
     let p = (places)
     let built = (build program-out $p.game "debug")
@@ -41,7 +41,7 @@ export def pose [map: string, poses: path, out: path, --set: string = "debug"] {
 }
 
 # A debug build played by seeded random pads, each seed one run held
-export def smoke [seeds: string = "1", seconds: int = 60] {
+export def smoke [seeds: string = "1", seconds: int = 60]: nothing -> nothing {
     let list = ($seeds | split row "," | each {|s| $s | str trim } | where {|s| $s != "" } | each {|s| $s | into int })
     build "debug"
     let p = (places)
@@ -50,7 +50,7 @@ export def smoke [seeds: string = "1", seconds: int = 60] {
 }
 
 # A debug build's map handed to robojab: an MCP config or a socket served
-export def play [target: string = "mcp", map: string = "render_0", seconds: int = 600] {
+export def play [target: string = "mcp", map: string = "render_0", seconds: int = 600]: nothing -> any {
     build "debug"
     let p = (places)
     let built = (build program-out $p.game "debug")

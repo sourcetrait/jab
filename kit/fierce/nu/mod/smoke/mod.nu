@@ -39,7 +39,7 @@ const STATES_A_SECOND = 10
 const WALKED = 5.0
 
 # Seeded random players on the pad, a launch a seed, held to walk and survive
-export def seeds [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", --seconds: int = 60, --set: string = "DEBUG"] {
+export def seeds [--kernel: path, --image: path, --out: path, --seeds: string = "[1]", --seconds: int = 60, --set: string = "DEBUG"]: nothing -> nothing {
     let seeds = (try { $seeds | from nuon } catch { null })
     if ($seeds | describe) != "list<int>" { error make { msg: $"--seeds takes a NUON list of whole numbers, \"[1 2 3]\": ($seeds | to nuon)" } }
     let game = ($WORKSPACE | path join "kit" "fierce")

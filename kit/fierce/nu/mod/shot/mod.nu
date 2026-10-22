@@ -1,7 +1,7 @@
 use (path self ../png)
 
 # A PPM capture sampled every `step` pixels each way, written as an RGB PNG
-export def main [ppm: path, png: path, --step: int = 4] {
+export def main [ppm: path, png: path, --step: int = 4]: nothing -> nothing {
     let bytes = (open --raw $ppm | into binary)
     let header = ($bytes | bytes at 0..<64 | decode | lines)
     if ($header | get 0) != "P6" { error make { msg: $"($ppm): not a P6 PPM" } }

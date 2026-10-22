@@ -128,7 +128,7 @@ def test-under [ws: path, words: list<string>, names: list<string>]: nothing -> 
 }
 
 # A program's headless machine prepared and printed as JSON for a harness
-export def plan [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --spec (-s): string = "", --harts: int = 0, --bootargs: string = ""] {
+export def plan [dir: path, --out: string = "", --disk: string = "", --serial: string = "disk0", --set: string = "", --api, --gamepad, --pad-port, --no-kbm, --sound, --spec (-s): string = "", --harts: int = 0, --bootargs: string = ""]: nothing -> string {
     let names = (build symbols $set)
     let c = (build context ($dir | path expand) "program" $names)
     let ready = (prepared ($dir | path expand) $names)
@@ -137,7 +137,7 @@ export def plan [dir: path, --out: string = "", --disk: string = "", --serial: s
 }
 
 # A workspace's tests, or one program's, built with DEBUG, then a summary
-export def test [dir: path, ...words: string, --set: string = "", --spec (-s): string = ""] {
+export def test [dir: path, ...words: string, --set: string = "", --spec (-s): string = ""]: nothing -> any {
     let names = (build symbols $set)
     let s = (workspace subject $dir $words)
     let forced = (if $spec == "" { {} } else { { JAB_SPEC: $spec } })
@@ -149,7 +149,7 @@ export def test [dir: path, ...words: string, --set: string = "", --spec (-s): s
 }
 
 # A program built, then run in its window with the UART on stdio
-export def boot [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0] {
+export def boot [dir: path, ...words: string, --set: string = "", --api, --kbm, --no-kbm, --pad, --no-pad, --no-sound, --spec (-s): string = "", --harts: int = 0]: nothing -> nothing {
     let s = (workspace subject $dir $words)
     let program = (if (workspace is-workspace $s.dir) { workspace run-target $s.dir $s.words } else { $s.dir | path expand })
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }

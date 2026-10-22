@@ -2,7 +2,7 @@ use (path self ../handoff)
 use (path self ..)
 
 # The most the lit loop's picture steps between side-by-side pixels, as NUON
-export def main [capture: path, rect: string, crosshair: int, out: path] {
+export def main [capture: path, rect: string, crosshair: int, out: path]: nothing -> nothing {
     let r = ($rect | from nuon)
     let c = (tiles capture $capture)
     let ch = $crosshair

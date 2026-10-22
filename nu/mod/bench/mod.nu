@@ -78,7 +78,7 @@ def build-record [x: record, root: path, stem: string]: nothing -> record {
 }
 
 # The bench a name names, held to its shape; a package's own when one is given
-export def bench-at [ws: path, name: string, --package: string = ""] {
+export def bench-at [ws: path, name: string, --package: string = ""]: nothing -> record<name: string, program: string, dir: string, bench: string, file: string, def: record, builds: list<record<name: string, set: string>>, package: oneof<string, nothing>> {
     let words = ($name | split row "/" | where {|w| $w != "" })
     let all = (benches-of $ws)
     if ($words | length) < 2 { error make {msg: $"a bench by its program's path and its name, `./do bench <program>/<bench>`: ($all | str join ', ')"} }
@@ -134,7 +134,7 @@ def bench-save-state [file: path, state: record]: nothing -> nothing {
 }
 
 # A bench's run packed into one tar beside its directory: the tar's path
-export def bench-tar [home: path, stamp: string, name: string, root: path] {
+export def bench-tar [home: path, stamp: string, name: string, root: path]: nothing -> string {
     let file = ($home | path join $"($name | str replace --all '/' '_')-($stamp).tar")
     target retire $file $root
     let r = (do { cd $home; ^tar -cf ($file | path basename) $stamp | complete })
@@ -143,7 +143,7 @@ export def bench-tar [home: path, stamp: string, name: string, root: path] {
 }
 
 # A program's bench, every step in order, then its report and its tar
-export def main [ws: path, name?: string, --only: string = "", --package: string = ""] {
+export def main [ws: path, name?: string, --only: string = "", --package: string = ""]: nothing -> nothing {
     let ws = ($ws | path expand)
     if not (workspace is-workspace $ws) { error make {msg: $"($ws) is no workspace's root"} }
     if $name == null { print (bench-list $ws); return }

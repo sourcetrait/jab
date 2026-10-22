@@ -5,7 +5,7 @@ const division = 480
 const microseconds_a_beat = 1000000
 
 # A note list rendered to a MIDI file, a line with the counts printed
-export def render [list: path, out: path] {
+export def render [list: path, out: path]: nothing -> nothing {
     let piece = (open $list)
     to-midi $piece | save --raw -f $out
     let notes = ($piece.tracks | each {|t| $t.notes | length } | math sum)

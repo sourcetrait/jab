@@ -5,7 +5,7 @@ const rate = 48000
 const two_pi = 6.283185307179586
 
 # A recipe rendered to a PCM file, a line with the counts and peak printed
-export def render [recipe: path, out: path] {
+export def render [recipe: path, out: path]: nothing -> nothing {
     let r = (open $recipe)
     let samples = (samples $r)
     to-pcm $samples | save --raw -f $out

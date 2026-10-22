@@ -32,7 +32,7 @@ const snap = 1024.0
 const content_dir = path self ../../../../content
 
 # A source compiled to its tree under `out`: map, assets, NUON, plan views
-export def main [source: path, out: path, --content: path = ""] {
+export def main [source: path, out: path, --content: path = ""]: nothing -> nothing {
     let content = (if $content == "" { $content_dir } else { $content | path expand })
     let src = (open $source)
     let m = (build $src)

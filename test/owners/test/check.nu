@@ -49,7 +49,7 @@ def path-to [funcs: list<any>, seen: record, i: int]: nothing -> string {
 # read off its code and its table, every function its graph reaches from
 # the entries, the drain's cut, the references permitted under their
 # conditions, and every violation with its path
-export def owners-check [elf: path, values: record] {
+export def owners-check [elf: path, values: record]: nothing -> record<entries: list<string>, class: list<int>, handlers: list<string>, reached: int, split: record, cut: record, cuts: list<int>, permitted: list<record<function: string, symbol: string, offset: int, kind: string>>, violations: list<record<kind: string, function: string, symbol: string, offset: int, detail: string, path: string>>> {
     let prefix = (prefix-of $elf)
     let elf_symbols = (symbols-of $prefix $elf)
     let objects = (objects-of $prefix $elf)

@@ -8,7 +8,7 @@ const GAME = path self ../../../..
 const COMPILER = path self ../../../bin/nuance/map.nu
 
 # Every map source under content/map compiled into the game's asset shard
-export def main [] {
+export def main []: nothing -> nothing {
     let trees = (build program-shard $GAME "asset")
     for src in (walk paths ($GAME | path join "content" "map" "*.nuon")) {
         ^nu $COMPILER compile $src $trees

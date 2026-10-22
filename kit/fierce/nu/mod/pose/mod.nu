@@ -22,7 +22,7 @@ const MET = [nothing geometry android]
 const ANDROID_EVENTS = [none roused fired struck destroyed fallen waypoint]
 
 # A map captured from placed poses, a launch and a PNG a pose, events printed
-export def capture [map: string, poses: path, out: path, --kernel: path, --image: path, --set: string = "DEBUG"] {
+export def capture [map: string, poses: path, out: path, --kernel: path, --image: path, --set: string = "DEBUG"]: nothing -> nothing {
     let game = ($WORKSPACE | path join "kit" "fierce")
     let tree = (build program-shard $game "asset" | path join $map)
     let disk = ($out | path join $"($map).romfs")

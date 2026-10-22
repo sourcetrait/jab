@@ -135,7 +135,7 @@ def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
 }
 
 # The bench's preflight: package, host, launch, capture path, and no rebuild
-export def preflight [dir: path, --spec: string, --image: string, --kernel: string, --tree: string, --serial: string, --bench: string, --out: string, --label: string = ""] {
+export def preflight [dir: path, --spec: string, --image: string, --kernel: string, --tree: string, --serial: string, --bench: string, --out: string, --label: string = ""]: nothing -> nothing {
     let launcher = (identity reader [$WORKSPACE])
     let root = ($dir | path expand)
     let out = ($out | path expand)

@@ -28,7 +28,7 @@ export def sections-of [prefix: string, file: path]: nothing -> table<name: stri
 
 # The objects beside a kernel's ELF: each its file, its symbols, and its
 # sections
-export def objects-of [prefix: string, elf: path] {
+export def objects-of [prefix: string, elf: path]: nothing -> list<record<file: string, symbols: table<value: int, section: string, name: string>, sections: table<name: string, size: int, vma: int, off: int>>> {
     walk paths ($elf | path dirname | path join "*.o") | sort | each {|o| { file: ($o | path parse | get stem), symbols: (symbols-of $prefix $o), sections: (sections-of $prefix $o) } }
 }
 
@@ -79,13 +79,13 @@ export def function-files [objects: list<any>, funcs: list<any>]: nothing -> lis
 }
 
 # The range holding an address, or null
-export def placed [places: table, address: int] {
+export def placed [places: table, address: int]: nothing -> oneof<record, nothing> {
     $places | where {|p| $p.start <= $address and $address < $p.end } | get -o 0
 }
 
 # The ELF's functions in address order: each a symbol's block of objdump
 # -d, its name, its start, and its instructions
-export def functions-of [prefix: string, elf: path] {
+export def functions-of [prefix: string, elf: path]: nothing -> list<record<name: string, start: int, instrs: list<record<addr: int, op: string, args: string>>>> {
     ^$"($prefix)objdump" -d $elf | complete | get stdout | split row "\n\n"
     | where {|b| $b =~ '^[0-9a-f]+ <[^>]+>:' }
     | each {|b|
