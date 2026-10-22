@@ -22,10 +22,11 @@
 # as it stops a run, each refused ahead of the rest; every refusal in
 # turn, a render in no object, the inlined renders, a return address in
 # two functions' symbols, a render read by timing with its size call
-# late, and a render's table gone, unreadable, or changed among them, and
-# the first refusal alone when two are held; a valid zero; and the
-# record's fields. The run's lines, the process and the nonce,
-# read apart, and each refused by name given twice, malformed, or out of
+# late, a render's table gone, unreadable, or changed, and its caller's
+# table unreadable or changed among them, and the first refusal alone
+# when two are held; a valid zero; and the record's fields. The run's
+# lines, the process and the nonce, read apart, and each refused by name
+# given twice, malformed, or out of
 # its place; a probing launch's machine as plan makes it, no QEMU run: its
 # port and its sends as its caller asks, the nonce handed in reaching the
 # shim and the identity, plan minting none and a launch alone one; the

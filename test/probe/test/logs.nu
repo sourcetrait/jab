@@ -193,6 +193,8 @@ export def refusals [shim_logs: record, gap: int, fixture: path, stripped: path,
         { name: "render_changed", lines: [(object-line 0 $fixture --later 1) $shim_line $render_chain "size"], says: $"($fixture) is not the file its line in the object table names" }
         { name: "render_unreadable", lines: [(object-line 0 $text) $shim_line (do $made [$shim "0+10"]) "size"], says: $"nm cannot read ($text)" }
         { name: "render_gone", lines: [$"object 0 1 100 1000 ($gone)" $shim_line $render_chain "size"], says: $"($gone) is not the file its line in the object table names" }
+        { name: "render_caller_unreadable", lines: [(object-line 0 $fixture) $shim_line (object-line 2 $text) (do $made [$shim (do $inside 0 "sdl2_gl_render_surface") (do $at 2 16)]) "size"], says: $"nm cannot read ($text)" }
+        { name: "render_caller_changed", lines: [(object-line 0 $fixture) $shim_line (object-line 2 $front --later 1) (do $made [$shim (do $inside 0 "sdl2_gl_render_surface") (do $at 2 16)]) "size"], says: $"($front) is not the file its line in the object table names" }
         { name: "device_after", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $inside 0 "virtio_gpu_simple_process_cmd")])]), says: "an upload's second frame is the device's own code" }
         { name: "exe_unresolved", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update") (do $at 0 $gap)])]), says: "an upload's second frame resolves in no table" }
         { name: "absent", lines: ($exe ++ [(do $made [$shim (do $inside 0 "sdl2_gl_update")])]), says: "an upload's chain ends at its immediate caller" }

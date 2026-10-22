@@ -27,15 +27,17 @@ the probe does not support.
 reading by timing's bound where a render's caller cannot resolve, and
 the bound past which a render's gap is named in the report. A host
 stall between a render's two calls makes the gap any length: the
-qualification bench's probed_2 run 3 held one at 3.049 ms, line 3934,
+qualification bench's probed_2 run 3 held one at 3.049 ms, line 3935,
 which the timing rule sent to the anchor rule and the whole log was
 refused.
 
 ## sdl-decide
 
 How a make_current's chain reached the window by its frames past the
-shim's own (sdl resolve), decided once a chain. Its immediate caller
-first: its object's table held (sdl-held), its return address in two
+shim's own (sdl resolve), decided once a chain. The tables first, before
+any rule and a render's chain among them: the immediate caller's object
+and its caller's, each held to its table (sdl-held). Then the immediate
+caller: its return address in two
 functions' symbols refused as ambiguous (`overlap`, aliases of one
 function being one); resolved to the render's anchor a `render`; to an
 inliner refused (`inlined`); unresolved in a table that was read and

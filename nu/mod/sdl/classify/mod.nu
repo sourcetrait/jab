@@ -16,6 +16,9 @@ def sdl-decide [frames: list, device_in: string, modules: list<int>, executable:
     if $caller == null { return { kind: "refused", class: 5, fault: "anchor", at: null } }
     let caller_held = (symbols sdl-held $caller)
     if $caller_held != null { return $caller_held }
+    let second = ($frames | get -o 1)
+    let second_held = (if $second == null { null } else { symbols sdl-held $second })
+    if $second_held != null { return $second_held }
     if $caller.overlap { return { kind: "refused", class: 5, fault: "overlap", at: $caller } }
     if $render_anchor in $caller.functions { return { kind: "render", class: 0, fault: "", at: null } }
     if ($render_inliners | any {|n| $n in $caller.functions }) { return { kind: "refused", class: 5, fault: "inlined", at: $caller } }
@@ -26,11 +29,8 @@ def sdl-decide [frames: list, device_in: string, modules: list<int>, executable:
     let update = ("sdl2_gl_update" in $caller.functions)
     if $switch and (not $update) { return { kind: "switch", class: 0, fault: "", at: null } }
     if (not $update) or $switch { return { kind: "refused", class: 5, fault: "front_end", at: $caller } }
-    let second = ($frames | get -o 1)
     if $second == null { return { kind: "refused", class: 6, fault: "absent", at: $caller } }
     if $second.object == null { return { kind: "refused", class: 6, fault: "nowhere", at: $second } }
-    let second_held = (symbols sdl-held $second)
-    if $second_held != null { return $second_held }
     if $second.overlap { return { kind: "refused", class: 5, fault: "overlap", at: $second } }
     if (symbols sdl-device $second $device_in $modules) { return { kind: "refused", class: 5, fault: "device", at: $second } }
     if not ($second.functions | is-empty) {
