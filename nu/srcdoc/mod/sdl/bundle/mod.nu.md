@@ -18,8 +18,9 @@ anchor or timing, each chain's decision, and the counts by kind; the
 probe directory's `api.out`, `identity.nuon`,
 `trace.log`, and each file `extra` names, where it has them, copied
 whole; and last `bundle.nuon`, the manifest, bundle_schema 2: the
-profile; the reader (sdl-reader), `identity reader`'s record, the one
-field schema 2 changes; the host, its OS, kernel release,
+profile; the reader (sdl-reader), `identity reader`'s record taken as
+the bundle starts, where its code is read, the one field schema 2
+changes; the host, its OS, kernel release,
 hostname, and QEMU (sdl-qemu-of); every object of the log's table with
 its line's fields, its state, and for a read one its SHA-256 and its
 table with that file's SHA-256 and its source; every other file with
@@ -72,7 +73,8 @@ the manifest's QEMU the one the bracket rests on (traced_qemu), any other
 version or none refused as unsupported, then the trace's bracket
 (trace-bracket) over the log's flip uploads as integer microseconds of
 their stamps (stamp-us), its refusal this stage's; 6, the
-reader, the host's set beside this one, `same` whether their jab commits
+reader, the host's set beside this one, taken as the check starts, `same`
+whether their jab commits
 agree, read from schema 1's `jab` or schema 2's first repository and
 refusing nothing, the replay's equality being what admits another
 revision. The profile, the run, both readers, the trace's

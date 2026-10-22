@@ -136,6 +136,7 @@ def rebuild-problems [root: string, bench: path]: nothing -> list<string> {
 
 # The bench's preflight: package, host, launch, capture path, and no rebuild
 export def preflight [dir: path, --spec: string, --image: string, --kernel: string, --tree: string, --serial: string, --bench: string, --out: string, --label: string = ""] {
+    let launcher = (identity reader [$WORKSPACE])
     let root = ($dir | path expand)
     let out = ($out | path expand)
     mkdir $out
@@ -189,7 +190,7 @@ export def preflight [dir: path, --spec: string, --image: string, --kernel: stri
         package: $root, manifest_sha256: (if ($root | path join $MANIFEST | path exists) { open --raw ($root | path join $MANIFEST) | hash sha256 } else { null }), checked: $checked,
         spec: (if ($row | get -o problem) == null { $row } else { null }), machine: (if ($row | get -o problem) == null { machine resolve $WORKSPACE $spec 0 } else { null }),
         host: { os: $nu.os-info.name, cores: $cores, memory: $memory, hostname: (sys host | get -o hostname) },
-        launcher: (identity reader [$WORKSPACE]),
+        launcher: $launcher,
         launch: (if $planned == null or ($planned | get -o problem) != null { null } else {
             { qemu: $qemu, timeout: { path: $planned.timeout_binary, version: $planned.timeout_version, override: $planned.timeout_override }, window: $planned.window, audio: $planned.audio, env: ($planned.env | merge { SDL_VIDEODRIVER: ($env.SDL_VIDEODRIVER? | default null), JAB_DISPLAY: ($env.JAB_DISPLAY? | default null), JAB_AUDIO: ($env.JAB_AUDIO? | default null) }), machine: $planned.machine }
         }),

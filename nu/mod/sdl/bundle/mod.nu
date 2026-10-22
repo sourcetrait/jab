@@ -10,6 +10,7 @@ const traced_qemu = "11.1.2"
 
 # A probed run's capture bundled with its tables and manifest, on its host
 export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []] {
+    let reader = (sdl-reader)
     let probe = ($probe | path expand)
     let bundle = ($bundle | path expand)
     let log = ($probe | path join "sdl.log")
@@ -53,7 +54,7 @@ export def main [probe: path, bundle: path, --profile: string = "", --extra: lis
     let manifest = {
         bundle_schema: 2,
         profile: $named,
-        reader: (sdl-reader),
+        reader: $reader,
         host: { os: $nu.os-info.name, kernel: $nu.os-info.kernel_version, hostname: (sys host | get hostname), qemu: (sdl-qemu-of ($c.objects | where index == 0 | get -o 0) ($hashed | where index == 0 | get -o 0.sha256)) },
         objects: ($c.objects | each {|o|
             let t = ($c.tables | get ($o.index | into string))
@@ -89,6 +90,7 @@ def sdl-qemu-of [exe: oneof<record, nothing>, sha256: oneof<string, nothing>]: n
 
 # A bundle held to its manifest stage by stage, the first failing refusing it
 export def bundle-check [bundle: path, --guest: closure] {
+    let box = (sdl-reader)
     let dir = ($bundle | path expand)
     let refuse = {|stage: int, name: string, why: string| error make {msg: $"the bundle is refused at stage ($stage), ($name): ($why)"} }
     let manifest_file = ($dir | path join "bundle.nuon")
@@ -167,7 +169,6 @@ export def bundle-check [bundle: path, --guest: closure] {
         try { trace-bracket $text $uploads } catch {|e| do $refuse 5 "the run" $e.msg }
     })
     let host = ($m | get -o reader)
-    let box = (sdl-reader)
     let commit_of = {|r| if ($r | describe | str starts-with 'record') { if ($r | get -o repos) != null { $r.repos | get -o 0.commit } else { $r | get -o jab } } }
     let hosted = (do $commit_of $host)
     { profile: $profile, run: $run, reader: { host: $host, box: $box, same: ($hosted != null and $hosted == (do $commit_of $box)) }, trace: $trace, events: $read_events }
