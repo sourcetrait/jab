@@ -14,12 +14,12 @@ call hart_swap record addr,from u64,to u64 > moved a0 bool [345:358] :the record
 call harts_masks > online a0 u64,failed a1 u64,released a2 u64 [359:399] :the discovered harts' masks by the states in their records
  released :released and not yet in
 call harts_release > clobber a0-a2 [400:537] :supervisor mode, hart 0, after serial_open: each discovered hart refused by the tree or without an interrupt file failed, every other released, its state, its slot, and the wake into its supervisor file, one whose release store faults failed with no file; then the check-in waited for, a hart still released after HART_CHECKIN_TICKS failed; under DEBUG a jab.stray knob of 1 makes a stray store access fault
-j hart_main hart u64 [538:594] :a secondary's supervisor entry from hart_park's mret, sp its record: its supervisor setup and self-check, its state swapped from released to online and hart 0 woken, then hart_idle; a hart hart 0 failed first parks for the run touching nothing; under DEBUG a jab.late knob naming it holds it until hart 0 has failed it
+j hart_main hart u64 [538:607] :a secondary's supervisor entry from hart_park's mret, sp its record: its supervisor setup and self-check, its state swapped from released to online and hart 0 woken, then hart_idle; a hart hart 0 failed first parks for the run touching nothing; under DEBUG a jab.late knob naming it holds it until hart 0 has failed it, and on hart 1 alone a jab.strayenable knob enables that identity in its own file before its first hart_idle
  hart :mhartid, as hart_park's mret hands it in a0
-call harts_report > clobber a0-a3 [595:770] :under DEBUG, on the debug channel: the masks, every problem kept, the bootargs, and every discovered hart's line, an online hart's id, result, and canary read back
-call knob_value name addr > value a0 u64 [771:826] :under DEBUG, a knob's decimal value from /chosen's bootargs
+call harts_report > clobber a0-a3 [608:783] :under DEBUG, on the debug channel: the masks, every problem kept, the bootargs, and every discovered hart's line, an online hart's id, result, and canary read back
+call knob_value name addr > value a0 u64 [784:839] :under DEBUG, a knob's decimal value from /chosen's bootargs
  name :the knob with its '=', matched at a token's start
  value :-1 when absent or not a run of digits alone
-call spec_name > name a0 addr,length a1 u64 [827:872] :in every build, the spec /chosen's bootargs name: the value of the first token that starts jab.spec=, read to the next space or the end
+call spec_name > name a0 addr,length a1 u64 [840:885] :in every build, the spec /chosen's bootargs name: the value of the first token that starts jab.spec=, read to the next space or the end
  name :its first byte in boot_args, 0 with a length of 0 when no token names one
-ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [873:880] :the discovered mask and, read from the records, the online and failed
+ecall sys_harts > discovered a0 u64,online a1 u64,failed a2 u64 [886:893] :the discovered mask and, read from the records, the online and failed

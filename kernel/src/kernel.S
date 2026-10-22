@@ -29,6 +29,21 @@ kmain:
     li t0, HART_ONLINE
     sd t0, HART_STATE(tp)
     call aia_supervisor
+.ifdef DEBUG
+    la a0, knob_strayclaim
+    call knob_value
+    bltz a0, 1f
+    mv s1, a0
+    call aia_stray_enable
+    li a0, 0
+    call aia_file_page
+    sw s1, 0(a0)                            # sent to its own file, which its next drain claims
+.pushsection .rodata
+knob_strayclaim:
+    .asciz "jab.strayclaim="
+.popsection
+1:
+.endif
     call serial_open
     call harts_release
 .ifdef DEBUG

@@ -26,12 +26,14 @@ start's wake sent after the check stays pending in the hart's file and ends
 the wfi at once. The drain claims the wake and fences, so the state is read
 after it.
 
-Under DEBUG the hart's own file's eie0 is read back first, through
-siselect, and held to the wake's bit exactly: an identity enabled there
-besides the wake ends the run, `jab: hart N enabled a device identity M`
-(trap.S's fatal_hart_dec), M the lowest, and so does the wake's own bit
-clear, `jab: hart N disabled the wake identity 1`, a hart that could never
-be woken; a file holding both reads as the device's. Only the wake belongs
+Under DEBUG the hart's own file is read back first, through siselect, every
+eie register its identities reach, aia.S's aia_ids, eie0 to eie6 at
+QEMU's 255: eie0 held to the wake's bit exactly and the rest to none. An
+identity enabled besides the wake ends the run, `jab: hart N enabled a
+device identity M` (trap.S's fatal_hart_dec), M the lowest, its register's
+base past it, and so does the wake's own bit clear, `jab: hart N disabled
+the wake identity 1`, a hart that could never be woken; a file holding
+both reads as the device's. Only the wake belongs
 in a secondary's file (aia.S's aia_file_open), the half of the drain's path
 condition a misconfigured file breaks before any message lands in it
 (aia.S's irq_drain).

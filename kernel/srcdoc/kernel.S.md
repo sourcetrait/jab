@@ -27,7 +27,11 @@ machine mode.
 
 Hart 0 writes its id and its canary (harts.S's hart_self_check) and is
 online. The supervisor APLIC domain and hart 0's interrupt file are set up
-before any device's interrupt is let through (aia.S's aia_supervisor). The
+before any device's interrupt is let through (aia.S's aia_supervisor).
+Under DEBUG a jab.strayclaim knob then enables that identity in hart 0's
+own file and sends it to the file's page, so the drain of the first wait
+after it, the serial ports' bring-up, claims it and ends the run (aia.S's
+irq_drain). The
 ports come up before the secondaries are released, whose check-in hart 0
 waits for on the drain (harts.S's harts_release), and before the program
 starts: the API when the run put its port on the machine, and under DEBUG
@@ -46,6 +50,10 @@ page, an image from before the header begins there.
 ## msg_banner
 
 `29 u8`: the banner on the debug channel, under DEBUG only.
+
+## knob_strayclaim
+
+`u8`: under DEBUG only, the knob kmain reads after aia_supervisor.
 
 ## .set KERNEL_FLAG_DEBUG
 

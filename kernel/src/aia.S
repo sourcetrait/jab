@@ -178,6 +178,10 @@ aia_topology:
     beq a0, t0, 90f
     li t0, AIA_IDENTITIES - 1
     bltu a0, t0, 90f
+.ifdef DEBUG
+    la t0, aia_ids
+    sd a0, 0(t0)                            # the file's identities, the readback's reach
+.endif
     mv a0, s0
     mv a1, s7
     la a2, word_num_sources
@@ -431,6 +435,22 @@ aia_file_page:
     li a0, 0                                # no file in the tree
     ret
 
+.ifdef DEBUG
+.global aia_stray_enable
+aia_stray_enable:                           # identity a0 enabled in this hart's own file, the knobs' fault
+    srli t0, a0, 6
+    slli t0, t0, 1
+    addi t0, t0, IMSIC_EIE0                 # its eie register, the even ones alone on RV64
+    csrw CSR_SISELECT, t0
+    csrr t1, CSR_SIREG
+    andi t2, a0, 63
+    li t3, 1
+    sll t3, t3, t2
+    or t1, t1, t3
+    csrw CSR_SIREG, t1
+    ret
+.endif
+
 .global irq_mmio_source
 irq_mmio_source:
     li t0, QEMU_VIRT_VIRTIO0
@@ -546,7 +566,19 @@ irq_drain:
     andi t0, t0, 0x7ff
     beqz t0, 2f
     li t1, AIA_IDENTITIES
+.ifdef DEBUG
+    bltu t0, t1, 12f
+    mv a1, t0
+    la a0, msg_unenabled
+    j fatal_hart_dec                        # an identity the kernel never enables, claimed: a file's configuration broken
+.pushsection .rodata
+msg_unenabled:
+    .asciz " claimed an unenabled identity "
+.popsection
+12:
+.else
     bgeu t0, t1, 11f
+.endif
     li t1, 1
     sll t1, t1, t0
     or s0, s0, t1
@@ -826,6 +858,11 @@ aia_lhxw:
     .skip 8
 aia_lhxs:
     .skip 8
+.ifdef DEBUG
+.global aia_ids
+aia_ids:
+    .skip 8
+.endif
 irq_progress_fns:
     .skip (AIA_IDENTITIES * 8)
 irq_fault_fns:

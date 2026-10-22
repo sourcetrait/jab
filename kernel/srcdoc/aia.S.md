@@ -31,7 +31,10 @@ the files' count needs. The supervisor domain's sources past
 APLIC_SOURCES_MAX are refused (AIA_TOO_MANY), since aia_root writes a
 sourcecfg for each. A refusal prints `jab: interrupt platform refused:
 code N` on the UART, N an AIA_* code of aia.inc, and ends the run with
-status 1, since hart 0 alone repairs none of it.
+status 1, since hart 0 alone repairs none of it. Under DEBUG the
+supervisor IMSIC's riscv,num-ids is kept in aia_ids: QEMU's virt gives
+255, past the 64 the kernel takes, and the readback at a secondary's idle
+reads every eie register those identities reach (workers.S's hart_idle).
 
 ## aia_root
 
@@ -60,6 +63,16 @@ comes up (irq_enable).
 A message to a hart is a 32-bit write of the identity to its file's page:
 the supervisor files' base plus the hart's file index shifted by 12 and
 LHXS bits.
+
+## aia_stray_enable
+
+Under DEBUG, an identity enabled in the running hart's own file: its eie
+register the even one of its 64 (eie0 0 to 63, eie2 64 to 127, on to eie6),
+its bit the rest, read, set, and written back through siselect and sireg.
+It is the fault the two knobs inject where no ordinary run reaches,
+an identity past the kernel's 64 enabled: jab.strayenable on hart 1 before
+its first readback (harts.S's hart_main), jab.strayclaim on hart 0 beside a
+message to its own page (kernel.S's kmain).
 
 ## irq_hold
 
@@ -106,10 +119,21 @@ is the path condition test/owners cuts the worker paths at, and this check
 is what makes a break of it fail loudly rather than serve a device off
 hart 0.
 
+Under DEBUG too, a claim at or past AIA_IDENTITIES ends the run on any
+hart, hart 0 among them, `jab: hart N claimed an unenabled identity M`: the
+kernel enables no identity past 63, so a claim there is a file the kernel
+did not configure. A release build passes such a claim over, its 64-bit
+claim set holding no bit for it.
+
 ## msg_claimed
 
 `28 u8`: the claim check's line between its hart and its identity, under
 DEBUG only.
+
+## msg_unenabled
+
+`32 u8`: the line for a claim past the kernel's identities, between its
+hart and its identity, under DEBUG only.
 
 ## irq_serve
 
@@ -194,6 +218,11 @@ a hart with none.
 
 `u64`: a file's spacing in pages past one, the supervisor IMSIC's guest
 bits.
+
+## aia_ids
+
+`u64`: under DEBUG only, the supervisor IMSIC's riscv,num-ids, the
+identities each file implements.
 
 ## irq_progress_fns
 ## irq_fault_fns

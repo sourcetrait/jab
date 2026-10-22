@@ -583,6 +583,19 @@ knob_late:
     li a0, 0
     call hart_wake                          # its record before the wake
     bnez s1, 8f
+.ifdef DEBUG
+    li t0, 1
+    bne s0, t0, 4f                          # hart 1 alone, so no two harts race to own the fault
+    la a0, knob_strayenable
+    call knob_value
+    bltz a0, 4f
+    call aia_stray_enable                   # its readback at hart_idle's entry ends the run
+.pushsection .rodata
+knob_strayenable:
+    .asciz "jab.strayenable="
+.popsection
+4:
+.endif
     j hart_idle                             # until a start request
 8:
     csrw sie, zero                          # parked for the run, touching nothing

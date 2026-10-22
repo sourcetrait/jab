@@ -41,7 +41,11 @@
 # bound, its swap then losing and the hart parked, still failed and idle
 # two seconds on; and the stray kernel fault, the release store's cause
 # at another instruction and address, which ends the run with the
-# kernel fault line rather than being stepped over.
+# kernel fault line rather than being stepped over. Last, on 1KA1 and a
+# debug kernel, the identities past the kernel's 64 the tree's 255 allow:
+# one enabled in hart 1's own file at 100 and at 255, ending the run at
+# its idle's readback, and one sent to hart 0's own file at 100, ending
+# it at hart 0's next drain, each with its one line.
 use ../../../nu/mod/process
 use ../../../nu/mod/target
 use ../../../nu/mod/spec
@@ -241,7 +245,23 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
         let fault = ($stray.serial | lines)
         assert equal ($fault | length) 1 $"the kernel fault line alone, nothing of the program's: ($stray.serial)"
         assert ($fault.0 =~ '^jab: kernel fault: hart=0 cause=0x0000000000000007 epc=0x[0-9a-f]{16} tval=0x0000000028100000$') $"a store access fault on hart 0 at the stray address: ($stray.serial)"
-        $knobs = [$"late: ($late.serial | str trim)" $"stray: ($stray.serial | str trim)"]
+
+        # an identity past the kernel's 64 enabled in hart 1's own file, in
+        # EIE2 at 100 and in EIE6 at 255: its readback at its idle's entry
+        # reads every register the file's identities reach and ends the run
+        let enabled = ([100 255] | each {|id|
+            let run = (launch --kernel $kernel --image $image --out ($out | path join $"strayenable_($id)") --set $set --spec 1ka1 --bootargs $"jab.strayenable=($id)" --seconds 20)
+            assert equal $run.status 1 $"identity ($id) enabled on hart 1 ends the run with status 1: ($run.status), ($run.serial)"
+            assert equal ($run.serial | lines) [$"jab: hart 1 enabled a device identity ($id)"] $"hart 1's readback names identity ($id), its one line: ($run.serial)"
+            $"strayenable ($id): ($run.serial | str trim)"
+        })
+
+        # an identity past the kernel's 64 sent to hart 0's own file: its
+        # next drain claims it and ends the run
+        let claimed = (launch --kernel $kernel --image $image --out ($out | path join "strayclaim") --set $set --spec 1ka1 --bootargs "jab.strayclaim=100" --seconds 20)
+        assert equal $claimed.status 1 $"identity 100 claimed on hart 0 ends the run with status 1: ($claimed.status), ($claimed.serial)"
+        assert equal ($claimed.serial | lines) ["jab: hart 0 claimed an unenabled identity 100"] $"hart 0's drain names identity 100, its one line: ($claimed.serial)"
+        $knobs = [$"late: ($late.serial | str trim)" $"stray: ($stray.serial | str trim)"] ++ $enabled ++ [$"strayclaim 100: ($claimed.serial | str trim)"]
     }
 
     print $"harts: the launcher takes ($max) and refuses ($max + 1); ($seen | each {|s| $'($s.harts) harts: ($s.serial)' } | str join '; '); a cpu past the bound: ($past.serial | str trim); a slow timebase: ($slow.serial | str trim); ($tried | str join '; '); ($platform | str join '; '); missing: ($missing.serial | str trim); ($knobs | str join '; ')"

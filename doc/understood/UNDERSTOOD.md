@@ -595,9 +595,11 @@ line on the console and status 1. `jab
 launch --dtb <file>` hands the machine a tree of its own, `--bootargs
 <text>` puts QEMU's `-append` in the tree, which a debug kernel prints,
 and `machine dump-tree` writes the tree QEMU builds for a machine. A debug
-kernel reads two more settings there for `test/harts`: `jab.late=<hart>`
-holds that hart back until it has been failed, and `jab.stray=1` makes a
-kernel fault. A fault in the kernel, on any hart, prints its line on the
+kernel reads four more settings there for `test/harts`: `jab.late=<hart>`
+holds that hart back until it has been failed, `jab.stray=1` makes a
+kernel fault, `jab.strayenable=<identity>` enables an interrupt identity
+in hart 1's own file, and `jab.strayclaim=<identity>` enables one in hart
+0's own file and sends it there. A fault in the kernel, on any hart, prints its line on the
 console, naming the hart, and ends the run with status 1.
 
 Before the program starts, the kernel holds the machine to the image's
@@ -669,9 +671,11 @@ sound's live flag, on hart 0's side of its branch. The check sees the
 addresses an instruction names; an address held in a register and then
 used is outside it. A debug kernel also ends the run when a hart other than
 0 claims a device's interrupt, `jab: hart N claimed a device identity M`,
-or when a secondary's file enables one, `jab: hart N enabled a device
-identity M`, or disables its wake, `jab: hart N disabled the wake identity
-1`.
+or when any hart claims an identity past the 64 the kernel enables, `jab:
+hart N claimed an unenabled identity M`, or when a secondary's file
+enables one, `jab: hart N enabled a device identity M`, read across every
+enable register the file's identities reach, or disables its wake, `jab:
+hart N disabled the wake identity 1`.
 
 Two of the program's buffers belong to the kernel after their call
 returns. A MIDI file is read in place while it plays, and a SoundFont while

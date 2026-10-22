@@ -120,7 +120,12 @@ a wfi loop, touching nothing, and since mie then holds no bit, nothing
 wakes it.
 
 Under DEBUG a jab.late knob naming the hart holds it before its swap until
-its state reads failed, so the losing swap runs every time.
+its state reads failed, so the losing swap runs every time. On hart 1
+alone, after its swap and hart 0's wake, a jab.strayenable knob enables
+that identity in its own file (aia.S's aia_stray_enable), so its first
+readback at hart_idle's entry ends the run naming it; one hart alone, since
+every secondary injecting would race to own the shutdown and print more
+than one line.
 
 ## harts_report
 
@@ -185,6 +190,7 @@ harts_release.
 
 ## knob_stray
 ## knob_late
+## knob_strayenable
 
 `u8`: under DEBUG only, the knobs harts_release and hart_main read.
 

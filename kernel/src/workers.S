@@ -9,17 +9,30 @@
 .global hart_idle
 hart_idle:                                  # a secondary between its workers, on its record's stack
 .ifdef DEBUG
-    li t0, IMSIC_EIE0
-    csrw CSR_SISELECT, t0
+    la t2, aia_ids
+    ld t2, 0(t2)
+    srli t2, t2, 6                          # the last register the file's identities reach
+    li t3, 0                                # the register, 0 for EIE0, 1 for EIE2, on
+12:
+    slli t4, t3, 1
+    addi t4, t4, IMSIC_EIE0                 # the even ones alone on RV64
+    csrw CSR_SISELECT, t4
     csrr t0, CSR_SIREG
+    bnez t3, 13f
+    mv t5, t0                               # EIE0, the wake's
     li t1, ~(1 << AIA_WAKE)
-    and t1, t0, t1
-    beqz t1, 10f                            # no device's identity enabled
-    ctz a1, t1
+    and t0, t0, t1
+13:
+    beqz t0, 14f                            # no device's identity enabled here
+    ctz a1, t0
+    slli t1, t3, 6
+    add a1, a1, t1                          # the lowest, its register's base past it
     la a0, msg_enabled
     j fatal_hart_dec                        # a device's identity enabled off hart 0
-10:
-    andi t1, t0, (1 << AIA_WAKE)
+14:
+    addi t3, t3, 1
+    bleu t3, t2, 12b
+    andi t1, t5, (1 << AIA_WAKE)
     bnez t1, 11f                            # its file enables the wake alone
     li a1, AIA_WAKE
     la a0, msg_disabled
