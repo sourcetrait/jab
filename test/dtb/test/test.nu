@@ -25,7 +25,6 @@
 # the tree it booted on: its harts and its command line, given through
 # -append, a named spec's `jab.spec` after it.
 use ../../../nu/mod/target
-use ../../../nu/mod/spec
 use ../../../nu/mod/machine
 use ../../../nu/mod/launch
 use std/assert
@@ -49,11 +48,10 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let stage = ($out | path join "trees")
     target retire $stage
     mkdir $stage
-    let ws = ($env.FILE_PWD | path join ".." ".." ".." | path expand)
-    # the line a launch on the configured spec hands the kernel: the test's
-    # own words, then the spec's name
-    let line = $"($BOOTARGS) jab.spec=(spec configured $ws)"
-    let good = (machine dump-tree --kernel $kernel --image $image --out ($out | path join "virt3.dtb") --bootargs $BOOTARGS)
+    # the line a launch on 1KA1, named, hands the kernel: the test's own
+    # words, then the spec's name, whatever spec the host's default names
+    let line = $"($BOOTARGS) jab.spec=1ka1"
+    let good = (machine dump-tree --kernel $kernel --image $image --out ($out | path join "virt3.dtb") --spec 1ka1 --bootargs $BOOTARGS)
     machine dump-tree --kernel $kernel --image $image --out ($stage | path join "virt8.dtb") --spec 1kb1 | ignore
     let tree = (open --raw $good | into binary)
     let h = (header $tree)
@@ -99,7 +97,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let disk = ($out | path join "trees.romfs")
     let made = (^genromfs -d $stage -f $disk -V dtb | complete)
     assert equal $made.exit_code 0 $"genromfs: ($made.stderr)"
-    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $disk --serial "dtb" --bootargs $BOOTARGS --seconds 30)
+    let run = (launch --kernel $kernel --image $image --out $out --set $set --disk $disk --serial "dtb" --spec 1ka1 --bootargs $BOOTARGS --seconds 30)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     let lines = ($run.serial | lines)

@@ -226,14 +226,15 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     }
     mut knobs = []
     if $debug {
-        # the late check-in, on the specification's three harts: hart 2
-        # held until hart 0 has failed it at the bound, its swap then
-        # losing; still failed two seconds on, and parked, its thread idle
-        let late = (launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
+        # the late check-in, on 1KA1's three harts, named whatever the
+        # host's default: hart 2 held until hart 0 has failed it at the
+        # bound, its swap then losing; still failed two seconds on, and
+        # parked, its thread idle
+        let late = (launch --kernel $kernel --image $image --out ($out | path join "late") --set $set --spec 1ka1 --bootargs "jab.late=2" --seconds 20 --threads (if $threads { $HELD_AT } else { 0sec }))
         assert equal $late.status 0 $"the program runs past a late hart: ($late.serial)"
         assert equal ($late.serial | lines) ["harts 7 3 4" "window 261888 0"] $"hart 2 failed, the rest online, two seconds after its swap: ($late.serial)"
         let lines = ($late.debug | lines)
-        for line in [$"jab: bootargs jab.late=2 jab.spec=(spec configured $ws)" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
+        for line in ["jab: bootargs jab.late=2 jab.spec=1ka1" "jab: hart 2 failed: no check-in" "jab: hart 1 online"] {
             assert ($lines | any {|l| $l == $line }) $"($line): ($late.debug)"
         }
         if $threads { idle-harts $late [1 2] "the late check-in" }
