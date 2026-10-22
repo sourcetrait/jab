@@ -26,8 +26,7 @@ The roles a manifest's sections may name, each a count of harts: those
 A program's declared demand, from the manifest in its directory
 (program-demand): the specs it supports as asset/spec.nuon names them,
 its reservation by role, each feature's demand, and its base demand.
-Null for the legacy path, a manifest with no `specs`. Untyped because it
-ends in an error.
+Null for the legacy path, a manifest with no `specs`.
 
 ## program-demand
 
@@ -44,7 +43,7 @@ program without the feature. The specs come back by their names in the
 spec data, the reservation with every role, 0 for one not reserved.
 Null for the legacy path, a manifest with no `specs` and neither
 section, which builds and launches as before, its runs recorded
-undeclared. Untyped because it ends in an error.
+undeclared.
 
 ## section-counts
 
@@ -82,7 +81,7 @@ decl_name_bytes or of other than letters and digits; a count past a u16.
 More specs than decl_specs_max are refused too. Beside the bytes the
 header's flags, offset, length, and CRC-32 (crc32): 1, decl_offset, the
 bytes' length, and their CRC for a declared program; every one 0 and no
-bytes for one declaring no demand. Untyped because it ends in an error.
+bytes for one declaring no demand.
 
 ## crc32
 
@@ -123,8 +122,7 @@ zero padded, an ISA decl_isas numbers, and zeros past its fields. The
 record: `kind`; `header`, the magic, version, flags, offset, length, and
 CRC, null for a legacy image; and `declaration`, the base demand and each
 spec with its cores, RAM in GiB, display, frame rate, and ISA, null but
-for a declared image. Each refusal names the image. Untyped because it
-ends in an error.
+for a declared image. Each refusal names the image.
 
 ## bit-not-of
 
@@ -140,8 +138,7 @@ no declaration, and comes back null as the legacy record's demand does;
 a record present and unsound, unreadable as NUON, of other fields, of
 another image, or of a demand off the shape, is refused naming the
 record and its faults, never read as the legacy path, as is a record
-beside no image. The demand, or null. Untyped because it can end in an
-error.
+beside no image. The demand, or null.
 
 ## demand-record-of
 
@@ -174,4 +171,3 @@ or of another demand is false, so the build runs again whole.
 A named spec held to the program's demand: refused naming both when the
 demand recorded with its image (demand image) does not list it; a
 custom machine, and a legacy image, null demand, on any machine, pass.
-Untyped because it ends in an error.

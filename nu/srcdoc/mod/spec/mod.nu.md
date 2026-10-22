@@ -45,12 +45,11 @@ rate, and size the type names above zero, the VRAM only where a spec
 gives one. A file that does not parse is refused naming it, NUON's own
 refusal of a field given twice in a record among them. Every problem
 found is named, a line each. The rows come back as the file has them.
-Untyped because it ends in an error.
 
 ## data
 
 The workspace's spec data, its asset/spec.nuon held to its
-asset/spec.nutype (spec read). Untyped because it ends in an error.
+asset/spec.nutype (spec read).
 
 ## spec-label
 

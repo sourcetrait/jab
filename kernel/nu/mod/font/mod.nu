@@ -4,7 +4,7 @@ use std/assert
 const font_file = path self ../../../src/font.S
 
 # The kernel's console font regenerated into src/font.S from a Spleen 12x24 BDF
-export def main [bdf: path] {
+export def main [bdf: path]: nothing -> nothing {
     let text = (open --raw ($bdf | path expand) | decode)
     let version = ($text | lines | where {|l| $l =~ '^COMMENT  \* Spleen ' } | first | str replace -r '^COMMENT  \* ' '')
     let glyphs = ($text | split row "STARTCHAR " | skip 1 | each {|c|

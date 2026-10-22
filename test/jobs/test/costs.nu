@@ -20,7 +20,7 @@ const ROUNDS = 100
 const TICKS_PER_US = 10
 
 # One launch of the costs scenario, its samples as distributions in
-# microseconds. Untyped because launch's record is wide.
+# microseconds.
 export def measure [kernel: path, image: path, out: path, set: string, --harts: int = 3]: nothing -> record<workers: int, harts: int, machine: record, qemu: list<string>, rows: list<record<workers: int, size_us: int, dispatch: record<n: int, min: float, p50: float, p90: float, p99: float, max: float>, barrier: record<n: int, min: float, p50: float, p90: float, p99: float, max: float>, round: record<n: int, min: float, p50: float, p90: float, p99: float, max: float>>>> {
     let send = [[at, bytes]; [1sec, ("c" | into binary)]]
     let run = (launch --kernel $kernel --image $image --out $out --set $set --send $send --harts $harts --seconds 60)

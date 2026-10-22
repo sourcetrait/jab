@@ -31,8 +31,8 @@ const MAX_WORKERS = 3
 # read a little past it
 const AT_ONCE = 1.5
 
-# One launch of a bench scenario. Untyped because launch's record is wide.
-export def measure [kernel: path, image: path, out: path, set: string, --workers: int = 3] {
+# One launch of a bench scenario.
+export def measure [kernel: path, image: path, out: path, set: string, --workers: int = 3]: nothing -> record<workers: int, frames: int, ms: int, fps: number, hash: string, rows: list<int>, owners: list<int>, bands: list<record<band: int, start: int, end: int, hart: int>>, overlap: record<span_ms: float, busy_ms: float, concurrency: float, overlapped: float>, harts: list<record<hart: int, delta: float, rate: float>>, span: oneof<float, nothing>, worker_cpu: number, at_once: float, cpu_at_once: bool, bands_at_once: bool, machine: record, qemu: list<string>> {
     if $workers < 1 or $workers > $MAX_WORKERS { error make { msg: $"--workers is 1 to ($MAX_WORKERS), not ($workers)" } }
     let send = [[at, bytes]; [1sec, ($workers | into string | into binary)]]
     let run = (launch --kernel $kernel --image $image --out $out --set $set --send $send --harts 4 --seconds 40 --threads $HELD_AT)

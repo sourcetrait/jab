@@ -60,7 +60,7 @@ words read at the package's directory (packaged-words), and it must say
 package carries and a tree build beside them could stand in for them.
 The program still names the scripts, which come from the checkout.
 Its named builds (builds-of) are its `builds`, and a step naming a build it
-does not declare is refused. Untyped because it ends in an error.
+does not declare is refused.
 
 ## bench-home
 
@@ -94,8 +94,7 @@ bench's home, so the run travels as one file: named for the bench, its
 path's slashes as underscores, and the stamp, `<bench>-<stamp>.tar`,
 the run's directory at the archive's top under its stamp. A tar of the
 run already there, an earlier packing, is retired first (retire), since
-nothing is deleted. The tar's path. Untyped because it can end in an
-error.
+nothing is deleted. The tar's path.
 
 ## main
 

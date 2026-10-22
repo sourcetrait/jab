@@ -11,7 +11,7 @@ A type's text as nushell writes it, comment lines aside, as its parts:
 element, `oneof` with its members, and a scalar by its name. Only that
 much of the type grammar is read, and anything else is refused naming
 it, so a type the tools cannot hold a spec to never passes as one they
-can. Untyped because it ends in an error.
+can.
 
 ## type-parse
 

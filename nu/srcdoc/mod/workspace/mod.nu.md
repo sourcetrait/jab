@@ -48,13 +48,11 @@ kit/fierce.
 ## programs-under
 
 The programs at or under a path in the workspace, every program for no
-path; a path matching none is an error naming them all. Untyped because
-it ends in an error.
+path; a path matching none is an error naming them all.
 
 ## program-at
 
-The one program at a path in the workspace, its directory. Untyped
-because it ends in an error.
+The one program at a path in the workspace, its directory.
 
 ## is-test
 
@@ -64,8 +62,7 @@ a `test` directory, which `./do test` runs and `./do run` does not.
 ## run-target
 
 The one program `./do run` takes at a path in the workspace, its
-directory: any program but a test (is-test). Untyped because it ends
-in an error.
+directory: any program but a test (is-test).
 
 ## subject
 

@@ -54,8 +54,7 @@ it (debug or release), and the output directory, the tree's shard
 ## kernel-elf
 
 The kernel ELF a program runs on: the workspace's, in the same tree
-of that workspace's target, or JAB_KERNEL. Left untyped because it
-ends in an error, which the output check rejects.
+of that workspace's target, or JAB_KERNEL.
 
 ## build-kernel
 

@@ -20,20 +20,17 @@ export def main [here: path, workspace: oneof<string, nothing>]: nothing -> oneo
 }
 
 # The tools' command prefix, the first triple whose `as` is found
-export def tool-prefix [toolchain: oneof<string, nothing>] {
+export def tool-prefix [toolchain: oneof<string, nothing>]: nothing -> string {
     let looked = ($triples | each {|t| host exe-name ($t + "as") } | str join ", ")
     if $toolchain != null {
         let bin = ($toolchain | path join "bin")
-        for t in $triples {
-            let prefix = ($bin | path join $t)
-            if (host exe-name ($prefix + "as") | path exists) { return $prefix }
-        }
-        error make {msg: $"no riscv64 binutils under ($bin): looked for ($looked)"}
+        let found = ($triples | each {|t| $bin | path join $t } | where {|p| host exe-name ($p + "as") | path exists })
+        if ($found | is-empty) { error make {msg: $"no riscv64 binutils under ($bin): looked for ($looked)"} }
+        return ($found | first)
     }
-    for t in $triples {
-        if not (which ($t + "as") | is-empty) { return $t }
-    }
-    error make {msg: $"no riscv64 binutils on PATH: looked for ($looked); set RISCV_TOOLCHAIN or link extern/riscv to a toolchain"}
+    let found = ($triples | where {|t| not (which ($t + "as") | is-empty) })
+    if ($found | is-empty) { error make {msg: $"no riscv64 binutils on PATH: looked for ($looked); set RISCV_TOOLCHAIN or link extern/riscv to a toolchain"} }
+    $found | first
 }
 
 # Refuses an assembler that takes no RVA23 profile, naming its version

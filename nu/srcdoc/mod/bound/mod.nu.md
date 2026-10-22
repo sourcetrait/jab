@@ -14,8 +14,7 @@ when none does. `{path, version, override}`: the path, run as a value
 wherever a bound runs, so no bound resolves the name again against its
 own job's PATH or working directory (ResolvedOverride, Astra's review 10,
 F8); its version line; and the override as given, "" with none, which a
-launch's record keeps beside the path (`timeout_override`). Untyped
-because it ends in an error.
+launch's record keeps beside the path (`timeout_override`).
 
 ## override-path
 

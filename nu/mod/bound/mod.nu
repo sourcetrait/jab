@@ -1,5 +1,5 @@
 # The GNU timeout a run's bounds take, resolved once to its path, its version line
-export def timeout [] {
+export def timeout []: nothing -> record<path: string, version: string, override: string> {
     let forced = ($env.JAB_TIMEOUT? | default "")
     if $forced != "" {
         let path = (override-path $forced)
@@ -10,11 +10,16 @@ export def timeout [] {
     let msys = (if $nu.os-info.name == "windows" { try { [(^cygpath -w /usr/bin/timeout.exe | str trim)] } catch { [] } } else { [] })
     let listed = (which -a timeout | where type == "external" | get path)
     let candidates = ($msys ++ $listed | uniq)
+    mut found: any = null
     for c in $candidates {
         let line = (timeout-version $c)
-        if (gnu-timeout $line) { return { path: $c, version: $line, override: "" } }
+        if (gnu-timeout $line) {
+            $found = { path: $c, version: $line, override: "" }
+            break
+        }
     }
-    error make {msg: $"no GNU coreutils timeout, which every bound of a run takes: tried (if ($candidates | is-empty) { 'none on PATH' } else { $candidates | str join ', ' }); install coreutils, or name one with JAB_TIMEOUT"}
+    if $found == null { error make {msg: $"no GNU coreutils timeout, which every bound of a run takes: tried (if ($candidates | is-empty) { 'none on PATH' } else { $candidates | str join ', ' }); install coreutils, or name one with JAB_TIMEOUT"} }
+    $found
 }
 
 # JAB_TIMEOUT as one absolute path: a path expanded here, a bare name by PATH

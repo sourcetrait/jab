@@ -39,7 +39,7 @@ absolute path. A second retirement of one path within a second takes
 a numbered name, and `--stamp` sets the stamp, so a clean's entries
 share one. Nothing when nothing is there; a link is moved as a link.
 A path in no target with no root given, or one already retired, is
-left as it is and refused. Untyped because it can end in an error.
+left as it is and refused.
 
 ## shard-of
 

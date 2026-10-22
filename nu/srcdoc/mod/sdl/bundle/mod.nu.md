@@ -28,8 +28,7 @@ its SHA-256 and size; the events counted; and the run, the identity's
 capture fields beside the log's process and nonce. The profile is
 `--profile`, else the identity's, else generic, and historical for a
 log written before the run's lines; a paired bundle needs the log's
-nonce, `api.out`, and `identity.nuon`. The manifest. Untyped because it
-ends in an error.
+nonce, `api.out`, and `identity.nuon`. The manifest.
 
 ## sdl-reader
 
@@ -79,8 +78,7 @@ agree, read from schema 1's `jab` or schema 2's first repository and
 refusing nothing, the replay's equality being what admits another
 revision. The profile, the run, both readers, the trace's
 bracket, and classified.nuon's events, each with the replay's evidence,
-which the check holds equal where the bundle carries one. Untyped because
-it ends in an error.
+which the check holds equal where the bundle carries one.
 
 ## traced_qemu
 
