@@ -35,7 +35,12 @@ type does not name.
 ## value-problems
 
 What is wrong with a value against its part of a type, a line each, `at`
-its path; none when it holds.
+its path; none when it holds. A `oneof` holds when any member does, tried
+in order. When none does, a oneof of scalars says which type was expected
+and which found; one with a record, table, or list among its members
+names the failure, then the problems of the member that comes nearest,
+the one with the fewest, since its whole type's text can run past a
+hundred thousand characters and names no field.
 
 ## problems
 

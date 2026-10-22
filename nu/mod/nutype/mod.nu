@@ -105,7 +105,11 @@ def value-problems [value: any, schema: record, at: string]: nothing -> list<str
             if $holds { [] } else { [$"($at): ($schema.name) expected, ($got) found"] }
         },
         "oneof" => {
-            if ($schema.members | any {|m| value-problems $value $m $at | is-empty }) { [] } else { [$"($at): (type-name $schema) expected, ($got) found"] }
+            if ($schema.members | any {|m| value-problems $value $m $at | is-empty }) { return [] }
+            let shaped = ($schema.members | where {|m| $m.kind != "scalar" })
+            if ($shaped | is-empty) { return [$"($at): (type-name $schema) expected, ($got) found"] }
+            let nearest = ($shaped | each {|m| value-problems $value $m $at } | sort-by {|p| $p | length } | first)
+            [$"(if $at == '' { 'the value' } else { $at }): no member of its oneof holds, the nearest's problems after"] ++ $nearest
         },
         "record" => (record-problems $value $schema.fields $at),
         "list" => {
