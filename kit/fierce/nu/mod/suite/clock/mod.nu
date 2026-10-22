@@ -12,10 +12,10 @@ use (path self ../../tree)
 use std/assert
 use (path self ../../console) [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT GRAIN_DEFAULT RECEIPT_NONCE]
 use (path self ../../frame) [WORKERS_STARTED]
-use (path self ../../gauge/measure/presentation) [CADENCES EPS_CAP]
+use (path self ../../gauge/measure/presentation) [CADENCES]
 use (path self ../../gauge/stream) [CLOCK_SCHEMA]
 
-# The kernel's source of P2's tolerance, FRAME_EPS
+# The kernel's source of the frame rule's tolerance, FRAME_EPS
 const TIMER = path self ../../../../../../kernel/src/timer.S
 
 # The kernel's TICK: the period at the cap of 60 in the guest clock's ticks
@@ -88,8 +88,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
     let stick = ($dir | path join "stick.nuon")
     [{ at: $MOTION_STICK.from, type: 3, code: 1, value: 0 } { at: $MOTION_STICK.to, type: 3, code: 1, value: 127 }] | to nuon | save --raw -f $stick
     let p = $CADENCE_PERIOD
-    let p2 = ("P2" in ($set | split row ","))
-    let eps = (if $p2 { frame-eps } else { $EPS_CAP })
+    let eps = (frame-eps)
     for cadence in $CADENCES {
         let says = $"on the schedule at cadence ($cadence)"
         let sends = ([
@@ -106,8 +105,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         let m = (measure $run.api [{ name: "schedule", places: [], pad: [] }] --eps $eps)
         assert ($m.complete and $m.valid and $m.schema == $CLOCK_SCHEMA) $"the window complete and valid at schema ($CLOCK_SCHEMA) ($says): ($m.problems) ($m.invalid)"
         assert equal $m.cadences [$cadence] $"every frame presented at cadence ($cadence) ($says)"
-        if $p2 { p2-holds $m $cadence $eps $says }
-        let awaits_first = ($p2 and $cadence == 0)
+        rule-holds $m $cadence $eps $says
         let s = (frame answered $run.api $CONSOLE_S)
         assert equal ($s | length) 4 $"the four S frames answered in the window ($says): ($s)"
         let rows = (submitted $m.rows)
@@ -116,7 +114,12 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         let slow = ($rows | where {|r| $r.frame >= ($s.3 + $CADENCE_SKIP) })
 
         let interval = ($fast | get submit_interval_us | compact | math median)
-        if not $awaits_first {
+        if $cadence == 0 {
+            let drawn = ($interval - $p - $SCHEDULE_FAST.stall)
+            assert ($drawn >= 0 and $drawn <= 2000) $"the fast stage a period plus its wake and drawing under cadence 0, which awaits after its flip: ($interval) us"
+            let anchored = ($fast | where {|r| $r.flip_status == 0 and ($r.receipt_stamp - $r.receipt_tick) < $eps })
+            assert ($anchored | is-empty) $"every presented flip of the fast stage late by its drawing under cadence 0, so each re-anchors: ($anchored | select frame receipt_stamp receipt_tick | first 3)"
+        } else {
             assert ((($interval - $p) | math abs) <= 500) $"the fast stage presents every period ($says): ($interval) us"
         }
         let age = ($fast | get submission_age_us | compact | math median)
@@ -148,7 +151,7 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
         assert ($stalled.draw_us >= $once and $stalled.draw_us <= ($once + 1000)) $"the stalled frame's drawing its ($once / 1000) ms stall ($says): ($stalled.draw_us) us"
         let after = (0..2 | each {|k| (do $row ($s.2 + $k)).submit_interval_us })
         let recovered = (match $cadence {
-            0 => ($awaits_first or ($after.0 >= ($once + 9000) and $after.0 <= ($once + 17000) and $after.1 >= 19000 and $after.1 <= 27000))
+            0 => ($after.0 >= ($p + $once) and $after.0 <= ($p + $once + 7000) and ($after | skip 1 | all {|a| $a >= ($p + $SCHEDULE_FAST.stall) and $a <= ($p + $SCHEDULE_FAST.stall + 2000) }))
             1 => ($after.0 >= $once and $after.0 <= ($once + 7000) and $after.1 >= ($p - 500) and $after.1 <= ($p + 6000) and ((($after.2 - $p) | math abs) <= 1000))
             _ => (((($after.0 - 3 * $p) | math abs) <= 1000) and ((($after.1 - $p) | math abs) <= 1000))
         })
@@ -156,7 +159,8 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
 
         let slow_interval = ($slow | get submit_interval_us | compact | math median)
         if $cadence == 0 {
-            assert ($slow_interval > 40000) $"the slow stage a period past each late flip under cadence 0: ($slow_interval) us"
+            let drawn = ($slow_interval - $p - $SCHEDULE_SLOW.stall)
+            assert ($drawn >= 0 and $drawn <= 2000) $"the slow stage a period plus its wake and drawing under cadence 0: ($slow_interval) us"
         } else if $cadence == 1 {
             assert ($slow_interval < 28000) $"the slow stage presents as soon as ready under cadence 1: ($slow_interval) us"
             let waited = ($slow | where {|r| $r.wait_us > 0 })
@@ -208,13 +212,13 @@ export def cadence-holds [kernel: path, image: path, out: path, set: string, gam
     }
 }
 
-# P2's tolerance as timer.S sets it, in ticks
+# The frame rule's on-time tolerance as timer.S sets it, in ticks
 def frame-eps []: nothing -> int {
     open --raw $TIMER | decode | parse --regex '\.set FRAME_EPS, (?P<eps>\d+)' | get 0.eps | into int
 }
 
-# P2's rule on a window's receipts, and K at eps over every acceptance
-def p2-holds [m: record, cadence: int, eps: int, says: string]: nothing -> nothing {
+# The frame rule on a window's receipts, and K at eps over every acceptance
+def rule-holds [m: record, cadence: int, eps: int, says: string]: nothing -> nothing {
     let presented = ($m.rows | where {|r| $r.flip_status == 0 })
     let steps = ($presented | window 2 | each {|w|
         let late = ($w.0.receipt_stamp - $w.0.receipt_tick)
@@ -224,7 +228,7 @@ def p2-holds [m: record, cadence: int, eps: int, says: string]: nothing -> nothi
     })
     let off = ($steps | where {|x| $x.off != 0 or $x.periods < 0 or ($cadence != 2 and $x.periods != 0) })
     let rule = (if $cadence == 2 { "or whole periods past it" } else { "exactly" })
-    assert ($off | is-empty) $"each presented flip judged against P2's tick from the flip before it, ($rule), at eps ($eps) ($says): ($off | first 3)"
+    assert ($off | is-empty) $"each presented flip judged against the rule's tick from the flip before it, ($rule), at eps ($eps) ($says): ($off | first 3)"
     assert equal $m.contract.k_violations 0 $"K at eps ($eps) over every acceptance ($says): ($m.contract.k_first | first 3)"
 }
 

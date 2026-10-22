@@ -112,14 +112,17 @@ the receipt stage passed: its eps, the period in ticks (HZ over the cap),
 
 - `k_violations`: K's violations over the presented frames' acceptances
   in order (jab's `present k-violations`), every later flip short of K
-  against the running maximum counted, so one flip accepted late under
-  P0 is the witness of every on-grid flip after it; `k_first` the first
-  eight, each with its frame and its witness's frame
+  against the running maximum counted, so on a kernel that kept the tick
+  on its grid after a late flip, as kernels before the frame rule's
+  FRAME_EPS did, that late flip is the witness of every on-grid flip after
+  it; `k_first` the first eight, each with its frame and its witness's
+  frame
 - `late_wakes`: the wake delays at or past eps (wake-delays), the flips
-  that re-anchor under P2
+  the frame rule re-anchors
 - `catch_ups`: the presented frames accepted under half a period after
   the present before them, by their acceptance intervals; K at eps under
-  half a period admits none, so any is P0's catch-up
+  half a period admits none, so any is a grid-keeping kernel's catch-up,
+  a flip let through soon after a late one
 
 Unavailable, the three are null and `k_first` empty. The bench's own
 `catch_up` (gauge bench) is another count: presenting calls' intervals

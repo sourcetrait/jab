@@ -14,14 +14,15 @@ from 7 s a 25 ms standing stall; the E at 9 s. A sustained stage sets
 its first five frames aside; a one-off is read at the frame its S
 answer names, the first state after it, and the frames after it as they
 come. The fast
-stage presents every period under every cadence, soon after its
-simulation under 0 and a period after it under 1 and 2, which wait for
-the tick, every frame with wakes holding the consume's spin in its
+stage presents every period under 1 and 2, which wait for the tick, a
+period after its simulation, and under 0 a period plus its wake and
+drawing apart, soon after its simulation, every presented flip late by
+its drawing; every frame with wakes holding the consume's spin in its
 pacing and its critical path, never its wait; the forced frame under 1
 and 2 is refused once and presents on the tick; the stalled frame's
-intervals are each cadence's catch-up; the slow stage presents a period
-past each late flip under 0, as soon as ready with no wait under 1, and
-every second period on the tick grid under 2; ten rounds under every
+intervals are each cadence's recovery; the slow stage presents a period
+plus its wake and drawing apart under 0, as soon as ready with no wait
+under 1, and every second period on the tick grid under 2; ten rounds under every
 cadence, presses taken in waits under 1 and 2, and few wakes a frame.
 MotionByTime, on the still copy of Render Zero: placed on the bay's east side
 facing north, a 25 ms standing stall, the stick held forward from 2 to
@@ -30,21 +31,18 @@ of their sector, the distance from the first to the last over the
 difference of their simulation times is 4 m/s within 2 percent under
 every cadence.
 
-Under P2, a `set` holding P2 (JointTiming), each schedule's receipts are
-held to the rule (p2-holds) at FRAME_EPS as timer.S sets it, and its
-contract is read at that eps. Cadence 0 is the order that awaits, then
-draws, then flips, so under P2 its flips land late by their drawing,
-re-anchor, and present every period and the drawing: its fast stage's
-period and its stall's intervals, P0's arithmetic, are left to the rule's
-check, while its slow stage still presents more than 40 ms apart.
-Cadences 1 and 2 prepare first and wait for the tick, which P2 keeps on
-its grid, so every check of theirs holds under both rules.
+Each schedule's receipts are held to the frame rule (rule-holds) at
+FRAME_EPS as timer.S sets it, and its contract is read at that eps.
+Cadence 0 is the order that awaits, then draws, then flips, so its flips
+land late by their wake and drawing and re-anchor, each a period plus
+those after the one before; cadences 1 and 2 prepare first and wait for
+the tick, which the rule keeps on its grid.
 
 - the fast stage
 - the frame whose flip is tried before its wait
 - the frame stalled once and the two after it: under 0 its flip a
-  period past the frame before's tick and its stall, the next a
-  period past its flip and that frame's work; under 1 presented
+  period and its stall past the flip before, the next two a period and
+  the standing stall past theirs; under 1 presented
   once ready, the next held to the tick a period past its flip, then
   the period; under 2 held to the third tick, then the period
 - the slow stage
@@ -52,7 +50,8 @@ its grid, so every check of theirs holds under both rules.
 
 ## TIMER
 
-The kernel's timer.S, which sets P2's tolerance FRAME_EPS (frame-eps).
+The kernel's timer.S, which sets the frame rule's tolerance FRAME_EPS
+(frame-eps).
 
 ## TICK
 
@@ -64,9 +63,9 @@ clock's 10 MHz ticks, the unit the rule steps a receipt's tick by.
 FRAME_EPS as timer.S sets it, in ticks, the workspace's own: the eps the
 kernel under test was built with when the suite builds it.
 
-## p2-holds
+## rule-holds
 
-P2's rule on a schedule's receipts: for each two presented flips in
+The frame rule on a schedule's receipts: for each two presented flips in
 order, the later one's tick is the earlier's tick a period on when the
 earlier was accepted under eps past its tick, else its acceptance a
 period on; exactly that at cadences 0 and 1, which never let a reported

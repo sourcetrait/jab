@@ -134,6 +134,7 @@ macro jab.sys.harts.release owner u64 > status a0 u64,returned a1 u64,scratch a7
 macro jab.sys.harts.owned owner u64 > harts a0 u64,scratch a7 [612:616] :hart 0's: the online secondaries the owner holds, read at the call
  owner :JAB_OWNER_NONE the unowned, every online secondary before a reservation; JAB_OWNER_RESERVED the grant; a claim's id its harts, none for an id no hart holds
 macro jab.sys.frame.step tick u64,stamp u64,end u64 > status a0 u64,tick a1 u64,scratch a2,a7 [618:624] :a DEBUG kernel's alone, the frame clock's rule at exact ticks, nothing presented and the clock untouched
+ end :a present's end, which the rule never reads
  status :0, or 1 when the acceptance is before the tick, refused as an early flip is
  tick :the rule's next tick, or the tick as it stood with 1
 macro jab.sys.pad.axis buffer addr,code imm > status a0 u64,range 0(buffer),scratch a1,a7 [626:631] :the pad's own range for the axis

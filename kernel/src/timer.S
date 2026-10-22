@@ -4,11 +4,9 @@
 
 .set TICK, (QEMU_VIRT_TIMEBASE / JAB_DISPLAY_FPS_CAP)
 .set SOUND_POLL, (QEMU_VIRT_TIMEBASE / 2)
-.ifdef P2
 .set FRAME_EPS, 3700
 .if (FRAME_EPS < 100) || (FRAME_EPS > 10000) || ((FRAME_EPS % 100) != 0)
 .error "FRAME_EPS is a multiple of 100 ticks from 100 to 10000"
-.endif
 .endif
 
 .section .text
@@ -36,7 +34,6 @@ frame_flipped:
     addi sp, sp, -16
     sd ra, 8(sp)
     mv a1, a0                               # the acceptance, the flip's own stamp
-    rdtime a2                               # the present's end
     la t3, frame_tick
     ld a0, 0(t3)
     call frame_next
@@ -51,7 +48,6 @@ frame_flipped:
 .global frame_next
 frame_next:
     li t0, TICK
-.ifdef P2
     sub t1, a1, a0                          # the acceptance's lateness past its tick
     li t2, FRAME_EPS
     bgeu t1, t2, 1f
@@ -60,21 +56,12 @@ frame_next:
 1:
     add a0, a1, t0                          # late: a period from the acceptance
     ret
-.else
-    add t1, a0, t0
-    bltu a2, t1, 1f                         # ended within a period of its tick: the grid kept
-    add t1, a2, t0                          # else a period from the present's end
-1:
-    mv a0, t1
-    ret
-.endif
 
 .ifdef DEBUG
 .global sys_frame_step
 sys_frame_step:
     ld a0, 80(sp)
     ld a1, 88(sp)
-    ld a2, 96(sp)
     bltu a1, a0, 1f                         # before its tick: refused, the tick as it stood
     call frame_next
     sd zero, 80(sp)

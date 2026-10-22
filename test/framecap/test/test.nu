@@ -15,10 +15,12 @@
 # with FLIP_BATCH, SubmitWait's candidate, the whole flip goes as one
 # batch, so its refused transfer's flush shows the old frame again and
 # counts; the whole flip's scenarios run before the list's, so a defect
-# of the batch the two share fails at the candidate's own case.
+# of the batch the two share fails at the candidate's own case. A last
+# launch holds the frame rule at exact ticks: its cases go over the API
+# to the debug kernel's step call, each answer held to the rule computed
+# here.
 use ../../../nu/mod/capture
 use ../../../nu/mod/launch
-use ../../../nu/mod/present
 use std/assert
 
 # Sixty-four awaited frames, half of them whole and half a rectangle
@@ -38,7 +40,7 @@ const OUTSIDE = [1500 800]
 const GPU = 16
 # The frame clock's period in ticks, timer.S's TICK at the 10 MHz timebase
 const PERIOD = 166666
-# A present's length in the deadline model, ticks
+# A present's length in the step cases, ticks
 const PRESENT = 1000
 # The tick the step cases are judged against
 const STEP_TICK = 1000000000
@@ -127,28 +129,27 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let whole = (if $batched { "the whole flip batched, its refused transfer's flush counted" } else { "the whole flip's refused transfer and flush uncounted" })
     print $"framecap: receipts on ($receipts | length) flips; ($whole), the clock untouched by either; the list's present counted, the long list's not; the stuck source's after-check zeros"
 
-    let rule = (if ("P2" in ($set | split row ",")) { "p2" } else { "p0" })
     let eps = (frame-eps)
     let cases = (step-cases $eps)
     let stepped = (step-scenario $kernel $image ($out | path join "step") $set $cases)
     for c in ($cases | zip $stepped) {
-        let want = (rule-step $rule $c.0.0 $c.0.1 $c.0.2 $eps)
+        let want = (rule-step $c.0.0 $c.0.1 $eps)
         assert equal [$c.1.before $c.1.a2 $c.1.a3] $c.0 $"the step case came back as sent: ($c.1)"
-        assert equal [$c.1.status $c.1.a1] [$want.status $want.next] $"($rule)'s step at tick ($c.0.0), acceptance ($c.0.1), end ($c.0.2): ($c.1)"
+        assert equal [$c.1.status $c.1.a1] [$want.status $want.next] $"the rule's step at tick ($c.0.0), acceptance ($c.0.1), end ($c.0.2): ($c.1)"
     }
-    deadline-holds $eps
-    print $"framecap: ($rule)'s step held on ($cases | length) cases at eps ($eps); the deadline model's table, steady rates, catch-up shape, and generated set held"
+    print $"framecap: the frame rule's step held on ($cases | length) cases at eps ($eps)"
     print "framecap: ok"
 }
 
-# P2's tolerance as timer.S sets it, in ticks
+# The frame rule's on-time tolerance as timer.S sets it, in ticks
 def frame-eps []: nothing -> int {
     open --raw ($env.FILE_PWD | path join ".." ".." ".." "kernel" "src" "timer.S") | decode | parse --regex '\.set FRAME_EPS, (?P<eps>\d+)' | get 0.eps | into int
 }
 
 # The step cases about one tick: the acceptance at the tick and about eps
-# past it, P2's edge; the present's end about a period past the tick, P0's
-# re-anchor edge; an acceptance before the tick, refused; a stall
+# past it, the rule's edge; the present's end about a period past the
+# tick, which the rule never reads; an acceptance before the tick,
+# refused; a stall
 def step-cases [eps: int]: nothing -> list<list<int>> {
     let t = $STEP_TICK
     [
@@ -177,86 +178,17 @@ def step-scenario [kernel: path, image: path, out: path, set: string, cases: lis
     $steps
 }
 
-# A rule's next eligibility after a presented flip accepted at s, its
-# present ended at f, its tick t: P0 a period from the tick while the
-# present ended within one, else from the end; P1a the first grid point
-# strictly after the end; P1b the first at or after the end plus half a
-# period; P2 a period from the tick while the acceptance is under eps past
+# The rule's next eligibility after a presented flip accepted at s, its
+# tick t: a period from the tick while the acceptance is under eps past
 # it, else from the acceptance
-def rule-next [rule: string, t: int, s: int, f: int, eps: int]: nothing -> int {
-    match $rule {
-        "p0" => (if $f < ($t + $PERIOD) { $t + $PERIOD } else { $f + $PERIOD })
-        "p1a" => ($t + (($f - $t) // $PERIOD + 1) * $PERIOD)
-        "p1b" => ($t + (($f + $PERIOD // 2 - $t + $PERIOD - 1) // $PERIOD) * $PERIOD)
-        "p2" => (if ($s - $t) < $eps { $t + $PERIOD } else { $s + $PERIOD })
-    }
+def rule-next [t: int, s: int, eps: int]: nothing -> int {
+    if ($s - $t) < $eps { $t + $PERIOD } else { $s + $PERIOD }
 }
 
 # The kernel's step as the rule gives it: an acceptance before the tick
 # refused, 1, the tick unchanged; else 0 and the rule's next tick
-def rule-step [rule: string, t: int, s: int, f: int, eps: int]: nothing -> record<status: int, next: int> {
-    if $s < $t { { status: 1, next: $t } } else { { status: 0, next: (rule-next $rule $t $s $f $eps) } }
-}
-
-# The presented acceptances of a rule over frames of work in a loop order,
-# the first tick 0: await, then draw, then flip; or prepare, draw, then
-# wait only while early, then flip; a wait's end the tick plus the wake,
-# every present PRESENT long
-def deadline-model [rule: string, order: string, frames: list<int>, eps: int, --wake: int = 0]: nothing -> list<int> {
-    mut now = 0
-    mut tick = 0
-    mut accepted = []
-    for d in $frames {
-        if $order == "await" {
-            if $now < $tick { $now = $tick + $wake }
-            $now = $now + $d
-        } else {
-            $now = $now + $d
-            if $now < $tick { $now = $tick + $wake }
-        }
-        let s = $now
-        let f = $s + $PRESENT
-        $tick = (rule-next $rule $tick $s $f $eps)
-        $accepted = ($accepted | append $s)
-        $now = $f
-    }
-    $accepted
-}
-
-# The model held: JointTiming's table exactly; P2's await order steady at a
-# period plus the wake and the drawing, its prepare order at a period; the
-# catch-up shape breaking K under P0, P1a, and P1b and not under P2; and P2
-# breaking K on no sequence of a generated set in either order
-def deadline-holds [eps: int] {
-    assert equal (deadline-model p0 await [50000 50000 50000] 10000) [50000 216666 383332] "the table's P0 acceptances"
-    assert equal (deadline-model p2 await [50000 50000 50000] 10000) [50000 266666 483332] "the table's P2 acceptances"
-    let intervals = {|a: list<int>| $a | window 2 | each {|w| $w.1 - $w.0 } }
-    let awaited = (do $intervals (deadline-model p2 await (1..10 | each { 50000 }) $eps --wake 2000))
-    assert equal ($awaited | uniq) [(166666 + 2000 + 50000)] $"P2's await order every P + w + D: ($awaited)"
-    let prepared = (do $intervals (deadline-model p2 prepare (1..10 | each { 50000 }) $eps --wake 2000) | skip 1)
-    assert equal ($prepared | uniq) [166666] $"P2's prepare order every P once on its grid: ($prepared)"
-    for rule in [p0 p1a p1b] {
-        let k = (present k-violations (deadline-model $rule await [79000 1000 1000] $eps) $PERIOD $eps)
-        assert (($k | length) > 0) $"($rule) breaks K on the catch-up shape"
-    }
-    assert equal (present k-violations (deadline-model p2 await [79000 1000 1000] $eps) $PERIOD $eps) [] "P2 keeps K on the catch-up shape"
-    let draws = (generate {|x|
-        let a = ($x bit-xor (($x bit-shl 13) bit-and 0xffffffff))
-        let b = ($a bit-xor ($a bit-shr 17))
-        let c = ($b bit-xor (($b bit-shl 5) bit-and 0xffffffff))
-        { out: $c, next: $c }
-    } 2463534242 | take 20000)
-    let edges = [($PERIOD - 1) $PERIOD ($PERIOD + 1) ($eps - 1) $eps ($eps + 1)]
-    let sequences = (0..<1000 | each {|k|
-        $draws | skip ($k * 20) | take 20 | each {|r|
-            let roll = ($r mod 100)
-            if $roll < 8 { $PERIOD + $PERIOD // 2 + ($r mod (2 * $PERIOD)) } else if $roll < 16 { $edges | get ($r mod 6) } else { $r mod $PERIOD }
-        }
-    })
-    for order in [await prepare] {
-        let broken = ($sequences | enumerate | where {|s| (present k-violations (deadline-model p2 $order $s.item $eps) $PERIOD $eps | is-not-empty) } | get index)
-        assert equal $broken [] $"P2 keeps K on every generated sequence in the ($order) order"
-    }
+def rule-step [t: int, s: int, eps: int]: nothing -> record<status: int, next: int> {
+    if $s < $t { { status: 1, next: $t } } else { { status: 0, next: (rule-next $t $s $eps) } }
 }
 
 # A refused flip leaves the frame clock where it stood: the flip of a

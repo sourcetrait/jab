@@ -1412,10 +1412,10 @@ so a program and its records name its harts, never their count alone.
 ## .macro jab.sys.frame.step
 
 The frame clock's rule at exact ticks for a test, a DEBUG kernel's alone:
-the tick, a flip's acceptance, and its present's end in, the status and
-the next tick out, nothing presented and the clock untouched. The rule is
-the kernel's build's, P0, or P2 under its symbol (JointTiming), so a test
-holds the arithmetic the flips run.
+the tick and a flip's acceptance in, the status and the next tick out,
+nothing presented and the clock untouched; the third operand, a present's
+end, goes unread. The rule is the flips' own, so a test holds the arithmetic
+the flips run.
 
 ## .macro jab.sys.api.write
 
