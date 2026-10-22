@@ -42,14 +42,14 @@ const reserved_roles = [gfx_harts]
 const feature_roles = [io_harts]
 
 # A program's declared demand from its manifest; null for the legacy path
-export def of [dir: path] {
+export def of [dir: path]: nothing -> oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing> {
     let here = ($dir | path expand)
     let manifest = (open ($here | path join "program.jab.toml"))
     program-demand $manifest (workspace workspace-of $here $manifest)
 }
 
 # A manifest's declared demand, validated against the spec data; null for legacy
-export def program-demand [m: record, ws: oneof<string, nothing>] {
+export def program-demand [m: record, ws: oneof<string, nothing>]: nothing -> oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing> {
     let name = $m.name
     let specs = ($m | get -o specs)
     if $specs == null {
@@ -101,7 +101,7 @@ def section-counts [name: string, section: string, value: any, roles: list<strin
 }
 
 # jab_manifest.inc, a declared demand's constants for the assembly: its path
-export def demand-include [d: record, out: path]: nothing -> string {
+export def demand-include [d: record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, out: path]: nothing -> string {
     let reserved = ($d.reserved | transpose role harts | each {|r| $".set JAB_RESERVED_($r.role | str uppercase), ($r.harts)" })
     let features = ($d.features | each {|f| $f | reject name | transpose role harts | each {|r| $".set JAB_FEATURE_($f.name | str uppercase)_($r.role | str uppercase), ($r.harts)" } } | flatten)
     let file = ($out | path join "jab_manifest.inc")
@@ -112,7 +112,7 @@ export def demand-include [d: record, out: path]: nothing -> string {
 }
 
 # An image's declaration bytes and its header's fields, from a declared demand
-export def image-declaration [d: any, ws: any, program: string] {
+export def image-declaration [d: oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing>, ws: oneof<string, nothing>, program: string]: nothing -> record<flags: int, offset: int, length: int, crc: int, bytes: binary> {
     if $d == null { return { flags: 0, offset: 0, length: 0, crc: 0, bytes: 0x[] } }
     let count = ($d.specs | length)
     if $count > $decl_specs_max { error make {msg: $"($program) lists ($count) specs, and an image declares ($decl_specs_max) at most"} }
@@ -234,7 +234,7 @@ def bit-not-of [mask: int]: nothing -> int {
 }
 
 # The demand recorded with an image, held to its rules; null where none is
-export def image [image: path] {
+export def image [image: path]: nothing -> oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing> {
     let image = ($image | path expand)
     let file = (demand-record-of $image)
     if not ($file | path exists) { return null }
@@ -319,14 +319,15 @@ def demand-shape-problems [d: any]: nothing -> list<string> {
 }
 
 # Whether an image's demand record holds and names the demand a build resolved
-export def record-holds [image: path, demand: any]: nothing -> bool {
+export def record-holds [image: path, demand: oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing>]: nothing -> bool {
     if not (demand-record-of $image | path exists) { return false }
     try { (image $image) == $demand } catch { false }
 }
 
 # Refuses a named spec the image's recorded demand does not list
-export def spec-listed [m: record, demand: oneof<record, nothing>, program: string] {
+export def spec-listed [m: record, demand: oneof<record<specs: list<string>, reserved: record<gfx_harts: int>, features: table<name: string, io_harts: int>, base: int>, nothing>, program: string]: nothing -> nothing {
     if $m.spec == null or $demand == null { return }
-    if $m.spec.name in ($demand.specs | each {|s| $s | str lowercase }) { return }
-    error make {msg: $"($program) does not list ($m.spec.name), the spec this launch names; it lists ($demand.specs | str join ', ')"}
+    if $m.spec.name not-in ($demand.specs | each {|s| $s | str lowercase }) {
+        error make {msg: $"($program) does not list ($m.spec.name), the spec this launch names; it lists ($demand.specs | str join ', ')"}
+    }
 }

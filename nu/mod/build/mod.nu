@@ -48,7 +48,7 @@ export def program-kernel [dir: path, tree: string]: nothing -> string {
 }
 
 # A kernel's or program's build context: manifest, toolchain, target, out
-export def context [dir: path, kind: string, names: list<string>]: nothing -> record {
+export def context [dir: path, kind: string, names: list<string>]: nothing -> record<here: path, manifest: record, manifest_path: path, workspace: oneof<path, nothing>, toolchain: oneof<path, nothing>, prefix: string, symbols: list<string>, profile: string, root: path, shard: string, inside: bool, target: path, out: path> {
     let here = ($dir | path expand)
     let manifest_path = ($here | path join $"($kind).jab.toml")
     let manifest = (open $manifest_path)
@@ -76,14 +76,14 @@ export def context [dir: path, kind: string, names: list<string>]: nothing -> re
 }
 
 # The kernel ELF a program runs on: its workspace's in its tree, or JAB_KERNEL
-export def kernel-elf [c: record] {
+export def kernel-elf [c: record<here: path, manifest: record, manifest_path: path, workspace: oneof<path, nothing>, toolchain: oneof<path, nothing>, prefix: string, symbols: list<string>, profile: string, root: path, shard: string, inside: bool, target: path, out: path>]: nothing -> string {
     if $c.workspace != null {
         let ws = (open ($c.workspace | path join "workspace.jab.toml"))
         return (target root $c.workspace | path join $c.profile $ws.kernel "jab.elf")
     }
     let from_env = ($env.JAB_KERNEL? | default "")
-    if $from_env != "" { return $from_env }
-    error make {msg: "no workspace above this program and no JAB_KERNEL: where is the kernel?"}
+    if $from_env == "" { error make {msg: "no workspace above this program and no JAB_KERNEL: where is the kernel?"} }
+    $from_env
 }
 
 # The kernel built from its sources into the tree its symbols pick, when stale
@@ -117,7 +117,7 @@ export def build-kernel [dir: path, names: list<string>]: nothing -> nothing {
 }
 
 # The spec data a program listing specs builds from, inputs of its build
-def spec-inputs [c: record]: nothing -> list<string> {
+def spec-inputs [c: record<here: path, manifest: record, manifest_path: path, workspace: oneof<path, nothing>, toolchain: oneof<path, nothing>, prefix: string, symbols: list<string>, profile: string, root: path, shard: string, inside: bool, target: path, out: path>]: nothing -> list<string> {
     if ($c.manifest | get -o specs) == null { return [] }
     if $c.workspace == null { error make {msg: $"($c.manifest.name) lists specs and has no workspace, whose asset/spec.nuon defines them"} }
     let asset = ($c.workspace | path join "asset")

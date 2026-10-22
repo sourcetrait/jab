@@ -61,7 +61,7 @@ export def shard-of [here: path, workspace: oneof<string, nothing>, root: path, 
 }
 
 # A build context's purpose shard, beside its source when inside the target
-export def shard-dir [c: record, purpose: string]: nothing -> string {
+export def shard-dir [c: record<here: path, manifest: record, manifest_path: path, workspace: oneof<path, nothing>, toolchain: oneof<path, nothing>, prefix: string, symbols: list<string>, profile: string, root: path, shard: string, inside: bool, target: path, out: path>, purpose: string]: nothing -> string {
     if $c.inside { $c.here | path join $purpose } else { $c.root | path join $purpose $c.shard }
 }
 

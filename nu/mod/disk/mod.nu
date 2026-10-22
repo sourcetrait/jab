@@ -74,7 +74,7 @@ def fetched [target: path, url: string, sha256: string]: nothing -> string {
 }
 
 # A program's assets as a romfs image, built when its tree has moved on
-export def assets-image [c: record]: nothing -> string {
+export def assets-image [c: record<here: path, manifest: record, manifest_path: path, workspace: oneof<path, nothing>, toolchain: oneof<path, nothing>, prefix: string, symbols: list<string>, profile: string, root: path, shard: string, inside: bool, target: path, out: path>]: nothing -> string {
     let declared = ($c.manifest | get -o assets | default "")
     let compiled = ($c.manifest | get -o target_assets | default "")
     if $declared == "" and $compiled == "" { return "" }
