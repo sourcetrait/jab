@@ -192,7 +192,9 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     # PATH passed over for the real one; the real one bounding a child of
     # 30 s at a second, 124 within two; the stand-ins on every host but
     # Windows; and a launch of a program that never exits ending at its
-    # --seconds 2 with 124 and the resolved timeout in its result
+    # --seconds 2 with 124 and the resolved timeout in its result, and off
+    # Windows the same launch under a bare override, its result holding
+    # GNU's resolved path and the name as given
     let real = (with-env { JAB_TIMEOUT: "" } { bound timeout })
     assert ($real.version | str starts-with "timeout (GNU coreutils) ") $"the timeout resolved GNU's: ($real)"
     if $nu.os-info.name != "windows" {
@@ -228,6 +230,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let forever = (fixture $ws ($out | path join "fixtures" "forever") "forever" "" --forever)
     let bound_run = (launch --kernel $kernel --image $forever --out ($out | path join "forever_run") --set $set --harts 1 --seconds 2)
     assert equal [$bound_run.status $bound_run.timeout_binary $bound_run.timeout_override] [124 $real.path ""] $"a program that never exits ends at its bound, the resolved timeout in its record, no override: ($bound_run.status), ($bound_run.timeout_binary), ($bound_run.timeout_override)"
+    if $nu.os-info.name != "windows" {
+        let bare = ($real.path | path basename)
+        let bare_run = (with-env { JAB_TIMEOUT: $bare } { launch --kernel $kernel --image $forever --out ($out | path join "forever_bare") --set $set --harts 1 --seconds 2 })
+        assert equal [$bare_run.status $bare_run.timeout_binary $bare_run.timeout_override] [124 $real.path $bare] $"a launch under a bare override ends at its bound, GNU's path and the name as given in its record: ($bare_run.status), ($bare_run.timeout_binary), ($bare_run.timeout_override)"
+    }
 
     # Windows' pipes (PipeShape): the chardev's path on each host, a POSIX
     # host's `<out>/<endpoint>` and Windows' bare name by the run's nonce,
