@@ -26,8 +26,9 @@ line, since nu passes each word of a script's command line as a string.
 
 ## route
 
-Play the route on the build `runs` times and read every frame: the
-route's placements, its legs' `sends` (console command frames by their
+Play the route on the build `runs` times and read every frame, the route
+read through `route read`, held to its model before any run: the route's
+placements, its legs' `sends` (console command frames by their
 one-letter kind, each at its `at`), and its pad rows, an R with the
 run's seed and a C with the cadence before the first frame, with
 `--workers` a W with the workers and the grain beside them, the E at

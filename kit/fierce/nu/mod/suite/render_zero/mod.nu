@@ -2,6 +2,7 @@ use (path self ../../../../../../nu/mod/launch)
 use (path self ../../console)
 use (path self ../../frame)
 use (path self ../../map)
+use (path self ../../padtable)
 use (path self ../../picture)
 use (path self ../../pose)
 use (path self ../../tree)
@@ -232,7 +233,7 @@ export def walk [context: record, records: record]: nothing -> record {
         | append ($render_0_starts | each {|s| { at: $s.at, bytes: (pose pose-frame $s) } })
         | append [{ at: $CLOCK_END_AT, bytes: (pose command-frame "E") }]
         | sort-by at)
-    let render_0_walk = (launch --kernel $kernel --image $image --out ($out | path join "render_0_walk") --set $set --sound --api --pad ($game | path join "nu" "nuon" "table" "table_render_0.nuon") --disk $render_0_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
+    let render_0_walk = (launch --kernel $kernel --image $image --out ($out | path join "render_0_walk") --set $set --sound --api --pad (padtable held ($game | path join "nu" "nuon" "table" "table_render_0.nuon")) --disk $render_0_disk --serial "fps" --send $walk_sends --capture 14500ms --seconds 16)
     assert equal (open --raw $render_0_walk.qemu_log) "" "QEMU has no complaint about the guest on the render_0 walk"
     let walk_lines = ($render_0_walk.serial | lines)
     let render_0_walk_records = (picture records $render_0_walk.api)
@@ -274,7 +275,7 @@ export def fight [context: record, records: record]: nothing -> record {
     let game = $context.game
     let render_0_disk = $records."render_zero launched".render_0_disk
     let fight_sends = ([{ at: 1500ms, bytes: (pose pose-frame $FIGHT_POSE) }] | append ($FIGHT_ROUNDS | each {|at| { at: $at, bytes: (pose command-frame "F") } }))
-    let fight_run = (launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad ($game | path join "nu" "nuon" "table" "table_fight.nuon") --disk $render_0_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
+    let fight_run = (launch --kernel $kernel --image $image --out ($out | path join "fight") --set $set --sound --api --pad (padtable held ($game | path join "nu" "nuon" "table" "table_fight.nuon")) --disk $render_0_disk --serial "fps" --send $fight_sends --capture 9500ms --seconds 11)
     assert equal (open --raw $fight_run.qemu_log) "" "QEMU has no complaint about the guest on the fight"
     let fight_records = (picture records $fight_run.api)
     assert (($fight_records | where kind == 1 | length) > 100) $"states through the fight: ($fight_records | where kind == 1 | length)"

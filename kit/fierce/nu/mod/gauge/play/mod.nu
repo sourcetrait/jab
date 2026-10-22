@@ -10,6 +10,7 @@ use (path self ../identity)
 use (path self ../measure)
 use (path self ../../pose)
 use (path self ../report)
+use (path self ../../route)
 use (path self ../../console) [SEED_AT]
 use (path self ../../frame) [GFX_SLOTS]
 use (path self ../measure) [CADENCES CAP SCREEN_ROWS]
@@ -74,7 +75,7 @@ export def route [
     if $service >= 0 and not (($flags | default "") =~ '--defsym SERVICE=') { error make { msg: $"--service asks the synthetic service, and the image's build flags define no SERVICE: ($flags | default 'none recorded')" } }
     let route_file = (if $route == "" { $WORKSPACE | path join "kit" "fierce" "nu" "nuon" "route" "route_render_0.nuon" } else { $route | path expand })
     let route_bytes = (open --raw $route_file | into binary)
-    let r = ($route_bytes | decode utf-8 | from nuon)
+    let r = (route read $route_file)
     let requests = (if $cpu { cpu requests $r.legs $r.end } else { [] })
     let map_name = (if $map == "" { $r.map } else { $map })
     let at = ($at | insert assets (assets-of $at.game $map_name $assets))

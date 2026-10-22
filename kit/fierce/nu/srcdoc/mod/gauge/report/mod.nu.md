@@ -90,19 +90,21 @@ revision of a report made again (report-doc).
 The legs a capture's frames are assigned to, from the route that
 played it: the route given, else the copy kept beside the capture,
 else the file the identity names, and whichever it is must have the
-SHA-256 the identity recorded, or the read stops naming both. A
-capture whose identity records no route is one leg, play, unless a
-route is given, which then goes unchecked.
+SHA-256 the identity recorded, or the read stops naming both; its legs
+come through `route read`, the route held to its model. A capture whose
+identity records no route is one leg, play, unless a route is given,
+which then goes unchecked.
 
 ## route-of
 
 A compared run's route (RouteLegs): the SHA-256 its identity recorded,
 held as legs-for holds it against the route.nuon beside the run's bound
 identity file, else in the first of its run-dirs holding one, else the
-file its identity names; its legs the route's names in order. A
-recorded route missing, of another digest, or naming no legs is the
-run's problem, its file and digests named; an identity recording no
-route has no digest and no legs.
+file its identity names; its legs the route's names in order, read
+through `route read`. A recorded route missing, of another digest,
+breaking its model, or naming no legs is the run's problem, its file and
+digests named; an identity recording no route has no digest and no
+legs.
 
 ## route-text
 

@@ -1,5 +1,6 @@
 use (path self ../../../../../../nu/mod/target)
 use (path self ../identity)
+use (path self ../../route)
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..
@@ -159,7 +160,7 @@ export def legs-for [dir: path, id: record, route: string]: nothing -> record<le
     if $recorded != null and $sha != $recorded {
         error make { msg: $"the route ($file) has SHA-256 ($sha) where the capture's identity recorded ($recorded): its legs are not the ones that played" }
     }
-    { legs: ($bytes | decode utf-8 | from nuon | get legs), route: $file, checked: ($recorded != null) }
+    { legs: (route read $file | get legs), route: $file, checked: ($recorded != null) }
 }
 
 # A compared run's route held to its recorded SHA-256: its legs or problem
@@ -179,9 +180,10 @@ export def route-of [report: path, run: record, effective: record]: nothing -> r
     if $sha != $recorded {
         return { sha256: $recorded, file: $file, legs: null, problem: $"the route ($file) has SHA-256 ($sha) where its identity recorded ($recorded): its legs are not the ones that played" }
     }
-    let legs = (try { $bytes | decode utf-8 | from nuon | get legs | get name } catch { [] })
-    if ($legs | is-empty) { return { sha256: $recorded, file: $file, legs: null, problem: $"the route ($file) names no legs" } }
-    { sha256: $recorded, file: $file, legs: $legs, problem: null }
+    let read = (try { { legs: (route read $file | get legs | get name), problem: null } } catch {|e| { legs: [], problem: $e.msg } })
+    if $read.problem != null { return { sha256: $recorded, file: $file, legs: null, problem: $read.problem } }
+    if ($read.legs | is-empty) { return { sha256: $recorded, file: $file, legs: null, problem: $"the route ($file) names no legs" } }
+    { sha256: $recorded, file: $file, legs: $read.legs, problem: null }
 }
 
 # A compared route in words: its SHA-256 and file, or none recorded
