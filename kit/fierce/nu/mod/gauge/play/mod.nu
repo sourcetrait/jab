@@ -1,6 +1,5 @@
-use (path self ../../../../../../nu/mod/audio) [audio-plan]
+use (path self ../../../../../../nu/mod/audio) [live-backend]
 use (path self ../../../../../../nu/mod/build)
-use (path self ../../../../../../nu/mod/disco)
 use (path self ../../../../../../nu/mod/launch)
 use (path self ../../../../../../nu/mod/machine)
 use (path self ../../../../../../nu/mod/nonce)
@@ -207,7 +206,7 @@ export def audio [
     let pad = ($run_out | path join "table.nuon")
     $table | to nuon --indent 2 | save --raw -f $pad
     let words = ($qemu ++ ["-trace" $QUEUE_FULL])
-    let live = ($host and (live-output $at.workspace))
+    let live = ($host and ((live-backend $at.workspace) != "none"))
     let mode = { window: $host, sound: (if $live { "host" } else { "recorded" }), pad: "table", seed: null, cadence: null, workers: null, grain: null, end: $MEASURED_TO, capture: $END_AT, service: null }
     let id = (identity new $at "debug" "render_0" null $mode $machine $words)
     $id | to nuon --indent 2 | save --raw -f ($run_out | path join "identity.nuon")
@@ -228,12 +227,6 @@ export def audio [
     print (report run-line $label 1 $measured $ran)
     print (audio line $reading)
     report write $label $ran_id [{ run: 1, seed: null, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: null, audio: $reading }] $at.out
-}
-
-# Whether this host plays a live run's sound: its audio plan names an output
-def live-output [ws: string]: nothing -> bool {
-    let found = (if (disco discovery-wanted false true) { disco discover $ws | get audio } else { null })
-    (audio-plan $found) != "none"
 }
 
 # A run's V frames asking the service: its start, its quota, and its stop

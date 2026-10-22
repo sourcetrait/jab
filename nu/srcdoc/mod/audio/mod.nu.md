@@ -23,3 +23,12 @@ ALSA plugin (the pipewire backend dropped the start of a stream and
 the pa backend errored on volume and cut off, both measured on the
 reference host); on macOS coreaudio and on Windows dsound, whose
 default is the system's chosen output, the one the record names.
+
+## live-backend
+
+The backend a live run on this host plays through, `audio-plan` over
+discovery's audio output, discovery asked only where `JAB_AUDIO` leaves
+the sound undecided, as a run asks it: `none` on a host with no output,
+where a live run plays into a backend that keeps nothing. A tool that
+chooses between a live run and a recording asks it, fierce's gauge audio
+step among them.

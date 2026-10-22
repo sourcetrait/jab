@@ -282,7 +282,9 @@ device and the server's ALSA plugin, on macOS the system's output
 through coreaudio, on Windows through dsound; a host with no output
 gets the `none` backend, which discards, so a program's sound calls
 still answer. `JAB_AUDIO` names a backend and its options outright,
-skipping discovery, and `--no-sound` leaves the device off. `jab
+skipping discovery, and `--no-sound` leaves the device off. `audio
+live-backend` names the backend a live run on the host takes, `none`
+where it has no output, so a tool can record there instead. `jab
 launch --sound` records the guest's output to a wav, which `capture wave`
 reads back, so the sound tests measure a tone rather than listening
 for it. A list of rectangles
