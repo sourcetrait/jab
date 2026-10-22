@@ -1,5 +1,3 @@
-# A supervised launch's schedule as the SDK prepares it, held before `to json`.
-# Times are nanoseconds from the go; bounds nanoseconds; bytes as written.
 record<
     token: string,
     mode: string,

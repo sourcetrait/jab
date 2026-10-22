@@ -1,5 +1,3 @@
-# A supervised launch's exit receipt as the supervisor writes it, held after `from json`.
-# Every time is nanoseconds from the go on the supervisor's monotonic clock.
 record<
     token: string,
     outcome: record<token: string, decision: string, go_utc: oneof<string, nothing>>,

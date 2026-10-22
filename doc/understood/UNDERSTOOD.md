@@ -60,7 +60,9 @@ runs only under QEMU's `virt` machine.
 
 Every nushell tree takes one layout: the repository's own `nu/` for the
 SDK and the workspace, a prog's or a kit's `nu/` beside its `src/` at
-`<prog|kit>/<name>/nu/`, and the kernel's at `kernel/nu/`. In a tree,
+`<prog|kit>/<name>/nu/`, and the kernel's at `kernel/nu/`, which holds
+`nuance.nu` alone, the kernel's casual verbs being the root's (`./do build
+--kernel`). In a tree,
 `bin/` holds `do.nu`, the casual driver (`build`, `run`, `test`, and
 `bench`, and at the root `watch`), `nuance.nu`, the nuanced commands
 grouped by concept, and `nuance/`, a nuanced script that fits no group;

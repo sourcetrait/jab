@@ -1,6 +1,3 @@
-# A bounded launch's record, launch.nuon in its out, written once and never edited:
-# the schedule's SHA-256 as the caller wrote it, the receipt whole as read, or null
-# with `incomplete` naming what ended a run that left none.
 record<
     schedule_sha256: string,
     receipt: oneof<record<
