@@ -11,6 +11,14 @@
 # service past the priming 300 ms before its drain, past the eight
 # periods' 160 ms of lead, and that service alone counts, the stream going
 # on and the whole tone recorded after the longer silent start.
+#
+# The delayed service refills all eight periods from the ring at once, so
+# a period the program had not yet written by then is mixed silent: the
+# late run's tone may hold whole periods of exact zeros, a race between the
+# program's first writes and QEMU's first return that the kernel's design
+# allows. Each such period, on the stream's period boundaries and all
+# zeros, is set aside and counted, and the tone's length and pitch are read
+# over the rest. The plain run's tone holds no silence at all.
 use ../../../nu/mod/capture
 use ../../../nu/mod/launch
 use std/assert
@@ -23,6 +31,8 @@ const HEARD = 1000
 # The priming's eight periods and the tone's fifty, which every run's
 # counts pass
 const PERIODS = 58
+# The stream's period in frames, the kernel's JAB_SOUND_PERIOD
+const PERIOD = 960
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let plain = (launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set --sound --seconds 15)
@@ -38,8 +48,8 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let late_counts = (counts-of $late.debug)
     assert equal $late_counts.exhausted 1 $"sound: the late service alone found its queue empty: ($late_counts)"
     counts-hold $late_counts "late"
-    let late_tone = (tone-holds $late)
-    print $"sound: under jab.soundlate=300, ($late_tone.seconds | math round -p 2) seconds of ($late_tone.frequency | math round -p 1) Hz at ($late_tone.peak) after a silent start of ($late_tone.start | math round -p 2) seconds against the plain run's ($tone.start | math round -p 2); submitted ($late_counts.submitted) returned ($late_counts.returned) exhausted ($late_counts.exhausted)"
+    let late_tone = (tone-holds $late --gaps)
+    print $"sound: under jab.soundlate=300, ($late_tone.seconds | math round -p 2) seconds of ($late_tone.frequency | math round -p 1) Hz at ($late_tone.peak) after a silent start of ($late_tone.start | math round -p 2) seconds against the plain run's ($tone.start | math round -p 2); submitted ($late_counts.submitted) returned ($late_counts.returned) exhausted ($late_counts.exhausted), ($late_tone.gaps) whole silent periods inside the tone set aside"
     print "sound: ok"
 }
 
@@ -57,8 +67,11 @@ def counts-hold [counts: record, run: string] {
     assert equal $counts.failed 0 $"sound: none of the ($run) run's periods failed: ($counts)"
 }
 
-# The recording holds the second of tone at its pitch and amplitude
-def tone-holds [run: record]: nothing -> record<seconds: float, frequency: float, peak: int, start: float> {
+# The recording holds the second of tone at its pitch and amplitude. With
+# `--gaps`, whole periods of exact zeros inside it, each on the stream's
+# period boundaries, are set aside and counted before its length and pitch
+# are read; without it, nothing inside the tone is silent.
+def tone-holds [run: record, --gaps]: nothing -> record<seconds: float, frequency: float, peak: int, start: float, gaps: int> {
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
     assert equal (open --raw $run.qemu_log) "" "QEMU has no complaint about the guest"
     assert ($run.debug | str contains "jab: sound at ") $"the kernel found the sound device: ($run.debug)"
@@ -72,13 +85,26 @@ def tone-holds [run: record]: nothing -> record<seconds: float, frequency: float
     assert (($heard | length) > 0) "the tone is in the recording"
     let first = ($heard | first)
     let last = ($heard | last)
-    let seconds = (($last - $first) / $RATE)
+    # the frames inside the tone heard as silence, by the period they lie in
+    let quiet = ($left | slice $first..$last | enumerate | where {|s| ($s.item | math abs) <= $HEARD } | each {|s| $s.index + $first })
+    let silent = ($quiet | each {|i| $i // $PERIOD } | uniq)
+    if not $gaps {
+        assert ($quiet | is-empty) $"nothing inside the tone is silent: frames in periods ($silent)"
+    }
+    let zeros = (0..<($PERIOD * 4) | each { 0x[00] } | bytes collect)
+    for p in $silent {
+        let lo = ($p * $PERIOD)
+        let hi = ($lo + $PERIOD)
+        assert ($lo > $first and $hi <= $last) $"a silent period whole inside the tone: frames ($lo) to ($hi - 1) in ($first) to ($last)"
+        assert (($wave.samples | bytes at ($lo * 4)..<($hi * 4)) == $zeros) $"the silent period at frames ($lo) to ($hi - 1) all exact zeros"
+    }
+    let tone = ($left | slice $first..$last | enumerate | where {|s| (($s.index + $first) // $PERIOD) not-in $silent } | get item)
+    let seconds = ((($last - $first) - ($silent | length) * $PERIOD) / $RATE)
     assert ($seconds > 0.95 and $seconds < 1.05) $"the tone lasts the second the program wrote: ($seconds)"
-    let tone = ($left | slice $first..$last)
     let peak = ($tone | each {|s| $s | math abs } | math max)
     assert ($peak >= ($AMPLITUDE - 500) and $peak <= $AMPLITUDE) $"at the amplitude the program set: ($peak)"
     let crossings = ($tone | window 2 | where {|w| ($w.0 < 0) != ($w.1 < 0) } | length)
     let frequency = ($crossings / 2.0 / $seconds)
     assert ($frequency > ($TONE - 2) and $frequency < ($TONE + 2)) $"the zero crossings count out ($TONE) Hz: ($frequency)"
-    { seconds: ($seconds | into float), frequency: $frequency, peak: $peak, start: ($first / $RATE | into float) }
+    { seconds: ($seconds | into float), frequency: $frequency, peak: $peak, start: ($first / $RATE | into float), gaps: ($silent | length) }
 }
