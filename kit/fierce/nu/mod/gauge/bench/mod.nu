@@ -2,9 +2,9 @@ use (path self ../../../../../../nu/mod/target)
 use (path self ../audio)
 use (path self ../compare)
 use (path self ../identity)
-use (path self ../measure)
 use (path self ../report)
-use (path self ../measure) [CAP FLIP_EARLY FLIP_PRESENTED]
+use (path self ../measure/summary)
+use (path self ../measure/presentation) [CAP FLIP_EARLY FLIP_PRESENTED]
 use (path self ../report) [CEILING_US]
 
 # The workspace's root, resolved from this file's own path
@@ -48,21 +48,21 @@ def bench-frames [rows: list<any>, period: number]: nothing -> record {
     {
         frames: ($rows | length),
         presented: ($rows | where {|r| ($r | get -o flip_status) == $FLIP_PRESENTED } | length),
-        acceptance: (measure stats (column-of $rows "acceptance_interval_us")),
-        completion: (measure stats (completion-of $rows)),
-        call_interval: (measure stats $calls),
+        acceptance: (summary stats (column-of $rows "acceptance_interval_us")),
+        completion: (summary stats (completion-of $rows)),
+        call_interval: (summary stats $calls),
         grid: ($multiples | uniq --count | sort-by value | each {|c| { periods: $c.value, intervals: $c.count } }),
         off_grid: (($calls | length) - ($multiples | length)),
         unknown_calls: ($rows | where {|r| ($r | get -o call_unknown) == true } | length),
-        submission_age: (measure stats (column-of $rows "submission_age_us")),
-        critical: (measure stats (column-of $rows "critical_us")),
-        draw: (measure stats (column-of $rows "draw_us")),
-        wait: (measure stats (column-of $rows "wait_us")),
-        pacing: (measure stats (column-of $rows "pacing_us")),
-        await: (measure stats (column-of $rows "await_us")),
-        wakes: (measure total (column-of $rows "wakes")),
-        attempts: (measure total (column-of $rows "flip_attempts")),
-        refusals: (measure total (column-of $rows "refusals")),
+        submission_age: (summary stats (column-of $rows "submission_age_us")),
+        critical: (summary stats (column-of $rows "critical_us")),
+        draw: (summary stats (column-of $rows "draw_us")),
+        wait: (summary stats (column-of $rows "wait_us")),
+        pacing: (summary stats (column-of $rows "pacing_us")),
+        await: (summary stats (column-of $rows "await_us")),
+        wakes: (summary total (column-of $rows "wakes")),
+        attempts: (summary total (column-of $rows "flip_attempts")),
+        refusals: (summary total (column-of $rows "refusals")),
         flips_early: ($rows | where {|r| ($r | get -o flip_status) == $FLIP_EARLY } | length),
         flips_failed: ($rows | where {|r| ($r | get -o flip_status | default $FLIP_PRESENTED) > $FLIP_EARLY } | length),
         over: ($rows | where {|r| (do $critical $r | default 0) >= $CEILING_US } | length),

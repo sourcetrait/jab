@@ -21,8 +21,9 @@ pickups, the window, and the audio backend's driver.
 
 ## service-line
 
-One line on a run's service, a SERVICE build's (gauge measure service-of):
-each window's frames, its handoff, its offered count and rate, its
+One line on a run's service, a SERVICE build's
+(gauge/measure/service's service-of): each window's frames, its handoff,
+its offered count and rate, its
 applied, dropped, rejected, and discarded, the quotas skipped, its apply
 phase in microseconds, and its oldest applied message's age; a reduced
 load named; held, or broken with its problems; a start refused with its

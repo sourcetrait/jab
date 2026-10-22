@@ -3,7 +3,7 @@ use (path self ../identity)
 use (path self ../measure)
 use (path self ../report)
 use (path self ../identity) [FROM_EMBEDDED FROM_FILE]
-use (path self ../measure) [CAP]
+use (path self ../measure/presentation) [CAP]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..

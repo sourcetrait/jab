@@ -1,11 +1,11 @@
 use (path self ../../../../../../nu/mod/build)
 use (path self ../../../../../../nu/mod/target)
 use (path self ../identity)
-use (path self ../measure)
 use (path self ../report)
 use (path self ../stream)
+use (path self ../measure/summary)
 use (path self ../identity) [FROM_FILE]
-use (path self ../measure) [CADENCES CADENCE_AFTER_FLIP]
+use (path self ../measure/presentation) [CADENCES CADENCE_AFTER_FLIP]
 use (path self ../stream) [UNKNOWN_PARTS]
 
 # The workspace's root, resolved from this file's own path
@@ -478,9 +478,9 @@ def leg-measure [rows: list<any>, leg: string, field: string, bin_cm: int]: noth
         $placed = ($placed | append { bin: (($travelled * 100 / $bin_cm) | math floor), value: ($r | get $field) })
     }
     if ($travelled * 100) < $bin_cm {
-        return { leg: $leg, kind: "frames", frames: ($rows | length), path_m: $travelled, median: (measure stats ($rows | get $field)).median, bins: [] }
+        return { leg: $leg, kind: "frames", frames: ($rows | length), path_m: $travelled, median: (summary stats ($rows | get $field)).median, bins: [] }
     }
-    let bins = ($placed | group-by {|p| $p.bin | into string } | transpose bin entries | each {|g| { bin: ($g.bin | into int), frames: ($g.entries | length), median: (measure stats ($g.entries | get value)).median } } | sort-by bin)
+    let bins = ($placed | group-by {|p| $p.bin | into string } | transpose bin entries | each {|g| { bin: ($g.bin | into int), frames: ($g.entries | length), median: (summary stats ($g.entries | get value)).median } } | sort-by bin)
     { leg: $leg, kind: "path", frames: ($rows | length), path_m: $travelled, median: null, bins: $bins }
 }
 

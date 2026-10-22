@@ -91,8 +91,9 @@ placement, and at the route's end, kept whole in run.nuon and reported
 as host-time windows (gauge cpu windows). A SERVICE build's capture carries
 its service's records, outside the clock kinds (SceneOwnership), one a
 frame held complete beside the clock's; `run --service` runs the synthetic
-service through the route, and the measurement reads its windows (gauge
-measure service-of), a broken window making the run invalid. `audio`, the
+service through the route, and the measurement reads its windows
+(gauge/measure/service's service-of), a broken window making the run
+invalid. `audio`, the
 `nuance.nu gauge audio` step, runs RegressionSuite's fixture as a bench
 step and keeps its reading.
 

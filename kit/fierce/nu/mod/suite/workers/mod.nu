@@ -4,11 +4,12 @@ use (path self ../../frame)
 use (path self ../../gauge/measure)
 use (path self ../../picture)
 use (path self ../../pose)
+use (path self ../../gauge/measure/screen)
 use (path self ../../gauge/stream)
 use std/assert
 use (path self ../../console) [CONSOLE_P GRAIN_DEFAULT SPAWN_POSE]
 use (path self ../../frame) [FRAME GFX_SLOTS WORKERS_STARTED]
-use (path self ../../gauge/measure) [SCREEN_ROWS]
+use (path self ../../gauge/measure/validity) [SCREEN_ROWS]
 use (path self ../../gauge/stream) [CLOCK_SCHEMA]
 
 # The H frame's command byte as a console record carries it
@@ -158,7 +159,7 @@ def take-holds [kernel: path, image: path, out: path, set: string, disk: path, d
         let m = (measure $run.api $legs)
         let bytes = (open --raw $run.screen | into binary)
         let stamp = (picture stamp $bytes)
-        let b = (measure screen-frame $m $stamp $from $expect)
+        let b = (screen screen-frame $m $stamp $from $expect)
         assert ($b.problems | is-empty) $"($label): its screen bound to a settled frame of its window, at the spawn pose, by its workers at its grain on its harts: ($b.problems | str join '; ')"
         { m: $m, stamp: $stamp, frame: $b.frame, bytes: $bytes }
     }
@@ -183,7 +184,7 @@ def take-holds [kernel: path, image: path, out: path, set: string, disk: path, d
     let taken_bound = (do $bound $taken (do $placed_legs 3) (frame answered $taken.api $CONSOLE_H | first) $taken_expect "the frame read while hart 3 is taken")
     do $pictured $taken_bound "the frame read while hart 3 is taken"
     for s in [{ name: "taken", b: $taken_bound, expect: $taken_expect } { name: "reference", b: $reference, expect: $reference_expect }] {
-        let stale = (measure screen-frame $s.b.m $s.b.stamp ($s.b.frame + 1) $s.expect)
+        let stale = (screen screen-frame $s.b.m $s.b.stamp ($s.b.frame + 1) $s.expect)
         assert ($stale.problems | any {|p| $p =~ "before the window's opening frame" }) $"the ($s.name)'s screen bound against a window opening past its frame, ($s.b.frame + 1), refused for its stamp: ($stale.problems)"
     }
 
@@ -392,7 +393,7 @@ export def jobs [context: record, records: record]: nothing -> record {
             let placements = (frame answered $run.api $CONSOLE_P)
             let stamp = (picture stamp (open --raw $run.screen | into binary))
             let pose = ($SPAWN_POSE | select x y z yaw pitch | insert roll 0.0)
-            let bound = (measure screen-frame $m $stamp ($placements | get 1) { pose: $pose, workers: 2, grain: $j.grain, masks: { grant: $HARTS_TWO, claimed: 0, started: $HARTS_TWO, active: $HARTS_TWO }, witness: "worker" })
+            let bound = (screen screen-frame $m $stamp ($placements | get 1) { pose: $pose, workers: 2, grain: $j.grain, masks: { grant: $HARTS_TWO, claimed: 0, started: $HARTS_TWO, active: $HARTS_TWO }, witness: "worker" })
             assert ($bound.problems | is-empty) $"($label): its screen bound to a settled frame of its window, drawn by its two workers under the cancel with its witness: ($bound.problems | str join '; ')"
         } else {
             assert ($frame.cancelled == 0 and (frame band-sum $frame) == ($frame.rounds * $bands)) $"($label) every band rendered once by the workers: ($frame)"

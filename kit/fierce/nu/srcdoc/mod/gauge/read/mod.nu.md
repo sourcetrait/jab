@@ -14,7 +14,7 @@ Read a capture, a run's api.out (read-capture).
 - `--out`: where gauge.nuon lands, beside the capture unless given
 - `--label`: a name for the build in the summary
 - `--eps`: the contract's on-time tolerance in ticks, the cap's 10,000 unless
-  given (gauge measure contract-of)
+  given (gauge/measure/receipt's contract-of)
 
 ## read-capture
 

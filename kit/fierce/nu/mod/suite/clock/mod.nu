@@ -12,7 +12,7 @@ use (path self ../../tree)
 use std/assert
 use (path self ../../console) [CLOCK_CADENCE CLOCK_SEED CLOCK_SEED_AT GRAIN_DEFAULT RECEIPT_NONCE]
 use (path self ../../frame) [WORKERS_STARTED]
-use (path self ../../gauge/measure) [CADENCES EPS_CAP]
+use (path self ../../gauge/measure/presentation) [CADENCES EPS_CAP]
 use (path self ../../gauge/stream) [CLOCK_SCHEMA]
 
 # The kernel's source of P2's tolerance, FRAME_EPS

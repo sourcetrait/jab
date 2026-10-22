@@ -13,8 +13,9 @@ use (path self ../report)
 use (path self ../../route)
 use (path self ../../console) [SEED_AT]
 use (path self ../../frame) [GFX_SLOTS]
-use (path self ../measure) [CADENCES CAP SCREEN_ROWS]
+use (path self ../measure/presentation) [CADENCES CAP]
 use (path self ../audio) [END_AT MEASURED_TO QUEUE_FULL SECONDS]
+use (path self ../measure/validity) [SCREEN_ROWS]
 
 # The workspace's root, resolved from this file's own path
 const WORKSPACE = path self ../../../../../..
