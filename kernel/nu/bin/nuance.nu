@@ -8,4 +8,5 @@ def "main font" [bdf: path] {
     font $bdf
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

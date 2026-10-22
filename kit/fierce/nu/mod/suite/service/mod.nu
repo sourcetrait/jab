@@ -45,7 +45,7 @@ const CONSOLE_V = 86
 # When a V starts the service, the load past and the frames running
 const SERVICE_AT = 2000ms
 
-# The machine the service runs on: hart 3 its io hart beside the two graphics harts
+# The machine the service runs on: hart 3 the io hart, beside two graphics harts
 const SERVICE_HARTS = 4
 
 # Hart 3's mask, the service's hart on four
@@ -79,14 +79,14 @@ const GFX_FLOOR = -1
 # The take refused on three harts, workers.S's line
 const FLOOR_LINE = "fps: harts take refused under the floor: 1 of grant 1 2, floor 2"
 
-# The LOCKSTEP loads: messages over quota frames, the stop's time, the plan's acceptance and drops
+# The LOCKSTEP loads, each its messages, quota frames, stop time, and plan
 const LOCKSTEP_LOADS = [
     { name: "steady", total: 120, frames: 60, stop_at: 5000ms, accepted: 120, dropped: 0 }
     { name: "burst", total: 1000, frames: 6, stop_at: 4000ms, accepted: 416, dropped: 584 }
     { name: "overload", total: 18000, frames: 60, stop_at: 7000ms, accepted: 2144, dropped: 15856 }
 ]
 
-# The corruption case: two quotas of 32 under LOCKSTEP, the second's sequence 40 corrupted
+# The corruption case: two quotas of 32 under LOCKSTEP, sequence 40 corrupted
 const CORRUPT_LOAD = { name: "corrupt", total: 64, frames: 2, corrupt: 40, stop_at: 4000ms }
 
 # A stop mid-quota: one quota too long to finish, 200 us before each message
@@ -95,16 +95,16 @@ const CANCEL_LOAD = { name: "cancel", total: 100000, frames: 0, delay_us: 200, s
 # A forced stop: half a second spun before each message, past WORK_STOP_TICKS
 const FORCED_LOAD = { name: "forced", total: 2, frames: 0, delay_us: 500000, stop_at: 2300ms }
 
-# The steady load's offering time bound: two messages offered, the producer woken
+# The steady load's offering time bound: two messages offered, producer woken
 const STEADY_OFFERING_US = 1000
 
-# The instructions an index's fence may stand apart from it by: address and value work
+# The instructions an index's fence may stand apart from it by
 const ORDER_BETWEEN = [la li addi mv slli add andi]
 
 # The ring's index stores and loads in service.S, each placed on purpose
 const ORDER_COUNTS = [5 4]
 
-# The service's fixtures, a SERVICE build's set alone: order, loads, corruption, stops, refusal
+# The service's fixtures, a SERVICE build's set alone, in order
 export def holds [context: record, records: record]: nothing -> record {
     let out = ($context.out | path join "service")
     mkdir $out
@@ -117,7 +117,7 @@ export def holds [context: record, records: record]: nothing -> record {
     { order: $order, loads: $loads, corrupt: (corrupt-holds $context $disk), cancel: (cancel-holds $context $disk), forced: (forced-holds $context $disk), refusal: (refusal-holds $context $disk) }
 }
 
-# The ring's indexes' fences read from the source: each store after fence rw, w, each load before fence r, rw
+# The ring's indexes' fences read from service.S, each where its order needs
 def order-holds [game: path]: nothing -> record<stores: int, loads: int> {
     let lines = (open --raw ($game | path join "src" "service.S") | decode | lines | each {|l| $l | split row "#" | first | str trim })
     let count = ($lines | length)
@@ -144,7 +144,7 @@ def order-holds [game: path]: nothing -> record<stores: int, loads: int> {
     { stores: $stores, loads: $loads }
 }
 
-# The LOCKSTEP model: each boundary's quota offered, accepted, dropped, the slots applied, the depth after
+# The LOCKSTEP model: each boundary's offer, acceptance, drops, apply, depth
 def lockstep-model [total: int, frames: int]: nothing -> list<record> {
     mut depth = 0
     mut rows = []
@@ -172,7 +172,7 @@ def service-run [context: record, disk: path, name: string, sends: list<any>, st
     { run: $run, s: (stream $run.api), answered: (frame answered $run.api $CONSOLE_V) }
 }
 
-# Every record's packet word its boundary's, no torn read, no boundary past its 32
+# Every record's packet word its boundary's, none torn, none past APPLY_MAX
 def witness-holds [label: string, services: list<any>]: nothing -> nothing {
     let torn = ($services | where {|v| (($v.flags // $SVC_TORN) mod 2) == 1 or $v.word != $v.last })
     assert ($torn | is-empty) $"($label): every frame's packet carried the word its boundary left, no worker reading another: ($torn | first 3)"
@@ -180,7 +180,7 @@ def witness-holds [label: string, services: list<any>]: nothing -> nothing {
     assert ($over | is-empty) $"($label): no boundary consumed past ($APPLY_MAX) slots: ($over | first 3)"
 }
 
-# The window's flags frame by frame: idle before the start, running to the stop, idle after
+# The window's flags frame by frame: idle, running from start to stop, idle
 def flags-hold [label: string, services: list<any>, started: int, stopped: int, lockstep: bool]: nothing -> nothing {
     let wrong = ($services | where {|v|
         let running = (($v.flags mod 2) == 1)
@@ -193,7 +193,7 @@ def flags-hold [label: string, services: list<any>, started: int, stopped: int, 
     assert ($wrong | is-empty) $"($label): idle before frame ($started), running from it to frame ($stopped), marked started and stopped at those two: ($wrong | first 3 | select frame flags)"
 }
 
-# The harts frame by frame: hart 3 claimed from the start's frame to the stop's, the three drawing otherwise
+# The harts frame by frame: hart 3 claimed from the start to the stop
 def harts-hold [label: string, s: record, started: int, stopped: int]: nothing -> nothing {
     let wrong = ($s.harts | where {|h|
         let held = ($h.frame >= $started and $h.frame < $stopped)
@@ -212,7 +212,7 @@ def window-holds [label: string, end: record, evidence: record, expected: record
     assert equal $evidence.gaps ($end.dropped + $end.rejected + $end.discarded) $"($label): the sequences' gaps, leading, between, and trailing, the dropped, rejected, and discarded: ($evidence.gaps)"
 }
 
-# A LOCKSTEP load on four harts: every boundary's counts the model's, the window exact
+# A LOCKSTEP load on four harts: every boundary's counts the model's
 def lockstep-holds [context: record, disk: path, load: record]: nothing -> record {
     let label = $"the service's ($load.name) load under LOCKSTEP"
     let model = (lockstep-model $load.total $load.frames)
@@ -263,7 +263,7 @@ def lockstep-holds [context: record, disk: path, load: record]: nothing -> recor
     { started: $started, stopped: $stopped, boundaries: ($model | length), end: $end }
 }
 
-# The corruption case: its message rejected in its frame's 32, the lists equal, the window conserved
+# The corruption case: its message rejected, the window conserved
 def corrupt-holds [context: record, disk: path]: nothing -> record {
     let load = $CORRUPT_LOAD
     let label = "the service's corruption case under LOCKSTEP"
@@ -290,7 +290,7 @@ def corrupt-holds [context: record, disk: path]: nothing -> record {
     { rejected: $load.corrupt, frame: $reject_frame }
 }
 
-# A stop mid-quota: the cancel taken at the next message, the evidence handed over whole
+# A stop mid-quota: the cancel taken at the next message, evidence whole
 def cancel-holds [context: record, disk: path]: nothing -> record {
     let load = $CANCEL_LOAD
     let label = "the service stopped mid-quota"
@@ -317,7 +317,7 @@ def cancel-holds [context: record, disk: path]: nothing -> record {
     { offered: $end.offered, applied: $end.applied, dropped: $end.dropped, skipped: $end.skipped }
 }
 
-# A forced stop: the producer interrupted, its evidence absent, the window incomplete, the hart back
+# A forced stop: the producer interrupted, the window incomplete, the hart back
 def forced-holds [context: record, disk: path]: nothing -> record {
     let load = $FORCED_LOAD
     let label = "the service's forced stop"
@@ -338,7 +338,7 @@ def forced-holds [context: record, disk: path]: nothing -> record {
     { offered: $end.offered, discarded: $end.discarded }
 }
 
-# The service refused on three harts: the take under the floor, everything held as it stood
+# The service refused on three harts, everything held as it stood
 def refusal-holds [context: record, disk: path]: nothing -> record {
     let label = "the service on three harts"
     let sends = [{ at: $SERVICE_AT, bytes: (console service true --total 2 --frames 0) }]

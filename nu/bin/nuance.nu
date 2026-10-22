@@ -24,4 +24,5 @@ def "main watch bench" [name?: string, --skip: float = 5.0] {
     watcher bench $WORKSPACE $name --skip $skip
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

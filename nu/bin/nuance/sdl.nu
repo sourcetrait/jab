@@ -18,4 +18,5 @@ def "main report" [log: path] {
     sdl report $log
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

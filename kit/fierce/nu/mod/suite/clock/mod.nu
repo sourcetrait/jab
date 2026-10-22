@@ -213,9 +213,7 @@ def frame-eps []: nothing -> int {
     open --raw $TIMER | decode | parse --regex '\.set FRAME_EPS, (?P<eps>\d+)' | get 0.eps | into int
 }
 
-# P2's rule on a window's receipts: each presented flip judged against the
-# tick the rule set from the presented flip before it, whole periods past it
-# at cadence 2 alone, and K at eps over every acceptance
+# P2's rule on a window's receipts, and K at eps over every acceptance
 def p2-holds [m: record, cadence: int, eps: int, says: string]: nothing -> nothing {
     let presented = ($m.rows | where {|r| $r.flip_status == 0 })
     let steps = ($presented | window 2 | each {|w|
@@ -243,8 +241,7 @@ def submitted [rows: list<any>]: nothing -> list<any> {
     $out
 }
 
-# Receipts on Render One: the load record and its bounds, ordinals in sequence,
-# each decision timed inside its recorded call
+# Receipts on Render One: the load record and its bounds, ordinals in sequence
 export def receipts [context: record, records: record]: nothing -> record {
     let render_1_run = $records."render_one launched".render_1_run
     let r1 = (stream $render_1_run.api)

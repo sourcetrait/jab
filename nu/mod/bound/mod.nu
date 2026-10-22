@@ -1,4 +1,4 @@
-# The GNU timeout a run's bounds take, resolved once to its path, its version line
+# The GNU timeout a run's bounds take, resolved once: its path and version
 export def timeout []: nothing -> record<path: string, version: string, override: string> {
     let forced = ($env.JAB_TIMEOUT? | default "")
     if $forced != "" {

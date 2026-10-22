@@ -78,7 +78,7 @@ def batch-run [label: string, n: int, dir: string, eps: int]: nothing -> record 
     { run: $n, seed: ($id | get -o mode.seed), out: $dir, ran: $ran, measured: $measured, identity: $id, corrections: $read.corrections, identity_sha256: ($raw | hash sha256), cpu: $windows, audio: (kept-audio $dir) }
 }
 
-# A run's audio reading as its play kept it, audio.nuon beside its stream, null for none
+# A run's audio reading as its play kept it beside its stream, null for none
 def kept-audio [dir: string]: nothing -> any {
     let file = ($dir | path join "audio.nuon")
     if ($file | path exists) { open $file } else { null }

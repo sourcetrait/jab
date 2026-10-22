@@ -42,4 +42,5 @@ def "main watch" [--skip: float = 5.0] {
     watcher $WORKSPACE --skip $skip
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

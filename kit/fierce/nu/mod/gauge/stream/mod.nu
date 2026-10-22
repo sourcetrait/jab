@@ -47,7 +47,7 @@ const KIND_LOAD = 21
 # The load's bounds record kind, from schema 8: its calls' bounds and the origin
 const KIND_BOUNDS = 22
 
-# A SERVICE build's frame record kind: the boundary's application and the packet's word
+# A SERVICE build's frame record kind: the boundary's application, packet word
 const KIND_SERVICE = 26
 
 # A SERVICE build's rejected message, written as its boundary rejects it
@@ -56,7 +56,7 @@ const KIND_SERVICE_REJECT = 27
 # A SERVICE build's window closed: its counts and the producer's chains
 const KIND_SERVICE_END = 28
 
-# A SERVICE build's window closed: hart 0's chain, the gaps, the corrupted sequence
+# A SERVICE build's window closed: hart 0's chain, gaps, corrupted sequence
 const KIND_SERVICE_EVIDENCE = 29
 
 # The V frame's command byte as a console record carries it

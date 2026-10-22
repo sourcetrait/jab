@@ -10,8 +10,7 @@ const US_TICKS = 10
 # The guest clock's ticks a second, its 10 MHz, a period's numerator
 const HZ = 10000000
 
-# A measurement's presents in order, the load's two and every frame's, each its
-# status, ordinal, and call's bounds in ticks: recorded, or derived at schema 7
+# A measurement's presents in order, each its status, ordinal, and call bounds
 export def flips [m: record]: nothing -> record<source: oneof<string, nothing>, reason: oneof<string, nothing>, origin: oneof<record<lo: int, hi: int, width: int>, nothing>, flips: list<any>> {
     let at = ($m.schema | default 1)
     if $at < 7 { return { source: null, reason: $"schema ($at) carries no receipt", origin: null, flips: [] } }
@@ -87,8 +86,7 @@ export def receipt-invalidity [rows: list<any>, anchor: oneof<int, nothing>]: no
     ] | compact
 }
 
-# What makes a schema 8 window invalid in its recorded calls' bounds, at the
-# receipt stage: the origin, the load's two calls, and every attempted frame's
+# What makes a schema 8 window invalid in its recorded calls' bounds
 export def bracket-invalidity [rows: list<any>, load: any, bounds: any]: nothing -> list<string> {
     if $load == null or $bounds == null { return ["the load's calls unbounded: no load record or no bounds record to read"] }
     let b = $bounds
@@ -115,9 +113,7 @@ export def acceptance-of [clocked: bool, schema: any, complete: bool, receipted:
     { available: true, reason: null }
 }
 
-# Each presented frame's acceptance interval from the present before it, the
-# first from the load's cleared screen; a frame that presented nothing keeps
-# null and breaks no adjacency
+# Each presented frame's acceptance interval from the present before it
 export def accepted [rows: list<any>, anchor: int]: nothing -> list<any> {
     mut last = $anchor
     mut out = []
@@ -132,9 +128,7 @@ export def accepted [rows: list<any>, anchor: int]: nothing -> list<any> {
     $out
 }
 
-# The presentation contract read on a measurement's receipts at eps, where its
-# receipt stage passed: K's violations over the presented acceptances, the
-# first eight named, the late wakes, and the catch-ups; else none, its reason
+# The presentation contract read on a measurement's receipts at eps
 export def contract-of [rows: list<any>, acceptance: record, cap: int, eps: int]: nothing -> record {
     let period = ($HZ // $cap)
     let read = { eps: $eps, period: $period, available: $acceptance.available, reason: $acceptance.reason }
@@ -151,9 +145,7 @@ export def contract-of [rows: list<any>, acceptance: record, cap: int, eps: int]
     }
 }
 
-# A measurement's wake delays, s less T in ticks: its frames at the cadence
-# that waits only while early which waited and presented, each its receipt's
-# acceptance less the tick it was judged against
+# A measurement's wake delays, s less T in ticks, over its frames that waited
 export def wake-delays [rows: list<any>]: nothing -> list<int> {
     $rows
     | where {|r| $r.cadence == $CADENCE_IF_EARLY and ($r.wait_us | default 0) > 0 and $r.flip_status == $FLIP_PRESENTED and $r.receipt_stamp != null and $r.receipt_tick != null }

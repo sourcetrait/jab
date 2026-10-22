@@ -3,7 +3,7 @@ use (path self ../target)
 use (path self ../tool)
 use (path self ../word)
 
-# The gamepad a machine carries when asked: the shim's fifo on Linux, or the port
+# The gamepad a machine carries when asked: Linux's shim fifo, or the pad port
 export def pad-attach [wanted: bool, out: path, port: bool, ws: oneof<string, nothing>, root: path]: nothing -> record<args: list<string>, env: record, fifo: string, port: bool, header: binary> {
     let none = { args: [], env: {}, fifo: "", port: false, header: 0x[] }
     if not $wanted { return $none }

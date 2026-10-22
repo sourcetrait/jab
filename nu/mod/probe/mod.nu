@@ -96,7 +96,7 @@ def probe-sdl [dir: path, names: list<string>, seconds: int, --api, --send: stri
     print ($record | to nuon --indent 2)
 }
 
-# What a probe puts on the machine and sends; a paired one its nonce's frame first
+# What a probe puts on the machine and sends; paired, its nonce's frame first
 export def plan [manifest: record, names: list<string>, nonce: int, --api, --send: binary = 0x[]]: nothing -> record<profile: string, api: bool, sends: list<record<at: duration, bytes: binary>>> {
     let paired = (probe-paired $manifest $names)
     let framed = (if $paired { [{ at: 200ms, bytes: (wnon-frame $nonce) }] } else { [] })
@@ -116,7 +116,7 @@ export def wnon-frame [nonce: int]: nothing -> binary {
     0x[57 4e 4f 4e 00 00 00 00] ++ ($nonce | into binary --endian little)
 }
 
-# A run's build as its identity names it: the image, its kernel, and their symbols
+# A run's build as its identity names it: image, kernel, and symbols
 export def build-fields [program: string, image: path, kernel: path, --replay: path]: nothing -> record<workload: record<program: string, order: string>, image: record<file: string, sha256: string>, kernel: record<file: string, sha256: string>, flags: string, cadence: list<string>, replay: oneof<record<file: string, sha256: string, frames: int, window_s: float, bound: int>, nothing>> {
     let image = ($image | path expand)
     let kernel = ($kernel | path expand)

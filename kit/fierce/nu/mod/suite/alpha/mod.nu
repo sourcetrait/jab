@@ -273,7 +273,7 @@ export def fence [context: record, records: record]: nothing -> record {
     {}
 }
 
-# The alpha policy rendered: each patch its colour where it passes, else backdrop
+# The alpha policy rendered: a patch's colour where it passes, else backdrop
 export def fixture [context: record, records: record]: nothing -> record {
     let render_1_source = $context.render_1.source
     let game = $context.game

@@ -4,7 +4,7 @@ use (path self ../symbols)
 # The front-end function whose own make_current opens a drawn frame
 const render_anchor = "sdl2_gl_render_surface"
 
-# The front-end functions a render's or the scanout path's call may lie inlined in
+# The front-end functions a render or the scanout path may lie inlined in
 const render_inliners = ["sdl2_gl_refresh" "sdl2_gl_redraw"]
 
 # The window a render read by timing has its size call within, the gaps' bound

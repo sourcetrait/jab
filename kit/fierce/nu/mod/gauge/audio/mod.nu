@@ -13,7 +13,7 @@ export const REPORTS = 1250
 # The first report's time, the pad opened by the first frame's look by then
 export const PLAY_FROM = 2000ms
 
-# The E frame's time, half a second past the last report, closing the measurement
+# The E frame's time, half a second past the last report, closing the capture
 export const MEASURED_TO = 12500ms
 
 # The Z frame's time, a second past the last report so every event is taken
@@ -67,8 +67,7 @@ export def window-peaks [wav: path]: nothing -> list<int> {
     }
 }
 
-# A recording's windows for continuity: the ambient's first heard, whether the
-# recording reaches HEARD_TO, and every quiet window between
+# A recording's windows read for continuity
 export def heard [peaks: list<int>]: nothing -> record {
     let first = ($peaks | enumerate | where {|w| $w.item >= $SOUND_HEARD } | get -o 0.index)
     let last = (($HEARD_TO / $WINDOW_SECONDS) | math floor | into int)
@@ -89,8 +88,7 @@ def counts [debug: list<string>, prefix: string, pattern: string]: nothing -> li
     $debug | where {|l| $l starts-with $prefix } | each {|l| $l | parse $pattern | get 0 | update cells {|c| $c | into int } }
 }
 
-# A launch of the play read: QEMU's log, the exit, the kernel's pad and sound
-# counts, and the recording's windows where there is one, each problem named
+# A launch of the play read: QEMU's log, the exit, the counts, the recording
 export def reading [run: record, sent: int]: nothing -> record {
     let events = (^$run.qemu_binary -trace help | complete | get stdout | lines | each {|l| $l | str trim })
     let logged = (open --raw $run.qemu_log | decode | lines)

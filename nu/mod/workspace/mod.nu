@@ -12,7 +12,7 @@ export def workspace-dir [dir: path]: nothing -> oneof<string, nothing> {
     }
 }
 
-# The workspace a kernel or program builds against: a parent, else its manifest's
+# The workspace a kernel or program builds against, a parent or its manifest's
 export def workspace-of [here: path, manifest: record]: nothing -> oneof<string, nothing> {
     let above = (workspace-dir $here)
     if $above != null { return $above }
@@ -99,7 +99,7 @@ export def run-target [ws: path, words: list<string>]: nothing -> string {
     $ws | path expand | path join $at
 }
 
-# A command's directory and words: an absolute first word's, else the workspace's
+# A command's directory and words: an absolute first word's or the workspace's
 export def subject [ws: path, words: list<string>]: nothing -> record<dir: string, words: list<string>> {
     let first = ($words | get -o 0 | default "")
     let root = ($first | path split | get -o 0 | default "")

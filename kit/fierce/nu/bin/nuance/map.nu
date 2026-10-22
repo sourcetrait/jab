@@ -16,4 +16,5 @@ def "main show" [map: path] {
     map show $map
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

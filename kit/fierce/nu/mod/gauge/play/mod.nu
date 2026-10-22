@@ -26,7 +26,7 @@ const DRAIN = 2sec
 # How far a run's bound lies past its stop
 const BOUND_PAST = 3sec
 
-# How far before the E a run's service stops, its window's records inside the measurement
+# How far before the E a run's service stops
 const SERVICE_STOP_BEFORE = 1ms
 
 # A script flag's NUON list, refused unless every item is of the kind named
@@ -178,10 +178,7 @@ export def host [
     report write $label $ran_id [{ run: 1, seed: $seed, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: null }] $at.out
 }
 
-# RegressionSuite's fixture as a bench step, a debug build's: its pad table
-# through the play, the sound live in the host's window or else recorded, the
-# E closing the measurement and the Z's exit writing the kernel's counts, the
-# reading kept as audio.nuon beside the run and in the report
+# RegressionSuite's fixture as a bench step, a debug build's
 export def audio [
     --tree: string = "debug"
     --kernel: string = ""
@@ -228,8 +225,7 @@ export def audio [
     report write $label $ran_id [{ run: 1, seed: null, out: $run_out, ran: $ran, measured: $measured, identity: $ran_id, corrections: null, identity_sha256: $id_sha, cpu: null, audio: $reading }] $at.out
 }
 
-# A run's V frames asking the service: its start, `quota` messages every
-# frame, at SEED_AT, and its stop SERVICE_STOP_BEFORE the E; none for -1
+# A run's V frames asking the service: its start, its quota, and its stop
 def service-sends [quota: int, end: duration]: nothing -> list<any> {
     if $quota < 0 { return [] }
     [{ at: $SEED_AT, bytes: (console service true --total $quota) }, { at: ($end - $SERVICE_STOP_BEFORE), bytes: (console service false) }]
@@ -255,7 +251,7 @@ def places [tree: string, kernel: string, image: string, out: string]: nothing -
     }
 }
 
-# A map's compiled tree, `assets` or else the checkout's shard's, held to the map
+# A map's compiled tree, `assets` or the checkout's shard's, held to the map
 def assets-of [game: path, map: string, assets: string]: nothing -> string {
     let tree = (if $assets == "" { build program-shard $game "asset" | path join $map } else { $assets | path expand })
     let named = ($tree | path join "map" "name")

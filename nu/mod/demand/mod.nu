@@ -172,7 +172,7 @@ export def header-source [decl: record, out: path]: nothing -> string {
     $file
 }
 
-# An image's first page read as the kernel reads it: legacy, undeclared, declared
+# An image's first page as the kernel reads it: legacy, undeclared, declared
 export def check-image [image: path]: nothing -> record<kind: string, header: oneof<record<magic: int, version: int, flags: int, offset: int, length: int, crc: int>, nothing>, declaration: oneof<record<base: int, specs: list<record<name: string, cores: int, ram_gib: int, display: record<width: int, height: int>, fps: int, isa: string>>>, nothing>> {
     let image = ($image | path expand)
     let b = (open --raw $image | into binary)

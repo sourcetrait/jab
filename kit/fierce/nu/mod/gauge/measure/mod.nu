@@ -11,8 +11,7 @@ export use (path self ./receipt) [flips wake-delays]
 export use (path self ./screen) [screen-frame]
 export use (path self ./summary) [stats total]
 
-# A capture measured: its window, rows, legs, outliers, outcomes, validity,
-# and the presentation contract read at eps
+# A capture measured: its window, rows, legs, outliers, outcomes, and contract
 export def main [api: binary, legs: list<any>, --cap: int = 60, --eps: int = 10000]: nothing -> record {
     if $eps <= 0 or $eps > $EPS_CAP { error make { msg: $"--eps is 1 to ($EPS_CAP) ticks, not ($eps)" } }
     let s = (stream $api)

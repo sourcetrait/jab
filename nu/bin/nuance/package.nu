@@ -18,4 +18,5 @@ def "main preflight" [dir: path, --spec: string, --image: string, --kernel: stri
     package preflight $dir --spec $spec --image $image --kernel $kernel --tree $tree --serial $serial --bench $bench --out $out --label $label
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

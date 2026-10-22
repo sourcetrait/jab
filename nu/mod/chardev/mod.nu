@@ -17,7 +17,7 @@ export def ports [names: list<string>, out: path, api: bool, pad_port: bool, roo
     { args: ($device ++ $debug.args ++ $port_args ++ $pad_args), debug_log: $debug.log, api: $port, pad: $pad }
 }
 
-# QEMU's pipe chardev path for an endpoint: `<out>/<endpoint>`, a name on Windows
+# QEMU's pipe chardev path for an endpoint, `<out>/<endpoint>` or a Windows name
 export def pipe-path [out: path, endpoint: string, nonce: int, os: string]: nothing -> string {
     if $os != "windows" { return ($out | path join $endpoint) }
     if $nonce < 1 { error make {msg: $"a Windows run's pipes are named by its nonce, 1 to 2^63 - 1, not ($nonce)"} }

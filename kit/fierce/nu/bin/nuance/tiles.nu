@@ -37,4 +37,5 @@ def "main lit-steps" [capture: path, rect: string, crosshair: int, out: path] {
     steps $capture $rect $crosshair $out
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

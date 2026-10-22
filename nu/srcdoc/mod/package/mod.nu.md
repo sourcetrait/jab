@@ -22,6 +22,11 @@ The flags a run takes its guest inputs by: the image, the kernel, and the
 asset tree, which every packaged step names, and the route, which a
 route run (`gauge run`) names, each taken from the package.
 
+## POSITIONAL
+
+The scripts that take a run's image and kernel as their first two words,
+where every other step names them by flag (INPUTS).
+
 ## file-of
 
 ## make

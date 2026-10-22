@@ -13,10 +13,10 @@ const WORKSPACE = path self ../../..
 # A package's manifest, at its root
 export const MANIFEST = "package.nuon"
 
-# The words that name a run's guest inputs, each of which a packaged step takes from the package
+# The flags naming a run's guest inputs, each taken from the package
 const INPUTS = ["--image" "--kernel" "--assets" "--route"]
 
-# The scripts that take a run's image and kernel as their first two words, where other steps name them by flag
+# The scripts taking a run's image and kernel as their first two words
 const POSITIONAL = ["example/walk/test/cadence.nu"]
 
 # A file's length in bytes and its SHA-256
@@ -66,7 +66,7 @@ export def make [spec: path, stage: path, out: path]: nothing -> record {
     }
 }
 
-# A package's files held to its manifest by SHA-256 and role, every problem named
+# A package's files held to its manifest by SHA-256 and role, problems named
 export def check [dir: path]: nothing -> record<artifacts: int, problems: list<string>> {
     let root = ($dir | path expand)
     let file = ($root | path join $MANIFEST)

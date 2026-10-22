@@ -77,8 +77,7 @@ def column-of [rows: list<any>, name: string]: nothing -> list<any> {
     $rows | each {|r| $r | get -o $name }
 }
 
-# Each row's completion interval; a report written before AcceptanceInterval
-# names the same flip-end-to-flip-end interval flip_interval_us
+# Each row's completion interval, under its older name in an older report
 def completion-of [rows: list<any>]: nothing -> list<any> {
     $rows | each {|r| $r | get -o completion_interval_us | default ($r | get -o flip_interval_us) }
 }
@@ -118,7 +117,7 @@ def bench-step [dir: path, label: string, state: any]: nothing -> record {
     { label: $label, state: $state, file: $file, runs: $runs }
 }
 
-# A run's service in a bench report's words: its windows' accounting, or its refusal
+# A run's service in a bench report's words: its windows, or its refusal
 def service-text [label: string, run: int, sv: record]: nothing -> string {
     let state = (if ($sv.problems | is-empty) { "held" } else { $"broken: ($sv.problems | str join '; ')" })
     if not $sv.started {

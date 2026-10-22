@@ -43,9 +43,7 @@ export def built-words [words: list<string>, root: path]: nothing -> list<string
     }
 }
 
-# A program built with a set's symbols alone into the tree they pick, the
-# kernel with that tree's own, a program's symbols being nothing the kernel
-# reads: the tree, its output, the kernel, and the image's stem
+# A program built with a set's symbols alone into the tree they pick
 export def build-set [ws: path, program: path, set: string]: nothing -> record<tree: string, out: string, kernel: string, stem: string> {
     let names = (build symbols $set)
     let tree = (if "DEBUG" in $names { "debug" } else { "release" })
@@ -56,9 +54,7 @@ export def build-set [ws: path, program: path, set: string]: nothing -> record<t
     { tree: $tree, out: (build program-out $program $tree), kernel: (build program-kernel $program $tree), stem: (open ($program | path join "program.jab.toml") | get name) }
 }
 
-# A named build of a program, build-set's, copied out of its tree into `into`,
-# a directory made here, before the tree is built again: the image, its ELF,
-# flags, demand, and home, and the kernel as jab.elf
+# A named build, build-set's, copied out of its tree into `into`
 export def build-named [ws: path, program: path, set: string, into: path]: nothing -> nothing {
     if ($into | path exists) { error make {msg: $"($into) exists; a named build is copied out once"} }
     let b = (build-set $ws $program $set)

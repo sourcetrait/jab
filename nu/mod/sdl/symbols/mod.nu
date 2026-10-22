@@ -70,8 +70,7 @@ def sdl-bundled-table [object: record, manifest: record, bundle: path]: nothing 
     sdl-table-from ($bytes | decode) $entry.source
 }
 
-# The functions of a table holding an address, aliases included, and whether
-# symbols of more than one extent hold it
+# A table's functions holding an address, aliases included, and their overlap
 def sdl-functions-at [table: record, address: int]: nothing -> record<functions: list<string>, overlap: bool> {
     let starts = $table.starts
     let ends = $table.ends

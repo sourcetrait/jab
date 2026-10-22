@@ -8,7 +8,7 @@ use (path self ../spec) [harts_allowed]
 # A custom machine's RAM in GiB, the 4 every machine had before named specs
 const custom_ram_gib = 4
 
-# The kernel's command line at most, in bytes: harts.S's BOOT_ARGS_BYTES less one
+# The kernel's longest command line in bytes: BOOT_ARGS_BYTES less one
 const boot_args_max = 255
 
 # The CPU every machine runs: RVA23's supervisor profile with PMP
@@ -72,7 +72,7 @@ export def of [harts?: int, --spec: any = null, --overrides: list<string> = []]:
     }
 }
 
-# The machine a launch asks for: --harts a custom one, else --spec or the default
+# The machine a launch asks for: a custom one by --harts, else a spec's
 export def resolve [ws: oneof<string, nothing>, spec: string, harts: int]: nothing -> record {
     if $spec != "" and $harts != 0 { error make {msg: $"--spec ($spec) with --harts ($harts): a named spec provisions its own harts, and --harts names a custom machine; one or the other"} }
     if $harts != 0 { return (of $harts) }

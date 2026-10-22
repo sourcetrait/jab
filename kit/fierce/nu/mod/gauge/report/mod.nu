@@ -53,8 +53,7 @@ export def outcome-line [n: int, m: record, ran: record]: nothing -> string {
     $"gauge:   run ($n) played: rounds ($rounds); androids ($androids); struck ($o.struck); pickups ($o.pickups); window ($window), audio ($audio)"
 }
 
-# One line on a run's service, a SERVICE build's: each window's accounting,
-# or the start's refusal; null for a capture without the service's records
+# One line on a run's service, a SERVICE build's, or null without its records
 export def service-line [n: int, m: record]: nothing -> oneof<string, nothing> {
     let sv = ($m | get -o service)
     if $sv == null { return null }
@@ -72,9 +71,7 @@ export def service-line [n: int, m: record]: nothing -> oneof<string, nothing> {
     $"gauge:   run ($n) service: ($windows)($reduced); ($state)"
 }
 
-# One line on a run's presentation contract at its eps: K's violations, the
-# first named by its frames, the late wakes, and the catch-ups; or why its
-# receipts give none
+# One line on a run's presentation contract at its eps, or why there is none
 export def contract-line [n: int, m: record]: nothing -> string {
     let c = $m.contract
     if not $c.available { return $"gauge:   run ($n) contract at eps ($c.eps) ticks: not read, ($c.reason)" }

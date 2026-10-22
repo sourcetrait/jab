@@ -13,13 +13,13 @@ const sdk = path self ../../..
 # The supervisor's startup allowance, from its own start
 export const startup_allowance = 11sec
 
-# The caller's backstop on a startup, from just before the spawn, and on a cancel
+# The caller's backstop on a startup, from before the spawn, and on a cancel
 export const backstop = 14sec
 
 # The bound's escalation past a run's seconds, timeout's --kill-after
 export const kill_after = 5sec
 
-# A clean end or a broken pipe while QEMU runs: QEMU's own exit awaited this long
+# QEMU's own exit awaited this long after a clean end or a broken pipe
 export const grace = 2sec
 
 # A termination's wait between TERM and KILL
@@ -92,7 +92,7 @@ def lock-call [binary: string, bound: string, words: list<string>]: nothing -> r
     try { $r.stdout | from json } catch { { outcome: "error", why: $"the lock call said ($r.stdout | str trim) ($r.stderr | str trim)", record: null } }
 }
 
-# An alarm: a job that sleeps its bound out, then tells the launch's tag it fired
+# An alarm: a job that sleeps its bound, then tells the launch's tag it fired
 def alarm [tag: int, source: string, after: duration]: nothing -> int {
     job spawn { sleep $after; { token: $tag, source: $source } | job send --tag $tag 0 }
 }
@@ -108,7 +108,7 @@ export def receive [tag: int, retired: list<string>, wait: oneof<duration, nothi
     }
 }
 
-# Every message left on a launch's tag discarded, every source received or retired
+# A launch's tag emptied of messages once each source is received or retired
 def drain [tag: int]: nothing -> nothing {
     while (try { job recv --tag $tag --timeout 0sec; true } catch { false }) {}
 }

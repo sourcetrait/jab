@@ -11,7 +11,7 @@ const march_program = "-march=rva23u64"
 # The assembler's profile for the kernel, the supervisor's
 const march_kernel = "-march=rva23s64"
 
-# A build's symbols from --set: screaming snake case, sorted, a digit-led refused
+# A build's symbols from --set: screaming snake case, sorted, digit-led refused
 export def symbols [set: string]: nothing -> list<string> {
     let names = ($set | split row "," | each {|s| $s | str trim } | where {|s| $s != "" } | each {|s| $s | str screaming-snake-case } | uniq | sort)
     for n in $names {

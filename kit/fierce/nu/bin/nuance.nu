@@ -47,7 +47,7 @@ def "main gauge run" [--tree: string = "release", --kernel: string = "", --image
     gauge play route --tree $tree --kernel $kernel --image $image --route $route --map $map --assets $assets --runs $runs --seeds $seeds --cadence $cadence --workers $workers --grain $grain --host=$host --out $out --label $label --spec $spec --harts $harts --qemu $qemu --cpu=$cpu --sdl-probe=$sdl_probe --trace=$trace --service $service --eps $eps
 }
 
-# RegressionSuite's fixture as a bench step from the command line by gauge play audio
+# RegressionSuite's fixture as a bench step, by gauge play audio
 def "main gauge audio" [--tree: string = "debug", --kernel: string = "", --image: string = "", --assets: string = "", --host, --out: string = "", --label: string = "", --spec (-s): string = "", --harts: int = 0, --qemu: string = "[]"] {
     gauge play audio --tree $tree --kernel $kernel --image $image --assets $assets --host=$host --out $out --label $label --spec $spec --harts $harts --qemu $qemu
 }
@@ -77,4 +77,5 @@ def "main gauge bench-report" [dir: path] {
     gauge bench report $dir
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }

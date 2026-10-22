@@ -32,4 +32,5 @@ def "main bench" [name: string, --only: string = "", --package: string = ""] {
     bench $WORKSPACE $"kit/fierce/($name)" --only $only --package $package
 }
 
+# The bin's help, its verbs listed, when called with no verb
 def main [] { help main }
