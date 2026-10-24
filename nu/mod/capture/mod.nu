@@ -52,23 +52,6 @@ export def pixel [screen: record<width: int, height: int, pixels: binary>, x: in
     $screen.pixels | bytes at $i..<($i + 3) | encode hex | str lowercase
 }
 
-# A screen as rough text, a character a block by its brightness
-def thumbnail [screen: record<width: int, height: int, pixels: binary>, --columns: int = 96, --rows: int = 27]: nothing -> string {
-    let block_w = ($screen.width // $columns)
-    let block_h = ($screen.height // $rows)
-    let row_bytes = ($screen.width * 3)
-    0..<$rows | each {|r|
-        let y = ($r * $block_h + ($block_h // 2))
-        let row = ($screen.pixels | bytes at ($y * $row_bytes)..<(($y + 1) * $row_bytes))
-        0..<$columns | each {|c|
-            let x = ($c * $block_w + ($block_w // 2))
-            let p = ($row | bytes at ($x * 3)..<($x * 3 + 3))
-            let brightness = (($p | bytes at 0..<1 | into int) + ($p | bytes at 1..<2 | into int) + ($p | bytes at 2..<3 | into int))
-            if $brightness < 48 { " " } else if $brightness < 256 { "." } else if $brightness < 512 { "o" } else { "#" }
-        } | str join ""
-    } | str join "\n"
-}
-
 # The strings in a binary starting with `prefix`, each to its terminator
 export def strings [path: path, prefix: string]: nothing -> list<string> {
     let bytes = (open --raw ($path | path expand) | into binary)

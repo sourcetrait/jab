@@ -30,12 +30,6 @@ RRGGBB.
 
 The color of the pixel at x, y as six hex digits, RRGGBB.
 
-## thumbnail
-
-A rough look at a screen as text, one character per block from the
-pixel at the block's centre: space for black, then . o # by
-brightness.
-
 ## strings
 
 The strings in a binary that start with `prefix`, each read to its
