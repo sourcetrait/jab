@@ -7,7 +7,7 @@ use (path self ./rows) [rows-of]
 use (path self ./service) [service-of]
 use (path self ./summary) [leg-summary outcomes-of outliers]
 use (path self ./validity) [invalidity]
-export use (path self ./receipt) [flips wake-delays]
+export use (path self ./receipt) [contract-of flips wake-delays]
 export use (path self ./screen) [screen-frame]
 export use (path self ./summary) [stats total]
 
