@@ -184,9 +184,6 @@ _start:
     call snapshots_init             # the presented frames' ring, empty
 .endif
     li s8, 0                        # the frames drawn
-    la t0, cadence
-    li t1, CADENCE_DEFAULT
-    sw t1, 0(t0)                    # the image's cadence until a C
     rdtime s7                       # the frame before's time
     la t0, frame_clock
     sd s11, CLOCK_ORIGIN(t0)        # the program's start
@@ -299,23 +296,11 @@ frame:
     sub t2, t0, s9
     sd t2, CLOCK_MIX(t1)
     mv s9, t0
-    la t0, cadence
-    lwu t2, 0(t0)
-    sd t2, CLOCK_CADENCE(t1)        # the cadence this frame presents under
-    bnez t2, 4f
-.ifdef DEBUG
-    la t0, flip_first
-    sb zero, 0(t0)                  # an S's forced attempt is a pacing step's
-.endif
-    call flip_attempt               # cadence 0: one attempt, the await after
-    mv s9, a1                       # the flip's end
-    j 5f
-4:
+    li t2, CADENCE_IF_EARLY
+    sd t2, CLOCK_CADENCE(t1)        # the cadence the frame presents under
     mv a0, s9
-    mv a1, t2
-    call pacing_step                # cadences 1 and 2: wait only if early, flip
+    call pacing_step                # wait only if early, then flip
     mv s9, a0                       # the step's end
-5:
 .ifdef SNAPSHOTS
     call snapshot_present           # a presented frame's snapshot into the ring
 .endif
@@ -346,15 +331,7 @@ frame:
     sd t3, CLOCK_REPORT(t1)
     sd t0, CLOCK_AWAIT(t1)          # the critical path's end, the await's start
     addi s8, s8, 1
-    ld t2, CLOCK_CADENCE(t1)
-    bnez t2, frame                  # cadences 1 and 2 waited before their flip
-    jab.sys.await (JAB_AWAIT_DISPLAY | JAB_AWAIT_PAD)
-    andi t0, a0, JAB_AWAIT_DISPLAY
-    beqz t0, frame
-    la t0, tick_reported
-    li t1, 1
-    sb t1, 0(t0)                    # the tick reported, as the kernel keeps it
-    j frame
+    j frame                         # the next frame at once, its wait before its flip
 
 no_display:
     jab.sys.uart.print msg_no_display
@@ -896,20 +873,14 @@ flip_attempt:
     addi t4, t4, 1
     sd t4, CLOCK_REFUSALS(t2)       # an attempt answered as early
 1:
-    bnez a0, 2f
-    la t3, tick_reported
-    sb zero, 0(t3)                  # a presented flip ends the reported tick
-2:
     mv a1, t1
     ret
 
 pacing_step:
-    addi sp, sp, -32
-    sd ra, 24(sp)
-    sd s2, 16(sp)
-    sd s3, 8(sp)
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd s2, 0(sp)
     mv s2, a0                       # the step's start
-    mv s3, a1                       # the cadence
 .ifdef DEBUG
     la t0, flip_first
     lbu t1, 0(t0)
@@ -921,13 +892,7 @@ pacing_step:
 1:
 .endif
     jab.sys.display.ready
-    beqz a0, 3f                     # early: the wait
-    li t0, CADENCE_ON_GRID
-    bne s3, t0, 5f                  # cadence 1, ready: the flip
-    la t0, tick_reported
-    lbu t1, 0(t0)
-    bnez t1, 3f                     # the passed tick reported: the wait moves it
-    call pacing_await               # at once on the passed tick, reporting it
+    bnez a0, 5f                     # ready: the flip
 3:
     call pacing_await
     andi t0, a0, JAB_AWAIT_DISPLAY
@@ -945,10 +910,9 @@ pacing_step:
     ld t2, CLOCK_FLIP(t0)
     sub t1, t1, t2
     sd t1, CLOCK_PACING(t0)         # the step less its awaits and its flips
-    ld ra, 24(sp)
-    ld s2, 16(sp)
-    ld s3, 8(sp)
-    addi sp, sp, 32
+    ld ra, 8(sp)
+    ld s2, 0(sp)
+    addi sp, sp, 16
     ret
 
 pacing_await:
@@ -963,14 +927,9 @@ pacing_await:
     add t2, t2, t0
     sd t2, CLOCK_WAIT(t1)           # the time inside the await alone
     andi t0, a0, JAB_AWAIT_DISPLAY
-    beqz t0, 1f
-    la t0, tick_reported
-    li t1, 1
-    sb t1, 0(t0)                    # the tick reported, as the kernel keeps it
-    j 9f
-1:
+    bnez t0, 9f                     # the display's tick: the wait ends
     sd a0, 0(sp)
-    call pad_consume
+    call pad_consume                # a wake on the pad alone, consumed
     ld a0, 0(sp)
 9:
     ld ra, 8(sp)
@@ -1686,10 +1645,6 @@ game_us:
     .skip 4
 frame_seconds:
     .skip 4
-cadence:
-    .skip 4
-tick_reported:
-    .skip 1
 .balign 8
 frame_clock:
     .skip CLOCK_SIZE

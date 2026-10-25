@@ -160,15 +160,6 @@ console_frame:
     sb t2, 0(t1)                    # the frame records close after this frame's
     j 8f
 11:
-    li t1, 'C'
-    bne t0, t1, 12f
-    lbu t1, 4(s2)
-    li t2, CADENCE_COUNT
-    bgeu t1, t2, 8f                 # any other value leaves the cadence
-    la t2, cadence
-    sw t1, 0(t2)                    # from this frame's flip on
-    j 8f
-12:
     li t1, 'W'
     bne t0, t1, 121f
     lbu t1, 4(s2)

@@ -3,9 +3,9 @@
 The console, a test channel over the API's input: CONSOLE_FRAME-byte frames by
 kind, P placing the camera, T a trace, F a round, N a noise, L the tiles
 forgotten with the lumels bright or set by parity and construction lifted or
-frozen, R the generator seeded, E the gauge's measurement closed, C the
-cadence chosen, W the raster's workers and grain chosen, I the capture's nonce
-kept, S on a debug build the
+frozen, R the generator seeded, E the gauge's measurement closed, W the
+raster's workers and grain chosen, I the capture's nonce kept, S on a debug
+build the
 cadence fixture's stalls, K on a debug build the packet's bounds, O on a debug
 build the tile pool's knobs, B on a debug build every tile of a surface built
 at the next boundary, D on a debug build a surface's tiles read back over the
@@ -93,11 +93,11 @@ workers_latch), so a count asked before a take draws with those left while
 the harts are taken and with the count again once they are given back.
 With no W the frame draws with the default's count and grain.
 
-C takes byte 4 as the cadence, render.inc's CADENCE_*, from the reading
-frame's flip on (main.S's CLOCK_CADENCE); a value past the three leaves the
-cadence as it was. The gauge sends one beside R before the first frame, and
-every presentation record carries the cadence the frame presented under, the
-proof that it took.
+The gauge sends a C beside R before the first frame, the cadence it asks.
+The program plays one cadence, CADENCE_IF_EARLY, and answers a C as an
+unknown kind, its kind byte reported and nothing else; every presentation
+record carries the cadence the frame presented under (main.S's
+CLOCK_CADENCE).
 
 S is the cadence fixture's knob, on a debug build alone, acting on the frame
 that reads it, whose drawing and pacing follow console_read: byte 4 set

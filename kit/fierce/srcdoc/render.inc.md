@@ -1620,21 +1620,17 @@ phase_mark), and the raster is every render of the frame's packets. The
 packet record splits the drawing in two, its preparation and its raster,
 each converted once, so the drawing less the two is 0 or 1 microsecond.
 The await runs from the
-reporting's end to the next frame's start, the time inside the call
-whatever the kernel does there. So the next start less the start is the
-critical path, the wait, and the await, to the microseconds each
+reporting's end to the next frame's start, the loop's few instructions,
+since no call waits after the reporting. So the next start less the start
+is the critical path, the wait, and the await, to the microseconds each
 conversion drops. The presentation record carries what presenting the
 frame took: the simulation's time, camera_look's start, and the next
 frame's start as frame_records was handed it, both 64 bits from the
 program's start; the wait and the pacing, each converted once from its
 ticks; the pad's wakes during the wait and the presses they drained; the
-flip's attempts and the refusals among them; and the frame's cadence. Under
-CADENCE_AFTER_FLIP the frame awaits after its flip, so its wait, pacing,
-wakes, and presses are 0 and its attempts 1, a refusal among them when the
-flip came early. Under CADENCE_IF_EARLY and CADENCE_ON_GRID the frame waits
-before its flip only when presenting would be early, the second also when
-it came after its tick, and flips again after a refusal, so its final flip
-presents and its await is the loop's few instructions to the next start.
+flip's attempts and the refusals among them; and the frame's cadence,
+CADENCE_IF_EARLY: the frame waits before its flip only when presenting
+would be early and flips again after a refusal, so its final flip presents.
 The pixel counts are candidates before the
 depth test and the masked pass: DRAW_TILED_PIXELS the blocks read from
 tiles, DRAW_LIT_PIXELS every lit span's, their difference the lit pixels the
@@ -1962,7 +1958,8 @@ sprite_draw drew it, and its row.
 
 ## .set PRESENT_CADENCE
 
-`u32`: the frame's cadence, a CADENCE_*.
+`u32`: the frame's cadence, CADENCE_IF_EARLY; readers know a cadence by
+its number, so the number stays 1.
 
 ## .set PACKET_PREPARATION
 
@@ -2376,25 +2373,9 @@ frame, the first it governs. 36 to 56 are free.
 
 `u64`: the texel records a tile takes.
 
-## .set CADENCE_AFTER_FLIP
-
-`u32`: the cadence awaiting the display's tick or the pad after each flip.
-
 ## .set CADENCE_IF_EARLY
 
-`u32`: the cadence flipping as soon as presenting is no longer early, the display's tick or the pad awaited before the flip only when it would be.
-
-## .set CADENCE_ON_GRID
-
-`u32`: the cadence holding every flip to the display's tick grid, a frame ready after its tick waiting for the next.
-
-## .set CADENCE_COUNT
-
-`u32`: the cadences; a C past them leaves the cadence as it was.
-
-## .set CADENCE_DEFAULT
-
-`u32`: the image's cadence until a C, CADENCE_IF_EARLY, until the cadences' measurements choose the shipped one.
+`u32`: the program's cadence, 1, flipping as soon as presenting is no longer early, the display's tick or the pad awaited before the flip only when it would be.
 
 ## .set EVENT_ROUSED
 
