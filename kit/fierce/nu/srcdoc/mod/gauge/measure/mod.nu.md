@@ -9,6 +9,7 @@ child's `main` by the child (`sdl log`) and refuses to export an alias as
 each imports its siblings by path, and fierce's own modules import a child
 directly.
 
+- `measure catch-ups-of`: measure/receipt's `catch-ups-of`.
 - `measure contract-of`: measure/receipt's `contract-of`.
 - `measure flips`: measure/receipt's `flips`.
 - `measure screen-frame`: measure/screen's `screen-frame`.

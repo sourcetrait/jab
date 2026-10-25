@@ -135,14 +135,20 @@ export def contract-of [rows: list<any>, acceptance: record, cap: int, eps: int]
     if not $acceptance.available { return ($read | merge { k_violations: null, k_first: [], late_wakes: null, catch_ups: null }) }
     let presented = ($rows | where {|r| $r.flip_status == $FLIP_PRESENTED })
     let k = (present k-violations ($presented | each {|r| $r.receipt_stamp }) $period $eps)
-    let half_us = ($period / $TICKS_PER_US / 2)
     let named = ($k | first 8 | each {|v| $v | insert frame ($presented | get $v.index | get frame) | insert witness_frame ($presented | get $v.witness | get frame) })
     $read | merge {
         k_violations: ($k | length),
         k_first: $named,
         late_wakes: (wake-delays $rows | where {|d| $d >= $eps } | length),
-        catch_ups: ($presented | where {|r| $r.acceptance_interval_us < $half_us } | length),
+        catch_ups: (catch-ups-of $rows $cap),
     }
+}
+
+# A measurement's catch-ups: presents accepted under half a period apart
+export def catch-ups-of [rows: list<any>, cap: int]: nothing -> int {
+    if $cap <= 0 { error make { msg: $"a cap is a positive frame rate, not ($cap)" } }
+    let half_us = (($HZ // $cap) / $TICKS_PER_US / 2)
+    $rows | where {|r| $r.flip_status == $FLIP_PRESENTED and $r.acceptance_interval_us < $half_us } | length
 }
 
 # A measurement's wake delays, s less T in ticks, over its frames that waited

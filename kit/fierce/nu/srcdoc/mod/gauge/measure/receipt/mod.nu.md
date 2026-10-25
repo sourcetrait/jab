@@ -2,8 +2,9 @@
 
 The receipt stage from schema 7: what makes a window invalid in its
 receipts and its recorded calls' bounds, whether the acceptance intervals
-stand and what they are, the presentation contract read at eps, the wake
-delays, and the presents in order with their calls' bounds.
+stand and what they are, the presentation contract read at eps, the
+catch-ups at a cap, the wake delays, and the presents in order with their
+calls' bounds.
 
 ## TICKS_PER_US
 
@@ -119,15 +120,25 @@ the receipt stage passed: its eps, the period in ticks (HZ over the cap),
   frame
 - `late_wakes`: the wake delays at or past eps (wake-delays), the flips
   the frame rule re-anchors
-- `catch_ups`: the presented frames accepted under half a period after
-  the present before them, by their acceptance intervals; K at eps under
-  half a period admits none, so any is a grid-keeping kernel's catch-up,
-  a flip let through soon after a late one
+- `catch_ups`: the catch-ups at the cap (catch-ups-of), which no eps
+  enters
 
 Unavailable, the three are null and `k_first` empty. The bench's own
 `catch_up` (gauge bench) is another count: presenting calls' intervals
 under half a period after a frame past the period, read from the calls'
 starts, never from the receipts.
+
+## catch-ups-of
+
+A measurement's catch-ups (GuestCatchUps): its presented frames accepted
+under half a period after the present before them, by their acceptance
+intervals (accepted), the period HZ over `cap`, the cap the run recorded.
+It reads no eps, so a run that knows no tolerance has its catch-ups all
+the same; K at eps under half a period admits none, so any is a
+grid-keeping kernel's catch-up, a flip let through soon after a late one.
+The rows are an available acceptance's (acceptance-of), every presented
+frame carrying its interval; a cap that is not a positive rate is
+refused, since it gives no period.
 
 ## wake-delays
 
