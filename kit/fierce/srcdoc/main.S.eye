@@ -43,26 +43,26 @@ call local load_report ms s5 u64 > clobber a0-a1,a7 [1026:1092] :a debug build's
  ms :the load's milliseconds
 call local frame_report ticks s10 u64 > clobber a0-a1,a7 [1094:1322] :a debug build's frame line on the UART, the counts, the ticks by phase with the raster's, the spans and pixels, the light, the rejected pixels, the samples, the tiles with the slots in use, the packet's commands and flushes, and the workers' count, grain, rounds, bands a hart, and times
  ticks :the frame's drawing ticks
-call local count_report > clobber a0-a1,a7 [1323:1395] :a COUNT build's count line on the UART after the frame line: the divides span_fill made and avoided, the blocks shifted and short, the negative steps off sixteen in u and v, the flat spans, the mismatches, and the re-entries into intervals of two blocks, of four, and cut short, every count the frame's own
-call local sectors_report > clobber a0-a1,a7 [1397:1426] :a debug build's sectors line on the UART, the last frame's walk in order
-call local sector_at index u32 > record a0 addr [1428:1433]
-call local loop_at index u32 > record a0 addr [1435:1440]
-call local wall_at index u32 > record a0 addr [1442:1447]
-call local vertex_at index u32 > record a0 addr [1449:1454]
-call local portal_at index u32 > record a0 addr [1456:1461]
-call local entity_at index u32 > record a0 addr [1463:1468]
-call local material_at index u32 > record a0 addr [1470:1475]
-call local name_at offset u32 > name a0 addr [1477:1480] :a name in the names table
-call local clear_screen > screen JAB_DISPLAY_BASE u32,clobber a0 [1482:1483] :the framebuffer black
-call local fill_screen colour u32 > screen JAB_DISPLAY_BASE u32 [1484:1495] :the framebuffer one colour
-call local read_file buffer addr,capacity u64,disk u64,path addr > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [1497:1549] :a file off a disk read whole, a page at a time, as much as the buffer holds
+call local count_report > clobber a0-a1,a7 [1323:1388] :a COUNT build's count line on the UART after the frame line: the divides span_fill made and avoided, the blocks shifted and short, the negative steps off sixteen in u and v, the flat spans, the mismatches, and the re-entries into intervals of two blocks, of four, and cut short, every count the frame's own
+call local sectors_report > clobber a0-a1,a7 [1390:1419] :a debug build's sectors line on the UART, the last frame's walk in order
+call local sector_at index u32 > record a0 addr [1421:1426]
+call local loop_at index u32 > record a0 addr [1428:1433]
+call local wall_at index u32 > record a0 addr [1435:1440]
+call local vertex_at index u32 > record a0 addr [1442:1447]
+call local portal_at index u32 > record a0 addr [1449:1454]
+call local entity_at index u32 > record a0 addr [1456:1461]
+call local material_at index u32 > record a0 addr [1463:1468]
+call local name_at offset u32 > name a0 addr [1470:1473] :a name in the names table
+call local clear_screen > screen JAB_DISPLAY_BASE u32,clobber a0 [1475:1476] :the framebuffer black
+call local fill_screen colour u32 > screen JAB_DISPLAY_BASE u32 [1477:1488] :the framebuffer one colour
+call local read_file buffer addr,capacity u64,disk u64,path addr > bytes a0 u64,contents 0(buffer) u8,clobber a1-a4,a7 [1490:1542] :a file off a disk read whole, a page at a time, as much as the buffer holds
  path :the path from the root, NUL-terminated
  bytes :the bytes read, 0 when the file is not there
-call local str_len string addr > length a1 u64 [1551:1560]
+call local str_len string addr > length a1 u64 [1544:1553]
  string :NUL-terminated, kept in a0
-call local text_trim text addr,count u64 > length a1 u64,contents 0(text) u8 [1562:1575] :the text ended after its last byte that is not whitespace
+call local text_trim text addr,count u64 > length a1 u64,contents 0(text) u8 [1555:1568] :the text ended after its last byte that is not whitespace
  text :kept in a0
  count :the bytes the text holds, a terminator written after them first
-call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [1577:1586] :appends a string at the cursor
+call local append_str cursor addr,string addr > cursor a0 addr,text 0(cursor) u8,clobber a1 [1570:1579] :appends a string at the cursor
  string :NUL-terminated
-call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [1588:1607] :appends a number in decimal at the cursor
+call local append_dec cursor addr,value u64 > cursor a0 addr,digits 0(cursor) u8,clobber a1 [1581:1600] :appends a number in decimal at the cursor

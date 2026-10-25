@@ -300,12 +300,7 @@ boot, so a program places each of its presents in the host's sequence of
 flushes. A debug kernel's `jab.badxfer`, `jab.badxferat`, and
 `jab.badflush` bootargs make the device refuse a chosen present's transfer
 or flush, which is how `test/framecap` holds the receipts of a failure. A
-kernel built with `FLIP_BATCH`, a candidate under measurement, sends the
-whole flip's transfer and flush as one batch with one wait, as a list's
-are sent, so a refused transfer is followed by the flush, which shows the
-frame before again and counts; `./do test test/framecap --set flip_batch`
-holds it, and a kernel built without the symbol is byte for byte the one
-before it. A program's loop takes what arrived without waiting, draws
+program's loop takes what arrived without waiting, draws
 its frame by the time since the last, keeps what it will flip, awaits
 the display's tick, and then flips, an early answer awaited and flipped
 again; bounce, walk, wasd, and pad run that loop. A presented flip sets
@@ -314,14 +309,12 @@ ticks (0.37 ms) past it, else a period from the acceptance, so a frame
 drawn first flips on its tick every period while its drawing fits one,
 and a loop that awaits the tick and then draws flips a period plus its
 wake and drawing apart, under the cap. Input that arrives during the
-wait takes effect with the next frame. The game built
-with `FOOTPRINT`, a candidate, takes each block's mip level from the row
-derivative at the block's own start, and a debug build with `LEVELS`
-stores each pixel's block level, offset, and span in place of its
-colour, which the game's `rust/footprint` crate reads and holds to the
-exact footprint, its `differ` boxing where two pictures part;
-`kit/fierce/test/footprint` holds the candidate's arithmetic to the
-crate's.
+wait takes effect with the next frame. The game's debug build with
+`LEVELS` stores each pixel's block level, offset, and span in place of
+its colour, which the game's `rust/footprint` crate reads and holds to
+the exact footprint, its `differ` boxing where two pictures part;
+`kit/fierce/test/footprint` holds `render.inc`'s `row_derivative`, a
+block's step down a row at its own start, to the crate's.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `./do run ... --set debug`

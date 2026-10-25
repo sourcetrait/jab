@@ -1381,13 +1381,6 @@ count_report:
     call append_dec
     la a1, word_count_reentry_end
     call append_str
-.ifdef FOOTPRINT
-    la a1, word_count_saturated
-    call append_str
-    la t0, count_stats
-    ld a1, COUNT_SATURATED(t0)
-    call append_dec
-.endif
     call line_end
     ld ra, 8(sp)
     addi sp, sp, 16
@@ -1860,10 +1853,6 @@ word_count_reentry_cut:
     .asciz " in four, "
 word_count_reentry_end:
     .asciz " cut short"
-.ifdef FOOTPRINT
-word_count_saturated:
-    .asciz "; saturated "
-.endif
 .endif
 .endif
 

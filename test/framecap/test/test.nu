@@ -11,11 +11,7 @@
 # the API with a GPU knob, hold the receipts of a whole flip's refused
 # transfer and refused flush, each followed by a flip that finds the
 # clock where the refused one left it, a refused transfer in a list, a
-# refused transfer in a list's first batch, and a stuck source. Built
-# with FLIP_BATCH, SubmitWait's candidate, the whole flip goes as one
-# batch, so its refused transfer's flush shows the old frame again and
-# counts; the whole flip's scenarios run before the list's, so a defect
-# of the batch the two share fails at the candidate's own case. A last
+# refused transfer in a list's first batch, and a stuck source. A last
 # launch holds the frame rule at exact ticks: its cases go over the API
 # to the debug kernel's step call, each answer held to the rule computed
 # here.
@@ -46,7 +42,6 @@ const PRESENT = 1000
 const STEP_TICK = 1000000000
 
 def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
-    let batched = ("FLIP_BATCH" in ($set | split row ","))
     let cap = (open --raw ($env.FILE_PWD | path join ".." ".." ".." "sdk" "src" "jab.inc") | decode | parse --regex '\.set JAB_DISPLAY_FPS_CAP, (?P<cap>\d+)' | get 0.cap | into int)
     let run = (launch --kernel $kernel --image $image --out ($out | path join "plain") --set $set)
     assert equal $run.status 0 $"exit status, with the UART: ($run.serial)"
@@ -79,15 +74,11 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     let flip = ($transfer.receipts | where kind == $KIND.badxfer | first)
     stamp-holds $flip
     assert equal $flip.status 3 $"a whole flip with its transfer refused answers 3: ($flip)"
-    if $batched {
-        assert equal $flip.a3 ($old.a3 + 1) $"the batched whole flip's flush answered OK after its refused transfer counts its present: ($flip.a3) after ($old.a3)"
-    } else {
-        assert equal $flip.a3 $old.a3 $"its present uncounted: ($flip.a3) after ($old.a3)"
-    }
+    assert equal $flip.a3 $old.a3 $"its present uncounted: ($flip.a3) after ($old.a3)"
     let screen = (capture screen $transfer.run.screen)
     assert equal (capture pixel $screen 960 540) $OLD "the screen the old frame"
     assert equal (refusals $transfer.run "transfer") 1 "QEMU refused the transfer"
-    assert equal (refusals $transfer.run "flush") 0 (if $batched { "and no flush, which showed the old frame again" } else { "and no flush was issued" })
+    assert equal (refusals $transfer.run "flush") 0 "and no flush was issued"
     clock-holds $transfer.receipts $KIND.badxfer "transfer"
 
     let flush = (scenario $kernel $image ($out | path join "flush") $set "f" "jab.badflush=2")
@@ -126,8 +117,7 @@ def main [--kernel: path, --image: path, --out: path, --set: string = ""] {
     assert equal $flip.status 3 $"a flip after the source failed answers 3: ($flip)"
     assert equal [$flip.a1 $flip.a2] [0 0] $"a refused-before-the-check flip observes no decision: ($flip)"
     assert equal $flip.a3 $before.a3 $"and its ordinal unchanged: ($flip.a3) after ($before.a3)"
-    let whole = (if $batched { "the whole flip batched, its refused transfer's flush counted" } else { "the whole flip's refused transfer and flush uncounted" })
-    print $"framecap: receipts on ($receipts | length) flips; ($whole), the clock untouched by either; the list's present counted, the long list's not; the stuck source's after-check zeros"
+    print $"framecap: receipts on ($receipts | length) flips; the whole flip's refused transfer and flush uncounted, the clock untouched by either; the list's present counted, the long list's not; the stuck source's after-check zeros"
 
     let eps = (frame-eps)
     let cases = (step-cases $eps)

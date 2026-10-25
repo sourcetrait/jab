@@ -53,9 +53,6 @@ const HANDOFF_OBLIQUE_LEVELS = 3
 # A COUNT build's count line form, the reported frame's own counts
 const COUNT_LINE = "fps: count {divides} divides, {avoided} avoided; blocks {shifted} shifted, {short} short; negative steps off sixteen {nu} in u, {nv} in v; flat spans {flat}; mismatches {mismatches}; re-entries {two} in two blocks, {four} in four, {cut} cut short"
 
-# The saturations FOOTPRINT adds after a count line
-const COUNT_SATURATED = "; saturated {saturated}"
-
 # Where a handoff run's window breaks its kind's rule, frame by frame
 def handoff-unsettled [rows: list<any>, kind: string, slots: int]: nothing -> list<string> {
     let tiled = ($rows | get -o 0.tiled_pixels)
@@ -77,10 +74,10 @@ def handoff-unsettled [rows: list<any>, kind: string, slots: int]: nothing -> li
     }
 }
 
-# A count line's counts, saturations included where present, else refused
+# A count line's counts, else refused
 def count-of [line: string]: nothing -> record {
-    let parsed = (if ($line | str contains "; saturated ") { $line | parse ($COUNT_LINE + $COUNT_SATURATED) } else { $line | parse $COUNT_LINE })
-    assert equal ($parsed | length) 1 $"a count line of COUNT_LINE's form, FOOTPRINT's saturations after it or not: ($line)"
+    let parsed = ($line | parse $COUNT_LINE)
+    assert equal ($parsed | length) 1 $"a count line of COUNT_LINE's form: ($line)"
     $parsed | get 0 | update cells {|c| $c | into int }
 }
 

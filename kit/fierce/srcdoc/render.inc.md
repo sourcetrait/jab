@@ -755,9 +755,8 @@ A span block's pixels.
 1/z of 16,384 m, past every view the content holds. Under IZ_TEST, a debug
 build's symbol allowed with LEVELS and OWNER (ClampedReference),
 12,201,612, 1/z of 5.5 m, the depth the clamp's plan chose over garage_far's
-floor, so the drawn mapping's hold and FOOTPRINT's clamp branch are
-exercised on real geometry; the OWNER capture and both LEVELS captures of
-the clamp pose share it. An image's provenance carries the integer it was
+floor, so the drawn mapping's hold is exercised on real geometry; the OWNER
+capture and the LEVELS capture of the clamp pose share it. An image's provenance carries the integer it was
 assembled with, read from its ELF's absolute symbol.
 
 ## .set SKY_DEPTH
@@ -1161,15 +1160,9 @@ a tile block, on spans whose 1/z changes (raster.S's The cadence).
 `u64`: the same for an interval the span's end cut short, its step the
 per-lane division's.
 
-## .set COUNT_SATURATED
-
-`u64`: on a COUNT build with FOOTPRINT, the blocks whose row derivative
-saturated, each read at its chain's last level; the line's `; saturated
-N`. The blocks the candidate differentiates are the shifted and the short.
-
 ## .set COUNT_SIZE
 
-The count record's bytes, 96 with FOOTPRINT's saturations and 88 without.
+The count record's bytes, 88.
 
 ## .set MAX_COMMANDS
 
@@ -3208,8 +3201,8 @@ blocks (`blocks`) and holds them to the exact footprint (`reference`).
 
 ## .macro row_derivative
 
-FootprintEstimate's candidate, the row derivative of a texel coordinate at
-a block's start from the block's own z, by multiplies: with u = (u/z) /
+The row derivative of a texel coordinate at a block's start from the
+block's own z, by multiplies, which no build of the game takes: with u = (u/z) /
 (1/z), du/dy = (B_u - u B) z, B the polygon's IZB and B_u its UZB (or
 VZB for v). In fixed point u IZB is 16.16 by 6.26, so DEPTH_BITS down to
 u/z's 48.16 before the subtraction, and the difference times the 16.16 z

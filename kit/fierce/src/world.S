@@ -122,9 +122,6 @@ world_draw:
     sd zero, COUNT_REENTRY_TWO(t1)
     sd zero, COUNT_REENTRY_FOUR(t1)
     sd zero, COUNT_REENTRY_CUT(t1)
-.ifdef FOOTPRINT
-    sd zero, COUNT_SATURATED(t1)
-.endif
 .endif
     call tile_boundary              # the pool's one change a frame, before any bind
 .ifdef DEBUG

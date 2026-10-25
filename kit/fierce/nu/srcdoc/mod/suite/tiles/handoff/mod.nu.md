@@ -29,8 +29,7 @@ ones in the four-block part; levels 0 to HANDOFF_OBLIQUE_LEVELS - 1
 
 ## COUNT_LINE
 
-a COUNT build's count line, every count the reported frame's own; with
-FOOTPRINT besides, the blocks whose row derivative saturated after it
+a COUNT build's count line, every count the reported frame's own
 
 ## handoff-unsettled
 
@@ -45,8 +44,7 @@ throughout, and requests admitted and filtered every frame).
 
 ## count-of
 
-A count line's counts: COUNT_LINE's, and with FOOTPRINT's saturations
-after them `saturated` besides; a line of neither form refused.
+A count line's counts, COUNT_LINE's; a line of another form refused.
 
 ## handoff-holds
 

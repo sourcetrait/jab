@@ -749,27 +749,6 @@ acceptance measure of a change to what is drawn where: two builds posed
 on the same views must own every pixel alike, which the colour captures
 cannot say once a span's blocks shift.
 
-### The candidate's footprint
-
-FOOTPRINT, FootprintEstimate's candidate, a build symbol so every image
-built without it is byte for byte the one before. Under it the prologue
-computes none of today's estimate, the end's z, the two z a row below, and
-the row step's change a pixel, up to four divides a span; it keeps the
-span's z, slot 232, as the first block's start z in slot 208, and each
-block's end z, kept in slot 168 at its computation, becomes the next
-block's start there, so a block knows its start z with no divide. At the
-level each block takes the row derivatives of u and v at its start through
-render.inc's row_derivative, from s8, s9, the start z, and the command's
-IZB, UZB, and VZB, IZB taken as zero where s2, the start's raw 1/z, lies
-under IZ_MIN, the clamp's mapping; the footprint is the largest of the
-along-span steps and the two derivatives, and a saturation sets it to the
-greatest, which the halvings hold at the chain's last level. A COUNT
-build counts the saturations and the flat spans the prologue counted
-before. Each block pays about forty integer ops, four multiplies and four
-high multiplies among them, where today's paid about eight; the prologue's
-divides go. Both estimators read the along-span step as the block's
-secant, the steps the block takes.
-
 ### The levels build
 
 Under LEVELS every pixel loop stores its pixel's code (render.inc's

@@ -478,8 +478,7 @@ are the made plus the avoided; every avoided one was recomputed from its
 original operands and compared, a difference counted a mismatch. The
 re-entries are lit blocks entering an interval mid-way after a tile
 block on spans whose 1/z changes, by the interval's case (raster.S's The
-cadence). With FOOTPRINT the line ends `; saturated {saturated}`, the
-blocks whose row derivative saturated.
+cadence).
 
 ## clear_screen
 
@@ -966,10 +965,6 @@ COUNT build alone.
 ## word_count_reentry_end
 
 `11 u8`.
-
-## word_count_saturated
-
-`13 u8`: FOOTPRINT's alone.
 
 ## k_seconds_a_tick
 

@@ -1390,15 +1390,6 @@ span_fill:
     li t3, -1
     sd t3, 240(sp)                  # no request in hand
     ld a0, CTX_COMMAND(tp)
-.ifdef FOOTPRINT
-    ld t4, 232(sp)
-    sd t4, 208(sp)                  # the first block's start z, the span's
-.ifdef COUNT
-    bnez s3, 2801f
-    count_add COUNT_FLAT, a5, a6    # 1/z flat along the row
-2801:
-.endif
-.else
     mul t3, s10, s3
     add t3, s2, t3                  # 1/z at the end, kept for the row below it
     li t4, IZ_MIN
@@ -1511,7 +1502,6 @@ span_fill:
 .endif
     div t3, t3, s10
     sd t3, 216(sp)                  # the row step's change a pixel
-.endif
     ld t3, 16(sp)
     andi t3, t3, POLY_LIT
     beqz t3, 29f                    # unlit: no tiles
@@ -1592,9 +1582,6 @@ span_fill:
     count_add COUNT_MISMATCHES, a6, a7
 .endif
 35:
-.ifdef FOOTPRINT
-    sd t4, 168(sp)                  # the block's end z, the next block's start
-.endif
     mul t3, s11, s6
     add t3, t3, s4                  # u/z at the end
     mul t3, t3, t4
@@ -1661,34 +1648,6 @@ span_fill:
     bge a7, a0, 432f
     mv a7, a0
 432:
-.ifdef FOOTPRINT
-    ld a0, CTX_COMMAND(tp)
-    li a1, 0                        # 1/z held at IZ_MIN: z constant there, IZB's term gone
-    li a2, IZ_MIN
-    blt s2, a2, 4371f
-    ld a1, POLY_IZB(a0)
-4371:
-    ld a2, 208(sp)                  # the block's start z
-    ld a3, POLY_UZB(a0)
-    row_derivative a4, s8, a1, a3, a2, a5, a6, 4374f
-    bge a7, a4, 4372f
-    mv a7, a4
-4372:
-    ld a3, POLY_VZB(a0)
-    row_derivative a4, s9, a1, a3, a2, a5, a6, 4374f
-    bge a7, a4, 4373f
-    mv a7, a4
-    j 4373f
-4374:
-.ifdef COUNT
-    count_add COUNT_SATURATED, a5, a6
-.endif
-    li a7, -1
-    srli a7, a7, 1                  # saturated: the greatest footprint, the chain's last level
-4373:
-    ld a0, 168(sp)
-    sd a0, 208(sp)                  # the next block's start z
-.else
     ld a0, 208(sp)                  # the step down a row here
     bge a7, a0, 433f
     mv a7, a0
@@ -1698,7 +1657,6 @@ span_fill:
     ld a6, 208(sp)
     add a6, a6, a0
     sd a6, 208(sp)                  # and at the next block
-.endif
     srli a7, a7, 17
     ld a0, 224(sp)                  # the chain's last level
     li a6, 0
