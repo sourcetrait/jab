@@ -24,3 +24,6 @@ export const FLIP_NONE = 255
 
 # The cadences: 0 awaits after the flip, 1 waits only if early, 2 on the tick
 export const CADENCES = [0 1 2]
+
+# The cadences a run may ask, the program's own: 1 alone
+export const LAUNCHABLE = [1]

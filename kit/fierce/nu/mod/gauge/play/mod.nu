@@ -14,7 +14,7 @@ use (path self ../report)
 use (path self ../../route)
 use (path self ../../console) [SEED_AT]
 use (path self ../../frame) [GFX_SLOTS]
-use (path self ../measure/presentation) [CADENCES CAP]
+use (path self ../measure/presentation) [CAP LAUNCHABLE]
 use (path self ../audio) [END_AT MEASURED_TO QUEUE_FULL SECONDS]
 use (path self ../measure/validity) [SCREEN_ROWS]
 
@@ -67,7 +67,7 @@ export def route [
 ]: nothing -> nothing {
     let seeds = (nuon-list $seeds "--seeds" "int")
     let qemu = (nuon-list $qemu "--qemu" "string")
-    if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
+    if $cadence not-in $LAUNCHABLE { error make { msg: $"--cadence is one of ($LAUNCHABLE | str join ', '), the program's, not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
     let machine = (machine resolve $at.workspace $spec $harts)
@@ -145,7 +145,7 @@ export def host [
     --eps: int = 10000
 ]: nothing -> nothing {
     let qemu = (nuon-list $qemu "--qemu" "string")
-    if $cadence not-in $CADENCES { error make { msg: $"--cadence is one of ($CADENCES | str join ', '), not ($cadence)" } }
+    if $cadence not-in $LAUNCHABLE { error make { msg: $"--cadence is one of ($LAUNCHABLE | str join ', '), the program's, not ($cadence)" } }
     let asked = (workers-asked $workers $grain)
     let at = (places $tree $kernel $image $out)
     let machine = (machine resolve $at.workspace $spec $harts)

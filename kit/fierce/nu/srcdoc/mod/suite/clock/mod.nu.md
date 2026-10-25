@@ -65,6 +65,61 @@ The kernel's timer.S, which sets the frame rule's tolerance FRAME_EPS
 The kernel's TICK, 166,666: the period at the cap of 60 in the guest
 clock's 10 MHz ticks, the unit the rule steps a receipt's tick by.
 
+## CLOCK_RESIDUAL
+
+The walk's bound in microseconds on a frame's next start less its start,
+critical path, wait, and await.
+
+## CADENCE_PERIOD
+
+The period at the cap of 60, in microseconds.
+
+## CONSOLE_S
+
+The S frame's command byte as a console record carries it.
+
+## CADENCE_SKIP
+
+The first frames a sustained stage sets aside.
+
+## SCHEDULE_FAST
+## SCHEDULE_TRIGGERS
+## SCHEDULE_FORCED
+## SCHEDULE_ONCE
+## SCHEDULE_SLOW
+## SCHEDULE_END
+
+CadenceSchedule on Render One: the standing stall and the consume's spin
+from 1.5 s, ten trigger reports, the frame whose flip is tried before its
+wait, the frame stalled once, the slow stage's standing stall, and the E.
+The once stall stands well past two periods: from the tick before it to
+its flip's end run two present calls, 0.3 to 4 ms each here, and the
+kernel sets the next tick from the grid when a flip lands within a period
+of its tick and from the flip when later, so a stall near two periods
+falls either side of that edge by chance; at 38 ms the frames stand 5 ms
+or more clear of every edge they meet. Every timed action stands 300 ms or
+more from the next: a launch writes its actions on the turns of its loop,
+about 220 ms apart here, so two reports nearer than that go in together
+and fire once in a frame, as two S frames would act on one.
+
+## SCHEDULE_WAKES
+
+The wakes a frame stays under: a consume that takes nothing spins its 500
+us again on every wake, twenty or more in a period's wait.
+
+## MOTION_POSE
+## MOTION_AT
+## MOTION_STALL
+## MOTION_STICK
+## MOTION_END
+## MOTION_SPEED
+## MOTION_CLEAR
+
+MotionByTime on the still copy of Render Zero: the placement, north along
+the bay's east side clear of the pillars, the standing stall, the stick
+held forward, the E, the body's speed, and the clearance from every wall
+of a frame's sector its frames keep.
+
 ## frame-eps
 
 FRAME_EPS as timer.S sets it, in ticks, the workspace's own: the eps the

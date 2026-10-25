@@ -33,29 +33,16 @@ so a receipt's acceptance less its tick is a wake delay alone
 
 ## CADENCES
 
-The cadence fixtures (cadence-holds): the cadences, the period at the
-cap of 60 in microseconds, the S frame's command byte as a console
-record carries it, and a sustained stage's first frames set aside.
-CadenceSchedule on Render One: the standing stall and the consume's
-spin from 1.5 s, ten trigger reports, the frame whose flip is tried
-before its wait, the frame stalled once, the slow stage's standing
-stall, and the E. The once stall stands well past two periods: from the
-tick before it to its flip's end run two present calls, 0.3 to 4 ms
-each here, and the kernel sets the next tick from the grid when a flip
-lands within a period of its tick and from the flip when later, so a
-stall near two periods falls either side of that edge by chance; at 38
-ms every cadence's frames stand 5 ms or more clear of every edge they
-meet. Every timed action stands 300 ms or more from the
-next: a launch writes its actions on the turns of its loop, about 220
-ms apart here, so two reports nearer than that go in together and fire
-once in a frame, as two S frames would act on one. The wakes a frame
-stays under: a consume that takes nothing spins its 500 us again on
-every wake, twenty or more in a period's wait. MotionByTime on the
-still copy of Render Zero: the placement, north along the bay's east
-side clear of the pillars, the standing stall, the stick held forward,
-the E, the
-body's speed, and the clearance from every wall of a frame's sector its
-frames keep
+The cadences a capture may hold, the reader's set: 0 awaits after its
+flip, 1 waits only while early, 2 holds a frame ready after its tick to
+the next. The program plays 1 alone (CadenceCleanup), and the reader
+keeps all three, so a capture made at 0 or 2 reads under its own rules as
+before: its validity, its pairing, and CADENCE_AFTER_FLIP's rules for 0.
+
+## LAUNCHABLE
+
+The cadences a run may ask, the program's own: 1 alone. `gauge run` and
+`gauge play` refuse any other, apart from CADENCES, which the reader keeps.
 
 ## FLIP_NONE
 

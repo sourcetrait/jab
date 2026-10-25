@@ -65,7 +65,8 @@ after its outcome (gauge report contract-line).
 - `--runs`: the route's runs
 - `--seeds`: each run's seed, a NUON list such as "[3 2 1]", run n's n unless
   given
-- `--cadence`: the cadence each run asks for, the program's own 1 unless given
+- `--cadence`: the cadence each run asks for, one of LAUNCHABLE, the program's
+  own 1
 - `--workers`: the raster's workers each run asks for, 0 the serial backend;
   none asked, no W, unless given
 - `--grain`: the rows a band asked with the workers, the program's own 32 unless
@@ -107,7 +108,8 @@ tree asked is refused as `run` refuses it. The run's contract is read at
 - `--image`: the program's image, the tree's own unless given
 - `--seconds`: the measurement's length
 - `--seed`: the seed the run sends
-- `--cadence`: the cadence the run asks for, the program's own 1 unless given
+- `--cadence`: the cadence the run asks for, one of LAUNCHABLE, the program's
+  own 1
 - `--workers`: the raster's workers the run asks for, 0 the serial backend; none
   asked, no W, unless given
 - `--grain`: the rows a band asked with the workers, the program's own 32 unless
