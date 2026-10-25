@@ -2,8 +2,8 @@
 
 ## cadence-holds
 
-The program's three cadences on its own clock records, one
-launch a cadence of each fixture, the debug build's S frames standing
+The program's cadence, each of LAUNCHABLE, 1 alone, on its own clock
+records, one launch of each fixture, the debug build's S frames standing
 stalls in place of the drawing, each window held complete and valid at
 the program's schema before anything is read from it. CadenceSchedule,
 on Render One: R and C at 200 ms; from 1.5 s a 4 ms standing stall and a
@@ -13,23 +13,18 @@ whose flip is tried before its wait; at 6.3 s a frame stalled 38 ms;
 from 7 s a 25 ms standing stall; the E at 9 s. A sustained stage sets
 its first five frames aside; a one-off is read at the frame its S
 answer names, the first state after it, and the frames after it as they
-come. The fast
-stage presents every period under 1 and 2, which wait for the tick, a
-period after its simulation, and under 0 a period plus its wake and
-drawing apart, soon after its simulation, every presented flip late by
-its drawing; every frame with wakes holding the consume's spin in its
-pacing and its critical path, never its wait; the forced frame under 1
-and 2 is refused once and presents on the tick; the stalled frame's
-intervals are each cadence's recovery; the slow stage presents a period
-plus its wake and drawing apart under 0, as soon as ready with no wait
-under 1, and every second period on the tick grid under 2; ten rounds under every
-cadence, presses taken in waits under 1 and 2, and few wakes a frame.
-MotionByTime, on the still copy of Render Zero: placed on the bay's east side
-facing north, a 25 ms standing stall, the stick held forward from 2 to
-5 s; over the frames the body moved in a metre or more from every wall
-of their sector, the distance from the first to the last over the
-difference of their simulation times is 4 m/s within 2 percent under
-every cadence.
+come. The fast stage presents every period, waiting for the tick, a
+period after its simulation; every frame with wakes holds the consume's
+spin in its pacing and its critical path, never its wait; the forced
+frame is refused once and presents on the tick; the stalled frame
+presents once ready, the next held to the tick a period past its flip,
+then the period; the slow stage presents as soon as ready with no wait;
+ten rounds, presses taken in waits, and few wakes a frame. MotionByTime,
+on the still copy of Render Zero: placed on the bay's east side facing
+north, a 25 ms standing stall, the stick held forward from 2 to 5 s; over
+the frames the body moved in a metre or more from every wall of their
+sector, the distance from the first to the last over the difference of
+their simulation times is 4 m/s within 2 percent.
 
 The trigger reports are 410 ms apart, 24.6 periods, so each lands 0.6 of
 a period past the one before on the tick grid and the ten fall at five
@@ -39,19 +34,14 @@ sits, which each late flip before the stage sets anew. Reports a whole
 number of periods apart share one phase, all in the waits or none.
 
 Each schedule's receipts are held to the frame rule (rule-holds) at
-FRAME_EPS as timer.S sets it, and its contract is read at that eps.
-Cadence 0 is the order that awaits, then draws, then flips, so its flips
-land late by their wake and drawing and re-anchor, each a period plus
-those after the one before; cadences 1 and 2 prepare first and wait for
-the tick, which the rule keeps on its grid.
+FRAME_EPS as timer.S sets it, and its contract is read at that eps. The
+cadence prepares first and waits for the tick, which the rule keeps on
+its grid.
 
 - the fast stage
 - the frame whose flip is tried before its wait
-- the frame stalled once and the two after it: under 0 its flip a
-  period and its stall past the flip before, the next two a period and
-  the standing stall past theirs; under 1 presented
-  once ready, the next held to the tick a period past its flip, then
-  the period; under 2 held to the third tick, then the period
+- the frame stalled once and the two after it: presented once ready, the
+  next held to the tick a period past its flip, then the period
 - the slow stage
 - the rounds, the presses taken in waits, and the wakes a frame
 
@@ -130,11 +120,10 @@ kernel under test was built with when the suite builds it.
 The frame rule on a schedule's receipts: for each two presented flips in
 order, the later one's tick is the earlier's tick a period on when the
 earlier was accepted under eps past its tick, else its acceptance a
-period on; exactly that at cadences 0 and 1, which never let a reported
-tick move the clock between two presents, and that or whole periods past
-it at cadence 2, whose late frames wait for a fresh tick. The read is
-exact, every tick and stamp a receipt's. K holds at eps over every
-acceptance, the contract's count none.
+period on, exactly, since the cadence never lets a reported tick move the
+clock between two presents. The read is exact, every tick and stamp a
+receipt's. K holds at eps over every acceptance, the contract's count
+none.
 
 ## submitted
 
@@ -162,8 +151,8 @@ the frame's clock over the walk: the seed and the cadence answered
 before the first frame, the E closing the measurement with the end
 marker after its final frame's records, every frame from 0 to it
 with a frame, a draw, a presentation, and a packet record in order
-at the schema, each at cadence 0, awaiting after its flip: no wait
-and no pacing, one flip attempt, a refusal only when it came early;
+at the schema, each at the program's cadence, 1, its final flip
+presented and its attempts its refusals and one more;
 each frame's start, critical path, wait, and await adding up to its
 next start, the next frame's start; each frame's phases within its
 critical path and the drawing's parts, the raster and the tile
@@ -182,5 +171,5 @@ the measurement
 
 ## cadences
 
-the three cadences on a schedule of stalls and trigger reports and
+the program's cadence on a schedule of stalls and trigger reports and
 on a timed walk (cadence-holds)

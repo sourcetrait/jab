@@ -25,7 +25,7 @@ walked to the upper storey; Render Zero, the game's map, from its
 spawn and four poses, one under the down flight's sloped ceiling,
 with the sky read off the yard's capture and two traces answered, its
 flights and driveway walked from placed starts with the ambient
-following and their clock read, the three cadences on a schedule of
+following and their clock read, the program's cadence on a schedule of
 stalls and trigger reports and on a timed walk (cadence-holds), the
 fight: an android roused and firing, struck down by four rounds from
 the console and one from the trigger, fallen, its magazine taken on a

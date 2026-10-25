@@ -12,7 +12,8 @@ state's sector sits; the P frame's, the H frame's, and the J frame's
 ## CLOCK_SEED
 
 The clock over Render Zero's walk: the seed and the cadence sent before
-the first frame, the E closing the measurement a second before the
+the first frame, the cadence the program's own, 1, the E closing the
+measurement a second before the
 capture, and the records' schema; a frame's next start less its
 start less its critical path, wait, and await, the microseconds the
 conversions drop, at most CLOCK_RESIDUAL
@@ -40,7 +41,8 @@ The console's R frame: the seed as 64 bits in bytes 4 to 11.
 
 ## cadence
 
-The console's C frame: the cadence in byte 4.
+The console's C frame: the cadence in byte 4, which the program, playing
+one cadence, answers as an unknown kind.
 
 ## nonce
 

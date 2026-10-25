@@ -11,7 +11,7 @@ export const CONSOLE_P = 80
 export const CLOCK_SEED = 7
 
 # The cadence Render Zero's walk asks before its first frame
-export const CLOCK_CADENCE = 0
+export const CLOCK_CADENCE = 1
 
 # When the seed and the cadence go in before the first frame
 export const CLOCK_SEED_AT = 200ms
