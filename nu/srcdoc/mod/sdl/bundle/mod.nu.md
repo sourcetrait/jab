@@ -20,8 +20,9 @@ probe directory's `api.out`, `identity.nuon`,
 whole; and last `bundle.nuon`, the manifest, bundle_schema 2: the
 profile; the reader (sdl-reader), `identity reader`'s record taken as
 the bundle starts, where its code is read, the one field schema 2
-changes; the host, its OS, kernel release,
-hostname, and QEMU (sdl-qemu-of); every object of the log's table with
+changes; the host, its OS, kernel release, and QEMU (sdl-qemu-of), its
+hostname written null so no bundle a public project lands carries one;
+every object of the log's table with
 its line's fields, its state, and for a read one its SHA-256 and its
 table with that file's SHA-256 and its source; every other file with
 its SHA-256 and size; the events counted; and the run, the identity's

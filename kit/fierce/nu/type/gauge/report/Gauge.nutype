@@ -69,10 +69,17 @@ oneof<
                 >,
                 overrides: list<string>,
                 qemu: record<binary: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>,
-                host: record<
-                    os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
-                    kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
-                    cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                host: oneof<
+                    record<
+                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                        kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
+                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    >,
+                    record<
+                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                        kernel_version: oneof<string, nothing>, hostname: nothing, alias: string, role: string,
+                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    >
                 >,
                 toolchain: record<
                     prefix: oneof<string, nothing>, assembler: oneof<string, nothing>, link: oneof<string, nothing>,
@@ -877,10 +884,17 @@ oneof<
                     >,
                     overrides: list<string>,
                     qemu: record<binary: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>,
-                    host: record<
-                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
-                        kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
-                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    host: oneof<
+                        record<
+                            os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                            kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
+                            cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                        >,
+                        record<
+                            os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                            kernel_version: oneof<string, nothing>, hostname: nothing, alias: string, role: string,
+                            cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                        >
                     >,
                     toolchain: record<
                         prefix: oneof<string, nothing>, assembler: oneof<string, nothing>, link: oneof<string, nothing>,
@@ -1185,10 +1199,17 @@ oneof<
                 >,
                 overrides: list<string>,
                 qemu: record<binary: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>,
-                host: record<
-                    os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
-                    kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
-                    cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                host: oneof<
+                    record<
+                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                        kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
+                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    >,
+                    record<
+                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                        kernel_version: oneof<string, nothing>, hostname: nothing, alias: string, role: string,
+                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    >
                 >,
                 toolchain: record<
                     prefix: oneof<string, nothing>, assembler: oneof<string, nothing>, link: oneof<string, nothing>,
@@ -1993,10 +2014,17 @@ oneof<
                     >,
                     overrides: list<string>,
                     qemu: record<binary: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>,
-                    host: record<
-                        os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
-                        kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
-                        cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                    host: oneof<
+                        record<
+                            os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                            kernel_version: oneof<string, nothing>, hostname: oneof<string, nothing>,
+                            cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                        >,
+                        record<
+                            os: string, name: oneof<string, nothing>, os_version: oneof<string, nothing>,
+                            kernel_version: oneof<string, nothing>, hostname: nothing, alias: string, role: string,
+                            cpu: oneof<string, nothing>, cores: int, memory: oneof<filesize, nothing>
+                        >
                     >,
                     toolchain: record<
                         prefix: oneof<string, nothing>, assembler: oneof<string, nothing>, link: oneof<string, nothing>,

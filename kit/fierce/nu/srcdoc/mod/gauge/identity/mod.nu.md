@@ -47,7 +47,11 @@ the route, the cap, the machine (`machine of`'s record: a named
 spec's, its name, cores, RAM, and display, or a custom machine's, its
 harts and RAM, diagnostic; -machine, the CPU, and the accelerator with
 its thread mode, and the words beside them),
-the QEMU words of the launch's own (`overrides`), the host, the
+the QEMU words of the launch's own (`overrides`), the host (its OS, name,
+version, and kernel, its hostname written null so no record carries it,
+the system's alias and the machine's declared role from the SDK's `host
+system-alias` and `host role`, either file written with its default where
+it is missing, and its CPU, cores, and memory), the
 toolchain with its as, ld, and objcopy, each the file its prefix resolves
 to with its SHA-256 (gauge identity resolved-file), and the mode: the window,
 the sound, the pad, the seed, the

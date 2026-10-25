@@ -610,6 +610,20 @@ in hart 1's own file, and `jab.strayclaim=<identity>` enables one in hart
 0's own file and sends it there. A fault in the kernel, on any hart, prints its line on the
 console, naming the hart, and ends the run with status 1.
 
+The machine a run happens on declares itself in two settings its user
+makes once, each under the XDG config home. Its role, `role` under
+`[system]` in `jab/debug.toml`, is one of `unknown`, `container`,
+`desktop`, and `metal`: a container such as a build box, a developer's
+own desktop with its window and live audio, or a console's own hardware
+under Jab Metal. That file is written from `asset/default/debug.toml`,
+`role = 'unknown'`, the first time a run needs it, and a role outside the
+four is refused. Its alias, `alias` under `[system]` in
+`lowkick/config.toml`, is the nickname its user gives the system in place
+of its hostname, written `lowkick` where the file is missing. Every gauge
+run records both in its identity's host, and no record carries the
+hostname: the gauge's identity, a host package's preflight record, and an
+sdl probe's bundle write it null.
+
 Before the program starts, the kernel holds the machine to the image's
 declaration. Every kernel reads `jab.spec` from its command line, a
 release one too. When a spec is named, it must be one the image lists,

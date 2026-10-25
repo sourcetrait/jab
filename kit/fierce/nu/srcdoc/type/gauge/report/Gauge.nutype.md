@@ -9,5 +9,8 @@ read batch adds. A run's corrections carry the sidecar's own values,
 stated as text or null. The identities and the runs' records a read
 copies from older captures are stated as their writers write them today,
 so a report over captures older than those writers' changes holds the
-shapes they wrote then. The workbench's landing holds a battery's reports
-to it (jab-stress's `runner record outputs`).
+shapes they wrote then. An identity's host is either shape its writer
+wrote: from DeclaredConditions and HostnamesOut on, its hostname null
+beside the system's alias and the machine's declared role; before, its
+hostname as the host gave it. The workbench's landing holds a battery's
+reports to it (jab-stress's `runner record outputs`).

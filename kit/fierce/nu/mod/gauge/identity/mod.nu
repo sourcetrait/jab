@@ -1,4 +1,5 @@
 use (path self ../../../../../../nu/mod/build)
+use (path self ../../../../../../nu/mod/host)
 use (path self ../../../../../../nu/mod/walk)
 
 # The clock records' schemas this reader takes
@@ -83,7 +84,9 @@ export def new [at: record, set: string, map: string, route: oneof<string, nothi
             name: ($host | get -o name),
             os_version: ($host | get -o os_version),
             kernel_version: ($host | get -o kernel_version),
-            hostname: ($host | get -o hostname),
+            hostname: null,
+            alias: (host system-alias),
+            role: (host role $at.workspace),
             cpu: ($cpus | get -o 0.brand),
             cores: ($cpus | length),
             memory: (sys mem | get -o total),

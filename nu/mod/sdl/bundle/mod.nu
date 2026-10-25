@@ -9,7 +9,7 @@ use (path self ../../walk)
 const traced_qemu = "11.1.2"
 
 # A probed run's capture bundled with its tables and manifest, on its host
-export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []]: nothing -> record<bundle_schema: int, profile: string, reader: record, host: record<os: string, kernel: string, hostname: string, qemu: record<path: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>>, objects: list<record>, files: list<record<path: string, sha256: string, size: int>>, events: int, run: record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, capture_nonce: oneof<int, nothing>, qemu_pid: oneof<int, nothing>, api: oneof<bool, nothing>, sends: oneof<list<any>, nothing>>> {
+export def main [probe: path, bundle: path, --profile: string = "", --extra: list<string> = []]: nothing -> record<bundle_schema: int, profile: string, reader: record, host: record<os: string, kernel: string, hostname: oneof<string, nothing>, qemu: record<path: string, version: oneof<string, nothing>, sha256: oneof<string, nothing>>>, objects: list<record>, files: list<record<path: string, sha256: string, size: int>>, events: int, run: record<process: oneof<int, nothing>, nonce: oneof<string, nothing>, capture_nonce: oneof<int, nothing>, qemu_pid: oneof<int, nothing>, api: oneof<bool, nothing>, sends: oneof<list<any>, nothing>>> {
     let reader = (sdl-reader)
     let probe = ($probe | path expand)
     let bundle = ($bundle | path expand)
@@ -55,7 +55,7 @@ export def main [probe: path, bundle: path, --profile: string = "", --extra: lis
         bundle_schema: 2,
         profile: $named,
         reader: $reader,
-        host: { os: $nu.os-info.name, kernel: $nu.os-info.kernel_version, hostname: (sys host | get hostname), qemu: (sdl-qemu-of ($c.objects | where index == 0 | get -o 0) ($hashed | where index == 0 | get -o 0.sha256)) },
+        host: { os: $nu.os-info.name, kernel: $nu.os-info.kernel_version, hostname: null, qemu:(sdl-qemu-of ($c.objects | where index == 0 | get -o 0) ($hashed | where index == 0 | get -o 0.sha256)) },
         objects: ($c.objects | each {|o|
             let t = ($c.tables | get ($o.index | into string))
             let h = ($hashed | where index == $o.index | get -o 0)
