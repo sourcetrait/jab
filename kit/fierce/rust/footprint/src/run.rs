@@ -1,7 +1,7 @@
 use crate::*;
 
 /// The invocation, each subcommand's arguments.
-const USAGE: &str = "footprint derivative <coord> <izb> <uzb> <z> | footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --iz-min <n> --owner <owner.ppm> [--export <api.out> <frame>] --levels <levels.ppm> [--export <api.out> <frame>]... [--rows <rows.nuon>] | footprint clamp-plan <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --owner <owner.ppm> --levels <levels.ppm> --surface <index> | footprint differ <a.ppm> <b.ppm>";
+const USAGE: &str = "footprint blocks <levels.ppm> | footprint reference <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --iz-min <n> --owner <owner.ppm> [--export <api.out> <frame>] --levels <levels.ppm> [--export <api.out> <frame>]... [--rows <rows.nuon>] | footprint clamp-plan <map> <tree> <x> <y> <z> <yaw> <pitch> <roll> --owner <owner.ppm> --levels <levels.ppm> --surface <index> | footprint differ <a.ppm> <b.ppm>";
 
 /// The subcommand named, its answer printed as NUON.
 pub fn run() -> ExitCode {
@@ -21,7 +21,6 @@ pub fn run() -> ExitCode {
 /// The subcommand's answer.
 fn dispatch(args: &[String]) -> FootprintResult<Nuon> {
     match args.first().map(String::as_str) {
-        Some("derivative") => derivative_command(&args[1..]),
         Some("blocks") => blocks_command(&args[1..]),
         Some("reference") => reference_command(&args[1..]),
         Some("clamp-plan") => clamp_plan_command(&args[1..]),
@@ -33,14 +32,6 @@ fn dispatch(args: &[String]) -> FootprintResult<Nuon> {
 /// A number argument, named in the refusal.
 fn number<T: FromStr>(text: &str, what: &str) -> FootprintResult<T> {
     text.parse::<T>().map_err(|_| FootprintError::Usage(format!("{what} is not a number: {text}")))
-}
-
-/// The exact row derivative of one case.
-fn derivative_command(args: &[String]) -> FootprintResult<Nuon> {
-    let [coord, izb, uzb, z] = args else {
-        return Err(FootprintError::Usage(USAGE.to_string()));
-    };
-    Ok(derivative_nuon(number(coord, "coord")?, number(izb, "izb")?, number(uzb, "uzb")?, number(z, "z")?))
 }
 
 /// A block's fields as NUON.

@@ -14,7 +14,7 @@ fierce's maps compiled first by its manifest's prepare.
 ## main test
 
 The SDK's `program test`: fierce's test with DEBUG, its suite and its
-programs' fixtures, `test/fillrate` and `test/footprint`.
+fill-rate probe's fixtures, `test/fillrate`.
 
 ## main run
 

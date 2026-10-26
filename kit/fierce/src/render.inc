@@ -828,34 +828,6 @@
 .endif
 .endm
 
-.macro row_derivative dst, coord, izb, uzb, z, s1, s2, saturate
-    mul \dst, \coord, \izb
-    mulh \s1, \coord, \izb
-    srli \dst, \dst, DEPTH_BITS
-    slli \s2, \s1, (64 - DEPTH_BITS)
-    or \dst, \dst, \s2              # coord izb shifted to u/z's 48.16, its low word
-    srai \s1, \s1, DEPTH_BITS       # its high word
-    srai \s2, \dst, 63
-    bne \s1, \s2, \saturate         # past 64 bits once shifted
-    sub \s1, \uzb, \dst             # the derivative of u/z less u's share of 1/z's
-    xor \s2, \uzb, \dst
-    xor \dst, \uzb, \s1
-    and \s2, \s2, \dst
-    bltz \s2, \saturate             # the subtraction overflowed
-    mul \dst, \s1, \z
-    mulh \s1, \s1, \z
-    srli \dst, \dst, 16
-    slli \s2, \s1, 48
-    or \dst, \dst, \s2              # times z, 16.16 texels a row
-    srai \s1, \s1, 16
-    srai \s2, \dst, 63
-    bne \s1, \s2, \saturate
-    bgez \dst, .Lrow_derivative\@
-    neg \dst, \dst
-    bltz \dst, \saturate            # the most negative value has no absolute
-.Lrow_derivative\@:
-.endm
-
 .macro section_at kind, dst
     la \dst, sections
     ld \dst, (SECTION_AT + SECTION_ENTRY * (\kind - 1))(\dst)

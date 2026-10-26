@@ -13,6 +13,8 @@ boundary, where either neighbouring level passes for every estimator.
 
 ## const BLOCK
 
+## const DEPTH_BITS
+
 ## fn depth_floor
 
 An image's IZ_MIN is 1/z in 6.26, so its floor is IZ_MIN over 2^26 of a

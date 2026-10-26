@@ -3195,22 +3195,3 @@ without DEBUG, beside OWNER, whose code shares the slot, and where
 MIP_LEVELS passes 15, BLOCK is not 16, or SPAN_RECORDS passes 65,536, so a
 code always fits its fields. The game's footprint crate reads a capture's
 blocks (`blocks`) and holds them to the exact footprint (`reference`).
-
-## .macro row_derivative
-
-The row derivative of a texel coordinate at a block's start from the
-block's own z, by multiplies, which no build of the game takes: with u = (u/z) /
-(1/z), du/dy = (B_u - u B) z, B the polygon's IZB and B_u its UZB (or
-VZB for v). In fixed point u IZB is 16.16 by 6.26, so DEPTH_BITS down to
-u/z's 48.16 before the subtraction, and the difference times the 16.16 z
-is 16 down to 16.16 texels a row. No range proof over supported geometry
-is offered, the near plane bounding 1/z where a surface shows but not its
-row gradient: each product is taken exactly, `mul` and `mulh`, the
-128-bit value shifted before its narrowing is checked, so a raw product
-past 64 bits whose shifted value fits is taken; the subtraction's signed
-overflow and the most negative value, which has no absolute, are
-overflows too. Each branches to the caller's saturate, which reads the
-chain's last level, the coarsest. The caller passes zero for IZB where the
-block's start 1/z lies under IZ_MIN, the drawn mapping's z constant there.
-test/footprint's cases hold every answer to the footprint crate's i128
-arithmetic.

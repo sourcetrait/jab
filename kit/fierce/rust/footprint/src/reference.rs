@@ -4,6 +4,8 @@ use crate::*;
 pub(crate) const BAND: f64 = 1.044_273_782_427_413_8;
 /// The pixels of a full block, BLOCK in render.inc.
 pub(crate) const BLOCK: f64 = 16.0;
+/// The bits of 1/z's fraction, DEPTH_BITS in render.inc: 6.26.
+pub(crate) const DEPTH_BITS: u32 = 26;
 
 /// The least 1/z an image keeps, in a metre's fractions, from its IZ_MIN.
 pub(crate) fn depth_floor(iz_min: i64) -> f64 {

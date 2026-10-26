@@ -24,8 +24,8 @@ blocks past it nearest a third, within a fifth to a half.
 A clamped block's three levels. Held: the reference on the drawn mapping,
 the secant over the held ends and the held down term. Unbranched: the
 candidate's estimate without its clamp branch, |UZB - u IZB| z with u the
-drawn coordinate and z the held one, row_derivative's arithmetic in
-doubles. Free: the mapping with no hold at all.
+drawn coordinate and z the held one, in doubles. Free: the mapping with no
+hold at all.
 
 ## fn rated
 

@@ -8,8 +8,6 @@
 
 ## fn number
 
-## fn derivative_command
-
 ## fn block_nuon
 
 ## fn blocks_command

@@ -312,9 +312,7 @@ wake and drawing apart, under the cap. Input that arrives during the
 wait takes effect with the next frame. The game's debug build with
 `LEVELS` stores each pixel's block level, offset, and span in place of
 its colour, which the game's `rust/footprint` crate reads and holds to
-the exact footprint, its `differ` boxing where two pictures part;
-`kit/fierce/test/footprint` holds `render.inc`'s `row_derivative`, a
-block's step down a row at its own start, to the crate's.
+the exact footprint, its `differ` boxing where two pictures part.
 
 With `DEBUG` the kernel's own lines leave the console: they go to a
 debug channel, a virtio-serial port, which `./do run ... --set debug`

@@ -10,7 +10,6 @@ pub(crate) use std::{
 };
 
 mod clamp;
-mod derivative;
 mod differ;
 mod error;
 mod export;
@@ -24,7 +23,6 @@ mod run;
 mod scene;
 
 pub(crate) use clamp::*;
-pub(crate) use derivative::*;
 pub(crate) use differ::*;
 pub(crate) use error::*;
 pub(crate) use export::*;
