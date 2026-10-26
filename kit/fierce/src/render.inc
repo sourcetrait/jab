@@ -149,14 +149,7 @@
 .set Z_SHIFT, (DEPTH_BITS + 16)
 .set BLOCK_SHIFT, 4
 .set BLOCK, (1 << BLOCK_SHIFT)
-.ifdef IZ_TEST
-.ifndef DEBUG
-.error "IZ_TEST is a debug build's instrument"
-.endif
-.set IZ_MIN, 12201612               # 1/z of 5.5 m, the clamp pose's threshold
-.else
 .set IZ_MIN, 4096
-.endif
 .set SKY_DEPTH, 1
 .set GFX_SLOTS, (JAB_HARTS_MAX - 1)
 .set GFX_GUIDELINE, 3

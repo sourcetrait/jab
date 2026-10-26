@@ -16,9 +16,9 @@ boundary, where either neighbouring level passes for every estimator.
 ## fn depth_floor
 
 An image's IZ_MIN is 1/z in 6.26, so its floor is IZ_MIN over 2^26 of a
-metre's inverse: 4096 is 16,384 m, IZ_TEST's 12,201,612 is 5.5 m. The
-reference takes the integer from the image's provenance, never a symbol's
-name or a nominal depth.
+metre's inverse: 4096 is 16,384 m, the landed clamp images' 12,201,612 is
+5.5 m. The reference takes the integer from the image's provenance, never
+a symbol's name or a nominal depth.
 
 ## struct Derivatives
 
@@ -52,11 +52,12 @@ the drawn coordinate is u/z over the floor, and its derivatives are u/z's
 steps over the floor, which carry the intercept; hence the mapping keeps
 each surface's u0 and v0, a lit surface's counted from its lumel map's
 origin as the engine draws it (scene.rs's `folded`). The release floor is
-past every view of the pose set; IZ_TEST's 5.5 m brings garage_far's floor
-under it. There the drawn mapping's down term exceeds the free mapping's: at
-the threshold the two differ by u times 1/z's step over 1/z, u being the
-drawn coordinate, 2.56 texels a row held on garage_far's floor against 1.94
-to 2.01 free just short of the threshold, every held block at level 1.
+past every view of the pose set; the landed clamp images' 5.5 m brings
+garage_far's floor under it. There the drawn mapping's down term exceeds
+the free mapping's: at the threshold the two differ by u times 1/z's step
+over 1/z, u being the drawn coordinate, 2.56 texels a row held on
+garage_far's floor against 1.94 to 2.01 free just short of the threshold,
+every held block at level 1.
 
 ## fn held_texel
 

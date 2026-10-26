@@ -752,12 +752,9 @@ A span block's pixels.
 ## .set IZ_MIN
 
 `u32`: the least 1/z a divide takes, a smaller one clamped to it: 4096,
-1/z of 16,384 m, past every view the content holds. Under IZ_TEST, a debug
-build's symbol allowed with LEVELS and OWNER (ClampedReference),
-12,201,612, 1/z of 5.5 m, the depth the clamp's plan chose over garage_far's
-floor, so the drawn mapping's hold is exercised on real geometry; the OWNER
-capture and the LEVELS capture of the clamp pose share it. An image's provenance carries the integer it was
-assembled with, read from its ELF's absolute symbol.
+1/z of 16,384 m, past every view the content holds. An image's provenance
+carries the integer it was assembled with, read from its ELF's absolute
+symbol.
 
 ## .set SKY_DEPTH
 
